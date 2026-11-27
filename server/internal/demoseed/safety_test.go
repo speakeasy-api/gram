@@ -5,9 +5,15 @@ package demoseed
 import (
 	"regexp"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/stretchr/testify/require"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
@@ -22,16 +28,17 @@ import (
 // It is an ordinary Spec, the same mechanism production uses to seed the local
 // development org, so the two cannot drift.
 var otherTenantSpec = Spec{
-	OrgID:       "org_gram_othr_workspace",
-	OrgSlug:     "acme-othr",
-	OrgName:     "Acme Othr Org",
-	UUIDPrefix:  "0ddba110",
-	UserPrefix:  "user_othr_",
-	EmailDomain: "@othr.getgram.ai",
-	NameSeed:    "gram-othr-",
-	GroupPrefix: "othr_grp_",
-	WorkOSOrgID: "workos_gram_othr_unlinked",
-	Marker:      "othr-seed",
+	CustomDomain: "mcp.other.example.com",
+	OrgID:        "org_gram_othr_workspace",
+	OrgSlug:      "acme-othr",
+	OrgName:      "Acme Othr Org",
+	UUIDPrefix:   "0ddba110",
+	UserPrefix:   "user_othr_",
+	EmailDomain:  "@othr.getgram.ai",
+	NameSeed:     "gram-othr-",
+	GroupPrefix:  "othr_grp_",
+	WorkOSOrgID:  "workos_gram_othr_unlinked",
+	Marker:       "othr-seed",
 }
 
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With
@@ -46,6 +53,9 @@ var otherTenantSpec = Spec{
 //  3. is idempotent — per-table row counts are identical after every run.
 func TestDemoSeedSafety(t *testing.T) {
 	t.Parallel()
+	// No other test writes another tenant's rows while this one compares them.
+	otherTenantWrites.Lock()
+	defer otherTenantWrites.Unlock()
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -60,20 +70,32 @@ func TestDemoSeedSafety(t *testing.T) {
 
 	// Baseline BEFORE the fixture: everything the fixture adds on top of it is
 	// "another tenant's data", and its ids feed the leak check below.
+	require.NoError(t, catalogseed.EnsureCatalog(ctx, db))
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
 	// Provision the other tenant with the seed itself, including realistic MCP
 	// server dependents that the demo cleanup must not touch.
-	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
+	otherSeed, err := seedPostgres(ctx, logger, db, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, otherTenantSpec, aivendors.CompiledSnapshot(), time.Time{})
 	require.NoError(t, err)
-	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
+	require.NoError(t, upstreamAuthReadiness(ctx, logger, db, otherTenantSpec.OrgID))
+	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, planted, "fixture must include a root endpoint")
+
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
 	require.NoError(t, demoseedtest.PlantPrivateNetworkState(
 		ctx, db, otherTenantSpec.OrgID,
 	))
+	// The cross-organization decision backfill would link this row.
+	_, err = agentrepo.New(db).SetAIScanTargetStatus(ctx, agentrepo.SetAIScanTargetStatusParams{
+		OrganizationID: otherTenantSpec.OrgID, ID: "cursor", Status: "approved",
+	})
+	require.NoError(t, err)
 	organizationMismatches, err := demoseedtest.ProjectOrganizationMismatchCounts(
 		ctx, db, []string{otherTenantSpec.ProjectID()},
 	)
@@ -122,8 +144,14 @@ func TestDemoSeedSafety(t *testing.T) {
 	}
 	require.True(t, fixtureOutside, "fixture produced no clickhouse rows; the isolation check would be vacuous")
 
+	// Both real runs share one clock. The seed generates rows relative to its
+	// clock (events in the last few minutes, story beats earlier today), so
+	// runs seconds apart can legitimately differ in row count; pinning the
+	// clock makes the count comparison below a pure idempotency check.
+	seedNow := time.Now()
+
 	// First real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, runAt(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec(), seedNow))
 
 	pgAfter1, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -143,6 +171,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
 	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	planted, err = repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: constants.DemoOrganizationID, ProjectID: uuid.MustParse(DefaultSpec().ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, planted, "reseed must remove custom-domain dependents")
+
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
 	)
@@ -151,7 +185,7 @@ func TestDemoSeedSafety(t *testing.T) {
 		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
-	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
+	require.NoError(t, runAt(ctx, logger, db, ch, blob, testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, DefaultSpec(), seedNow))
 
 	pgAfter2, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
@@ -159,6 +193,15 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter2)
+	otherTargets, err := agentrepo.New(db).ListAIScanTargets(ctx, otherTenantSpec.OrgID)
+	require.NoError(t, err)
+	var unlinked bool
+	for _, target := range otherTargets {
+		if target.ID == "cursor" {
+			unlinked = !target.AiProductID.Valid
+		}
+	}
+	require.True(t, unlinked, "demo seeding linked another tenant's built-in decision")
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	)

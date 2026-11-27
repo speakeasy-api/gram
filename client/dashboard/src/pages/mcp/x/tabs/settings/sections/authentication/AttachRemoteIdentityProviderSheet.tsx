@@ -1,7 +1,5 @@
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
-import { Combobox } from "@/components/ui/Combobox";
-import { Dialog } from "@/components/ui/Dialog";
-import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -31,10 +29,7 @@ import {
   proxyRegisterUpstreamClient,
   registrationProvenance,
 } from "@/lib/proxyRegisterUpstreamClient";
-import {
-  deriveRemoteSessionIssuerNameFromUrl,
-  remoteSessionScopeTier,
-} from "@/lib/sources";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
@@ -46,20 +41,10 @@ import { useRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIs
 import {
   invalidateAllRemoteSessionIssuers,
   useRemoteSessionIssuers,
-  useRemoteSessionIssuersInfinite,
 } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import {
-  invalidateSharedIssuerImpact,
-  needsSharedIssuerConfirm,
-  sharedIssuerChangeBlocked,
-  useSharedIssuerImpact,
-} from "@/lib/remote-identity/model/upstreamRepointing";
-import { RepointedServersNotice } from "./RepointedServersNotice";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { CommandItem } from "@/components/ui/Command";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -79,28 +64,29 @@ import {
   parseScopes,
   TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "./issuerFormUtils";
-import { pickPreferredAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
+import {
+  copyableAuthMethod,
+  pickPreferredAuthMethod,
+  usableAsClientTemplate,
+} from "@/lib/remote-identity/model/clientConfiguration";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { selectExistingClient } from "./selectExistingClient";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { AuthorizationServerSelect } from "./AuthorizationServerSelect";
+import { StartingClientFields } from "./StartingClientFields";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
 import {
   useIssuerDuplicatePreflight,
   type RemoteSessionIssuerDuplicateMatch,
 } from "./useIssuerDuplicatePreflight";
+import { CONFIG_WRITE_META } from "@/lib/config-write";
 
 type Mode = "select" | "new";
 
 const NO_EXCLUDED_ISSUERS: readonly string[] = [];
 // The listing's server-side page ceiling (constants.MaxPageLimit).
 const MAX_ISSUER_PAGE = 100;
-
-const ISSUER_TIER_LABEL = {
-  project: "This project",
-  organization: "Organization",
-  platform: "Platform catalog",
-} as const satisfies Record<ReturnType<typeof remoteSessionScopeTier>, string>;
 
 export function AttachRemoteIdentityProviderSheet({
   open,
@@ -236,10 +222,11 @@ export function AttachRemoteIdentityProviderSheet({
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");
 
-  // Session Client section state. The client toggle mirrors the issuer toggle:
-  // when the resolved issuer already has attachable clients the operator can
-  // bind an existing one (attachUserSessionIssuer) instead of registering a
-  // new one. clientType drives how a new client is created (DCR / CIMD /
+  // Session Client section state. Either way the sheet creates a client of
+  // the target's own: "select" starts it from a stored client's settings and
+  // never binds that client, because a person holds one upstream grant per
+  // client and sharing one lets a sign-in on one server replace another's.
+  // clientType drives how a from-scratch client is created (DCR / CIMD /
   // Manual); it is reset to the recommended default in an effect below.
   const [clientMode, setClientMode] = useState<Mode>("select");
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -283,10 +270,11 @@ export function AttachRemoteIdentityProviderSheet({
     [dcrAvailable, cimdAvailable],
   );
 
-  // Existing clients of the picked issuer (this project's clients, whether the
-  // issuer is organization-level or project-level). Only an existing issuer can
-  // have clients, so the walk is disabled in Add-new-issuer mode. Filter out
-  // any already bound to this user_session_issuer.
+  // Clients of the picked issuer a new one can start from (this project's
+  // clients, whether the issuer is organization-level or project-level). Only
+  // an existing issuer can have clients, so the walk is disabled in
+  // Add-new-issuer mode. Leaves out any already bound to this
+  // user_session_issuer, which keeps one client per issuer.
   const { items: issuerClients, isLoading: isLoadingIssuerClients } =
     useAllRemoteSessionClients(
       { remoteSessionIssuerId: selectedIssuerId },
@@ -296,14 +284,15 @@ export function AttachRemoteIdentityProviderSheet({
     () =>
       issuerClients.filter(
         (candidate) =>
-          !userSessionIssuer ||
-          !candidate.userSessionIssuerIds.includes(userSessionIssuer.id),
+          usableAsClientTemplate(candidate, cimdAvailable) &&
+          (!userSessionIssuer ||
+            !candidate.userSessionIssuerIds.includes(userSessionIssuer.id)),
       ),
-    [issuerClients, userSessionIssuer],
+    [issuerClients, userSessionIssuer, cimdAvailable],
   );
 
-  // The Session Client toggle only appears for an existing issuer that has
-  // attachable clients; otherwise the sheet shows the Add-new client form
+  // The Session Client toggle only appears for an existing issuer that has a
+  // client to start from; otherwise the sheet shows the from-scratch form
   // directly (a brand-new issuer never has clients).
   const clientToggleVisible = attachableClients.length > 0;
   const effectiveClientMode: Mode = clientToggleVisible ? clientMode : "new";
@@ -319,10 +308,66 @@ export function AttachRemoteIdentityProviderSheet({
   const issuerResolved =
     mode === "select" ? !!selectedIssuerId : issuerUrl.trim().length > 0;
 
+  // Keep the prepared registration for retry; creating another one can repeat
+  // DCR upstream, and deleting the registration could affect another server.
+  const [preparedSetup, setPrepared] = useState<{
+    serverId: string;
+    registrationId: string;
+    unsupportedDcrAuthMethod: string | null;
+    attached?: boolean;
+    downstreamIssuerId?: string;
+  } | null>(null);
+  const serverId = target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+  const prepared = preparedSetup?.serverId === serverId ? preparedSetup : null;
+
+  async function completeSetup(
+    setup: NonNullable<typeof prepared>,
+    linkIssuer: AuthTarget["linkUserSessionIssuer"],
+  ) {
+    setPrepared(setup);
+    if (!setup.attached) {
+      await client.remoteSessions.attachServerClientAssociation({
+        serverClientAssociationForm: {
+          mcpServerId: setup.serverId,
+          remoteSessionClientId: setup.registrationId,
+        },
+      });
+      setup = { ...setup, attached: true };
+      setPrepared(setup);
+    }
+
+    // The association does not require a downstream issuer. Link it last so
+    // the server cannot appear configured when the upstream attach failed.
+    if (!userSessionIssuer && linkIssuer) {
+      let downstreamIssuerId = setup.downstreamIssuerId;
+      if (!downstreamIssuerId) {
+        const created = await client.userSessionIssuers.create({
+          createUserSessionIssuerForm: {
+            slug: buildUserSessionResourceSlug(target.slug),
+            authnChallengeMode: "interactive",
+            sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
+          },
+        });
+        downstreamIssuerId = created.id;
+        setPrepared({ ...setup, downstreamIssuerId });
+      }
+      await linkIssuer(downstreamIssuerId);
+    }
+    return { unsupportedDcrAuthMethod: setup.unsupportedDcrAuthMethod };
+  }
+
   const attachMutation = useMutation({
-    mutationFn: async (): Promise<{
-      unsupportedDcrAuthMethod: string | null;
-    }> => {
+    meta: CONFIG_WRITE_META,
+    mutationFn: async () => {
+      if (!serverId) {
+        throw new Error("Choose an MCP server to configure upstream sign-in.");
+      }
+      const linkIssuer = target.linkUserSessionIssuer;
+      if (!userSessionIssuer && !linkIssuer) {
+        throw new Error("This MCP server cannot configure User Identity here.");
+      }
+      if (prepared) return completeSetup(prepared, linkIssuer);
+
       const parsedScopes = parseScopes(scopeOverride);
       const trimmedAudience = audienceOverride.trim();
       let createProvider: CreateRemoteSessionIssuerForm | undefined;
@@ -372,22 +417,7 @@ export function AttachRemoteIdentityProviderSheet({
         };
       }
 
-      // Step 1: ensure a user_session_issuer exists. First-add auto-creates
-      // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime.
-      let issuerId = userSessionIssuer?.id;
-      if (!issuerId) {
-        const created = await client.userSessionIssuers.create({
-          createUserSessionIssuerForm: {
-            slug: buildUserSessionResourceSlug(target.slug),
-            authnChallengeMode: "interactive",
-            sessionDurationHours: DEFAULT_USER_SESSION_DURATION_HOURS,
-          },
-        });
-        issuerId = created.id;
-      }
-
-      // Step 2: resolve the remote_session_issuer — pick existing or create a
+      // Resolve the remote_session_issuer — pick existing or create a
       // new one from the form fields. Empty endpoint inputs are omitted so
       // the backend can store them as null rather than empty strings.
       let resolvedIssuer: RemoteSessionIssuer | undefined;
@@ -403,36 +433,59 @@ export function AttachRemoteIdentityProviderSheet({
         resolvedIssuer = created;
       }
 
-      // Step 3: bind a remote_session_client to the user_session_issuer.
-      // Either attach an existing client (a join-table insert) or create a new
-      // one in the chosen mode (DCR / CIMD / Manual). Scope/audience overrides
-      // apply only to newly created clients; attaching reuses the selected
-      // client's stored configuration.
+      // Create a registration for this server: from scratch in the chosen mode (DCR / CIMD /
+      // Manual), or from a stored client's reviewed settings. A stored client
+      // is never bound here.
       // Tracks when DCR returns an auth method the SDK enum doesn't model
       // (e.g. `private_key_jwt`). We swallow it for the local client record
       // but warn the operator after success so they understand why their
       // client may not behave as the upstream advertised.
       let unsupportedDcrAuthMethod: string | null = null;
+      let registrationId: string;
 
-      if (effectiveClientMode === "select") {
-        // Attach the picked existing client to this user_session_issuer.
-        await client.remoteSessionClients.attachUserSessionIssuer({
-          attachUserSessionIssuerForm: {
-            id: effectiveSelectedClientId,
-            userSessionIssuerId: issuerId,
-          },
-        });
-      } else if (clientType === "cimd") {
+      if (effectiveClientMode === "select" && !selectedClient) {
+        throw new Error("Choose the client to start from.");
+      }
+      const startsFromDocument =
+        effectiveClientMode === "select" &&
+        !!selectedClient?.clientIdMetadataUri;
+      if (
+        effectiveClientMode === "select" &&
+        selectedClient &&
+        !startsFromDocument
+      ) {
+        // A new client on the stored one's registration. Naming it lets the
+        // server copy the secret and callback; the secret never reaches the
+        // browser. A different client ID is a different registration, so
+        // nothing is copied for it.
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientId.trim(),
+              clientSecret: clientSecret.trim() || undefined,
+              templateClientId:
+                clientId.trim() === selectedClient.clientId
+                  ? selectedClient.id
+                  : undefined,
+              tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
+      } else if (startsFromDocument || clientType === "cimd") {
         // CIMD: the platform generates the client_id and hosts the metadata
         // document, so there are no credentials to collect.
-        await client.remoteSessionClients.createCimd({
-          createCimdForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-          },
-        });
+        registrationId = (
+          await client.remoteSessionClients.createCimd({
+            createCimdForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
       } else {
         // DCR proxies a registration to the upstream issuer for a fresh
         // client_id / client_secret; Manual uses what the operator typed.
@@ -483,41 +536,38 @@ export function AttachRemoteIdentityProviderSheet({
           };
         }
 
-        // Create the remote_session_client binding the resolved issuer to the
-        // user_session_issuer. Scope/audience overrides are stored on the
-        // client and consumed at OAuth dance time.
-        await client.remoteSessionClients.create({
-          createRemoteSessionClientForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            clientId: clientCredentials.clientId,
-            clientSecret: clientCredentials.clientSecret,
-            tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-            ...clientCredentials.provenance,
-          },
-        });
+        // Store scope and audience overrides on the registration.
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientCredentials.clientId,
+              clientSecret: clientCredentials.clientSecret,
+              tokenEndpointAuthMethod:
+                clientCredentials.tokenEndpointAuthMethod,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+              ...clientCredentials.provenance,
+            },
+          })
+        ).id;
       }
 
-      // Step 4: on first-add, link the target to the new issuer. How the link
-      // is stored (and side effects like flipping a server private) is the
-      // target's business.
-      if (!userSessionIssuer) {
-        await target.linkUserSessionIssuer?.(issuerId);
-      }
-
-      return { unsupportedDcrAuthMethod };
+      return completeSetup(
+        { serverId, registrationId, unsupportedDcrAuthMethod },
+        linkIssuer,
+      );
     },
     onSuccess: async ({ unsupportedDcrAuthMethod }) => {
       await Promise.all([
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-        invalidateSharedIssuerImpact(queryClient),
+        invalidateAllServerClientAssociations(queryClient),
         target.invalidate(queryClient),
       ]);
 
+      setPrepared(null);
       toast.success("Authorization server attached");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
@@ -625,6 +675,45 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedClientId("");
   }, [selectedIssuerId, mode]);
 
+  // The client fields follow the client the new one starts from: filled from
+  // it for review, and emptied when the issuer changes or it goes away, so a
+  // previous registration's settings never stay behind as if typed. Only what
+  // the listing returns is copied here; the secret field stays blank.
+  const startingClient =
+    effectiveClientMode === "select" ? selectedClient : undefined;
+  const startingClientKey = startingClient?.id ?? "";
+  useEffect(() => {
+    setClientId(
+      !startingClient || startingClient.clientIdMetadataUri
+        ? ""
+        : startingClient.clientId,
+    );
+    setClientSecret("");
+    setTokenEndpointAuthMethod(
+      copyableAuthMethod(startingClient?.tokenEndpointAuthMethod) ?? "",
+    );
+    setScopeOverride(
+      (startingClient ? startingClient.scope : initialScopes)?.join(", ") ?? "",
+    );
+    setAudienceOverride(startingClient?.audience ?? "");
+    // Keyed by the issuer and the pick alone: a refetch of the same client
+    // must not discard the operator's edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIssuerId, mode, startingClientKey]);
+
+  // Leaving a starting client behind must not leave its settings posing as
+  // typed ones.
+  const changeClientMode = (next: Mode) => {
+    if (next === clientMode) return;
+    setClientMode(next);
+    setSelectedClientId("");
+    setClientId("");
+    setClientSecret("");
+    setTokenEndpointAuthMethod("");
+    setScopeOverride(initialScopes?.join(", ") ?? "");
+    setAudienceOverride("");
+  };
+
   // One-click reuse switches this sheet from creating an issuer to selecting
   // the one that already describes the URL. It is not offered when the match
   // is already attached to this target: the warning text alone is the right
@@ -649,8 +738,12 @@ export function AttachRemoteIdentityProviderSheet({
     } else if (!slug.trim() || !issuerUrl.trim()) {
       return false;
     }
-    // Session client: attach an existing one, or complete the new-client form.
-    if (effectiveClientMode === "select") return !!effectiveSelectedClientId;
+    // Session client: a reviewed copy of a stored one, or the from-scratch
+    // form. A copy of a hosted document needs no client ID of its own.
+    if (effectiveClientMode === "select") {
+      if (!selectedClient) return false;
+      return !!selectedClient.clientIdMetadataUri || !!clientId.trim();
+    }
     // Manual requires a client_id; DCR mints one; CIMD needs none.
     if (!clientTypes.includes(clientType)) return false;
     if (clientType === "manual" && !clientId.trim()) return false;
@@ -661,48 +754,26 @@ export function AttachRemoteIdentityProviderSheet({
     slug,
     issuerUrl,
     effectiveClientMode,
-    effectiveSelectedClientId,
+    selectedClient,
     clientType,
     clientTypes,
     clientId,
   ]);
 
-  // Linking another provider changes the upstream derived for every server
-  // sharing this user session issuer, in any project for an organization one.
-  const sharedIssuerId = userSessionIssuer?.id;
-  const sharedIssuerImpact = useSharedIssuerImpact(
-    open && sharedIssuerId && submittable
-      ? {
-          userSessionIssuerId: sharedIssuerId,
-          mcpServerId: target.mcpServerId,
-          change: "attach",
-          providerId: mode === "select" ? selectedIssuerId : undefined,
-          clientId:
-            effectiveClientMode === "select"
-              ? effectiveSelectedClientId
-              : undefined,
-        }
-      : null,
-  );
-  const repointLookupPending = sharedIssuerImpact.pending;
-  const [confirmRepointOpen, setConfirmRepointOpen] = useState(false);
-  useEffect(() => {
-    setConfirmRepointOpen(false);
-  }, [open]);
-
   const handleSubmit = () => {
-    if (!submittable || submitting || logoUploading) return;
-    if (needsSharedIssuerConfirm(sharedIssuerImpact)) {
-      setConfirmRepointOpen(true);
-      return;
-    }
+    if (submitting || logoUploading || (!prepared && !submittable)) return;
     attachMutation.mutate();
   };
 
   // The Session Client section body: its loading, select-existing, and add-new
   // branches, kept out of the JSX so the render stays flat.
   const clientToggle = clientToggleVisible ? (
-    <ModeSwitch mode={clientMode} onChange={setClientMode} />
+    <ModeSwitch
+      mode={clientMode}
+      onChange={changeClientMode}
+      selectLabel="New from existing"
+      newLabel="New from scratch"
+    />
   ) : null;
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
@@ -717,8 +788,26 @@ export function AttachRemoteIdentityProviderSheet({
           clients={attachableClients}
           selectedClientId={effectiveSelectedClientId}
           onChange={setSelectedClientId}
-          selectedClient={selectedClient}
         />
+        {selectedClient ? (
+          <>
+            <StartingClientFields
+              starting={selectedClient}
+              clientId={clientId}
+              clientSecret={clientSecret}
+              tokenEndpointAuthMethod={tokenEndpointAuthMethod}
+              onClientIdChange={setClientId}
+              onClientSecretChange={setClientSecret}
+              onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
+            />
+            <OverridesFields
+              scopeOverride={scopeOverride}
+              audienceOverride={audienceOverride}
+              onScopeOverrideChange={setScopeOverride}
+              onAudienceOverrideChange={setAudienceOverride}
+            />
+          </>
+        ) : null}
       </Stack>
     );
   } else {
@@ -760,20 +849,23 @@ export function AttachRemoteIdentityProviderSheet({
         >
           <SheetHeader className="px-6 pt-6 pb-0">
             <SheetTitle className="text-lg font-semibold">
-              Attach Authorization Server
+              Attach authorization server
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+          <div
+            hidden={!!prepared}
+            className="flex-1 space-y-6 overflow-y-auto px-6 py-6"
+          >
             <Stack gap={4}>
               <SectionHeading
-                title="Authorization Server"
+                title="Authorization server"
                 description="The upstream OAuth authorization server Speakeasy delegates to."
               />
               {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
 
               {mode === "select" ? (
-                <SelectExistingFields
+                <AuthorizationServerSelect
                   excludedIssuerIds={excludedIds}
                   selectedIssuerId={selectedIssuerId}
                   selectedIssuer={selectedIssuer}
@@ -911,79 +1003,71 @@ export function AttachRemoteIdentityProviderSheet({
             {issuerResolved && (
               <Stack gap={4} className="border-t pt-6">
                 <SectionHeading
-                  title="Session Client"
+                  title="Session client"
                   description="The OAuth client Speakeasy registers and uses with this authorization server."
                 />
                 {clientSectionBody}
               </Stack>
             )}
 
-            <IdentityProviderAttachmentErrorAlert
-              error={attachMutation.error}
-            />
+            {!prepared && (
+              <IdentityProviderAttachmentErrorAlert
+                error={attachMutation.error}
+              />
+            )}
           </div>
 
+          {prepared && (
+            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-6">
+              <Text small>
+                {prepared.attached
+                  ? "The upstream registration is attached. Retry to finish setting up User Identity."
+                  : "The upstream registration is saved. Retry to attach that same registration to this MCP server."}
+              </Text>
+              <IdentityProviderAttachmentErrorAlert
+                error={attachMutation.error}
+              />
+            </div>
+          )}
+
           <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
+            {prepared && !prepared.attached && attachMutation.isError && (
+              <Button
+                variant="secondary"
+                disabled={submitting}
+                onClick={() => {
+                  setPrepared(null);
+                  attachMutation.reset();
+                }}
+              >
+                <Button.Text>Choose a different registration</Button.Text>
+              </Button>
+            )}
             <Button
               variant="secondary"
               disabled={submitting}
               onClick={() => onOpenChange(false)}
             >
-              <Button.Text>Cancel</Button.Text>
+              <Button.Text>{prepared ? "Close" : "Cancel"}</Button.Text>
             </Button>
             <Button
               variant="primary"
               disabled={
-                !submittable ||
-                submitting ||
-                logoUploading ||
-                repointLookupPending
+                submitting || logoUploading || (!prepared && !submittable)
               }
               onClick={handleSubmit}
             >
               <Button.Text>
-                {submitting ? "Attaching…" : "Attach Authorization Server"}
+                {submitting
+                  ? "Attaching…"
+                  : prepared
+                    ? "Retry setup"
+                    : "Attach authorization server"}
               </Button.Text>
             </Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>
-      <Dialog open={confirmRepointOpen} onOpenChange={setConfirmRepointOpen}>
-        <Dialog.Content className="max-w-md">
-          <Dialog.Header>
-            <Dialog.Title>Change the upstream of other servers?</Dialog.Title>
-            <Dialog.Description className="sr-only">
-              Attaching changes the upstream of other servers.
-            </Dialog.Description>
-          </Dialog.Header>
-          <RepointedServersNotice
-            impact={sharedIssuerImpact}
-            projectId={target.projectId}
-          />
-          <Dialog.Footer>
-            <Button
-              variant="secondary"
-              onClick={() => setConfirmRepointOpen(false)}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-            <Button
-              variant="destructive-primary"
-              disabled={
-                submitting ||
-                repointLookupPending ||
-                sharedIssuerChangeBlocked(sharedIssuerImpact)
-              }
-              onClick={() => {
-                setConfirmRepointOpen(false);
-                attachMutation.mutate();
-              }}
-            >
-              <Button.Text>Attach Authorization Server</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
     </>
   );
 }
@@ -1010,9 +1094,13 @@ function SectionHeading({
 function ModeSwitch({
   mode,
   onChange,
+  selectLabel = "Select existing",
+  newLabel = "Add new",
 }: {
   mode: Mode;
   onChange: (next: Mode) => void;
+  selectLabel?: string;
+  newLabel?: string;
 }) {
   return (
     <Stack direction="horizontal" gap={2}>
@@ -1020,194 +1108,56 @@ function ModeSwitch({
         variant={mode === "select" ? "primary" : "secondary"}
         onClick={() => onChange("select")}
       >
-        <Button.Text>Select existing</Button.Text>
+        <Button.Text>{selectLabel}</Button.Text>
       </Button>
       <Button
         variant={mode === "new" ? "primary" : "secondary"}
         onClick={() => onChange("new")}
       >
-        <Button.Text>Add new</Button.Text>
+        <Button.Text>{newLabel}</Button.Text>
       </Button>
     </Stack>
   );
 }
 
-function issuerOptionLabel(issuer: RemoteSessionIssuer): string {
-  return `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`;
-}
-
-// Searched and paged on the server: the listing spans the project, its
-// organization and the whole platform catalog, which is too large to load
-// in full for a dropdown.
-function SelectExistingFields({
-  excludedIssuerIds,
-  selectedIssuerId,
-  selectedIssuer,
-  pickFailed,
-  onChange,
-}: {
-  excludedIssuerIds: ReadonlySet<string>;
-  selectedIssuerId: string;
-  selectedIssuer: RemoteSessionIssuer | undefined;
-  pickFailed: boolean;
-  onChange: (id: string) => void;
-}) {
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search.trim(), 250);
-  const {
-    data,
-    isFetching,
-    isError,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-  } = useRemoteSessionIssuersInfinite(
-    { search: debouncedSearch || undefined },
-    undefined,
-    { throwOnError: false },
-  );
-  const issuerOptions = useMemo(
-    () =>
-      (data?.pages.flatMap((page) => page.result.items) ?? [])
-        .filter((issuer) => !excludedIssuerIds.has(issuer.id))
-        .map((issuer) => ({
-          value: issuer.id,
-          label: issuerOptionLabel(issuer),
-          // Tiers can hold records with the same name and URL; the tier is
-          // what tells them apart.
-          description: ISSUER_TIER_LABEL[remoteSessionScopeTier(issuer)],
-        })),
-    [data, excludedIssuerIds],
-  );
-
-  let emptyMessage = "No authorization servers match.";
-  if (isError) emptyMessage = "Failed to load authorization servers.";
-  else if (isFetching) emptyMessage = "Searching…";
-
-  const loadMore = hasNextPage ? (
-    <CommandItem
-      value="__load_more__"
-      disabled={isFetchingNextPage}
-      onSelect={() => void fetchNextPage()}
-      className="text-muted-foreground cursor-pointer justify-center"
-    >
-      {isFetchingNextPage ? "Loading…" : "Load more"}
-    </CommandItem>
-  ) : null;
-
-  return (
-    <Stack gap={2}>
-      <Label className="text-muted-foreground text-xs">
-        Authorization Server
-      </Label>
-      <Combobox
-        items={issuerOptions}
-        selected={selectedIssuerId}
-        onSelectionChange={(issuer) => onChange(issuer.value)}
-        onSearchChange={setSearch}
-        emptyMessage={emptyMessage}
-        listFooter={loadMore}
-        searchPlaceholder="Search authorization servers…"
-        className="w-full justify-between"
-        contentClassName="w-[min(500px,calc(100vw-2rem))]"
-      >
-        {selectedIssuer
-          ? issuerOptionLabel(selectedIssuer)
-          : "Choose an authorization server…"}
-      </Combobox>
-      {pickFailed ? (
-        <FieldError>
-          Failed to load this authorization server. Pick it again, or refresh
-          the page.
-        </FieldError>
-      ) : (
-        <Text muted small>
-          Pick an authorization server this project already has: its own, its
-          organization&apos;s, or one from the platform catalog.
-        </Text>
-      )}
-    </Stack>
-  );
-}
-
+// SelectExistingClientFields picks the stored client a new one starts from.
+// The pick is a starting point only: its settings fill the form below for
+// review, and the client itself is never bound to this target.
 function SelectExistingClientFields({
   clients,
   selectedClientId,
   onChange,
-  selectedClient,
 }: {
   clients: RemoteSessionClient[];
   selectedClientId: string;
   onChange: (id: string) => void;
-  selectedClient: RemoteSessionClient | undefined;
 }) {
   return (
-    <Stack gap={4}>
-      <Stack gap={2}>
-        <Label className="text-muted-foreground text-xs">Client</Label>
-        <Select value={selectedClientId} onValueChange={onChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Choose a client…" />
-          </SelectTrigger>
-          <SelectContent>
-            {clients.map((candidate) => (
-              <SelectItem key={candidate.id} value={candidate.id}>
-                {remoteSessionClientDisplayName(candidate)}
-                {/* Names aren't unique, so keep the ID that tells two apart. */}
-                {candidate.displayName && (
-                  <span className="text-muted-foreground ml-2 font-mono text-xs">
-                    {candidate.clientId}
-                  </span>
-                )}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Text muted small>
-          Bind an existing client of this authorization server to this MCP
-          server. The client's stored configuration is reused as-is.
-        </Text>
-      </Stack>
-
-      {selectedClient && <SelectedClientDetails client={selectedClient} />}
-    </Stack>
-  );
-}
-
-// SelectedClientDetails shows the picked client's stored configuration
-// read-only — attaching reuses it, so there is nothing to edit here.
-function SelectedClientDetails({
-  client,
-}: {
-  client: RemoteSessionClient;
-}): JSX.Element {
-  let typeValue = "OAuth credentials";
-  if (client.clientIdMetadataUri) {
-    typeValue = "Client ID Metadata Document (CIMD)";
-  }
-  const scopeValue =
-    client.scope && client.scope.length > 0 ? client.scope.join(", ") : "—";
-  const rows: { label: string; value: string; mono: boolean }[] = [
-    { label: "Client ID", value: client.clientId, mono: true },
-    { label: "Type", value: typeValue, mono: false },
-    {
-      label: "Token Endpoint Auth Method",
-      value: client.tokenEndpointAuthMethod ?? "—",
-      mono: false,
-    },
-    { label: "Scope", value: scopeValue, mono: false },
-    { label: "Audience", value: client.audience || "—", mono: false },
-  ];
-  return (
-    <Stack gap={3} className="border-t pt-4">
-      {rows.map((row) => (
-        <Stack key={row.label} gap={1}>
-          <Label className="text-muted-foreground text-xs">{row.label}</Label>
-          <Text small mono={row.mono} className="break-all">
-            {row.value}
-          </Text>
-        </Stack>
-      ))}
+    <Stack gap={2}>
+      <Label className="text-muted-foreground text-xs">Start from</Label>
+      <Select value={selectedClientId} onValueChange={onChange}>
+        <SelectTrigger aria-label="Start from">
+          <SelectValue placeholder="Choose a client…" />
+        </SelectTrigger>
+        <SelectContent>
+          {clients.map((candidate) => (
+            <SelectItem key={candidate.id} value={candidate.id}>
+              {remoteSessionClientDisplayName(candidate)}
+              {/* Names aren't unique, so keep the ID that tells two apart. */}
+              {candidate.displayName && (
+                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                  {candidate.clientId}
+                </span>
+              )}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Text muted small>
+        Attaching creates a separate client with the settings below. The client
+        you start from, the servers that use it, and the people signed in
+        through it stay as they are.
+      </Text>
     </Stack>
   );
 }

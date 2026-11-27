@@ -177,7 +177,7 @@ func renderResultCard(card resultCard) (string, bool) {
 // registerCardResource serves the card view to external clients. The managed
 // assistant renders no MCP Apps, so it is not an audience.
 func registerCardResource(reg *Registrar) {
-	addResource(reg, &mcp.Resource{ //nolint:exhaustruct // MCP SDK annotations and icons are intentionally omitted.
+	addResource(reg, &mcp.Resource{ //nolint:exhaustruct_v5 // MCP SDK annotations and icons are intentionally omitted.
 		URI:         cardResourceURI,
 		Name:        "platform-card",
 		Title:       "Speakeasy result card",

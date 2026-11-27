@@ -2,6 +2,8 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { toast } from "sonner";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { recordActivity } from "./activity-journal";
+import { describeApiError } from "./api-error";
 import { denialFromError, denialMessage } from "./denial";
 
 interface ErrorHandlerOptions {
@@ -62,11 +64,14 @@ export function handleError(
   // A refusal the authz engine explained is shown as the permission that is
   // missing, not as "permission denied".
   const denial = denialFromError(error);
+  // The SDK's fallback message is a dump of the raw response ("API error
+  // occurred: …"); describeApiError keeps the API's own message and swaps a
+  // dump for plain fallback copy.
   const errorMessage = denial
     ? denialMessage(denial)
     : typeof error === "string"
       ? error
-      : toError(error).message;
+      : describeApiError(error).message;
   const title = options.title ?? (denial ? "Permission needed" : "Error");
 
   // A 4xx from the API is the server answering a request it understood —
@@ -81,6 +86,9 @@ export function handleError(
 
   // Show toast notification unless silent
   if (!silent) {
+    // The Project Assistant reads what the user was just shown, so it can
+    // explain an error without asking which one.
+    recordActivity("error", `${title}: ${errorMessage}`);
     toast.error(
       <Stack gap={1}>
         <Text variant="subheading" className="text-destructive!">

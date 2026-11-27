@@ -31,7 +31,7 @@ func (s *Service) GetClientDelegationStatus(ctx context.Context, payload *orgcli
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: authCtx.ActiveOrganizationID}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	clientID, err := uuid.Parse(payload.ID)
@@ -129,7 +129,7 @@ func delegationRegistrationUsable(client repo.RemoteSessionClient, now time.Time
 		return false
 	}
 	secret := ""
-	if client.ClientSecretEncrypted.Valid && client.ClientSecretEncrypted.String != "" {
+	if hasNonEmptyClientSecret(client) {
 		secret = "present"
 	}
 	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)

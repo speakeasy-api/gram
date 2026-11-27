@@ -1,7 +1,11 @@
 import { Badge } from "@/components/ui/Badge";
 import { Text } from "@/components/ui/Text";
 
+import type { Disposition } from "@gram/client/models/components/selector.js";
+
 import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
+import { dispositionCopy } from "./mcpAccessModel";
+import type { CredentialChangeLine } from "./credentialAccessModel";
 import {
   reviewNeedsConfirmation,
   type AddedPermission,
@@ -31,12 +35,17 @@ function describeHolders(holders: NewHolders): string {
  */
 export function ReviewGrantsStep({
   added,
+  removedKinds = [],
+  credentialChanges = [],
   newHolders,
   holdersNote,
   confirmed,
   onConfirmedChange,
 }: {
   added: AddedPermission[];
+  removedKinds?: Disposition[];
+  /** What the save changes about which upstream credentials can be used. */
+  credentialChanges?: CredentialChangeLine[];
   newHolders?: NewHolders | null;
   /** Who is affected, e.g. "6 members hold this role today." */
   holdersNote?: string;
@@ -55,6 +64,60 @@ export function ReviewGrantsStep({
             {added.length}
           </Text>
           <PermissionList permissions={added} />
+        </div>
+      )}
+
+      {removedKinds.length > 0 && (
+        <div className="space-y-1.5">
+          <Text muted small>
+            Removed tool kind {removedKinds.length === 1 ? "rule" : "rules"} ·{" "}
+            {removedKinds.length}
+          </Text>
+          <ul className="border-border divide-border divide-y border">
+            {removedKinds.map((kind) => (
+              <li key={kind} className="px-3 py-2">
+                <Text variant="body" className="text-sm font-medium">
+                  {dispositionCopy(kind).badge}
+                </Text>
+              </li>
+            ))}
+          </ul>
+          <Text muted small>
+            Tools of {removedKinds.length === 1 ? "this kind" : "these kinds"}{" "}
+            added to the server later are no longer covered.
+          </Text>
+        </div>
+      )}
+
+      {credentialChanges.length > 0 && (
+        <div className="space-y-1.5">
+          <Text muted small>
+            Upstream credentials · {credentialChanges.length}
+          </Text>
+          <ul className="border-border divide-border divide-y border">
+            {credentialChanges.map((change) => (
+              <li
+                key={change.key}
+                className="flex flex-wrap items-baseline gap-2 px-3 py-2"
+              >
+                <Text
+                  variant="body"
+                  className={
+                    change.verb === "Blocked" ||
+                    change.verb === "No longer allowed"
+                      ? "text-muted-foreground text-sm"
+                      : "text-sm font-medium"
+                  }
+                >
+                  {change.verb}
+                </Text>
+                <Text small>{change.what}</Text>
+              </li>
+            ))}
+          </ul>
+          <Text muted small>
+            Each applies on every server that uses the credential.
+          </Text>
         </div>
       )}
 

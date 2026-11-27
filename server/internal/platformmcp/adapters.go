@@ -17,13 +17,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -209,9 +209,7 @@ func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal 
 	if err != nil {
 		return false, fmt.Errorf("load live admin grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("authorize live admin grants: %w", err)
 	}
@@ -234,12 +232,7 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	if err != nil {
 		return fmt.Errorf("load live admin grants: %w", err)
 	}
-	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   principal.OrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()); err != nil {
 		return fmt.Errorf("require live org admin: %w", err)
 	}
 	return nil
@@ -354,6 +347,8 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	// customDomainTargetSuffix is the normalized parent of designated CNAME destinations.
+	customDomainTargetSuffix  string
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
@@ -368,20 +363,24 @@ type PostgresReader struct {
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
+	teamMemory                *TeamMemoryService
+	mcpFeedback               *MCPFeedbackReadService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
-	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	agentIdentityReads        *AgentIdentityReadService
+	channelsAccess            *ChannelsAccessService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
 	eventFeed                 *EventFeedReadService
 	networkIngress            *NetworkIngressStatusService
 	authz                     *authz.Engine
+	identityGate              CanonicalIdentityGate
 	shadowInventory           *ShadowInventoryService
 	shadowDecisions           *ShadowDecisionService
 	shadowAI                  *ShadowAIService
@@ -399,10 +398,15 @@ type PostgresReader struct {
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
 	codeModeAvailable         CodeModeAvailability
+
+	// functionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so tools that work with function tools refuse.
+	functionsDisabled bool
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		customDomainTargetSuffix:  "",
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),
@@ -415,14 +419,17 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindingList:           nil,
 		chatMetadata:              nil,
 		chatSearch:                nil,
+		teamMemory:                nil,
+		mcpFeedback:               nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
-		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		agentIdentityReads:        nil,
+		channelsAccess:            nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -431,6 +438,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		xaaReadiness:              nil,
 		issuerGate:                nil,
 		authz:                     nil,
+		identityGate:              nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
@@ -448,7 +456,23 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		widgets:                   nil,
 		dashboards:                nil,
 		codeModeAvailable:         nil,
+		functionsDisabled:         false,
 	}
+}
+
+// WithCustomDomainTargetSuffix supplies the deployment's normalized CNAME suffix.
+func (r *PostgresReader) WithCustomDomainTargetSuffix(suffix string) *PostgresReader {
+	r.customDomainTargetSuffix = suffix
+	return r
+}
+
+// WithFunctionsDisabled marks a deployment that runs with the disabled
+// Functions provider, so creating an MCP server from functions refuses.
+func (r *PostgresReader) WithFunctionsDisabled(disabled bool) *PostgresReader {
+	if r != nil {
+		r.functionsDisabled = disabled
+	}
+	return r
 }
 
 // WithCodeModeAvailability lets gateway connection settings report the
@@ -463,6 +487,15 @@ func (r *PostgresReader) WithCodeModeAvailability(check CodeModeAvailability) *P
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithCanonicalIdentityGate folds a member's own-scope email the same way the
+// telemetry APIs do, so their hook rows match either way.
+func (r *PostgresReader) WithCanonicalIdentityGate(gate CanonicalIdentityGate) *PostgresReader {
+	if r != nil {
+		r.identityGate = gate
 	}
 	return r
 }
@@ -516,16 +549,11 @@ func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Princ
 	if r.authz == nil || principal.OrganizationID == "" {
 		return false
 	}
-	// FindMatched asks which checks pass; Require asserts that they must. Asking
+	// Decide asks which checks pass; Require asserts that they must. Asking
 	// records the org:admin check as a filter, where Require would record every
 	// ordinary member read as a denied requirement.
-	matched, err := r.authz.FindMatched(ctx, []authz.Check{{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	}})
-	if err != nil || len(matched) == 0 {
-		return false
-	}
-	return matched[0]
+	decision, err := r.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
+	return err == nil && decision.AllAllowed
 }
 
 // redactPluginNames strips the human-readable plugin fields, leaving the
@@ -555,7 +583,7 @@ func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Pri
 	if err != nil {
 		return ResolvedProject{}, fmt.Errorf("resolve platform MCP review project: %w", err)
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, oops.E(oops.CodeNotFound, err, "project not found")
 		}
@@ -658,10 +686,36 @@ func (r *PostgresReader) WithChatSearch(service *ChatSearchService) *PostgresRea
 	return r
 }
 
+// WithTeamMemory attaches the project team memory tools.
+func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.teamMemory = service
+	}
+	return r
+}
+
+// WithMCPFeedback serves list_mcp_feedback.
+func (r *PostgresReader) WithMCPFeedback(service *MCPFeedbackReadService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.mcpFeedback = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.organizationGateway = service
+	}
+	return r
+}
+
+// WithChannelsAccess serves get_my_channels_access. A nil or incomplete
+// service leaves the tool registered as a stub, so it does not appear on and
+// disappear from the catalogue as the rollout flips.
+func (r *PostgresReader) WithChannelsAccess(service *ChannelsAccessService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.channelsAccess = service
 	}
 	return r
 }
@@ -732,14 +786,14 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 
 		checks := make([]authz.Check, 0, len(rows))
 		for _, row := range rows {
-			checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
+			checks = append(checks, authz.Project(authz.ProjectIDOf(row.ID)).Read())
 		}
-		allowed, err := r.authz.FindMatched(ctx, checks)
+		decisions, err := r.authz.Decide(ctx, checks...)
 		if err != nil {
 			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
 		}
 		for i, row := range rows {
-			if !allowed[i] {
+			if !decisions.Each[i].Allowed {
 				filtered = true
 				continue
 			}
@@ -874,9 +928,9 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCP{}, ErrForbidden
 		}
@@ -909,7 +963,7 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false, "")
 }
@@ -1015,15 +1069,15 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	}
 	checks := make([]authz.Check, 0, len(servers))
 	for _, server := range servers {
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Read())
 	}
-	matched, err := r.authz.FindMatched(ctx, checks)
+	decisions, err := r.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
 	}
 	ids := make([]uuid.UUID, 0, len(servers))
 	for i, server := range servers {
-		if matched[i] {
+		if decisions.Each[i].Allowed {
 			ids = append(ids, server.ID)
 		}
 	}
@@ -1034,17 +1088,54 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.Read)
 }
 
 // ResolveProjectLogRead resolves one exact project under the principal's
 // organization and enforces log:read before callers list that project's
 // individual tool calls. project:read alone does not satisfy it.
 func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.LogRead)
 }
 
-func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
+// ResolveProjectLogScope resolves one exact project and decides how much of its
+// tool calls the caller may list: everything with log:read, otherwise a member's
+// own sessions and owned agents, the rule the management API's Tool Logs apply.
+func (r *PostgresReader) ResolveProjectLogScope(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, *telemetryrepo.OwnScope, error) {
+	if r == nil || r.reader == nil || r.authz == nil || r.db == nil {
+		return ResolvedProject{}, nil, ErrUnavailable
+	}
+	// Only the OAuth-authenticated member surface reads as a person; the
+	// assistant runtime keeps the plain check whatever its context carries.
+	if principal.surface() != SurfacePlatformMCP {
+		project, err := r.ResolveProjectLogRead(ctx, principal, input)
+		return project, nil, err
+	}
+	project, err := r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+	if err != nil {
+		return ResolvedProject{}, nil, err
+	}
+	readScope, err := r.authz.ResolveReadScope(ctx, authz.ScopeLogRead, project.ID.String())
+	if err != nil {
+		if isAuthorizationDenied(err) {
+			return ResolvedProject{}, nil, ErrForbidden
+		}
+		return ResolvedProject{}, nil, fmt.Errorf("resolve tool log scope: %w", err)
+	}
+	if readScope.Unrestricted() {
+		return project, nil, nil
+	}
+	return project, telemetryrepo.OwnScopeFrom(readScope, r.canonicalIdentityOrg(ctx, principal.OrganizationID)), nil
+}
+
+func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationID string) string {
+	if r == nil || r.identityGate == nil {
+		return ""
+	}
+	return r.identityGate.CanonicalOrgFor(ctx, organizationID)
+}
+
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, permission func(authz.ProjectRef) authz.Check) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -1052,7 +1143,7 @@ func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal 
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, permission(authz.Project(authz.ProjectIDOf(project.ID)))); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}
@@ -1152,16 +1243,6 @@ func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
 		}
 	}
 	return mcps[:min(len(mcps), limit)]
-}
-
-// WithGatewayProxy serves the caller's own MCP servers through their
-// organization gateway. Call it after WithOrganizationGateway, whose
-// availability answer the proxy tools share.
-func (r *PostgresReader) WithGatewayProxy(proxy GatewayProxy, flags feature.Provider) *PostgresReader {
-	if r != nil {
-		r.gatewayProxy = &GatewayProxyService{gateway: r.organizationGateway, proxy: proxy, flags: flags}
-	}
-	return r
 }
 
 // WithGatewaySessions shares the dashboard gateway connection reads.

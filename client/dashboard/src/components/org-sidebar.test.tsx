@@ -177,20 +177,17 @@ it.each([
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(item);
 });
 
-it("lists Speakeasy authorization servers under Settings only once rolled out", () => {
-  renderSidebar();
-  expect(
-    screen.queryByRole("link", { name: "Speakeasy Authorization Servers" }),
-  ).toBeNull();
-  cleanup();
-
+it("keeps Org Gateway and leaves MCP Sign-in out of Settings", () => {
+  // MCP sign-ins are managed on each project's MCP Sign-in page now.
   mocks.userSessionIssuersFlag = "enabled";
   renderSidebar();
-  const link = within(
-    screen.getByRole("navigation", { name: "Settings" }),
-  ).getByRole("link", { name: "Speakeasy Authorization Servers" });
-  expect(link.textContent).toBe("Authorization Servers");
-  expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
+  const settings = screen.getByRole("navigation", { name: "Settings" });
+  expect(
+    within(settings).queryByRole("link", { name: "MCP Sign-in" }),
+  ).toBeNull();
+  expect(
+    within(settings).getByRole("link", { name: "Org Gateway" }),
+  ).toBeTruthy();
 });
 
 it.each([false, true])(

@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -70,7 +69,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 // and commit. It returns the custom domains whose root it cleared, to reconcile after commit.
 func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, preexisting repo.McpEndpoint, requestedDomainID uuid.NullUUID, slug string) (*types.McpEndpoint, []uuid.UUID, error) {
 	serverID := preexisting.McpServerID.UUID
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, nil, err
 	}
 
@@ -128,6 +127,10 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)
 	}
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		// An unchanged address keeps its slug, so an endpoint created before the prefix rule can still be saved.
+		if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogWarn(ctx, logger)
+		}
 		if err := requireHostedSlugPrefix(ctx, logger, authCtx, customDomainID, slug); err != nil {
 			return nil, nil, err
 		}
@@ -135,13 +138,11 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
 		}
 		// The scope is the endpoint's own domain or the organization's verified one, so a
-		// soft-deleted domain must not block a move within it; the server's frozen toolset alias does not count.
+		// soft-deleted domain must not block a move within it.
 		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
 			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: server.ID, Valid: true},
 			SkipDomainOwnershipCheck: true,
 		})
 		if err != nil {
@@ -209,9 +210,6 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		reconcileDomains = append(reconcileDomains, existing.CustomDomainID.UUID)
 	}
 
-	if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
-		return nil, nil, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return afterView, reconcileDomains, nil
 }
 
@@ -241,7 +239,7 @@ func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.L
 		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
 		case err == nil && isCanonicalHosted(server):
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, server.ID.String(), authCtx.ProjectID.String())); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -249,7 +247,7 @@ func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.L
 			return false, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
 		}
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return false, err
 	}
 	return false, nil
@@ -261,8 +259,8 @@ func isCanonicalHosted(server mcpserversrepo.McpServer) bool {
 }
 
 // checkHostedNewAddress applies the hosted address rules to an endpoint created on a canonical hosted server: the
-// slug length, the organization's verified and activated custom domain only, the organization prefix on the
-// platform and for free accounts, and a private network mode's ingress namespace.
+// slug length and the organization prefix on the platform and for free accounts, the
+// organization's verified and activated custom domain only, and a private network mode's ingress namespace.
 func checkHostedNewAddress(ctx context.Context, tx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer, slug string, customDomainID uuid.NullUUID) error {
 	if len(slug) > maxHostedSlugLength {
 		return oops.E(oops.CodeBadRequest, nil, "a hosted MCP slug must be at most %d characters", maxHostedSlugLength).LogWarn(ctx, logger)

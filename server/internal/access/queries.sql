@@ -313,13 +313,25 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 -- Silently skips challenges that are already resolved (ON CONFLICT DO NOTHING).
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   @organization_id, unnest(@challenge_ids::text[]), @principal_urn, @scope,
-  @resource_kind, @resource_id, @resolution_type, @role_slug, @resolved_by
+  @resource_kind, @resource_id, @resolution_type, @role_slug, sqlc.narg(temporary_grant_id)::uuid, @resolved_by
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
 RETURNING *;
+
+-- name: ListChallengeResolutionTemporaryGrants :many
+-- Returns each temporary grant a challenge resolution points at, expired ones
+-- included. A grant that is missing was revoked (revocation deletes the row).
+-- active compares the deadline with the database clock, the same clock
+-- authorization reads grants with. created_at moves when an expired grant is
+-- restarted, which tells a resolution of the earlier grant from the new one.
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND expires_at IS NOT NULL;
 
 -- name: GetGlobalRoleBySlug :one
 SELECT *
@@ -1038,15 +1050,30 @@ WHERE ora.organization_id = @organization_id
 ORDER BY role_slug;
 
 -- name: ListMemberPrincipalsByUsers :many
--- Resolve active user and role principals together for a requested set of owners.
+-- Resolve active user and role principals together for a requested set of
+-- owners. Roles come from direct assignments and from directory role
+-- mappings, with the same rules as ListUserRolePrincipals: the profile is the
+-- directory user linked to the member, falling back to an unlinked directory
+-- user with the same email, and a mapping applies when its group contains the
+-- profile or its attribute value matches it.
 WITH active_users AS (
-  SELECT users.id AS user_id
+  SELECT users.id AS user_id, users.email
   FROM users
   JOIN organization_user_relationships AS our ON our.user_id = users.id
   WHERE our.organization_id = @organization_id
     AND users.id = ANY(@user_ids::text[])
     AND users.deleted_at IS NULL
     AND our.deleted_at IS NULL
+),
+profiles AS (
+  SELECT DISTINCT ON (active_users.user_id) active_users.user_id, d.id, d.attributes
+  FROM active_users
+  JOIN directory_users AS d
+    ON d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
+  ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
 )
 SELECT user_id, ('user:' || user_id)::text AS principal_urn
 FROM active_users
@@ -1065,7 +1092,51 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE ora.organization_id = @organization_id
   AND ora.deleted_at IS NULL
-  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL;
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+UNION
+SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+FROM profiles
+JOIN directory_role_mappings AS drm
+  ON drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+WHERE (
+    (
+      drm.source_kind = 'group'
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        JOIN directory_groups AS dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = drm.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE m.directory_user_id = profiles.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_roles AS r
+      WHERE drm.role_urn = 'role:organization:' || r.id::text
+        AND r.organization_id = drm.organization_id
+        AND r.deleted IS FALSE
+        AND r.workos_deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM global_roles AS g
+      WHERE drm.role_urn = 'role:global:' || g.id::text
+        AND g.deleted IS FALSE
+        AND g.workos_deleted IS FALSE
+    )
+  );
 
 -- name: ListOrganizationRoleAssignmentRecordsByWorkosUser :many
 SELECT
@@ -1366,9 +1437,12 @@ SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || s
 -- server, so plugin membership is deliberately not consulted.
 --
 -- The shape mirrors the authorization engine's own: a permission is an allow
--- grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
--- server (see authz/expressions.go). mcp:blocked_connect withdraws
--- mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+-- grant for a scope minus a blocked_ grant proving the same server for that
+-- scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+-- withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+-- mcp:write, because a write check honours a read block (see scopeExpansions
+-- in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+-- connect is implied by neither read nor write. A grant made directly to the
 -- user that names this server outranks a block inherited from a role or
 -- user:all, while the user's own blocks always apply (authz/precedence.go).
 WITH user_grants AS (
@@ -1437,7 +1511,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
     AND blocked.strict
-    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name;
@@ -1450,6 +1527,16 @@ ORDER BY s.name;
 -- distributed to a plugin the user holds is still unreachable if RBAC does not
 -- allow it, so distribution is not consulted. Principal precedence also
 -- matches: a direct grant naming the skill outranks an inherited block.
+--
+-- Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+-- also skill:write, because a write check honours a read block (see
+-- scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+-- skill:write. Callers read the result as "skills this user can reach", which
+-- is the skill:read check, and the engine does not withdraw that on
+-- skill:blocked_write. So a user whose only grant is skill:write, blocked by
+-- skill:blocked_write, is left out here although the engine lets them read the
+-- skill. That case is kept as it was until list and single-skill access are
+-- reconciled.
 WITH user_grants AS (
   SELECT
     pg.scope,
@@ -1498,7 +1585,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 -- SELECT DISTINCT only permits ORDER BY over selected columns, and
@@ -2119,3 +2209,163 @@ JOIN agents
 WHERE aab.organization_id = @organization_id
   AND aab.deleted IS FALSE
   AND aab.agent_id = ANY(@agent_ids::uuid[]);
+
+-- name: ExpireLapsedAccessRequest :exec
+-- Marks the requester's pending request for this access expired once its
+-- window has passed, so a new request for the same access can be stored.
+UPDATE access_requests
+SET status = 'expired', updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND requester_user_id = @requester_user_id
+  AND scope = @scope
+  AND selector = @selector
+  AND status = 'pending'
+  AND expires_at <= clock_timestamp()
+  AND deleted IS FALSE;
+
+-- name: InsertAccessRequest :one
+-- Stores a pending request. Returns no row when the requester already has a
+-- pending request for the same access; the caller loads that one instead.
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, requested_duration_seconds, requested_until, expires_at)
+VALUES (@organization_id, @requester_user_id, @scope, @selector, sqlc.narg(resource_name), sqlc.narg(message), @challenge_ids, sqlc.narg(requested_duration_seconds), sqlc.narg(requested_until), @expires_at)
+ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
+DO NOTHING
+RETURNING *;
+
+-- name: GetPendingAccessRequest :one
+SELECT *
+FROM access_requests
+WHERE organization_id = @organization_id
+  AND requester_user_id = @requester_user_id
+  AND scope = @scope
+  AND selector = @selector
+  AND status = 'pending'
+  AND deleted IS FALSE;
+
+-- name: GetAccessRequest :one
+SELECT sqlc.embed(access_requests), principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = @organization_id
+  AND access_requests.id = @id
+  AND access_requests.deleted IS FALSE;
+
+-- name: GetAccessRequestForUpdate :one
+-- Locks one request so a decision or withdrawal sees the state it changes.
+SELECT *
+FROM access_requests
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListAccessRequests :many
+-- Lists an organization's requests, newest first. A pending request whose
+-- window has passed counts as expired for the status filter.
+SELECT sqlc.embed(access_requests), principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = @organization_id
+  AND access_requests.deleted IS FALSE
+  AND (sqlc.narg(requester_user_id)::text IS NULL OR access_requests.requester_user_id = sqlc.narg(requester_user_id)::text)
+  AND (
+    sqlc.narg(status)::text IS NULL
+    OR (CASE
+          WHEN access_requests.status = 'pending' AND access_requests.expires_at <= clock_timestamp() THEN 'expired'
+          ELSE access_requests.status
+        END) = sqlc.narg(status)::text
+  )
+ORDER BY access_requests.created_at DESC, access_requests.id DESC
+LIMIT @max_rows;
+
+-- name: DecideAccessRequest :one
+-- Records a decision on a pending request.
+UPDATE access_requests
+SET
+  status = @status,
+  decided_by_user_id = @decided_by_user_id,
+  decided_via = @decided_via,
+  decided_at = clock_timestamp(),
+  temporary_grant_id = sqlc.narg(temporary_grant_id),
+  challenge_ids = @challenge_ids,
+  updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: WithdrawAccessRequest :one
+UPDATE access_requests
+SET status = 'withdrawn', updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND requester_user_id = @requester_user_id
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListAccessRequestPeople :many
+-- Names the requesters and deciders a list of requests mentions.
+SELECT id, display_name, email
+FROM users
+WHERE id = ANY(@ids::text[]);
+
+-- name: InsertAccessRequestMessage :one
+-- Records a notification sent for an access request. One per recipient and
+-- provider, so a retried send that already recorded its message inserts
+-- nothing.
+INSERT INTO access_request_messages (
+  organization_id
+  , access_request_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  @organization_id
+  , @access_request_id
+  , @provider
+  , @kind
+  , @recipient_user_id
+  , @slack_team_id
+  , @slack_user_id
+  , @slack_channel_id
+  , @slack_message_ts
+)
+ON CONFLICT (access_request_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
+-- name: ListAccessRequestMessages :many
+SELECT *
+FROM access_request_messages
+WHERE organization_id = @organization_id
+  AND access_request_id = @access_request_id
+  AND deleted IS FALSE
+ORDER BY created_at, id;
+
+-- name: GetAccessRequestMessageBySlackMessage :one
+-- Resolves a Slack click to the DM it was made on. Slack signs the click, and
+-- the click names its workspace, channel and message, so this lookup is not
+-- tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+-- the organization has since disconnected finds no row.
+SELECT sqlc.embed(m)
+FROM access_request_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = @slack_team_id
+  AND m.slack_channel_id = @slack_channel_id
+  AND m.slack_message_ts = @slack_message_ts
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1;

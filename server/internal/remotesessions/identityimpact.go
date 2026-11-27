@@ -215,6 +215,10 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
+	if targetID.Valid && payload.Change == identityChangeReplace {
+		return s.previewOfferReplacement(ctx, logger, projectID, orgID, change.moved)
+	}
+
 	servers, err := q.ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{
 		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
 		OrganizationID:      orgID,
@@ -263,7 +267,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(row.ID, row.ToolsetID), row.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(row.ID, row.ToolsetID)), authz.ProjectIDOf(row.ProjectID)).Read())
 	}
 	for _, row := range gateways {
 		impact := change.gatewayImpactOf(row.ProjectID)
@@ -279,17 +283,17 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			ProjectName: row.ProjectName,
 			Impact:      impact,
 		})
-		checks = append(checks, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: row.ProjectID.String(), Dimensions: nil})
+		checks = append(checks, authz.MCPServers(authz.ProjectIDOf(row.ProjectID)).Read())
 	}
 
-	readable, err := s.authz.FindMatched(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
 	}
 	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: uuidStrings(change.detachClients), ReleaseClientIds: uuidStrings(change.releaseClients)}
 	for i, candidate := range candidates {
 		switch {
-		case !readable[i]:
+		case !decisions.Each[i].Allowed:
 			result.HiddenServerCount++
 		case candidate.Impact != "":
 			result.Servers = append(result.Servers, candidate)
@@ -306,12 +310,47 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	return result, nil
 }
 
+// previewOfferReplacement shows the actual servers that would move, even if
+// they sign in through another issuer. Sharing sign-in alone is not an impact.
+func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, orgID string, moved []uuid.UUID) (*gen.ServerIdentityImpactResult, error) {
+	result := &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DetachClientIds: []string{}, ReleaseClientIds: []string{}}
+	if len(moved) == 0 {
+		return result, nil
+	}
+	servers, err := repo.New(s.db).ListIdentityReplacementTargets(ctx, repo.ListIdentityReplacementTargetsParams{
+		OrganizationID: orgID, ProjectID: projectID, ServerIds: moved,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list servers for identity offer replacement").LogError(ctx, logger)
+	}
+	result.HiddenServerCount = len(moved) - len(servers)
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Read())
+	}
+	decisions, err := s.authz.Decide(ctx, checks...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
+	}
+	for i, server := range servers {
+		if !decisions.Each[i].Allowed {
+			result.HiddenServerCount++
+			continue
+		}
+		result.Servers = append(result.Servers, &gen.ServerIdentityImpactServer{
+			ID: server.ID.String(), Kind: identityImpactKindServer, Name: conv.FromPGText[string](server.Name), Slug: conv.PtrEmpty(server.Slug.String),
+			ProjectID: projectID.String(), ProjectName: server.ProjectName, Impact: identityImpactResignin,
+		})
+	}
+	return result, nil
+}
+
 // authorizeServerIdentityImpact requires what making the change requires: write
 // access to the server it is made from, or to the project for a change made
 // without one.
 func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slog.Logger, projectID, userIssuerID uuid.UUID, targetID uuid.NullUUID) error {
 	if !targetID.Valid {
-		return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil})
+		return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Write())
 	}
 	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        targetID.UUID,
@@ -323,7 +362,7 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), projectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(target.ID, target.ToolsetID)), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		return err
 	}
 	if !target.UserSessionIssuerID.Valid || target.UserSessionIssuerID.UUID != userIssuerID {
@@ -341,7 +380,7 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
-			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID, CredentialOwner: client.credentialOwner}) //nolint:exhaustruct // Only the fields decideBoundClients reads.
+			visible = append(visible, repo.RemoteSessionClient{ID: client.id, ProjectID: client.projectID, RemoteSessionIssuerID: client.providerID, CredentialOwner: client.credentialOwner}) //nolint:exhaustruct_v5 // Only the fields decideBoundClients reads.
 		}
 	}
 	change.scopedToServer = targetID.Valid && kind != identityChangeAttach
@@ -413,8 +452,10 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 		}
 	}
 	if !alreadyBound {
-		if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, added.projectID); err != nil {
-			return err
+		if !targetID.Valid || kind != identityChangeReplace {
+			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, added.projectID); err != nil {
+				return err
+			}
 		}
 		change.added = &added
 	}
@@ -422,7 +463,18 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	if kind == identityChangeReplace {
 		// The preview cannot tell automatic registration from typed credentials,
 		// so naming no client reads as the automatic form the commit reuses for.
-		decision, err := decideBoundClients(ctx, q, boundClientsRequest{
+		if targetID.Valid {
+			var err error
+			visible, err = q.ListIdentityOfferClients(ctx, repo.ListIdentityOfferClientsParams{McpServerID: targetID.UUID, ProjectID: projectID, OrganizationID: orgID})
+			if err != nil {
+				return fmt.Errorf("list server identity offers: %w", err)
+			}
+		}
+		decide := decideBoundClients
+		if targetID.Valid {
+			decide = decideOfferedClients
+		}
+		decision, err := decide(ctx, q, boundClientsRequest{
 			OrganizationID:      orgID,
 			UserSessionIssuerID: userIssuerID,
 			MCPServerID:         targetID.UUID,
@@ -443,6 +495,9 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 			return err
 		}
 		change.moved = decision.moved
+		if targetID.Valid {
+			change.added = nil // An offer is not an attachment to the issuer.
+		}
 		for _, client := range decision.detach {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {
 				return err
@@ -461,9 +516,9 @@ func uuidStrings(ids []uuid.UUID) []string {
 	return out
 }
 
-func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
+func mcpGrantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) uuid.UUID {
 	if toolsetID.Valid {
-		return toolsetID.UUID.String()
+		return toolsetID.UUID
 	}
-	return id.String()
+	return id
 }

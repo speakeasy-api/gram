@@ -67,3 +67,46 @@ func recordDenial(ctx context.Context, err error) {
 	defer recorder.mu.Unlock()
 	recorder.denial = &Denial{Scope: denied.Scope, ResourceKind: kind}
 }
+
+// Reason says why the caller is not authorized for a check.
+type Reason string
+
+const (
+	// ReasonNone marks a check the caller is authorized for.
+	ReasonNone Reason = ""
+
+	// ReasonBlocked marks a check an exclusion (a *:blocked_* grant)
+	// withdraws.
+	ReasonBlocked Reason = "blocked"
+
+	// ReasonReadOnly marks a check no grant allows only because of its
+	// disposition dimension, where the caller's access covers read_only: a
+	// grant would allow the same check if it named the read_only disposition.
+	ReasonReadOnly Reason = "read_only"
+
+	// ReasonDisposition marks a check no grant allows only because of
+	// its disposition dimension, where the caller's access is limited to other
+	// dispositions than read_only (for example idempotent or open_world): a
+	// grant would allow the same check if it named one of those dispositions
+	// instead.
+	ReasonDisposition Reason = "disposition"
+
+	// ReasonNotGranted marks a check no grant allows.
+	ReasonNotGranted Reason = "not_granted"
+)
+
+// RecordedCheck rebuilds a check that was stored earlier, such as the denied
+// request an access challenge keeps, from its scope, resource and dimensions.
+// A connect check that names a tool or a disposition was a tool call, so it is
+// rebuilt as one; anything else is rebuilt as an ordinary check. A recorded
+// check the evaluator would refuse today, such as a view check that names a
+// tool, stays invalid.
+func RecordedCheck(scope Scope, resourceKind, resourceID string, dimensions map[string]string) Check {
+	check := Check{Scope: scope, ResourceKind: resourceKind, ResourceID: resourceID, Dimensions: dimensions, representedUser: "", probe: false, group: nil, operation: operationDefault, exact: false}
+	_, hasTool := dimensions[SelectorKeyTool]
+	_, hasDisposition := dimensions[SelectorKeyDisposition]
+	if (hasTool || hasDisposition) && isConnectScope(scope) {
+		check.operation = operationToolCall
+	}
+	return check
+}

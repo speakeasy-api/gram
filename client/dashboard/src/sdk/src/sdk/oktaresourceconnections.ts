@@ -28,7 +28,7 @@ export class OktaResourceConnections extends ClientSDK {
    * confirm oktaResourceConnections
    *
    * @remarks
-   * Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin and the okta-connections rollout.
+   * Record that the administrator created the agent-to-resource connections for these servers in the identity provider console, with the audience each resource app is configured with. Servers that share an upstream share one Okta resource connection. Confirmation is the administrator's word; Speakeasy cannot check it. The connection must be verified or degraded. Requires org:admin.
    */
   async confirm(
     request: ConfirmOktaResourceConnectionsRequest,

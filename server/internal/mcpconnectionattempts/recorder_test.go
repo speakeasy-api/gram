@@ -27,7 +27,7 @@ import (
 
 func testConfig() config {
 	return config{
-		table:         eventsTable,
+		table:         EventsTable,
 		queueSize:     64,
 		maxBatch:      8,
 		flushInterval: 10 * time.Millisecond,
@@ -36,6 +36,11 @@ func testConfig() config {
 		logsCheckTimeout: 10 * time.Second,
 
 		repeatsInterval: time.Hour,
+
+		servedInterval:      5 * time.Minute,
+		servedFlushInterval: 10 * time.Millisecond,
+		servedFlushBudget:   10 * time.Second,
+		servedTable:         lastServedTable,
 	}
 }
 
@@ -93,20 +98,26 @@ func newTestRecorderWithLogs(t *testing.T, conn driver.Conn, logsEnabled func(co
 
 func (r testRecorder) dropped(t *testing.T, reason dropReason) int64 {
 	t.Helper()
+	return r.counted(t, meterDropped, reason)
+}
+
+// counted sums a counter's points with reason as their drop reason, or every point for "".
+func (r testRecorder) counted(t *testing.T, name string, reason dropReason) int64 {
+	t.Helper()
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, r.reader.Collect(t.Context(), &collected))
 	var total int64
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != meterDropped {
+			if m.Name != name {
 				continue
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
 			for _, point := range sum.DataPoints {
 				value, _ := point.Attributes.Value(attr.ConnectionDropReasonKey)
-				if value.AsString() == string(reason) {
+				if reason == "" || value.AsString() == string(reason) {
 					total += point.Value
 				}
 			}
@@ -461,6 +472,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 		t.Fatal("Step blocked on a stalled ClickHouse")
 	}
 	require.GreaterOrEqual(t, recorder.dropped(t, dropQueueFull)-before, int64(1000-cfg.queueSize))
+	require.Zero(t, stepsCounted(t, recorder), "rows past a full queue are not counted")
 
 }
 
@@ -496,6 +508,7 @@ func TestRecord_FailedInsertIsNotRetried(t *testing.T) {
 
 	require.Equal(t, int64(1), conn.prepares.Load())
 	require.Equal(t, int64(2), recorder.dropped(t, dropInsertFailed))
+	require.Zero(t, stepsCounted(t, recorder), "rows that failed to insert are not counted")
 }
 
 // With ClickHouse stalled, shutdown waits for one failed insert, not one per batch.
@@ -560,16 +573,68 @@ func TestRecord_NilRecorderDoesNothing(t *testing.T) {
 func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 	t.Parallel()
 
-	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, testConfig())
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
 	subject := urn.NewUserSubject("user-test")
 
 	recorder.End(t.Context(), Begin(testScope()), StepProviderSignIn, CodeProviderRateLimited,
 		Provider("https://login.example.com/oauth"), Subject(&subject))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, []map[string]string{{
+		string(attr.ConnectionOutcomeKey):  string(OutcomeFailed),
+		string(attr.ConnectionStepKey):     StepProviderSignIn.String(),
+		string(attr.ConnectionReasonKey):   "provider_rate_limited",
+		string(attr.ConnectionWhoFixesKey): string(WhoProvider),
+		string(attr.ConnectionProviderKey): LabelOther,
+	}}, stepTags(t, recorder))
+}
+
+func TestRecord_MetricKeepsAKnownProvider(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
+	attempt := Begin(testScope())
+	recorder.Step(t.Context(), attempt, StepProviderSignIn, ResultSignedIn, Provider("https://accounts.google.com/o/oauth2"))
+	recorder.End(t.Context(), attempt, StepInboundToken, ResultCodeIssued)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	providers := map[string]bool{}
+	for _, tags := range stepTags(t, recorder) {
+		providers[tags[string(attr.ConnectionProviderKey)]] = true
+	}
+	require.Equal(t, map[string]bool{"accounts.google.com": true, "": true}, providers)
+	for _, tags := range stepTags(t, recorder) {
+		if tags[string(attr.ConnectionStepKey)] == StepInboundToken.String() {
+			_, tagged := tags[string(attr.ConnectionProviderKey)]
+			require.False(t, tagged, "a row that reached no provider has no provider tag")
+		}
+	}
+}
+
+// A listing row keeps its member's host for the log but is not counted as a provider attempt.
+func TestRecord_MetricLeavesListingRowsUntagged(t *testing.T) {
+	t.Parallel()
+
+	recorder := newTestRecorder(t, clickhouseConn(t), testConfig())
+	attempt := Begin(testScope())
+	recorder.End(t.Context(), attempt, StepDiscoveryMember, CodeProviderServerError, Provider("https://mcp.example.com/mcp"))
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	points := stepTags(t, recorder)
+	require.NotEmpty(t, points)
+	for _, tags := range points {
+		_, tagged := tags[string(attr.ConnectionProviderKey)]
+		require.False(t, tagged, "a listing row has no provider tag")
+	}
+}
+
+// stepTags returns each step metric point's tags.
+func stepTags(t *testing.T, recorder testRecorder) []map[string]string {
+	t.Helper()
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
-	var keys map[string]string
+	var points []map[string]string
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			if m.Name != meterSteps {
@@ -577,19 +642,16 @@ func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
-			require.Len(t, sum.DataPoints, 1)
-			keys = map[string]string{}
-			for _, kv := range sum.DataPoints[0].Attributes.ToSlice() {
-				keys[string(kv.Key)] = kv.Value.AsString()
+			for _, point := range sum.DataPoints {
+				tags := map[string]string{}
+				for _, kv := range point.Attributes.ToSlice() {
+					tags[string(kv.Key)] = kv.Value.AsString()
+				}
+				points = append(points, tags)
 			}
 		}
 	}
-	require.Equal(t, map[string]string{
-		string(attr.ConnectionOutcomeKey):  string(OutcomeFailed),
-		string(attr.ConnectionStepKey):     StepProviderSignIn.String(),
-		string(attr.ConnectionReasonKey):   "provider_rate_limited",
-		string(attr.ConnectionWhoFixesKey): string(WhoProvider),
-	}, keys)
+	return points
 }
 
 func stepsCounted(t *testing.T, recorder testRecorder) int64 {
@@ -660,6 +722,7 @@ func TestLogs_OnWrites(t *testing.T) {
 	require.Equal(t, uint64(3), events)
 	require.NotZero(t, rollup)
 	require.Zero(t, recorder.dropped(t, dropLogsOff))
+	require.Equal(t, int64(3), stepsCounted(t, recorder))
 }
 
 func TestLogs_OffWritesNothing(t *testing.T) {
@@ -695,7 +758,7 @@ func TestLogs_OffWritesNothing(t *testing.T) {
 			require.Zero(t, events)
 			require.Zero(t, rollup)
 			require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
-			require.Equal(t, int64(3), stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
+			require.Zero(t, stepsCounted(t, recorder), "the step metric counts stored rows only")
 		})
 	}
 }
@@ -1132,12 +1195,12 @@ func TestRecorderOnceReportsAdmission(t *testing.T) {
 	t.Parallel()
 	var absent *Recorder
 	require.False(t, absent.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
-	rec := NewCapturing(func(Row) {}, func(context.Context, string) (bool, error) { return true, nil })
+	rec := NewCapturing(func(Row) {}, nil, func(context.Context, string) (bool, error) { return true, nil })
 	require.True(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 	require.False(t, rec.Once(t.Context(), Scope{}, StepProviderRefresh, CodeProviderServerError))
-	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, func(context.Context, string) (bool, error) { return false, nil })
+	disabled := NewCapturing(func(Row) { t.Error("disabled capture") }, nil, func(context.Context, string) (bool, error) { return false, nil })
 	require.False(t, disabled.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
-	panics := NewCapturing(func(Row) { panic("capture failed") }, func(context.Context, string) (bool, error) { return true, nil })
+	panics := NewCapturing(func(Row) { panic("capture failed") }, nil, func(context.Context, string) (bool, error) { return true, nil })
 	require.False(t, panics.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
 	rec.capture = nil
 	rec.queue = make(chan Row, 1)
@@ -1146,4 +1209,225 @@ func TestRecorderOnceReportsAdmission(t *testing.T) {
 	<-rec.queue
 	rec.stopped = true
 	require.False(t, rec.Once(t.Context(), testScope(), StepProviderRefresh, CodeProviderServerError))
+}
+
+// A stalled drain is cut off before the caller's deadline, the writer is joined, and every
+// lost row is counted on the metric and in the log instead of left unfinished.
+func TestShutdownAndWait_JoinsBeforeItsDeadlineAndCountsWhatItLost(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	var logged bytes.Buffer
+	reader := sdkmetric.NewManualReader()
+	recorder := testRecorder{
+		Recorder: newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, cfg),
+		reader:   reader,
+	}
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 3 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+
+	deadline := writerJoinMargin + 200*time.Millisecond
+	ctx, cancel := context.WithTimeout(t.Context(), deadline)
+	defer cancel()
+	started := time.Now()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.DeadlineExceeded)
+
+	require.Less(t, time.Since(started), deadline, "returns before the deadline its caller closes ClickHouse after")
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("writer still running after ShutdownAndWait")
+	}
+	require.Equal(t, int64(1), conn.prepares.Load(), "nothing is written once cancelled")
+	require.Zero(t, recorder.unfinished.Load())
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed), "the cancelled insert")
+	require.Equal(t, int64(3), recorder.dropped(t, dropShutdown), "the backlog")
+	require.Equal(t, int64(4), recorder.droppedTotal(t), "each lost row counted once")
+	require.Contains(t, logged.String(), `gram.connection.drop_counts="insert_failed=1 shutdown=3"`)
+}
+
+// A drain that finishes in time loses nothing and keeps its deadline.
+func TestShutdownAndWait_CleanDrainWritesEverything(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorder(t, conn, testConfig())
+	for range 5 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, recorder.ShutdownAndWait(ctx))
+	require.Equal(t, int64(5), conn.rows.Load())
+	require.Zero(t, recorder.droppedTotal(t))
+}
+
+// slowAbortConn honours cancellation, but takes a moment to return once cancelled.
+type slowAbortConn struct {
+	driver.Conn
+
+	prepares atomic.Int64
+}
+
+func (c *slowAbortConn) PrepareBatch(ctx context.Context, _ string, _ ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-ctx.Done()
+	<-time.After(200 * time.Millisecond)
+	return nil, fmt.Errorf("prepare batch: %w", ctx.Err())
+}
+
+// With ctx already over, ShutdownAndWait still returns only once the writer has exited.
+func TestShutdownAndWait_JoinsTheWriterAfterItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	conn := &slowAbortConn{Conn: nil, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	recorder := newTestRecorder(t, conn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, recorder.ShutdownAndWait(ctx), context.Canceled)
+
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("ShutdownAndWait returned before the writer exited")
+	}
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
+}
+
+// wedgedConn ignores cancellation until released.
+type wedgedConn struct {
+	driver.Conn
+
+	release  chan struct{}
+	prepares atomic.Int64
+}
+
+func (c *wedgedConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	c.prepares.Add(1)
+	<-c.release
+	return nil, errors.New("wedged")
+}
+
+// A writer that outlives its grace, and a log handler that never returns, still let ShutdownAndWait return.
+func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &wedgedConn{Conn: nil, release: release, prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = 50 * time.Millisecond
+	cfg.logsCheckTimeout = 50 * time.Millisecond
+	handler := &blockingLogHandler{entered: make(chan struct{}, 1), release: release}
+	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	finished := make(chan error, 1)
+	go func() { finished <- recorder.ShutdownAndWait(ctx) }()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, errWriterStillRunning)
+	case <-time.After(writerJoinWait(cfg.insertTimeout, cfg.logsCheckTimeout) + 2*drainLogWait + 2*time.Second):
+		t.Fatal("ShutdownAndWait waited on a blocked log call")
+	}
+}
+
+func TestDrainWindow_KeepsAMinimumFromASmallBudget(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 28*time.Second, drainWindow(30*time.Second))
+	require.Equal(t, minDrainWindow, drainWindow(writerJoinMargin))
+	require.Equal(t, minDrainWindow, drainWindow(time.Second))
+	require.Equal(t, 300*time.Millisecond, drainWindow(300*time.Millisecond))
+}
+
+// ctxConn fails a batch once its context ends, like the real driver.
+type ctxConn struct {
+	*repeatsConn
+}
+
+func (c ctxConn) PrepareBatch(ctx context.Context, query string, opts ...driver.PrepareBatchOption) (driver.Batch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("prepare batch: %w", err)
+	}
+	return c.repeatsConn.PrepareBatch(ctx, query, opts...)
+}
+
+// A budget smaller than writerJoinMargin still drains a healthy backlog.
+func TestShutdownAndWait_ASmallBudgetStillDrains(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	recorder := newTestRecorder(t, ctxConn{repeatsConn: conn}, cfg)
+	for range 5 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	require.NoError(t, recorder.ShutdownAndWait(ctx))
+	require.Equal(t, int64(5), conn.rows.Load())
+	require.Zero(t, recorder.droppedTotal(t))
+}
+
+// MaxShutdownOverrun must cover the join on a writer stuck in a logs check.
+func TestMaxShutdownOverrun_CoversALogsCheckOnTheWriter(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, MaxShutdownOverrun, writerJoinWait(defaultInsertTimeout, defaultLogsCheckTimeout)+2*drainLogWait)
+	require.Greater(t, writerJoinWait(defaultInsertTimeout, defaultLogsCheckTimeout), defaultLogsCheckTimeout+logsCheckLockRelease)
+}
+
+// A writer in a logs check that outlasts the insert timeout, as a lock release can, is still joined.
+func TestShutdownAndWait_JoinsAWriterInASlowLogsCheck(t *testing.T) {
+	t.Parallel()
+
+	var checks atomic.Int64
+	release := make(chan struct{})
+	slowCheck := func(context.Context, string) (bool, error) {
+		checks.Add(1)
+		<-release
+		return true, nil
+	}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	cfg := testConfig()
+	cfg.insertTimeout = 100 * time.Millisecond
+	cfg.logsCheckTimeout = 100 * time.Millisecond
+	recorder := newTestRecorderWithLogs(t, conn, slowCheck, cfg)
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return checks.Load() == 1 }, 10*time.Second, time.Millisecond)
+	// The check ignores cancellation, like the detached lock release, and outlasts the insert timeout and grace.
+	time.AfterFunc(1500*time.Millisecond, func() { close(release) })
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+
+	err := recorder.ShutdownAndWait(ctx)
+	require.NotErrorIs(t, err, errWriterStillRunning)
+	select {
+	case <-recorder.done:
+	default:
+		t.Fatal("ShutdownAndWait returned before the writer exited")
+	}
 }

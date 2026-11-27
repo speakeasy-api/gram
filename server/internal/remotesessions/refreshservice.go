@@ -37,8 +37,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -183,9 +186,16 @@ func (e *RefreshError) Is(target error) bool {
 // deliberately constructible without any HTTP-serving context so the
 // background worker can hold one alongside the request-path callers.
 type RefreshService struct {
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	enc     *encryption.Client
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	enc    *encryption.Client
+
+	// secrets opens the client secret a refresh authenticates with.
+	secrets *clientsecrets.Secrets
+
+	// tokens opens and stores the session's upstream tokens.
+	tokens *upstreamtokens.Tokens
+
 	policy  *guardian.Policy
 	tunnels *tunnelrouting.HTTPClient
 	locks   cache.Cache
@@ -223,6 +233,28 @@ type identityRestatement struct {
 
 // RefreshOption configures optional RefreshService behaviour.
 type RefreshOption func(*RefreshService)
+
+// WithRefreshClientSecrets installs the process's client secret seam, which
+// knows the organization encryption configured in the process. Without it the
+// service opens client secrets as a process without organization encryption:
+// platform_key works and every other transition state fails closed.
+// Production wiring always passes it.
+func WithRefreshClientSecrets(secrets *clientsecrets.Secrets) RefreshOption {
+	return func(s *RefreshService) {
+		s.secrets = secrets
+	}
+}
+
+// WithRefreshUpstreamTokens installs the process's upstream token seam, which
+// knows the organization encryption configured in the process. Without it the
+// service opens and stores session tokens as a process without organization
+// encryption: platform_key works and every other transition state fails
+// closed. Production wiring always passes it.
+func WithRefreshUpstreamTokens(tokens *upstreamtokens.Tokens) RefreshOption {
+	return func(s *RefreshService) {
+		s.tokens = tokens
+	}
+}
 
 // WithRefreshIDTokenVerifier restates a session's upstream identity from the
 // ID token a refresh grant returns.
@@ -269,6 +301,8 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		logger:         logger.With(attr.SlogComponent("remotesessions_refresh")),
 		db:             db,
 		enc:            enc,
+		secrets:        nil,
+		tokens:         nil,
 		policy:         policy,
 		tunnels:        tunnels,
 		locks:          locks,
@@ -285,6 +319,12 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 	for _, opt := range opts {
 		opt(s)
 	}
+	if s.secrets == nil {
+		s.secrets = clientsecrets.WithoutOrganizationEncryption(logger, db, enc)
+	}
+	if s.tokens == nil {
+		s.tokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, enc)
+	}
 	if s.enricher == nil && policy != nil {
 		s.enricher = NewSessionEnricher(logger, enc, policy, nil, nil, tunnels, s.issuerMetadata)
 	}
@@ -296,48 +336,35 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 // persisted resource. organizationID is the client's organization; it selects
 // where the attachments come from and, for associations, scopes them.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
-	if s.attachmentsFromAssociations(ctx, organizationID) {
-		attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
-		if err != nil {
-			return "", err
-		}
-		return clientUpstreamResource(attachments[clientID]), nil
+	if organizationID == "" {
+		return "", nil
 	}
-
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers for client: %w", err)
+		return "", err
 	}
-	resources := make([]string, 0, len(rows))
-	for _, row := range rows {
-		resources = append(resources, row.Url)
-	}
-	return clientUpstreamResource(resources), nil
+	return clientUpstreamResource(attachments[clientID]), nil
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
-// Where the organization it was consented in enforces typed auth clients, the
-// servers that offer its client decide; a client with no offer, and any client
-// elsewhere, falls back to its attached servers.
+// The grant's sign-in tenant fences both typed offers and direct placements.
+// Only a global sign-in may fall back to the registration's own tenant.
 func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
 	q := remotesessions_repo.New(s.db)
 	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
 	if err != nil {
 		return "", fmt.Errorf("get grant organization: %w", err)
 	}
-	attachments, offered, err := loadClientAttachments(ctx, s.db, organizationID, []uuid.UUID{sess.RemoteSessionClientID})
-	if err != nil {
-		return "", fmt.Errorf("list mcp servers for grant client: %w", err)
+	if organizationID == "" {
+		organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
+		if err != nil {
+			return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+		}
 	}
-	if offered[sess.RemoteSessionClientID] {
-		return clientUpstreamResource(attachments[sess.RemoteSessionClientID]), nil
-	}
-	// A global sign-in has no organization, but its client still has a tenant.
-	// Use that tenant for the association flag and retain the legacy client-wide
-	// fallback when association-derived resources are not enabled.
-	organizationID, err = q.GetRemoteSessionClientTenantOrganizationID(ctx, sess.RemoteSessionClientID)
-	if err != nil {
-		return "", fmt.Errorf("read client organization for fallback resource: %w", err)
+	if organizationID == "" {
+		// Neither side establishes a tenant. Do not infer a resource from
+		// some other tenant's placement of a platform-global registration.
+		return "", nil
 	}
 	return s.FallbackResourceForClient(ctx, organizationID, sess.RemoteSessionClientID)
 }
@@ -410,8 +437,8 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 	return attachments, nil
 }
 
-// loadClientAttachments also reports which clients have offers, so grant
-// refresh can preserve its client-wide fallback when no offer decides.
+// loadClientAttachments also reports which registrations have typed offers,
+// so attachmentsForClients only falls back to direct associations for others.
 func loadClientAttachments(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, map[uuid.UUID]bool, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
@@ -533,6 +560,52 @@ func RefreshOutageKey(sess remotesessions_repo.RemoteSession) string {
 	return "remotesession:refresh-outage:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
 }
 
+// RefreshAddressKey records the configured address one grant's last paced refresh could not dial.
+func RefreshAddressKey(sess remotesessions_repo.RemoteSession) string {
+	return "remotesession:refresh-address:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
+}
+
+// recordedAddress reads the address that last stopped sess's refresh, AddressFine when none or unreadable.
+func (s *RefreshService) recordedAddress(ctx context.Context, sess remotesessions_repo.RemoteSession) guardian.AddressFailure {
+	var address guardian.AddressFailure
+	if err := s.locks.Get(ctx, RefreshAddressKey(sess), &address); err != nil {
+		if !errors.Is(err, redisCache.ErrCacheMiss) {
+			s.logger.WarnContext(ctx, "remote session refresh address unreadable", attr.SlogError(err))
+		}
+		return guardian.AddressFine
+	}
+	switch address {
+	case guardian.AddressNotAllowed, guardian.AddressNotFound:
+	case guardian.AddressFine:
+		return guardian.AddressFine
+	default:
+		return guardian.AddressFine
+	}
+	// An outage record beside it means an older pod wrote a later cause; neither is known to be newer, so say neither.
+	if kind, known := s.RecordedOutage(ctx, sess); !known || kind != RefreshOutageNone {
+		return guardian.AddressFine
+	}
+	return address
+}
+
+// clearRefreshAddress forgets the address cause once a later refresh attempt ended some other way.
+func (s *RefreshService) clearRefreshAddress(ctx context.Context, sess remotesessions_repo.RemoteSession) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+	defer cancel()
+	if err := s.locks.Delete(ctx, RefreshAddressKey(sess)); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh address not cleared", attr.SlogError(err))
+	}
+}
+
+// RecordedAddress is the address that last stopped sess's refresh, for pages to render from.
+func (m *ChallengeManager) RecordedAddress(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) guardian.AddressFailure {
+	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return guardian.AddressFine
+	}
+	return m.refresher.recordedAddress(ctx, sess)
+}
+
 // RecordedOutage reads what last stopped sess's refresh; known is false when the record couldn't be read.
 func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) (kind RefreshOutageKind, known bool) {
 	if err := s.locks.Get(ctx, RefreshOutageKey(sess), &kind); err != nil {
@@ -586,6 +659,9 @@ type refreshDeferredError struct {
 
 	// why says whether an outage, another request, or our own setup stopped the call.
 	why refreshDeferral
+
+	// address is the configured address a paced refresh last could not dial.
+	address guardian.AddressFailure
 }
 
 func (e *refreshDeferredError) Error() string {
@@ -626,8 +702,8 @@ func (s *RefreshService) refreshCooldownRemaining(ctx context.Context, sess remo
 	return max(time.Until(until), 0)
 }
 
-// startRefreshCooldown paces the binding after an outage answer, records the outage for the connect page, and returns the wait and whether the page can see it.
-func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, cause error) (time.Duration, bool) {
+// startRefreshCooldown paces the binding and records the outage, or an undialed address in its place, returning the wait and whether an outage shows.
+func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, address guardian.AddressFailure, cause error) (time.Duration, bool) {
 	wait := refreshOutageCooldown
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](cause); ok {
 		wait = min(max(wait, tokenErr.retryAfter), refreshOutageCooldownMax)
@@ -635,9 +711,17 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
 	recorded := true
-	if err := s.locks.Set(ctx, RefreshOutageKey(sess), kind, refreshOutageTTL); err != nil {
+	recordKey, recordValue, staleKey := RefreshOutageKey(sess), any(kind), RefreshAddressKey(sess)
+	if address != guardian.AddressFine {
+		recorded = false
+		recordKey, recordValue, staleKey = RefreshAddressKey(sess), any(address), RefreshOutageKey(sess)
+	}
+	if err := s.locks.Set(ctx, recordKey, recordValue, refreshOutageTTL); err != nil {
 		recorded = false
 		s.logger.WarnContext(ctx, "remote session refresh outage not recorded", attr.SlogError(err))
+	}
+	if err := s.locks.Delete(ctx, staleKey); err != nil {
+		s.logger.WarnContext(ctx, "remote session refresh outage not cleared", attr.SlogError(err))
 	}
 	if err := s.locks.Set(ctx, RefreshCooldownKey(sess), time.Now().Add(wait), wait); err != nil {
 		s.logger.WarnContext(ctx, "remote session refresh cooldown not stored", attr.SlogError(err))
@@ -650,7 +734,7 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
-	for _, key := range []string{RefreshCooldownKey(sess), RefreshOutageKey(sess)} {
+	for _, key := range []string{RefreshCooldownKey(sess), RefreshOutageKey(sess), RefreshAddressKey(sess)} {
 		if err := s.locks.Delete(ctx, key); err != nil {
 			s.logger.WarnContext(ctx, "remote session refresh outage not cleared", attr.SlogError(err))
 		}
@@ -773,13 +857,18 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
 			recorded, _ := s.RecordedOutage(ctx, sess)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, visibleOutage: recorded, outageCause: kind, failureRecorded: false, stepRecorded: false, err: &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}}
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, visibleOutage: recorded, outageCause: kind, failureRecorded: false, stepRecorded: false, err: &refreshDeferredError{wait: wait, why: refreshDeferralCooldown, address: s.recordedAddress(ctx, sess)}}
 		}
 	}
 
 	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
 	attempted := sess
-	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted)
+	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted, attribution)
+	if attribution.scheduledEligibility != nil && result.Outcome == remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner {
+		// A scheduled worker does not need the winner's token. Its old claim
+		// cannot authorize material from a grant already refreshed elsewhere.
+		result = RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive} //nolint:exhaustruct_v5 // no grant is published
+	}
 	if postLockClient != nil {
 		client = *postLockClient
 	}
@@ -797,7 +886,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 		case refreshOutagePaced(outcome, err):
 			outageCause = kind
 			var recorded bool
-			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, err)
+			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, guardian.AddressFailureOf(err, client.TunneledMcpServerID.Valid), err)
 			if recorded {
 				visibleOutage = kind
 			}
@@ -812,6 +901,9 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 					visibleOutage, _ = s.RecordedOutage(ctx, attempted)
 				}
 			}
+		case outcome != remotesessionmetrics.RefreshOutcomeCanceled:
+			// This attempt ended some other way, so an earlier address cause no longer describes it.
+			s.clearRefreshAddress(ctx, attempted)
 		}
 		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, retryAfter: retryAfter, visibleOutage: visibleOutage, outageCause: outageCause, failureRecorded: failureRecorded, stepRecorded: stepRecorded, err: err}
 	}
@@ -904,8 +996,33 @@ func (s *RefreshService) refresh(
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
 	attempted *remotesessions_repo.RemoteSession,
+	attribution RefreshAttribution,
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
+
+	// An unreadable refresh token can't be sent, so it never takes the lease;
+	// a row that moved since the snapshot is used instead. The post-lock reread checks again.
+	// A key that cannot open it right now fails the refresh as retryable.
+	if hasRefreshToken(sess) && refreshTokenUsable(sess, time.Now()) {
+		if _, err := openRefreshToken(ctx, s.tokens, sess); err != nil && !orgencryption.IsUnreadable(err) {
+			return zero, nil, nil, newTokenRefreshError("the session's stored refresh token could not be opened right now; try again shortly", err, refreshRemedyRetry)
+		} else if err != nil {
+			current, done, rerr := s.rereadActiveSession(ctx, q, sess, sess.UpdatedAt.Time)
+			if rerr != nil {
+				return zero, nil, nil, rerr
+			}
+			if done != nil {
+				return *done, nil, nil, nil
+			}
+			sess = current
+			*attempted = current
+			if hasRefreshToken(sess) && refreshTokenUsable(sess, time.Now()) {
+				if _, err := s.readRefreshToken(ctx, sess); err != nil {
+					return zero, nil, nil, err
+				}
+			}
+		}
+	}
 
 	lockKey := RefreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
@@ -926,7 +1043,7 @@ func (s *RefreshService) refresh(
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
-			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}
+			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown, address: s.recordedAddress(ctx, sess)}
 		}
 		if err := ctx.Err(); err != nil {
 			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
@@ -935,7 +1052,7 @@ func (s *RefreshService) refresh(
 		lockAcquiredAt = time.Now()
 		held, lockErr = acquire()
 		if lockErr == nil && !held {
-			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld}
+			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld, address: guardian.AddressFine}
 		}
 	}
 
@@ -979,41 +1096,32 @@ func (s *RefreshService) refresh(
 	// has already consumed its refresh token. Replaying one makes providers with
 	// reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) revoke the whole family,
 	// the winner's fresh pair included, which nothing below can detect.
-	snapshotAt := sess.UpdatedAt.Time
-
-	current, currentErr := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            sess.SubjectUrn,
-		RemoteSessionClientID: sess.RemoteSessionClientID,
-	})
-	switch {
-	case errors.Is(currentErr, pgx.ErrNoRows), currentErr == nil && current.ID != sess.ID:
-		// Revoked or replaced while we were acquiring. Refreshing would rotate
-		// tokens upstream that nothing will ever hold.
-		var inactive remotesessions_repo.RemoteSession
-		return RefreshResult{Session: inactive, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil, nil, nil
-	case currentErr != nil:
-		// Whatever broke this read breaks the write below too, and a refresh we
-		// cannot persist leaves the stored token dead upstream.
-		return zero, nil, nil, fmt.Errorf("re-read active remote_session: %w", currentErr)
+	current, done, err := s.rereadActiveSession(ctx, q, sess, sess.UpdatedAt.Time)
+	if err != nil {
+		return zero, nil, nil, err
 	}
-
+	if done != nil {
+		return *done, nil, nil, nil
+	}
 	sess = current
 	*attempted = current
 
-	if current.UpdatedAt.Time.After(snapshotAt) {
-		if accessTokenLive(current, time.Now()) {
-			plain, err := s.enc.Decrypt(current.AccessTokenEncrypted)
-			if err != nil {
-				return zero, nil, nil, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
-			}
-			return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
-		}
-	}
 	if !hasRefreshToken(current) {
 		return zero, nil, nil, ErrNoValidToken
 	}
 	if !refreshTokenUsable(current, time.Now()) {
 		return zero, nil, nil, ErrNoValidToken
+	}
+
+	if attribution.scheduledEligibility != nil {
+		resources, err := attribution.scheduledEligibility(ctx, sess)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive}, nil, nil, nil //nolint:exhaustruct_v5 // no grant was presented
+		}
+		if err != nil {
+			return zero, nil, nil, fmt.Errorf("recheck scheduled remote session refresh eligibility: %w", err)
+		}
+		callerResource = clientUpstreamResource(resources)
 	}
 
 	// The persisted binding wins over the caller-derived fallback: the token
@@ -1023,7 +1131,7 @@ func (s *RefreshService) refresh(
 	if resource == "" {
 		resource = callerResource
 	}
-	if resource == "" {
+	if resource == "" && attribution.scheduledEligibility == nil {
 		// Legacy row minted before the resource column, with no caller value:
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
@@ -1034,6 +1142,13 @@ func (s *RefreshService) refresh(
 		}
 	}
 
+	// A hosted request accepts only an unqualified grant. Recheck after
+	// acquiring the lock and deriving any legacy fallback, before sending
+	// credentials or asking the provider for an audience we cannot use.
+	if ctx.Value(hostedTokenResourceKey{}) == true && resource != "" {
+		return zero, nil, nil, ErrNoValidToken
+	}
+
 	// Read after the lock: this caller may have waited on it for seconds, and
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
@@ -1041,10 +1156,16 @@ func (s *RefreshService) refresh(
 		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
+	if attribution.scheduledEligibility != nil && resource == "" && (!client.ResourceIndicatorSupported.Valid || client.ResourceIndicatorSupported.Bool) {
+		// Do not silently request a provider-default audience for an older
+		// grant whose typed route does not yield an unambiguous resource.
+		return RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive}, &client, nil, nil //nolint:exhaustruct_v5 // no grant was presented
+	}
+
 	now := time.Now()
 	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
 	if !postDeadline.After(now) {
-		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow}
+		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow, address: guardian.AddressFine}
 	}
 
 	// The provider may consume the refresh token once the POST starts; keep its replacement.
@@ -1062,7 +1183,7 @@ func (s *RefreshService) refresh(
 			)
 		case !renewed:
 			// Another caller may be presenting this refresh token by now.
-			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow})
+			return zero, &client, nil, fmt.Errorf("%w: %w", errRefreshLeaseLost, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralSetupSlow, address: guardian.AddressFine})
 		default:
 			// The renewed lease covers the POST and the store.
 			postDeadline = time.Now().Add(refreshUpstreamTimeout)
@@ -1161,8 +1282,14 @@ func (s *RefreshService) refresh(
 	if !accessTokenLive(latest, time.Now()) {
 		return zero, &client, nil, refreshErr
 	}
-	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
-	if err != nil {
+	plain, err := openAccessToken(ctx, s.tokens, latest)
+	switch {
+	case err != nil && orgencryption.IsKeyProblem(err):
+		// A concurrent winner holds a live token the key cannot open right
+		// now. Our own failure no longer describes the session, so the caller
+		// retries instead of acting on it.
+		return zero, &client, nil, newTokenRefreshError("the session's refreshed access token could not be opened right now; try again shortly", err, refreshRemedyRetry)
+	case err != nil:
 		return zero, &client, nil, refreshErr
 	}
 
@@ -1206,8 +1333,9 @@ func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bo
 	return sess.AccessExpiresAt.Time.After(now.Add(AccessTokenExpirySkew))
 }
 
+// hasRefreshToken reports whether sess stores a refresh token in either copy.
 func hasRefreshToken(sess remotesessions_repo.RemoteSession) bool {
-	return sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+	return upstreamtokens.Has(refreshTokenCopies(sess))
 }
 
 func refreshTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
@@ -1217,6 +1345,32 @@ func refreshTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) b
 
 func authorizationUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
 	return !sess.AuthorizationExpiresAt.Valid || sess.AuthorizationExpiresAt.Time.After(now)
+}
+
+// rereadActiveSession re-reads sess's binding before a refresh. A revoked or
+// replaced row ends it as inactive: refreshing would rotate tokens nothing
+// will hold. A row moved past snapshotAt with a live token this key can read
+// is adopted. Otherwise it returns the current row to refresh; a winner's
+// token this key can't read is renewed instead. A store that can't answer
+// fails the refresh, since the write after the POST would fail too.
+func (s *RefreshService) rereadActiveSession(ctx context.Context, q *remotesessions_repo.Queries, sess remotesessions_repo.RemoteSession, snapshotAt time.Time) (remotesessions_repo.RemoteSession, *RefreshResult, error) {
+	var none remotesessions_repo.RemoteSession
+	current, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            sess.SubjectUrn,
+		RemoteSessionClientID: sess.RemoteSessionClientID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows), err == nil && current.ID != sess.ID:
+		return none, &RefreshResult{Session: none, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil
+	case err != nil:
+		return none, nil, fmt.Errorf("re-read active remote_session: %w", err)
+	}
+	if current.UpdatedAt.Time.After(snapshotAt) && accessTokenLive(current, time.Now()) {
+		if plain, derr := openAccessToken(ctx, s.tokens, current); derr == nil {
+			return none, &RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
+		}
+	}
+	return current, nil, nil
 }
 
 // awaitRefreshedSession returns the session row and access token the lock
@@ -1268,7 +1422,7 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false, 0
 		}
 
-		plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
+		plain, err := openAccessToken(ctx, s.tokens, latest)
 		if err != nil {
 			return zero, false, 0
 		}

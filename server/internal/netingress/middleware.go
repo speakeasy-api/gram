@@ -15,7 +15,7 @@ import (
 const AttestationHeader = middleware.PrivateIngressAttestationHeader
 
 type WorkloadVerifier interface {
-	Verify(ctx context.Context, token, source string) (Ingress, error)
+	Verify(ctx context.Context, token, source, host string) (Ingress, error)
 }
 
 func Middleware(verifier WorkloadVerifier, parsers IdentityParsers, telemetry ...*Telemetry) func(http.Handler) http.Handler {
@@ -48,7 +48,7 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers, telemetry ..
 				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			ingress, err := verifier.Verify(request.Context(), token, source)
+			ingress, err := verifier.Verify(request.Context(), token, source, request.Host)
 			if err != nil {
 				if errors.Is(err, ErrAttestationRejected) {
 					record(ResultDenied, ReasonAttestationRejected, "")

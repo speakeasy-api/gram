@@ -28,6 +28,8 @@ import (
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -44,6 +46,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -53,7 +57,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -65,10 +71,25 @@ import (
 )
 
 type Service struct {
-	catalogPromotion     *catalogpromotion.Service
-	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
+	catalogPromotion *catalogpromotion.Service
+	providerHealth   *mcpconnectionattempts.ProviderHealth
+	registry         *mcpregistry.Service
+	remoteSessions   *remotesessions.Service
+
+	// tailscaleOAuthMigration serves the temporary Tailscale OAuth client
+	// migration to organization keys; nil without organization encryption.
+	tailscaleOAuthMigration *TailscaleOAuthMigration
+
+	// secretBackfillPlatformKey lets the temporary marketplace token backfill
+	// seal tokens; nil without the platform key.
+	secretBackfillPlatformKey *SecretBackfillPlatformKey
+	assets                    *assets.Service
+	mcpSourceStorage          blobio.Reader
+
+	// gcpIdentity screens and verifies platform external credentials. Nil
+	// leaves those methods unavailable.
+	gcpIdentity *gcpauth.Identity
+
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -91,6 +112,10 @@ type Service struct {
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
 
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
+
 	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
 	// Empty leaves them out.
 	stripeDashboardBase string
@@ -105,10 +130,17 @@ type Service struct {
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+	// memoryEvalStarter starts team memory eval runs. Nil leaves
+	// startMemoryEvalRun unavailable.
+	memoryEvalStarter MemoryEvalRunStarter
 
 	// projectRedeployer redeploys projects. Nil when this server has no
 	// Temporal connection.
 	projectRedeployer ProjectRedeployer
+
+	// assistantIdentities provisions assistant agent identities. Nil when this
+	// server has no Speakeasy signing issuer configured.
+	assistantIdentities *assistantidentity.Service
 
 	audit *audit.Logger
 
@@ -122,6 +154,17 @@ type Service struct {
 	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
+
+	hookFleet         HookFleetReader
+	hookFleetVersions hookversions.Policy
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
+
+	// orgEncryption reports and changes organization encryption transitions.
+	// Nil leaves those methods unavailable.
+	orgEncryption *OrganizationEncryption
 }
 
 type BillingOperations interface {
@@ -235,6 +278,7 @@ func NewService(
 	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -252,7 +296,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -271,6 +315,7 @@ func NewService(
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
+		memoryEvalStarter:    nil,
 		audit:                audit.NewLogger(),
 		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
@@ -278,11 +323,15 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:            trialNotifier,
-		billing:          billing,
-		supportCoverage:  supportCoverage,
-		mcpServerHealth:  mcpServerHealth,
-		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
+		staffOrg:                 staffOrg,
 	}
 }
 
@@ -302,8 +351,7 @@ func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*ge
 
 func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *gen.ProductFeatures {
 	return &gen.ProductFeatures{
-		ProviderSetupEnabled: new(snapshot.ProviderSetupEnabled),
-		LogsEnabled:          snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
+		LogsEnabled: snapshot.LogsEnabled, ToolIoLogsEnabled: snapshot.ToolIoLogsEnabled, SessionCaptureEnabled: snapshot.SessionCaptureEnabled,
 		AuthzChallengeLoggingEnabled: snapshot.AuthzChallengeLoggingEnabled, SsoEnabled: snapshot.SsoEnabled, ScimEnabled: snapshot.ScimEnabled,
 		HooksBrowserLoginEnabled: snapshot.HooksBrowserLoginEnabled, HooksFailOpenEnabled: snapshot.HooksFailOpenEnabled,
 		CustomModelKeysEnabled: snapshot.CustomModelKeysEnabled, SkillsEnabled: snapshot.SkillsEnabled, SkillCaptureMetadataOnly: snapshot.SkillCaptureMetadataOnly,
@@ -313,6 +361,9 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Deployment-wide settings, not part of an organization's features.
+		AssistantsAvailable: nil,
+		FunctionsAvailable:  nil,
 		// Staff read enforcement through the upstream auth enforcement status.
 		UpstreamAuthEnforced: nil,
 	}
@@ -338,22 +389,6 @@ func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizatio
 		return nil, fmt.Errorf("read organization features: %w", err)
 	}
 	return productFeaturesResult(snapshot), nil
-}
-
-func (s *Service) SetOrganizationProviderSetup(ctx context.Context, payload *gen.SetOrganizationProviderSetupPayload) (*gen.ProductFeatures, error) {
-	if _, ok := contextvalues.GetAdminAuthContext(ctx); !ok {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, payload.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	actor, displayName, _ := adminActor(ctx)
-	err = productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureProviderSetup, payload.Enabled, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil})
-	if err != nil {
-		return nil, fmt.Errorf("set provider setup rollout: %w", err)
-	}
-	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -484,7 +519,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
-	server.SetOrganizationProviderSetup = service.strictAdminJSON(server.SetOrganizationProviderSetup, func() any { return new(adminserver.SetOrganizationProviderSetupRequestBody) })
+	server.GetMemoryEvalOptions = service.preauthorizeAdmin(server.GetMemoryEvalOptions)
+	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
+	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
+	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
+	server.GetHooksRollout = service.preauthorizeAdmin(server.GetHooksRollout)
+	server.GetHooksReleaseProgress = service.preauthorizeAdmin(server.GetHooksReleaseProgress)
+	server.GetOrganizationHooksRollout = service.preauthorizeAdmin(server.GetOrganizationHooksRollout)
+	server.SetHooksRolloutDefault = service.strictAdminJSON(server.SetHooksRolloutDefault, func() any { return new(adminserver.SetHooksRolloutDefaultRequestBody) })
+	server.SetOrganizationHooksRollout = service.strictAdminJSON(server.SetOrganizationHooksRollout, func() any { return new(adminserver.SetOrganizationHooksRolloutRequestBody) })
+	server.ClearOrganizationHooksRollout = service.strictAdminJSON(server.ClearOrganizationHooksRollout, func() any { return new(adminserver.ClearOrganizationHooksRolloutRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
@@ -524,7 +568,29 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
 	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
 	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
+	server.ListPlatformExternalCredentials = service.preauthorizeAdmin(server.ListPlatformExternalCredentials)
+	server.GetGcpIamPlatformCredential = service.preauthorizeAdmin(server.GetGcpIamPlatformCredential)
+	server.CreateGcpIamPlatformCredential = service.strictAdminJSON(server.CreateGcpIamPlatformCredential, func() any { return new(adminserver.CreateGcpIamPlatformCredentialRequestBody) })
+	server.UpdateGcpIamPlatformCredential = service.strictAdminJSON(server.UpdateGcpIamPlatformCredential, func() any { return new(adminserver.UpdateGcpIamPlatformCredentialRequestBody) })
+	server.VerifyGcpIamPlatformCredential = service.strictAdminJSON(server.VerifyGcpIamPlatformCredential, func() any { return new(adminserver.VerifyGcpIamPlatformCredentialRequestBody) })
+	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
+	server.ListAssistantOrganizations = service.preauthorizeAdmin(server.ListAssistantOrganizations)
+	server.RepairOrganizationAssistantAgentNames = service.strictAdminJSON(server.RepairOrganizationAssistantAgentNames, func() any { return new(adminserver.RepairOrganizationAssistantAgentNamesRequestBody) })
+	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
+	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
+	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
+	server.GetSecretBackfills = service.preauthorizeAdmin(server.GetSecretBackfills)
+	server.RunMarketplaceTokenBackfill = service.strictAdminJSON(server.RunMarketplaceTokenBackfill, func() any { return new(adminserver.RunMarketplaceTokenBackfillRequestBody) })
+	server.RunRunnerKeyOrganizationBackfill = service.strictAdminJSON(server.RunRunnerKeyOrganizationBackfill, func() any { return new(adminserver.RunRunnerKeyOrganizationBackfillRequestBody) })
+	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
+	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
+	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })
+	server.RollbackOrganizationEncryption = service.strictAdminJSON(server.RollbackOrganizationEncryption, func() any { return new(adminserver.RollbackOrganizationEncryptionRequestBody) })
+	server.RunOrganizationEncryption = service.strictAdminJSON(server.RunOrganizationEncryption, func() any { return new(adminserver.RunOrganizationEncryptionRequestBody) })
+	server.FinalizeOrganizationEncryption = service.strictAdminJSON(server.FinalizeOrganizationEncryption, func() any { return new(adminserver.FinalizeOrganizationEncryptionRequestBody) })
 	adminserver.Mount(mux, server)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
+	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)
 
 }
 
@@ -541,11 +607,11 @@ type adminCallbackWriter struct{ http.ResponseWriter }
 
 func (w *adminCallbackWriter) WriteHeader(status int) {
 	if status == http.StatusTemporaryRedirect {
-		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct_v5 // Only response headers are needed to parse cookies.
 			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
 				continue
 			}
-			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct_v5 // No Domain so middleware controls cookie sharing.
 				Name:     constants.AdminSessionCookie,
 				Path:     "/admin-mcp",
 				Secure:   true,
@@ -1724,7 +1790,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision auth client defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
+	if err := productfeatures.SeedNewOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seed organization default entitlements: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
@@ -1808,7 +1874,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(rearmed.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(rearmed.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
 	}
@@ -1928,7 +1994,7 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(started.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(started.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", started.Tier).LogError(ctx, logger)
 	}

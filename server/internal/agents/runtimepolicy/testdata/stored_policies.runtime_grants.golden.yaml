@@ -1,0 +1,485 @@
+v1:
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v2:
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v3:
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v4:
+  assistant:blocked_read:
+    - assistant:blocked_read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:blocked_write:
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:blocked_read:
+    - environment:blocked_read {"resource_id":"*","resource_kind":"environment"}
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:blocked_write:
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  mcp:blocked_connect:
+    - mcp:blocked_connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_read:
+    - mcp:blocked_read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_write:
+    - mcp:blocked_write {"resource_id":"*","resource_kind":"mcp"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  project:blocked_read:
+    - project:blocked_read {"resource_id":"*","resource_kind":"project"}
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:blocked_write:
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:blocked_read:
+    - skill:blocked_read {"resource_id":"*","resource_kind":"skill"}
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:blocked_write:
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v5:
+  assistant:blocked_read:
+    - assistant:blocked_read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:blocked_write:
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:blocked_read:
+    - environment:blocked_read {"resource_id":"*","resource_kind":"environment"}
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:blocked_write:
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  mcp:auth:
+    - mcp:auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_auth:
+    - mcp:blocked_auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_connect:
+    - mcp:blocked_connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_read:
+    - mcp:blocked_read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_write:
+    - mcp:blocked_write {"resource_id":"*","resource_kind":"mcp"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  project:blocked_read:
+    - project:blocked_read {"resource_id":"*","resource_kind":"project"}
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:blocked_write:
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:blocked_read:
+    - skill:blocked_read {"resource_id":"*","resource_kind":"skill"}
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:blocked_write:
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v6:
+  assistant:blocked_read:
+    - assistant:blocked_read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:blocked_write:
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:blocked_read:
+    - environment:blocked_read {"resource_id":"*","resource_kind":"environment"}
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:blocked_write:
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  inference:execute:
+    - inference:execute {"resource_id":"*","resource_kind":"inference"}
+  mcp:auth:
+    - mcp:auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_auth:
+    - mcp:blocked_auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_connect:
+    - mcp:blocked_connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_read:
+    - mcp:blocked_read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_write:
+    - mcp:blocked_write {"resource_id":"*","resource_kind":"mcp"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  project:blocked_read:
+    - project:blocked_read {"resource_id":"*","resource_kind":"project"}
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:blocked_write:
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:blocked_read:
+    - skill:blocked_read {"resource_id":"*","resource_kind":"skill"}
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:blocked_write:
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v7:
+  assistant:blocked_read:
+    - assistant:blocked_read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:blocked_write:
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:connect {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:blocked_read:
+    - environment:blocked_read {"resource_id":"*","resource_kind":"environment"}
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:blocked_write:
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  inference:execute:
+    - inference:execute {"resource_id":"*","resource_kind":"inference"}
+  mcp:auth:
+    - mcp:auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_auth:
+    - mcp:blocked_auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_connect:
+    - mcp:blocked_connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_read:
+    - mcp:blocked_read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_write:
+    - mcp:blocked_write {"resource_id":"*","resource_kind":"mcp"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:blocked_admin:
+    - org:blocked_admin {"resource_id":"*","resource_kind":"org"}
+  org:blocked_read:
+    - org:blocked_admin {"resource_id":"*","resource_kind":"org"}
+    - org:blocked_read {"resource_id":"*","resource_kind":"org"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  org:read:
+    - org:read {"resource_id":"*","resource_kind":"org"}
+  project:blocked_read:
+    - project:blocked_read {"resource_id":"*","resource_kind":"project"}
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:blocked_write:
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:blocked_read:
+    - skill:blocked_read {"resource_id":"*","resource_kind":"skill"}
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:blocked_write:
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}
+v8:
+  assistant:blocked_read:
+    - assistant:blocked_read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:blocked_write:
+    - assistant:blocked_write {"resource_id":"*","resource_kind":"assistant"}
+  assistant:read:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+  assistant:write:
+    - assistant:read {"resource_id":"*","resource_kind":"assistant"}
+    - assistant:write {"resource_id":"*","resource_kind":"assistant"}
+  concrete mcp:write on one tool:
+    - mcp:read {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+    - mcp:write {"project_id":"project-1","resource_id":"server-1","resource_kind":"mcp","tool":"tool-a"}
+  environment:blocked_read:
+    - environment:blocked_read {"resource_id":"*","resource_kind":"environment"}
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:blocked_write:
+    - environment:blocked_write {"resource_id":"*","resource_kind":"environment"}
+  environment:read:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+  environment:write:
+    - environment:read {"resource_id":"*","resource_kind":"environment"}
+    - environment:write {"resource_id":"*","resource_kind":"environment"}
+  inference:execute:
+    - inference:execute {"resource_id":"*","resource_kind":"inference"}
+  mcp:auth:
+    - mcp:auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_auth:
+    - mcp:blocked_auth {"resource_id":"*","resource_kind":"mcp_auth_client"}
+  mcp:blocked_connect:
+    - mcp:blocked_connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_read:
+    - mcp:blocked_read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:blocked_write:
+    - mcp:blocked_write {"resource_id":"*","resource_kind":"mcp"}
+  mcp:connect:
+    - mcp:connect {"resource_id":"*","resource_kind":"mcp"}
+  mcp:read:
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+  mcp:write:
+    - mcp:read {"resource_id":"*","resource_kind":"mcp"}
+    - mcp:write {"resource_id":"*","resource_kind":"mcp"}
+  org:blocked_admin:
+    - org:blocked_admin {"resource_id":"*","resource_kind":"org"}
+  org:blocked_read:
+    - org:blocked_admin {"resource_id":"*","resource_kind":"org"}
+    - org:blocked_read {"resource_id":"*","resource_kind":"org"}
+  org:device_agent_sync:
+    - org:device_agent_sync {"resource_id":"*","resource_kind":"org"}
+  org:hooks_ingest:
+    - org:hooks_ingest {"resource_id":"*","resource_kind":"org"}
+  org:read:
+    - org:read {"resource_id":"*","resource_kind":"org"}
+  project:blocked_read:
+    - project:blocked_read {"resource_id":"*","resource_kind":"project"}
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:blocked_write:
+    - project:blocked_write {"resource_id":"*","resource_kind":"project"}
+  project:read:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  project:write:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+    - project:write {"resource_id":"*","resource_kind":"project"}
+  retired and unknown entries:
+    - project:read {"resource_id":"*","resource_kind":"project"}
+  risk_policy:evaluate:
+    - risk_policy:evaluate {"resource_id":"*","resource_kind":"risk_policy"}
+  skill:blocked_read:
+    - skill:blocked_read {"resource_id":"*","resource_kind":"skill"}
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:blocked_write:
+    - skill:blocked_write {"resource_id":"*","resource_kind":"skill"}
+  skill:read:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+  skill:write:
+    - skill:read {"resource_id":"*","resource_kind":"skill"}
+    - skill:write {"resource_id":"*","resource_kind":"skill"}

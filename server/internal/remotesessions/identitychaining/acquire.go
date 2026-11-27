@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -42,6 +44,12 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 		}
 		resourceAS = endpoint
 		return success
+	}
+	// The redeemed token has to be stored, so the organization's key must be
+	// able to seal it before anything is asked of a provider.
+	if err := c.tokens.RequireUsable(ctx, nil, conv.ToPGText(req.OrganizationID)); err != nil {
+		logger.WarnContext(ctx, "identity chaining credential cannot be stored right now", attr.SlogError(err))
+		return none, newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceVerified, true), false
 	}
 	grant, outcome := src.issue(ctx, logger, req, sel, ready)
 	if !outcome.Succeeded() {
@@ -238,10 +246,36 @@ func classifyEndpointError(stage Stage, err error) Outcome {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)
 	}
 	outcome := classifyEndpointFailure(stage, failure)
-	outcome.providerDescription = failure.Description
+	outcome.providerDescription = withoutLinks(failure.Description)
 	// The request may have been processed before it failed.
 	outcome.Submitted = outcome.Reason == ReasonTransientFailure
 	return outcome
+}
+
+// withoutLinks is a provider's error_description with every link replaced, since a link may address a person or carry their state.
+func withoutLinks(description string) string {
+	words := strings.Fields(description)
+	for i, word := range words {
+		core := strings.TrimLeft(word, linkWrapping)
+		lead := word[:len(word)-len(core)]
+		trimmed := strings.TrimRight(core, linkWrapping)
+		if isLink(trimmed) {
+			words[i] = lead + "[link]" + core[len(trimmed):]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+const linkWrapping = `.,;:!?()[]{}<>"'`
+
+var (
+	schemePrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:[^\d\s]`)
+	hostPath     = regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}(/|$)`)
+)
+
+// isLink: has "://", starts with "www.", starts with a scheme and colon (mailto:x), or is a dotted host with a letters-only last label alone or before "/".
+func isLink(word string) bool {
+	return strings.Contains(word, "://") || strings.HasPrefix(strings.ToLower(word), "www.") || schemePrefix.MatchString(word) || hostPath.MatchString(word)
 }
 
 func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointError) Outcome {

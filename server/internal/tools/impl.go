@@ -101,7 +101,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -129,11 +129,9 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	toolKinds := make(map[urn.ToolKind]any)
 	for _, t := range payload.ToolTypes {
 		switch t {
-		// The external MCP kind stays a valid filter value but matches no tools.
 		case types.ToolType(urn.ToolKindHTTP),
 			types.ToolType(urn.ToolKindFunction),
 			types.ToolType(urn.ToolKindPrompt),
-			types.ToolType(urn.ToolKindExternalMCP),
 			types.ToolType(urn.ToolKindPlatform):
 			toolKinds[urn.ToolKind(t)] = nil
 		default:

@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -341,6 +342,10 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{Name: "email-provider", Usage: "Transactional email provider: loops or resend", EnvVars: []string{"GRAM_EMAIL_PROVIDER"}, Value: "loops"},
+		&cli.StringFlag{Name: "resend-api-key", Usage: "Resend API key for transactional email delivery", EnvVars: []string{"RESEND_API_KEY"}},
+		&cli.StringFlag{Name: "email-from", Usage: "Explicit transactional sender address (required for Resend)", EnvVars: []string{"GRAM_EMAIL_FROM"}},
+		&cli.StringFlag{Name: "email-reply-to", Usage: "Transactional reply-to address (required for Resend)", EnvVars: []string{"GRAM_EMAIL_REPLY_TO"}},
 		&cli.StringFlag{
 			Name:     "email-template-ids",
 			Usage:    "JSON mapping of application email template keys to environment-specific Loops IDs",
@@ -349,6 +354,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	)
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
@@ -358,6 +364,8 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
+	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -378,6 +386,14 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("worker site-url: %w", err)
 			}
 			customDomainARecords, err := customDomainARecordsFromCLI(c)
+			if err != nil {
+				return err
+			}
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
 			if err != nil {
 				return err
 			}
@@ -405,6 +421,7 @@ func newWorkerCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -438,6 +455,9 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -457,12 +477,24 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
+			logger.InfoContext(ctx, "encryption key loaded", attr.SlogEncryptionKeyFingerprint(encryptionClient.Fingerprint()))
 
 			auditLogger := newAuditLogger()
 
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Unconfigured or disabled, Service and Provisioner are nil
+			// without an error. A configuration error stops the worker: a silently
+			// disabled sweep would leave organizations whose key was revoked
+			// unsuspended.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
+			aiProviderKeys := orgEncryption.AIProviderKeys(logger, encryptionClient)
+
 			var ghClient *ghclient.Client
 			if appID, key := c.Int64("plugins-github-app-id"), c.String("plugins-github-private-key"); appID != 0 && key != "" {
-				ghClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client())
+				ghClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client(), tracerProvider)
 				if err != nil {
 					return fmt.Errorf("create github app client: %w", err)
 				}
@@ -495,7 +527,7 @@ func newWorkerCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg, orgEncryption.MarketplaceTokens(logger, encryptionClient)).
 					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
@@ -567,6 +599,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			orEndpoints := openrouter.EndpointsFor(PullPartition(ctx))
 			var openRouter interface {
 				openrouter.Provisioner
 				openrouter.SpendClient
@@ -574,7 +607,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), PullPartition(ctx), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -583,7 +616,8 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
+			runnerKeys := orgEncryption.RunnerKeys(logger, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, runnerKeys)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -603,7 +637,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
-			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, newConnectionLogExport(publishers.OTELLogs))
 
 			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
 			if err != nil {
@@ -628,6 +662,7 @@ func newWorkerCommand() *cli.Command {
 					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
+					LoadUserPolicy:                   nil,
 				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
@@ -695,8 +730,9 @@ func newWorkerCommand() *cli.Command {
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
+				orEndpoints,
 				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				captureStrategy,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
@@ -793,12 +829,13 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient), orEndpoints)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+			assistantsCore.SetTurnStream(chat.NewTurnStream(redisClient))
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 				return err
 			}
 			assistantsCore.SetAssetStorage(assetStorage)
@@ -816,7 +853,7 @@ func newWorkerCommand() *cli.Command {
 			 * END -- Agent client
 			 */
 
-			piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
+			piScanner := promptinjection.NewScanner(logger, newPICascade(ctx, logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, orEndpoints, db).Classify)
 
 			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
 			if err != nil {
@@ -833,13 +870,19 @@ func newWorkerCommand() *cli.Command {
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+				return err
+			}
+			orgEncryptionMigrator, err := orgEncryption.Migrator(logger, db, encryptionClient, meterProvider)
+			if err != nil {
+				return err
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -848,7 +891,7 @@ func newWorkerCommand() *cli.Command {
 			var issuerProvisioner *identityproviderconnections.Provisioner
 			if err != nil {
 				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
-			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, orgEncryption.ClientSecrets(logger, encryptionClient), outboundOrigin); err != nil {
 				// Nil where KMS provisioning is unconfigured, too.
 				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
 				issuerProvisioner = nil
@@ -868,12 +911,18 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), telemetry.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
+				HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, meterReadConn),
 				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
+				MemoryEvals:                    evalrun.NewRunner(logger, db, chatClient),
 				CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 				GuardianPolicy:                 guardianPolicy,
 				TunnelHTTPClient:               tunnelHTTPClient,
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
+				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
+				UpstreamTokens:                 orgEncryption.UpstreamTokens(logger, encryptionClient),
+				AIProviderKeys:                 aiProviderKeys,
+				RunnerKeys:                     runnerKeys,
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,
@@ -885,10 +934,12 @@ func newWorkerCommand() *cli.Command {
 				K8sClient:                      k8sClient,
 				ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 				ExpectedARecords:               customDomainARecords,
+				CustomDomainTargetSuffix:       customDomainTargetSuffix,
 				GitHubEvidenceToken:            c.String("github-evidence-token"),
 				SiteURL:                        siteURL,
 				ServerURL:                      serverURL,
 				OrgHosts:                       orgHosts,
+				StaffOrganization:              staffOrg,
 				BillingTracker:                 billingTracker,
 				BillingRepository:              billingRepo,
 				StripeClient:                   stripeClient,
@@ -909,6 +960,8 @@ func newWorkerCommand() *cli.Command {
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
+				OrganizationEncryptionSweeper:  orgEncryptionSweeper(orgEncryption.Provisioner),
+				OrganizationEncryptionMigrator: orgEncryptionMigrator,
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,

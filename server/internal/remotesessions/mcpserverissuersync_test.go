@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -84,6 +85,12 @@ func resync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationI
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, conn, organizationID, projectID, userIssuerIDs))
 }
 
+func resyncStamp(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, issuerIDs ...uuid.UUID) {
+	t.Helper()
+	_, err := mcpserversrepo.New(conn).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{OrganizationID: organizationID, ProjectID: projectID, UserSessionIssuerIds: issuerIDs})
+	require.NoError(t, err)
+}
+
 func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Parallel()
 
@@ -94,17 +101,31 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	t.Run("one bound client stamps its issuer", func(t *testing.T) {
+	t.Run("only a typed offer can stamp without a direct association", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-one")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-one")
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a fresh server names no issuer")
 
-		_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-one")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-
-		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
+		clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-one")
+		q := mcpserversrepo.New(ti.conn)
+		params := mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{OrganizationID: orgID, ProjectID: projectID, UserSessionIssuerIds: []uuid.UUID{userIssuerID}}
+		_, err := q.ResyncMCPServerRemoteSessionIssuers(ctx, params)
+		require.NoError(t, err)
+		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a parent never qualifies a server")
+		typed := authclientbackfill.New(ti.conn)
+		client, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID)})
+		require.NoError(t, err)
+		require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, AuthClientID: client, Source: "admin"}))
+		_, err = q.ResyncMCPServerRemoteSessionIssuers(ctx, params)
+		require.NoError(t, err)
+		require.Equal(t, conv.ToNullUUID(remoteIssuerID), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+		require.NoError(t, typed.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: client, Enabled: false}))
+		_, err = q.ResyncMCPServerRemoteSessionIssuers(ctx, params)
+		require.NoError(t, err)
+		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "disabled typed offers must not fall back to an association")
 	})
 
 	t.Run("two distinct issuers leave it unset", func(t *testing.T) {
@@ -113,14 +134,14 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-two")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-two")
 
-		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-a")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "one issuer stamps, or the second adds nothing")
+		first, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-a")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, first)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 
-		// AIS-137 dropped the one-client-per-user-session-issuer index, so this
-		// is representable; a scalar column cannot say which, so it says none.
-		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-b")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		second, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-b")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, second)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "an ambiguous derivation must fail closed, not pick one")
 	})
 
@@ -131,7 +152,8 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-del")
 
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-del")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 
 		// The binding row survives the soft delete, so nothing but the resync
@@ -142,7 +164,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 			ProjectID: conv.ToNullUUID(projectID),
 		})
 		require.NoError(t, err)
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a soft-deleted client must not keep qualifying a server")
 	})
@@ -153,16 +175,18 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-deadissuer")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-deadissuer")
 
-		_, deadIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-dead")
+		deadClient, deadIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-dead")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, deadClient)
 		softDeleteRemoteIssuer(t, ctx, ti.conn, deadIssuerID)
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"the runtime resolver skips a tombstoned issuer, so the column must not name one")
 
 		// With the tombstoned issuer excluded, a single live client is
 		// unambiguous rather than one of two.
-		_, liveIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-live")
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		liveClient, liveIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-live")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, liveClient)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.Equal(t, uuid.NullUUID{UUID: liveIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 	})
 
@@ -178,7 +202,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		otherProjectID := createProject(t, ctx, ti.conn, "sync-xclient-project")
 		seedActiveClient(t, ctx, ti.conn, otherProjectID, userIssuerID, orgID, "rsi-sync-xclient")
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"a client owned by another project must not qualify this project's server")
 	})
@@ -191,11 +215,11 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		// match on user_session_issuer_id alone and stamp across the boundary.
 		otherProjectID := createProject(t, ctx, ti.conn, "sync-xissuer-project")
 		foreignIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-sync-xissuer")
-		_, foreignRemoteIssuerID := seedActiveClient(t, ctx, ti.conn, otherProjectID, foreignIssuerID, orgID, "rsi-sync-xissuer")
+		foreignClientID, foreignRemoteIssuerID := seedActiveClient(t, ctx, ti.conn, otherProjectID, foreignIssuerID, orgID, "rsi-sync-xissuer")
 
 		strandedServerID := seedServerOnIssuer(t, ctx, ti.conn, projectID, foreignIssuerID, "sync-xissuer")
 
-		resync(t, ctx, ti.conn, orgID, projectID, foreignIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, foreignIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, strandedServerID).Valid,
 			"an issuer owned by another project must not reach this project's server")
 
@@ -203,7 +227,8 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		// assertion above is about tenancy and not about the row being
 		// unreachable for some other reason.
 		ownServerID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, foreignIssuerID, "sync-xissuer-own")
-		resync(t, ctx, ti.conn, orgID, otherProjectID, foreignIssuerID)
+		associateClient(t, ctx, ti.conn, orgID, otherProjectID, ownServerID, foreignClientID)
+		resyncStamp(t, ctx, ti.conn, orgID, otherProjectID, foreignIssuerID)
 		require.Equal(t, uuid.NullUUID{UUID: foreignRemoteIssuerID, Valid: true},
 			storedIssuer(t, ctx, ti.conn, otherProjectID, ownServerID))
 	})
@@ -213,18 +238,19 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-xorg")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-xorg")
-		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-xorg")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-xorg")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
 
 		// The ids are read from join tables with no tenancy column, so the
 		// caller's own scope is the only thing standing between a stray id and
 		// a cross-tenant write.
 		otherOrgID := createOrganization(t, ctx, ti.conn, "sync-xorg-other")
-		resync(t, ctx, ti.conn, otherOrgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, otherOrgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"a caller outside the organization must not write its servers")
 
 		// And the same call from the owning organization does write it.
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 	})
 
@@ -234,29 +260,29 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		otherProjectID := createProject(t, ctx, ti.conn, "sync-narrow-project")
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-sync-narrow")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, userIssuerID, "sync-narrow")
-		seedActiveClient(t, ctx, ti.conn, otherProjectID, userIssuerID, orgID, "rsi-sync-narrow")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, otherProjectID, userIssuerID, orgID, "rsi-sync-narrow")
+		associateClient(t, ctx, ti.conn, orgID, otherProjectID, serverID, clientID)
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, otherProjectID, serverID).Valid,
 			"a project scope must not widen to a sibling project in the same organization")
 
-		resync(t, ctx, ti.conn, orgID, otherProjectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, otherProjectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, otherProjectID, serverID).Valid)
 	})
 
 	t.Run("an organization-level client counts toward a project issuer", func(t *testing.T) {
 		t.Parallel()
 
-		// The attach surface lets a project admin bind an org-level client to
-		// their own issuer, so the derivation must count it — and stop counting
-		// it once it is gone.
+		// A tenant-visible organization client counts until it is deleted.
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-orgclient")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-orgclient")
 
 		orgRemoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-sync-orgclient")
 		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, orgRemoteIssuerID, "cid-sync-orgclient", userIssuerID)
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.Equal(t, uuid.NullUUID{UUID: orgRemoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
 		_, err := repo.New(ti.conn).DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
@@ -265,7 +291,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 	})
 
@@ -274,11 +300,12 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-idem")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-idem")
-		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-idem")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-idem")
+		associateClient(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
 
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		first := storedIssuer(t, ctx, ti.conn, projectID, serverID)
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID, uuid.New())
+		resyncStamp(t, ctx, ti.conn, orgID, projectID, userIssuerID, uuid.New())
 		require.Equal(t, first, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
 		require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, nil), "an empty set is a no-op, not an error")
@@ -344,19 +371,19 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, associated))
-		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, sibling), "a server with no association keeps the issuer derivation")
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, sibling), "a server with no association cannot inherit a provider")
 	})
 
-	t.Run("no association keeps the issuer derivation", func(t *testing.T) {
+	t.Run("no association or offer leaves both servers unset", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID, first, second := sharedIssuer(t, "assoc-none")
-		_, provider := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-none")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-none")
 
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, first))
-		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, second))
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, first))
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, second))
 	})
 
 	t.Run("associations to several providers leave it unset", func(t *testing.T) {
@@ -373,25 +400,23 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated))
 	})
 
-	t.Run("an association reconcile prunes stops counting", func(t *testing.T) {
+	t.Run("an association to a deleted registration stops counting", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID, associated, _ := sharedIssuer(t, "assoc-pruned")
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-a")
-		_, remaining := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-b")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-b")
 		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
-			RemoteSessionClientID: clientID,
-			ProjectID:             conv.ToNullUUID(projectID),
-		}))
+		_, err := repo.New(ti.conn).DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: clientID, ProjectID: conv.ToNullUUID(projectID)})
+		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.Equal(t, conv.ToNullUUID(remaining), storedIssuer(t, ctx, ti.conn, projectID, associated), "the column is derived after the prune")
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated), "a remaining compatibility link cannot replace a pruned association")
 	})
 
-	t.Run("a detach falls back to the issuer derivation", func(t *testing.T) {
+	t.Run("a detach clears the stamp", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID, associated, _ := sharedIssuer(t, "assoc-detach")
@@ -410,35 +435,36 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 	})
 }
 
-// The read DeleteRemoteSessionClient takes before its purge: the tenancy has
-// to live in the query, since an unowned client must yield nothing.
-func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {
+// Client deletion resyncs places that actually offer the registration, not
+// sibling projects sharing a sign-in issuer or callers in another tenant.
+func TestListServerProjectsOnClientIssuers_Scoping(t *testing.T) {
 	t.Parallel()
-
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-bindscope")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-bindscope")
 	q := repo.New(ti.conn)
-
-	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-bindscope")
-	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-bindscope")
-
-	owned, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(projectID),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{userIssuerID}, owned, "the owning project sees the bindings its delete will purge")
-
+	server := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "bindscope-owner")
 	otherProjectID := createProject(t, ctx, ti.conn, "bindscope-other-project")
-	foreign, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(otherProjectID),
-	})
+	seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, userIssuerID, "bindscope-sibling")
+	// An old parent must not give either server reachability on its own.
+	params := repo.ListServerProjectsOnClientIssuersParams{OrganizationID: conv.ToPGText(orgID), RemoteSessionClientID: clientID}
+	rows, err := q.ListServerProjectsOnClientIssuers(ctx, params)
 	require.NoError(t, err)
-	require.Empty(t, foreign, "a sibling project must not read another project's client's bindings")
+	require.Empty(t, rows)
+
+	associateClient(t, ctx, ti.conn, orgID, projectID, server, clientID)
+	rows, err = q.ListServerProjectsOnClientIssuers(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, []repo.ListServerProjectsOnClientIssuersRow{{
+		OrganizationID: orgID, ProjectID: projectID, UserSessionIssuerID: conv.ToNullUUID(userIssuerID),
+	}}, rows, "a sibling project must not inherit reachability from the shared issuer")
+
+	params.OrganizationID = conv.ToPGText(createOrganization(t, ctx, ti.conn, "bindscope-foreign"))
+	rows, err = q.ListServerProjectsOnClientIssuers(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, rows, "another organization must not learn which project offers this registration")
 }

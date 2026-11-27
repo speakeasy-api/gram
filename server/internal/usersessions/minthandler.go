@@ -18,15 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -118,7 +115,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	// Authorization mirrors the runtime gate: minting a bearer grants runtime
 	// access, so the endpoint requires the same mcp:connect permission.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, target.resourceID, authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(target.resourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Connect()); err != nil {
 		return nil, fmt.Errorf("authorize MCP session mint: %w", mcpaccess.ServerPermissionDenied(err, ""))
 	}
 
@@ -225,16 +222,16 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}
-	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+	if _, err := txRepo.RecordIssuedAuthClientChoices(ctx, repo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: target.issuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        session.ID,
-		Source:              upstreamclients.SelectionSourceIssuance,
-		// A dashboard mint has no consent page, so it picks nothing.
-		PickedMcpServerIds:  []uuid.UUID{},
-		PickedClientIds:     []uuid.UUID{},
+		PickedMcpServerIds:  nil,
+		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
+		PickedExplicit:      nil,
 		ScopeMcpServerIds:   nil,
+		ExcludeMcpServerIds: nil,
+		AllowSoleOffer:      true,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
@@ -258,8 +255,8 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 }
 
 // resolveToolsetMintTarget binds a toolset-addressed mint to the toolset's
-// wrapper when a live one exists (issuer-URN audience, wrapper RBAC), else to
-// the legacy toolset binding — matching what the serving path validates.
+// live, issuer-gated wrapper (issuer-URN audience, wrapper RBAC), matching what
+// the serving path validates.
 func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr string, projectID uuid.UUID) (*mintTarget, error) {
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
@@ -276,57 +273,27 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
 	}
-	// The legacy binding below gates on the hosting state the slug fallback serves.
-	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load toolset mcp server").LogError(ctx, s.logger)
-	}
 
 	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
 		ToolsetID: toolset.ID,
 		ProjectID: projectID,
 	})
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// No wrapper: legacy toolset binding below.
+	case errors.Is(err, pgx.ErrNoRows), err == nil && wrapper.Visibility == visibility.Disabled:
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset has no enabled hosted MCP server").LogWarn(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
-	case wrapper.Visibility == visibility.Disabled:
-		// Every server for the toolset is disabled; a wrapper-bound token would be rejected.
 	case !wrapper.UserSessionIssuerID.Valid:
-		// A wrapper without an issuer cannot be a mint target; the toolset's
-		// own issuer gate below still applies.
-	default:
-		target, err := s.wrapperMintTarget(ctx, &wrapper, projectID)
-		if err != nil || target != nil {
-			return target, err
-		}
-		// No addressable endpoint: only the legacy toolset route serves.
-	}
-
-	if !hosting.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
-	alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
+	target, err := s.wrapperMintTarget(ctx, &wrapper, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, s.logger)
+		return nil, err
 	}
-	if alias.Slug.String == "" {
+	if target == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}
-
-	issuerURL, err := url.JoinPath(s.serverURL, "mcp", alias.Slug.String)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
-	}
-
-	return &mintTarget{
-		issuerID:   hosting.UserSessionIssuerID.UUID,
-		audience:   urn.NewToolset(toolset.ID).String(),
-		issuerURL:  issuerURL,
-		resourceID: toolset.ID.String(),
-		logAttr:    attr.SlogToolsetID(toolset.ID.String()),
-	}, nil
+	return target, nil
 }
 
 // resolveServerMintTarget binds the JWT to an mcp_server's user_session_issuer
@@ -370,7 +337,7 @@ func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.M
 }
 
 // wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
-// it; a nil target means the legacy toolset route is the one that serves.
+// it; a nil target means nothing serves it.
 // Endpoints on a domain that cannot serve yet still bind the wrapper.
 func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

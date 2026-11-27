@@ -4,7 +4,7 @@ import { TemplateFrame, type TemplateFrameProps } from "./scaffold";
 /**
  * FullBleedPage — the escape hatch, NOT a content template.
  *
- * The immersive canvases (Chat, Playground, Tool Builder, Assistant onboarding,
+ * The immersive canvases (Chat, Tool Builder, Assistant onboarding,
  * Elements) are two-pane / resizable-split surfaces where one pane edits and
  * the other previews or executes. Their bodies are irreducibly bespoke; only
  * the chrome is shared. This gives them the standard frame + a full-viewport,

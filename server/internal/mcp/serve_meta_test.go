@@ -174,7 +174,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
 	// The caller's servers lead, so agents see the gateway's reach first.
-	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+"\n\n"), "instructions=%s", result.Instructions)
+	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"), "instructions=%s", result.Instructions)
 	require.True(t, strings.HasSuffix(result.Instructions, metamcp.Instructions))
 	require.Contains(t, result.Instructions, "list_servers")
 	require.Contains(t, result.Instructions, "describe_tools")
@@ -233,7 +233,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		want   string
 	}{
 		{name: "custom replaces default and server line", stored: conv.ToPGText(custom), want: custom},
-		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + "\n\n" + metamcp.Instructions},
+		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + metamcp.ProgressiveMemberInstructionsHint + "\n\n" + metamcp.Instructions},
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)
@@ -317,7 +317,7 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 			require.Equal(t, map[string]any{"readOnlyHint": true}, tool.Annotations, tool.Name)
 		}
 	}
-	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "connection_status"}, names)
+	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool", "execute_read_only_tool", "connection_status"}, names)
 
 	// The contract consults neither the endpoint nor the meta server, so every
 	// caller receives these same tools.
@@ -665,7 +665,8 @@ func TestWellKnown_MetaEndpoint_IssuerGated_ServesMetadata(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
 
 	logger := ti.logger
-	mcpEndpoint, mcpServer, metaServer, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	require.NoError(t, err)
 	require.Nil(t, mcpServer)
 	require.NotNil(t, metaServer)
@@ -698,7 +699,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	logger := ti.logger
-	mcpEndpoint, _, metaServer, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, metaServer := resolved.Endpoint, resolved.MetaServer
 	require.NoError(t, err)
 	require.NotNil(t, metaServer)
 

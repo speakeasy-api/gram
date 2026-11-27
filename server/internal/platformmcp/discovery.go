@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
+//nolint:exhaustruct_v5 // MCP SDK and Code Mode types deliberately rely on documented zero-value defaults.
 package platformmcp
 
 import (
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -24,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // discoveryMode is the tool surface one Platform MCP request is served.
@@ -85,28 +85,14 @@ func (r *Runtime) WithDiscovery(config DiscoveryConfig) *Runtime {
 	return r
 }
 
-// harnessProducts maps each CIMD document URL in the aivendors registry to its
-// product ID, resolved once because the registry is static.
-var harnessProducts = sync.OnceValue(func() map[string]string {
-	products := make(map[string]string)
-	for _, product := range aivendors.Products() {
-		for _, clientID := range aivendors.GatewayMatchersFor(product).ClientIDs {
-			products[clientID] = product.ID
-		}
-	}
-	return products
-})
-
 // harnessForClient names the harness behind a verified OAuth client_id: the
-// aivendors product whose CIMD document admitted it, or "unknown". It
-// resolves through the CIMD admission catalog the same way the MCP gateway
-// does, never through the client's self-reported clientInfo. A dynamically
-// registered client has an opaque client_id that matches no entry.
-func harnessForClient(clientID string) string {
-	if preset, ok := admission.CatalogPreset(clientID); ok {
-		if product, ok := harnessProducts()[preset.URL]; ok {
-			return product
-		}
+// catalog product whose CIMD document admitted it, or "unknown". It resolves
+// through the CIMD admission catalog the same way the MCP gateway does, never
+// through the client's self-reported clientInfo. A dynamically registered
+// client has an opaque client_id that matches no entry.
+func harnessForClient(catalog *aivendors.Snapshot, clientID string) string {
+	if preset, ok := catalog.CatalogPreset(clientID); ok {
+		return preset.ProductID
 	}
 	return "unknown"
 }
@@ -123,7 +109,7 @@ func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, pri
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
-	harness := harnessForClient(principal.ClientID)
+	harness := harnessForClient(r.registrar.aiCatalogSnapshot(ctx), principal.ClientID)
 	if harness == chatGPTProductID {
 		return discoveryFull
 	}
@@ -152,21 +138,10 @@ func (r *Runtime) codeModeAvailable(ctx context.Context, organizationID string) 
 	return r.discovery.CodeExecutor != nil && r.discovery.CodeModeAvailable != nil && r.discovery.CodeModeAvailable(ctx, organizationID)
 }
 
-type discoveryModeKey struct{}
-
-// discoveryModeFromContext reads the surface the discovery middleware chose.
-// A request it never saw is a full-catalogue request.
-func discoveryModeFromContext(ctx context.Context) discoveryMode {
-	if mode, ok := ctx.Value(discoveryModeKey{}).(discoveryMode); ok {
-		return mode
-	}
-	return discoveryFull
-}
-
 // discoveryMiddleware serves a caller in the small surface from the meta-tools
-// plus the first-run tools. It sits outside the allowlist and catalogue
-// middleware: its tools/list takes the first-run tools from the catalogue they
-// filter for this caller, and a dispatched call enters them as an ordinary tools/call,
+// plus the first-run tools. It sits outside the catalogue middleware: its
+// tools/list takes the first-run tools from the catalogue they filter for this
+// caller, and a dispatched call enters them as an ordinary tools/call,
 // so the meta-tools reach a catalogue tool through the same SDK validation,
 // per-tool authorization, handler and fail-safe as a direct call does.
 func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
@@ -174,7 +149,6 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			principal := mustPrincipal(ctx)
 			mode := runtime.discoveryModeFor(ctx, logger, principal)
-			ctx = context.WithValue(ctx, discoveryModeKey{}, mode)
 			if mode == discoveryFull {
 				return next(ctx, method, req)
 			}
@@ -267,29 +241,11 @@ func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string
 	return tools, nil
 }
 
-// smallSurfaceInstructionBudget is the instructions size hosts on the small
-// surface keep; Codex cuts the rest.
-const smallSurfaceInstructionBudget = 1 << 10
-
-// instructionBudget reports the instructions size a caller's host keeps, or
-// zero when it keeps them whole. Middleware outside discovery cannot read the
-// mode from its context, so it asks the same way discovery does.
-func (r *Runtime) instructionBudget(logger *slog.Logger) func(context.Context) int {
-	return func(ctx context.Context) int {
-		principal, ok := PrincipalFromContext(ctx)
-		if !ok || r.discoveryModeFor(ctx, logger, principal) == discoveryFull {
-			return 0
-		}
-		return smallSurfaceInstructionBudget
-	}
-}
-
 // discoveryInstructions replace the full server instructions, which Codex cuts
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
-	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. This connection lists the tools most people use first; call them directly. " +
-		"For any other Platform tool, find it with search_platform_tools (plain words, such as \"add an MCP server to a plugin\"), call describe_platform_tool for its input schema and rules, then run it with call_platform_tool. Answer how-to and setup questions with search_speakeasy_docs and cite the pages it returns. " +
-		"Write tools preview first: show the user what will change and wait for explicit confirmation before calling again with confirmed set. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
+	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). Call the listed tools directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
+		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}
@@ -479,6 +435,12 @@ func (s *discoverySurface) describe(ctx context.Context, arguments json.RawMessa
 	}
 	return discoveryResult(output)
 }
+
+// chatGPTProductID is the catalog product whose CIMD documents identify a
+// ChatGPT caller.
+const chatGPTProductID = "chatgpt"
+
+var instructionToolNamePattern = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
 
 // guidanceFor returns the instruction paragraphs that name a tool.
 func (r *Registrar) guidanceFor(name string) []string {

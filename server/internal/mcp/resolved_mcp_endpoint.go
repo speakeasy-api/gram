@@ -19,11 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -36,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 )
@@ -121,6 +115,11 @@ type ResolvedMcpEndpoint struct {
 	// URL. Nil when the endpoint's own per-endpoint authorization server is
 	// serving it, and on every MCP request.
 	sharedResource *sharedResource
+
+	// serverDisplayName and serverSlug name the MCP server an endpoint resolved
+	// through an mcp_server serves; empty for every other resolution.
+	serverDisplayName string
+	serverSlug        string
 
 	// RouteBase is the route surface — drives URL construction in
 	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
@@ -448,11 +447,8 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if ref.IsPublic != nil && e.IsPublic != *ref.IsPublic {
 		return errToolsetEndpointMismatch
 	}
-	// Modern states pin the owning server/meta row and, when present, the
-	// delegated toolset. A legacy direct-toolset ref can intentionally survive a
-	// migration to a server-backed endpoint only when slug, issuer, visibility,
-	// route, domain, and the exact toolset all still match. States carrying no
-	// backend ID retain TTL-bounded compatibility with pre-field cached values.
+	// A state naming a server or meta row, or a toolset, must still match it;
+	// a backend-less ref is checked on the other fields only.
 	if ref.McpServerID.Valid || ref.MetaMcpServerID.Valid {
 		if e.McpServerID != ref.McpServerID || e.MetaMcpServerID != ref.MetaMcpServerID {
 			return errToolsetEndpointMismatch
@@ -490,6 +486,11 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	return nil
 }
 
+// IsSingleServer reports an endpoint for one MCP server rather than a toolset or gateway.
+func (e *ResolvedMcpEndpoint) IsSingleServer() bool {
+	return e.McpServerID.Valid && !e.ToolsetID.Valid
+}
+
 // NewResolvedMcpEndpointFromMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
@@ -521,6 +522,8 @@ func NewResolvedMcpEndpointFromMcpServer(
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
 		RouteBase:                 routeBase,
+		serverDisplayName:         mcpservers.ServerDisplayName(*mcpServer),
+		serverSlug:                mcpServer.Slug.String,
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
 		Slug:                      mcpEndpoint.Slug,
@@ -553,16 +556,6 @@ func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {
 	return e.ToolsetID.UUID
 }
 
-// legacyToolsetAudienceURN is the pre-migration toolset-URN audience a
-// toolset-backed wrapper's bearers may still carry; ok is false for every
-// other endpoint shape (AIS-633; acceptance is deleted by AIS-646).
-func (e *ResolvedMcpEndpoint) legacyToolsetAudienceURN() (string, bool) {
-	if !e.McpServerID.Valid || !e.ToolsetID.Valid {
-		return "", false
-	}
-	return urn.NewToolset(e.ToolsetID.UUID).String(), true
-}
-
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
@@ -592,6 +585,8 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		OrganizationID:            organizationID,
 		ProjectID:                 mcpEndpoint.ProjectID,
 		RouteBase:                 routeBase,
+		serverDisplayName:         "",
+		serverSlug:                "",
 		sharedAuthorizationServer: nil,
 		sharedResource:            nil,
 		Slug:                      mcpEndpoint.Slug,
@@ -601,42 +596,11 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	}
 }
 
-// newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
-// from a resolved toolsets row. Caller is responsible for first checking
-// hosting.UserSessionIssuerID.Valid. routeBase is the URL surface the
-// request arrived under — the WWW-Authenticate URL, OAuth issuer URL, and
-// consent form action all need to match the caller's surface.
-func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, hosting hostingstate.Hosting, alias legacyalias.Alias, routeBase mcproute.Base) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{
-		AudienceURN: urn.NewToolset(toolset.ID).String(),
-		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
-		clientInfoScope:           toolset.Slug,
-		CustomDomainID:            alias.CustomDomainID,
-		IsPublic:                  hosting.Public,
-		idJAGConfigured:           false,
-		issuerStamped:             false,
-		useAuthenticationHost:     false,
-		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:            toolset.OrganizationID,
-		ProjectID:                 toolset.ProjectID,
-		RouteBase:                 routeBase,
-		sharedAuthorizationServer: nil,
-		sharedResource:            nil,
-		Slug:                      conv.PtrValOr(conv.FromPGText[string](alias.Slug), ""),
-		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:          "",
-		UserSessionIssuerID:       hosting.UserSessionIssuerID.UUID,
-	}
-}
-
 // loadResolvedMcpEndpointByRef resolves the cached EndpointRef stored
 // on an in-flight AuthnChallengeState back to a fresh
 // ResolvedMcpEndpoint and verifies its issuer FK is still live.
-// Dispatches on the ref's McpServerID — when valid, resolves through the
-// mcp_endpoints → mcp_servers path; otherwise resolves through
-// the legacy /mcp toolsets path. Returns CodeNotFound when the
+// Dispatches on the ref's backend: the organization gateway, a meta MCP
+// server, or an mcp_server. Returns CodeNotFound when the
 // underlying row is missing or no longer issuer-gated. Used by
 // HandleIDPCallback (mounted under both route surfaces) to resume an
 // in-flight challenge against the addressing path it was minted under.
@@ -763,59 +727,8 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		return endpoint, nil
 	}
 
-	if ref.Authority.IsPrivate() {
-		// Legacy direct-toolset addressing has no organization-pinned private
-		// resolver and must never become a private fallback.
-		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
-	}
-	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
-	}
-	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, alias, wrapperID)
-	if !hosting.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	// loadToolset has already checked the canonical hosted policy for this public fallback.
-	// Honour the surface the challenge was minted under so the resumed
-	// endpoint's URLs match the original mint.
-	return newResolvedMcpEndpointFromToolset(toolset, hosting, alias, ref.RouteBase), nil
-}
-
-// loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
-// ResolvedMcpEndpoint via the legacy toolsets path and verifies its
-// issuer FK is still live. Returns CodeNotFound when either no toolset
-// matches the slug or the toolset is not issuer-gated. routeBase is the
-// surface the request arrived under and propagates
-// into the resolved endpoint's URL building. Used as the fallback leaf
-// of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
-// mcp_server row yet (issuer-gated toolset-backed servers predating the
-// toolsets → mcp_servers migration).
-func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug string, routeBase mcproute.Base, entryPoint mcpmetrics.LegacyFallbackEntryPoint) (*ResolvedMcpEndpoint, error) {
-	var customDomainID uuid.NullUUID
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
-	}
-	toolset, hosting, alias, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
-	switch {
-	case errors.Is(err, errToolsetNotFound):
-		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
-	}
-	s.recordToolsetSlugFallback(ctx, s.logger, entryPoint, mcpSlug, toolset, alias, wrapperID)
-	if !hosting.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeNotFound, nil, "not found")
-	}
-	// loadToolset has already checked the canonical hosted policy for this public fallback.
-	endpoint := newResolvedMcpEndpointFromToolset(toolset, hosting, alias, routeBase)
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
-		return nil, err
-	}
-	return endpoint, nil
+	// A ref naming neither a gateway nor a server cannot resume.
+	return nil, oops.E(oops.CodeNotFound, nil, "mcp server not found")
 }
 
 // buildResolvedMetaMcpEndpointByRef resolves a cached EndpointRef minted

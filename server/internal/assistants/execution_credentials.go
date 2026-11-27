@@ -37,6 +37,7 @@ func (s *ServiceCore) executionTrigger(ctx context.Context, assistant assistantR
 // request by the live policies of the agent, its owner, and that user.
 // Identity rejections wrap ErrTurnIdentity.
 func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, identity turnIdentity) (string, error) {
+	s.repairManagedCeilings(ctx, assistant)
 	trigger, err := s.executionTrigger(ctx, assistant, event)
 	if err != nil {
 		return "", fmt.Errorf("resolve execution trigger: %w", err)
@@ -62,13 +63,17 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 		credential.AuthorizerUserID = identity.UserID
 		execCtx = executionprofiles.ContextUserBacked
 	}
-	credential.SelectionProfileVersionID = s.bindExecutionProfile(ctx, executionprofiles.Target{
+	versionID, err := s.bindExecutionProfile(ctx, executionprofiles.Target{
 		OrganizationID: assistant.OrganizationID,
 		ProjectID:      assistant.ProjectID,
 		AssistantID:    assistant.ID,
 		TriggerID:      trigger,
 		Context:        execCtx,
 	})
+	if err != nil {
+		return "", err
+	}
+	credential.SelectionProfileVersionID = uuid.NullUUID{UUID: versionID, Valid: true}
 	token, err := s.assistantTokens.MintTurnCredential(ctx, credential, assistanttokens.RuntimeBinding{
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
 		AssistantID: assistant.ID, ThreadID: thread.ID, ChatID: thread.ChatID,
@@ -79,16 +84,13 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 	return token, nil
 }
 
-// bindExecutionProfile returns the execution-selection profile version a turn
-// under target binds. While the upstream client choice stays authoritative a
-// turn does not depend on it, so a failure is logged and the turn runs
-// unbound, as turns did before profiles existed.
-func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) uuid.NullUUID {
+// bindExecutionProfile returns the pinned profile version required by a turn.
+// Individual server gaps do not prevent issuance: other servers still work.
+func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target executionprofiles.Target) (uuid.UUID, error) {
 	logger := s.logger.With(attr.SlogOrganizationID(target.OrganizationID), attr.SlogAssistantID(target.AssistantID.String()))
 	binding, err := executionprofiles.Bind(ctx, s.db, target, executionprofiles.SourceIssuance)
 	if err != nil {
-		logger.ErrorContext(ctx, "bind execution selection profile", attr.SlogError(err))
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		return uuid.Nil, fmt.Errorf("bind execution selection profile: %w", err)
 	}
 	if len(binding.Gaps) > 0 {
 		logger.InfoContext(ctx, "execution selection profile has servers without a choice",
@@ -96,5 +98,5 @@ func (s *ServiceCore) bindExecutionProfile(ctx context.Context, target execution
 			attr.SlogExecutionProfileGaps(len(binding.Gaps)),
 		)
 	}
-	return uuid.NullUUID{UUID: binding.VersionID, Valid: true}
+	return binding.VersionID, nil
 }

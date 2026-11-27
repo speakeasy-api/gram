@@ -1,4 +1,4 @@
-package platformtools
+package platformtools_test
 
 import (
 	"context"
@@ -11,17 +11,18 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/stretchr/testify/require"
 )
 
 type threadTestExecutor struct {
-	descriptor ToolDescriptor
+	descriptor platformtools.ToolDescriptor
 	call       func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error
 }
 
-func (t threadTestExecutor) Descriptor() ToolDescriptor { return t.descriptor }
+func (t threadTestExecutor) Descriptor() platformtools.ToolDescriptor { return t.descriptor }
 func (t threadTestExecutor) Call(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, w io.Writer) error {
 	return t.call(ctx, env, r, w)
 }
@@ -37,7 +38,7 @@ func TestGatewayThreadContextSchemas(t *testing.T) {
 		if automatic {
 			callCtx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
 		}
-		listed := ListTypedTools(callCtx, "test-org", projectID, toolURN, nil)
+		listed := platformtools.ListTypedTools(callCtx, "test-org", projectID, toolURN, nil)
 		require.Len(t, listed, 1)
 		require.Equal(t, !automatic, strings.Contains(listed[0].PlatformToolDefinition.Schema, `"thread_id"`))
 	}
@@ -52,8 +53,8 @@ func TestPrepareThreadContextPreservesValidationPayloadAndIdentity(t *testing.T)
 		calls++
 		return target, "selected-chat", nil
 	}
-	descriptor := ToolDescriptor{ThreadContext: core.ThreadContextRequired}
-	ctx, env, payload, err := PrepareThreadContext(t.Context(), descriptor, toolconfig.ToolCallEnv{}, strings.NewReader(original), resolve)
+	descriptor := platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}
+	ctx, env, payload, err := platformtools.PrepareThreadContext(t.Context(), descriptor, toolconfig.ToolCallEnv{}, strings.NewReader(original), resolve)
 	require.NoError(t, err)
 	body, err := io.ReadAll(payload)
 	require.NoError(t, err)
@@ -64,7 +65,7 @@ func TestPrepareThreadContextPreservesValidationPayloadAndIdentity(t *testing.T)
 	require.True(t, ok)
 	require.Equal(t, target, selected)
 	require.Equal(t, "selected-chat", env.GramChatID)
-	executor := WithThreadFallback(threadTestExecutor{descriptor: descriptor, call: func(callCtx context.Context, callEnv toolconfig.ToolCallEnv, reader io.Reader, _ io.Writer) error {
+	executor := platformtools.WithThreadFallback(threadTestExecutor{descriptor: descriptor, call: func(callCtx context.Context, callEnv toolconfig.ToolCallEnv, reader io.Reader, _ io.Writer) error {
 		_, authenticated := contextvalues.GetAssistantPrincipal(callCtx)
 		require.False(t, authenticated)
 		got, ok := contextvalues.GetAssistantToolTarget(callCtx)
@@ -84,7 +85,7 @@ func TestThreadFallbackAutomatic(t *testing.T) {
 	t.Parallel()
 	principal := contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}
 	ctx := contextvalues.SetAssistantPrincipal(t.Context(), principal)
-	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, _ io.Writer) error {
+	tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, _ io.Writer) error {
 		got, ok := contextvalues.GetAssistantToolTarget(ctx)
 		require.True(t, ok)
 		require.Equal(t, principal, got)
@@ -108,7 +109,7 @@ func TestThreadFallbackExplicit(t *testing.T) {
 	selected := uuid.New()
 	principal := contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: selected}
 	called := false
-	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, _ io.Writer) error {
+	tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, _ io.Writer) error {
 		called = true
 		gotAuth, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -135,7 +136,7 @@ func TestThreadFallbackExplicit(t *testing.T) {
 func TestThreadFallbackRequiredAndDenied(t *testing.T) {
 	t.Parallel()
 	denied := errors.New("existing authorization denied")
-	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
+	tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
 		t.Fatal("must not dispatch")
 		return nil
 	}}, func(context.Context, uuid.UUID, bool) (contextvalues.AssistantPrincipal, string, error) {
@@ -164,7 +165,7 @@ func TestThreadFallbackConditional(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			called := false
-			tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: tc.policy}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error { called = true; return nil }}, nil)
+			tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: tc.policy}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error { called = true; return nil }}, nil)
 			err := tool.Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(tc.body), io.Discard)
 			require.Equal(t, tc.needed, err != nil)
 			require.Equal(t, !tc.needed, called)
@@ -174,7 +175,7 @@ func TestThreadFallbackConditional(t *testing.T) {
 
 func TestThreadFallbackConcurrent(t *testing.T) {
 	t.Parallel()
-	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, _ io.Reader, _ io.Writer) error {
+	tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, _ io.Reader, _ io.Writer) error {
 		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok || env.GramChatID != principal.ThreadID.String() {
 			return errors.New("thread context leaked across calls")
@@ -197,7 +198,7 @@ func TestThreadFallbackConcurrent(t *testing.T) {
 func TestDescriptorForContextConcurrent(t *testing.T) {
 	t.Parallel()
 	for _, policy := range []core.ThreadContextPolicy{"", core.ThreadContextRequired, core.ThreadContextSlackSelf, core.ThreadContextWake} {
-		original := ToolDescriptor{ThreadContext: policy, InputSchema: []byte(`{"type":"object","properties":{"route_replies":{"type":"string"},"input":{"type":"object"}},"additionalProperties":false}`)}
+		original := platformtools.ToolDescriptor{ThreadContext: policy, InputSchema: []byte(`{"type":"object","properties":{"route_replies":{"type":"string"},"input":{"type":"object"}},"additionalProperties":false}`)}
 		for i := range 12 {
 			t.Run(string(policy)+string(rune('a'+i)), func(t *testing.T) {
 				t.Parallel()
@@ -206,7 +207,7 @@ func TestDescriptorForContextConcurrent(t *testing.T) {
 				if automatic {
 					ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
 				}
-				desc := DescriptorForContext(ctx, original)
+				desc := platformtools.DescriptorForContext(ctx, original)
 				var schema jsonschema.Schema
 				require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
 				resolved, err := schema.Resolve(nil)
@@ -237,9 +238,9 @@ func TestDescriptorForContextConcurrent(t *testing.T) {
 
 func TestDescriptorForContextThreadlessPrincipalOffersOptionalThread(t *testing.T) {
 	t.Parallel()
-	original := ToolDescriptor{ThreadContext: core.ThreadContextRequired, InputSchema: []byte(`{"type":"object","properties":{},"additionalProperties":false}`)}
+	original := platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired, InputSchema: []byte(`{"type":"object","properties":{},"additionalProperties":false}`)}
 	ctx := contextvalues.SetAssistantPrincipal(t.Context(), contextvalues.AssistantPrincipal{AssistantID: uuid.New()})
-	desc := DescriptorForContext(ctx, original)
+	desc := platformtools.DescriptorForContext(ctx, original)
 	var schema jsonschema.Schema
 	require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
 	resolved, err := schema.Resolve(nil)
@@ -252,7 +253,7 @@ func TestDescriptorForContextThreadlessPrincipalOffersOptionalThread(t *testing.
 func TestThreadFallbackThreadlessPrincipalAcceptsEmptyInput(t *testing.T) {
 	t.Parallel()
 	called := false
-	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
+	tool := platformtools.WithThreadFallback(threadTestExecutor{descriptor: platformtools.ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
 		called = true
 		return nil
 	}}, nil)

@@ -5,7 +5,6 @@ import { GatewayNotServed } from "./organization-gateway-setting";
 
 const state = vi.hoisted(() => ({
   admin: true,
-  issuerDashboard: "enabled",
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -20,14 +19,10 @@ vi.mock("@/hooks/useRBAC", () => ({
       organizationId === "org-1" && (scope !== "org:admin" || state.admin),
   }),
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: state.issuerDashboard }),
-}));
 
 afterEach(cleanup);
 beforeEach(() => {
   state.admin = true;
-  state.issuerDashboard = "enabled";
 });
 
 function renderReason(
@@ -40,16 +35,13 @@ function renderReason(
   );
 }
 
-const issuersLink = () =>
-  screen.queryByRole("link", { name: "Speakeasy Authorization Servers" });
+const issuersLink = () => screen.queryByRole("link", { name: "MCP Sign-in" });
 
 describe("GatewayNotServed", () => {
   it("sends admins to make a project's server organization-wide", () => {
     renderReason("no_organization_issuer");
 
-    expect(
-      screen.getByText(/Make a project's authorization server/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Make a project's MCP sign-in/)).toBeTruthy();
     expect(issuersLink()?.getAttribute("href")).toBe(
       "/acme/user-session-issuers",
     );
@@ -64,18 +56,6 @@ describe("GatewayNotServed", () => {
       "/acme/user-session-issuers",
     );
   });
-
-  it.each(["no_organization_issuer", "multiple_organization_issuers"] as const)(
-    "falls back to support for %s when the issuer dashboard is off",
-    (reason) => {
-      state.issuerDashboard = "disabled";
-
-      renderReason(reason);
-
-      expect(screen.getByText(/Contact support/)).toBeTruthy();
-      expect(screen.queryByRole("link")).toBeNull();
-    },
-  );
 
   it.each(["no_organization_issuer", "multiple_organization_issuers"] as const)(
     "sends members to an admin for %s without a link",

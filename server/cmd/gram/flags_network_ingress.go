@@ -1,25 +1,53 @@
 package gram
 
 import (
+	"errors"
 	"fmt"
-	"net/netip"
 	"regexp"
 	"strings"
 
 	"github.com/urfave/cli/v2"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 )
 
 const (
 	networkIngressMutationFlag = "network-ingress-provider-mutations-enabled"
 	networkIngressQueueFlag    = "network-ingress-reconcile-task-queue"
+	networkIngressDevIDFlag    = "network-ingress-dev-id"
+
+	networkIngressGatewayNameQualifierFlag = "network-ingress-gateway-name-qualifier"
 )
 
 var networkIngressQueuePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
+
+// localDevelopmentNamer returns the namer for a process that changes or hosts
+// artifacts on a tailnet. In local development it insists on a development
+// id: without one the stack would use production's names, and could overwrite,
+// host or delete production's services on a tailnet both serve.
+func localDevelopmentNamer(environment, devID, qualifier string) (networkingress.Namer, error) {
+	if environment == "local" && devID == "" {
+		return nil, errors.New("local development needs GRAM_NETWORK_INGRESS_DEV_ID; run `mise run zero:network-ingress`")
+	}
+	namer, err := networkingress.NewNamer(environment, devID, qualifier)
+	if err != nil {
+		return nil, fmt.Errorf("network ingress naming: %w", err)
+	}
+	return namer, nil
+}
+
+// networkIngressGatewayNameQualifierFlagDef is shared by the reconciler, which
+// names auth keys and services with it, and the gateway, which names its
+// machines with it; both must carry the same value.
+func networkIngressGatewayNameQualifierFlagDef() cli.Flag {
+	return &cli.StringFlag{
+		Name:    networkIngressGatewayNameQualifierFlag,
+		Usage:   "Names this environment's gateway machines speakeasy-gw-<qualifier>-<slot> so they stay apart from another environment's on a shared tailnet; empty keeps speakeasy-gw-<slot>",
+		EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER"},
+	}
+}
 
 // The reconciliation queue is explicit: preview processes must not implicitly
 // claim production lifecycle work through their general-purpose task queue.
@@ -43,174 +71,51 @@ func networkIngressProviderFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:    networkIngressMutationFlag,
-			Usage:   "Allow private ingress provider apply and rotation; observation and cleanup remain independent",
+			Usage:   "Allow private ingress provider apply and rotation; set only where tailnet gateway pods run. Observation and cleanup remain independent",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED"},
 			Value:   false,
 		},
 		&cli.StringFlag{
-			Name: "network-ingress-operator-namespace", Usage: "Namespace containing the Tailscale operator and OAuth Secrets",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_OPERATOR_NAMESPACE"}, Action: validateNetworkIngressName,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-worker-namespace", Usage: "Namespace containing the dedicated private ingress worker ServiceAccount",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_WORKER_NAMESPACE"}, Action: validateNetworkIngressName,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-backend-namespace", Usage: "Namespace containing the private backend Service",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_BACKEND_NAMESPACE"}, Action: validateNetworkIngressName,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-backend-service", Usage: "Private backend Kubernetes Service name",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_BACKEND_SERVICE"}, Action: validateNetworkIngressName,
+			Name: "network-ingress-gateway-tag", Usage: "Tailscale tag carried by gateway auth keys and services",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: networkingress.DefaultGatewayTag, Action: validateNetworkIngressTag,
 		},
 		&cli.IntFlag{
-			Name: "network-ingress-backend-port", Usage: "Private backend HTTPS Service port",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_BACKEND_PORT"}, Action: validateNetworkIngressPort,
+			Name: "network-ingress-gateway-slots", Usage: "Node identities (gateway pod ordinals) hosting each ingress",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_SLOTS"}, Value: tailnetgateway.DefaultSlots,
 		},
 		&cli.StringFlag{
-			Name: "network-ingress-attestor-image", Usage: "Attestor image pinned by sha256 digest",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_ATTESTOR_IMAGE"},
-			Action: func(_ *cli.Context, value string) error {
-				if value == "" {
-					return nil
-				}
-				return networkingress.ValidateAttestorImageReference(value)
-			},
+			Name: "network-ingress-tailscale-api-url", Usage: "Tailscale API base URL override for tests",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
 		},
 		&cli.StringFlag{
-			Name: "network-ingress-attestor-ca-secret", Usage: "CA Secret in the backend namespace for attestor TLS trust",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_ATTESTOR_CA_SECRET"}, Action: validateNetworkIngressName,
+			Name: networkIngressDevIDFlag, Usage: "Local development only: names this stack's hostnames, services and devices local-<id>-... so they stay apart from production's on a shared tailnet",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_DEV_ID"},
 		},
-		&cli.StringFlag{
-			Name: "network-ingress-backend-pod-labels", Usage: "Equality-based pod labels selecting the private backend",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_BACKEND_POD_LABELS"},
-			Action: func(_ *cli.Context, value string) error {
-				if value == "" {
-					return nil
-				}
-				if _, err := labels.ConvertSelectorToLabelsMap(value); err != nil {
-					return fmt.Errorf("invalid private ingress backend pod labels")
-				}
-				return nil
-			},
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-proxy-tag", Usage: "Tailscale tag assigned to ingress proxies",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_PROXY_TAG"}, Action: validateNetworkIngressTag,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-service-tag", Usage: "Tailscale tag assigned to ingress services",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_SERVICE_TAG"}, Action: validateNetworkIngressTag,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-class", Usage: "Private ingress class; only tailscale is supported",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_CLASS"},
-			Action: func(_ *cli.Context, value string) error {
-				if value != "" && value != "tailscale" {
-					return fmt.Errorf("private ingress class must be tailscale")
-				}
-				return nil
-			},
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-token-audience", Usage: "Projected token audience; must match the private listener",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_TOKEN_AUDIENCE"},
-			Action: func(_ *cli.Context, value string) error {
-				if value != "" && value != "gram-netingress" {
-					return fmt.Errorf("private ingress token audience must be gram-netingress")
-				}
-				return nil
-			},
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-kubernetes-api-cidr", Usage: "Kubernetes API destination CIDR for private ingress NetworkPolicies",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_KUBERNETES_API_CIDR"}, Action: validateNetworkIngressCIDR,
-		},
-		&cli.IntFlag{
-			Name: "network-ingress-kubernetes-api-port", Usage: "Kubernetes API destination port for private ingress NetworkPolicies",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_KUBERNETES_API_PORT"}, Action: validateNetworkIngressPort,
-		},
-		&cli.StringSliceFlag{
-			Name: "network-ingress-cluster-cidrs", Usage: "Cluster destination CIDRs excluded from proxy internet egress",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_CLUSTER_CIDRS"},
-			Action: func(c *cli.Context, values []string) error {
-				for _, value := range values {
-					if value == "" {
-						return fmt.Errorf("private ingress cluster CIDRs must not contain empty entries")
-					}
-					if err := validateNetworkIngressCIDR(c, value); err != nil {
-						return err
-					}
-				}
-				return nil
-			},
-		},
+		networkIngressGatewayNameQualifierFlagDef(),
 	}
 }
 
 func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, error) {
 	var config networkingress.RuntimeConfig
-	backendPort := c.Int("network-ingress-backend-port")
-	if err := validateNetworkIngressPort(c, backendPort); err != nil {
-		return config, err
-	}
-	apiPort := c.Int("network-ingress-kubernetes-api-port")
-	if err := validateNetworkIngressPort(c, apiPort); err != nil {
-		return config, err
-	}
-	backendLabels, err := labels.ConvertSelectorToLabelsMap(c.String("network-ingress-backend-pod-labels"))
+	namer, err := networkingress.NewNamer(c.String("environment"), c.String(networkIngressDevIDFlag), c.String(networkIngressGatewayNameQualifierFlag))
 	if err != nil {
-		return config, fmt.Errorf("invalid private ingress backend pod labels")
+		return config, fmt.Errorf("network ingress naming: %w", err)
 	}
 	config = networkingress.RuntimeConfig{
 		ReconcileTaskQueue:       c.String(networkIngressQueueFlag),
 		ProviderMutationsEnabled: c.Bool(networkIngressMutationFlag),
-		Tailscale: k8s.TailscaleNetworkIngressConfig{
-			OperatorNamespace: c.String("network-ingress-operator-namespace"),
-			WorkerNamespace:   c.String("network-ingress-worker-namespace"),
-			BackendNamespace:  c.String("network-ingress-backend-namespace"),
-			BackendPodLabels:  backendLabels,
-			ProxyTag:          c.String("network-ingress-proxy-tag"),
-			ServiceTag:        c.String("network-ingress-service-tag"),
-			AttestorCASecret:  c.String("network-ingress-attestor-ca-secret"),
-			KubernetesAPICIDR: c.String("network-ingress-kubernetes-api-cidr"),
-			KubernetesAPIPort: int32(apiPort), // #nosec G115 -- validated port range before conversion.
-			ClusterCIDRs:      append([]string(nil), c.StringSlice("network-ingress-cluster-cidrs")...),
+		Gateway: networkingress.GatewayRuntimeConfig{
+			Tag:    c.String("network-ingress-gateway-tag"),
+			Slots:  int32(min(max(c.Int("network-ingress-gateway-slots"), -1), 1<<15)), // #nosec G115 -- clamped before conversion; -1 keeps negatives rejected by Validate.
+			APIURL: c.String("network-ingress-tailscale-api-url"),
+
+			Namer: namer,
 		},
-		AttestorImage:  c.String("network-ingress-attestor-image"),
-		BackendService: c.String("network-ingress-backend-service"),
-		BackendPort:    int32(backendPort), // #nosec G115 -- validated port range before conversion.
-		IngressClass:   c.String("network-ingress-class"),
-		TokenAudience:  c.String("network-ingress-token-audience"),
 	}
 	if err := config.Validate(); err != nil {
 		return config, fmt.Errorf("validate network ingress configuration: %w", err)
 	}
 	return config, nil
-}
-
-func validateNetworkIngressName(_ *cli.Context, value string) error {
-	if value != "" && len(validation.IsDNS1123Label(value)) > 0 {
-		return fmt.Errorf("invalid private ingress Kubernetes name")
-	}
-	return nil
-}
-
-func validateNetworkIngressCIDR(_ *cli.Context, value string) error {
-	if value == "" {
-		return nil
-	}
-	if _, err := netip.ParsePrefix(value); err != nil {
-		return fmt.Errorf("invalid private ingress network CIDR")
-	}
-	return nil
-}
-
-func validateNetworkIngressPort(_ *cli.Context, value int) error {
-	if value < 0 || value > 65535 {
-		return fmt.Errorf("private ingress port must be between 1 and 65535, or zero when unconfigured")
-	}
-	return nil
 }
 
 func validateNetworkIngressTag(_ *cli.Context, value string) error {

@@ -12,6 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export const ChallengeResolutionResolutionType = {
   RoleAssigned: "role_assigned",
+  TemporaryGrant: "temporary_grant",
   Dismissed: "dismissed",
 } as const;
 export type ChallengeResolutionResolutionType = OpenEnum<

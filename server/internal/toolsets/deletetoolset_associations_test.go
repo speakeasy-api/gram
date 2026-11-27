@@ -26,9 +26,8 @@ func TestToolsetsService_DeleteToolset_PrunesHostedServerAssociations(t *testing
 	require.True(t, ok)
 	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "Toolset with an upstream client")
-	issuerID := createShimIssuer(t, ctx, ti, "delete-associations-usi")
-	_, err := ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: &issuerID})
-	require.NoError(t, err)
+	issuerID := createProjectIssuer(t, ctx, ti, "delete-associations-usi")
+	linkHostedIssuer(t, ctx, ti, toolset, issuerID)
 	serverID := uuid.MustParse(toolset.ID)
 
 	rq := remoterepo.New(ti.conn)
@@ -52,10 +51,6 @@ func TestToolsetsService_DeleteToolset_PrunesHostedServerAssociations(t *testing
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
-	require.NoError(t, rq.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   uuid.MustParse(issuerID),
-	}))
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: client.ID,
 	}))

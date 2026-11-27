@@ -40,6 +40,19 @@ func (s *Service) configuredAuthOffers(ctx context.Context, organizationID strin
 	return offers, nil
 }
 
+// forPersonalRegistration restricts capability checks to the owned grant's
+// registration. A shared or sibling offer cannot authorize its bearer.
+func (o configuredAuthOffer) forPersonalRegistration(id uuid.UUID) configuredAuthOffer {
+	scoped := configuredAuthOffer{clients: nil, pending: o.pending}
+	for _, client := range o.clients {
+		if client.RemoteSessionClientID.Valid && client.RemoteSessionClientID.UUID == id &&
+			(client.ClientType.String == authz.AuthClientTypeRemoteSession || client.ClientType.String == authz.AuthClientTypeEMA) {
+			scoped.clients = append(scoped.clients, client)
+		}
+	}
+	return scoped
+}
+
 func (o configuredAuthOffer) personalRegistrations() []uuid.UUID {
 	var ids []uuid.UUID
 	for _, client := range o.clients {
@@ -122,7 +135,9 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)
 		}
 	}
-	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposedNoAuth: false, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID})
+	// Offers are only loaded for an organization that enforces, so decide
+	// them from typed state as the serving resolver does.
+	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposedNoAuth: false, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID, TypedOnly: true})
 	if err != nil {
 		return metadata, fmt.Errorf("resolve gateway offer header sources: %w", err)
 	}

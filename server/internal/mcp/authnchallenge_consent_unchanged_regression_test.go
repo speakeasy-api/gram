@@ -52,6 +52,17 @@ func firstPartyConsent(t *testing.T, ctx context.Context, fx consentActionFixtur
 	return fx
 }
 
+// focusTypedConsentTunnel places a sign-in offer on a tunneled member and
+// opens that member's connect page. Its backend accepts unqualified grants.
+func focusTypedConsentTunnel(t *testing.T, ctx context.Context, fx consentActionFixture, metaID, clientID, issuerID uuid.UUID, slug string) consentActionFixture {
+	t.Helper()
+	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, slug, "urn:gram:tunnel:"+slug, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
+	fx.server = slug
+	return fx
+}
+
 // markVerified records a valid verdict on the subject's grant, as a probe
 // would: a page waits on an unverified grant its server can check.
 func markVerified(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID) {
@@ -88,7 +99,7 @@ func expectFirstPartyAutoClose(t *testing.T, fx consentActionFixture) {
 func TestServeConsent_Unchanged_FirstPartyAutoClosesWhenGrantAlreadyCarriesOpenID(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "unchanged-fp-openid")
-	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, "unchanged-fp-openid-member")
+	fx = focusTypedConsentTunnel(t, ctx, firstPartyConsent(t, ctx, fx), metaID, clientID, issuerID, "unchanged-fp-openid-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read", "openid"})
 	grantScoped(t, ctx, fx, clientID, []string{"read", "openid"})
@@ -99,7 +110,7 @@ func TestServeConsent_Unchanged_FirstPartyAutoClosesWhenGrantAlreadyCarriesOpenI
 func TestServeConsent_Unchanged_FirstPartyAutoClosesWhenIssuerDoesNotAdvertiseOpenID(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "unchanged-fp-no-openid")
-	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, "unchanged-fp-no-openid-member")
+	fx = focusTypedConsentTunnel(t, ctx, firstPartyConsent(t, ctx, fx), metaID, clientID, issuerID, "unchanged-fp-no-openid-member")
 
 	advertise(t, ctx, fx, issuerID, []string{"read"})
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
@@ -124,9 +135,9 @@ func refreshableConnection(t *testing.T, ctx context.Context, fx consentActionFi
 	require.NoError(t, err)
 	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = repo.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = repo.UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: fx.subject, UserSessionIssuerID: session.UserSessionIssuerID, RemoteSessionClientID: clientID,
-		AccessTokenEncrypted: session.AccessTokenEncrypted, AccessExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true, InfinityModifier: pgtype.Finite},
+		AccessTokenEncrypted: session.AccessTokenEncrypted.String, AccessExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: session.Scopes, Resource: session.Resource,
 	})
 	require.NoError(t, err)
@@ -136,7 +147,7 @@ func refreshableConnection(t *testing.T, ctx context.Context, fx consentActionFi
 func outageConsentFixture(t *testing.T, name string) (context.Context, consentActionFixture, uuid.UUID) {
 	t.Helper()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, name)
-	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, name+"-member")
+	fx = focusTypedConsentTunnel(t, ctx, firstPartyConsent(t, ctx, fx), metaID, clientID, issuerID, name+"-member")
 	advertise(t, ctx, fx, issuerID, []string{"read"})
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
 	markVerified(t, ctx, fx, clientID)
@@ -252,7 +263,7 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 func TestServeConsent_TunnelDownWithoutRecordOffersNoReconnect(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "tunnel-down")
-	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, "tunnel-down-member")
+	fx = focusTypedConsentTunnel(t, ctx, firstPartyConsent(t, ctx, fx), metaID, clientID, issuerID, "tunnel-down-member")
 	advertise(t, ctx, fx, issuerID, []string{"read"})
 	grantScoped(t, ctx, fx, clientID, []string{"read"})
 	markVerified(t, ctx, fx, clientID)

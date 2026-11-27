@@ -44,8 +44,7 @@ type ResolutionInput struct {
 
 // ResolutionResult distinguishes a genuine address miss from an authoritative
 // endpoint result. An authoritative denial must terminate the request even
-// though its public HTTP representation is 404; callers must not continue into
-// legacy toolset fallback.
+// though its public HTTP representation is 404.
 type ResolutionResult struct {
 	Endpoint   *repo.McpEndpoint
 	Server     *mcpservers_repo.McpServer
@@ -53,6 +52,10 @@ type ResolutionResult struct {
 	Mode       networkaccess.Mode
 	Found      bool
 	Allowed    bool
+
+	// FeedbackToolEnabled reports whether Server offers the feedback tool,
+	// read with the server row. Always false without a Server.
+	FeedbackToolEnabled bool
 }
 
 // FromContext derives the current public/custom-domain namespace and surface.
@@ -126,7 +129,7 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return ResolutionResult{Endpoint: nil, Server: nil, MetaServer: nil, Mode: networkaccess.ModePublicOnly, Found: false, Allowed: false}, nil
+		return ResolutionResult{Endpoint: nil, Server: nil, MetaServer: nil, Mode: networkaccess.ModePublicOnly, Found: false, Allowed: false, FeedbackToolEnabled: false}, nil
 	case err != nil:
 		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}
@@ -160,10 +163,10 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		if metaServer.OrganizationID != project.OrganizationID || metaServer.Visibility == metamcp_visibility.Disabled || !mode.Allows(input.Surface) {
 			return deniedResult(&endpoint, nil, &metaServer, mode), nil
 		}
-		return ResolutionResult{Endpoint: &endpoint, Server: nil, MetaServer: &metaServer, Mode: mode, Found: true, Allowed: true}, nil
+		return ResolutionResult{Endpoint: &endpoint, Server: nil, MetaServer: &metaServer, Mode: mode, Found: true, Allowed: true, FeedbackToolEnabled: false}, nil
 	}
 
-	server, err := mcpservers_repo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+	served, err := mcpservers_repo.New(db).GetServableMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetServableMCPServerByIDAndProjectIDParams{
 		ID:        endpoint.McpServerID.UUID,
 		ProjectID: endpoint.ProjectID,
 	})
@@ -173,6 +176,7 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 	case err != nil:
 		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 	}
+	server := served.McpServer
 	mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
 	if modeErr != nil {
 		return deniedResult(&endpoint, &server, nil, networkaccess.ModePrivateOnly), nil
@@ -198,16 +202,15 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 			return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load hosted MCP toolset").LogError(ctx, logger)
 		}
 	}
-	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true}, nil
+	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true, FeedbackToolEnabled: served.FeedbackToolEnabled}, nil
 }
 
 func deniedResult(endpoint *repo.McpEndpoint, server *mcpservers_repo.McpServer, metaServer *metamcp_repo.MetaMcpServer, mode networkaccess.Mode) ResolutionResult {
-	return ResolutionResult{Endpoint: endpoint, Server: server, MetaServer: metaServer, Mode: mode, Found: true, Allowed: false}
+	return ResolutionResult{Endpoint: endpoint, Server: server, MetaServer: metaServer, Mode: mode, Found: true, Allowed: false, FeedbackToolEnabled: false}
 }
 
 // ErrPolicyDenied marks a terminal address result whose public representation
-// is 404. Callers that support legacy fallback must not fall through when this
-// cause is present.
+// is 404. Callers must not try another lookup when this cause is present.
 var ErrPolicyDenied = errors.New("mcp endpoint policy denied")
 
 // IsPolicyDenied reports whether an error is the terminal policy outcome.
@@ -215,31 +218,41 @@ func IsPolicyDenied(err error) bool {
 	return errors.Is(err, ErrPolicyDenied)
 }
 
-// IsAddressMiss reports whether an error is a genuine address miss that may
-// fall back to legacy toolset lookup rather than an authoritative policy denial.
+// IsAddressMiss reports whether an error is a genuine address miss rather than
+// an authoritative policy denial.
 func IsAddressMiss(err error) bool {
 	var shareErr *oops.ShareableError
 	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !IsPolicyDenied(err)
 }
 
 // BySlugAndCustomDomain preserves the public resolver signature while callers
-// migrate to ResolutionResult. A genuine miss remains CodeNotFound. Policy
-// denial is also represented as 404 to clients, but is authoritative and must
-// never be converted into legacy fallback by callers using Resolve directly.
+// migrate to ResolutionResult. Its errors are those of ResolveFromContext.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
-	input, err := FromContext(ctx, slug)
-	if err != nil {
-		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(ErrPolicyDenied, err), "mcp endpoint not found")
-	}
-	result, err := Resolve(ctx, db, logger, input)
+	result, err := ResolveFromContext(ctx, db, logger, slug)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	return result.Endpoint, result.Server, result.MetaServer, nil
+}
+
+// ResolveFromContext resolves a slug in the namespace and on the surface the
+// request arrived through, returning only an allowed result. A genuine miss
+// is CodeNotFound. Policy denial is also represented as 404 to clients, but
+// is authoritative.
+func ResolveFromContext(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (ResolutionResult, error) {
+	input, err := FromContext(ctx, slug)
+	if err != nil {
+		return ResolutionResult{}, oops.E(oops.CodeNotFound, errors.Join(ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	result, err := Resolve(ctx, db, logger, input)
+	if err != nil {
+		return ResolutionResult{}, err
+	}
 	if !result.Found {
-		return nil, nil, nil, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+		return ResolutionResult{}, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
 	}
 	if !result.Allowed {
-		return nil, nil, nil, oops.E(oops.CodeNotFound, ErrPolicyDenied, "mcp endpoint not found")
+		return ResolutionResult{}, oops.E(oops.CodeNotFound, ErrPolicyDenied, "mcp endpoint not found")
 	}
-	return result.Endpoint, result.Server, result.MetaServer, nil
+	return result, nil
 }

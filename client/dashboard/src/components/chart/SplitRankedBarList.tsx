@@ -7,6 +7,8 @@ export type SplitRankedBarItem = {
   value: number;
   // The share of `value` that went wrong. Drawn as a red head on the bar.
   failed: number;
+  // Makes the label a button, for a ranking that narrows a list beside it.
+  onSelect?: () => void;
 };
 
 /**
@@ -26,8 +28,15 @@ export type SplitRankedBarItem = {
  */
 export function SplitRankedBarList({
   items,
+  failedLabel = "fail",
+  failedTitle = "failed",
 }: {
   items: SplitRankedBarItem[];
+  // The word after the red share's figure, for a ranking whose red share is
+  // something other than a failed call ("3 blocked").
+  failedLabel?: string;
+  // The same word as hovering and screen readers get it ("3 failed").
+  failedTitle?: string;
 }): JSX.Element {
   // Widths normalize against the largest total so the bars stay bounded even
   // if a caller passes unsorted input.
@@ -50,7 +59,17 @@ export function SplitRankedBarList({
               className="col-span-3 truncate text-sm sm:col-span-1"
               title={item.label}
             >
-              {item.label}
+              {item.onSelect ? (
+                <button
+                  type="button"
+                  className="max-w-full truncate text-left hover:underline"
+                  onClick={item.onSelect}
+                >
+                  {item.label}
+                </button>
+              ) : (
+                item.label
+              )}
             </span>
             {/* On a narrow panel the label takes the whole line and the bar
                 drops beneath it rather than crushing every column; both
@@ -82,15 +101,17 @@ export function SplitRankedBarList({
             <span
               className="text-default-destructive col-start-4 text-right font-mono text-xs tabular-nums sm:col-start-5"
               title={
-                failed > 0 ? `${failed.toLocaleString()} failed` : undefined
+                failed > 0
+                  ? `${failed.toLocaleString()} ${failedTitle}`
+                  : undefined
               }
             >
               <span aria-hidden="true">
-                {failed > 0 ? `${formatCompact(failed)} fail` : ""}
+                {failed > 0 ? `${formatCompact(failed)} ${failedLabel}` : ""}
               </span>
               {failed > 0 && (
                 <span className="sr-only">
-                  {`${failed.toLocaleString()} failed`}
+                  {`${failed.toLocaleString()} ${failedTitle}`}
                 </span>
               )}
             </span>

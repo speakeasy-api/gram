@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -148,6 +149,9 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	sharedClient := f.authClient(shared, typeServiceAccount, f.registration(shared))
 	headers := f.server(unstored)
 	headerClient := f.authClient(headers, typeStaticCredential, uuid.Nil)
+	// Catalog rows for disabled links cannot count as competing offers.
+	disabledHeader := f.authClient(headers, typePassThrough, uuid.Nil)
+	require.NoError(t, f.q.DisableAuthClientFixture(t.Context(), DisableAuthClientFixtureParams{ID: disabledHeader, OrganizationID: f.orgID}))
 	open := f.server(unstored)
 	// A stored requirement is never read: a server with no auth client needs
 	// none.
@@ -184,7 +188,7 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	}, binding.Gaps)
 }
 
-func TestBindTreatsEMAAsPersonal(t *testing.T) {
+func TestBindDefaultsToSoleEMAClientOnlyForUserBackedTurns(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server := f.server(unstored)
@@ -196,8 +200,13 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
 
 	userBacked := f.bind(ContextUserBacked)
+	require.Empty(t, userBacked.Gaps)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(userBacked.VersionID))
 
+	f.authClient(server, typeRemoteSession, registration)
+	rebound := f.bind(ContextUserBacked)
+	require.Equal(t, userBacked.VersionID, rebound.VersionID, "a new offer cannot change an already saved choice")
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(rebound.VersionID))
 }
 
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
@@ -261,6 +270,7 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, dry.Targets)
 	require.Equal(t, len(Contexts), dry.VersionsWritten)
+	require.Equal(t, len(Contexts), dry.FirstVersions, "no turn has run under either profile")
 	for _, execCtx := range Contexts {
 		_, err := f.q.GetProfile(t.Context(), GetProfileParams{
 			OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant,
@@ -272,10 +282,19 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 	applied, err := Backfill(t.Context(), f.pool, f.orgID, true)
 	require.NoError(t, err)
 	require.Equal(t, len(Contexts), applied.VersionsWritten)
+	require.Equal(t, len(Contexts), applied.FirstVersions)
 
 	again, err := Backfill(t.Context(), f.pool, f.orgID, false)
 	require.NoError(t, err)
 	require.Zero(t, again.VersionsWritten)
+	require.Zero(t, again.FirstVersions)
+
+	added := f.server(unstored)
+	f.authClient(added, typeServiceAccount, f.registration(added))
+	stale, err := Backfill(t.Context(), f.pool, f.orgID, false)
+	require.NoError(t, err)
+	require.Equal(t, len(Contexts), stale.VersionsWritten, "a recorded profile gains a choice for the new server")
+	require.Zero(t, stale.FirstVersions)
 }
 
 func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {
@@ -317,4 +336,59 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	require.Equal(t, int64(2), v2.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient, second: secondClient}, f.choices(v2.VersionID))
 	require.Equal(t, map[uuid.UUID]uuid.UUID{first: firstClient}, f.choices(v1.VersionID), "an earlier version never changes")
+}
+
+// offerOnly seeds an auth client linked to serverID whose upstream OAuth
+// client the server has no association with.
+func (f *fixture) offerOnly(serverID uuid.UUID, clientType string) uuid.UUID {
+	f.t.Helper()
+	return f.authClient(serverID, clientType, f.registration(f.server(unstored)))
+}
+
+func TestBindDecidesFromTypedOffersWithoutEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	// An OAuth client the server offers with no association.
+	offered := f.server(unstored)
+	offeredClient := f.offerOnly(offered, typeServiceAccount)
+	// A leftover association whose client the server no longer offers.
+	leftover := f.server(unstored)
+	f.registration(leftover)
+	leftoverClient := f.authClient(leftover, typeStaticCredential, uuid.Nil)
+	several := f.server(unstored)
+	f.offerOnly(several, typeServiceAccount)
+	f.offerOnly(several, typeServiceAccount)
+	personal := f.server(unstored)
+	f.offerOnly(personal, typeRemoteSession)
+	// An OAuth client beside a header client: either could serve the server.
+	mixed := f.server(unstored)
+	f.offerOnly(mixed, typeServiceAccount)
+	f.authClient(mixed, typeStaticCredential, uuid.Nil)
+	// A personal client beside a header client: a userless turn can use one.
+	personalOrHeaders := f.server(unstored)
+	f.authClient(personalOrHeaders, typeRemoteSession, f.registration(personalOrHeaders))
+	personalOrHeadersClient := f.authClient(personalOrHeaders, typeStaticCredential, uuid.Nil)
+
+	// The servers holding the offered clients' associations are gaps of their
+	// own, so only these servers' gaps are compared.
+	reasons := func(binding Binding) map[uuid.UUID]GapReason {
+		out := map[uuid.UUID]GapReason{}
+		for _, gap := range binding.Gaps {
+			if slices.Contains([]uuid.UUID{offered, leftover, several, personal, mixed, personalOrHeaders}, gap.MCPServerID) {
+				out[gap.MCPServerID] = gap.Reason
+			}
+		}
+		return out
+	}
+
+	binding := f.bind(ContextUserless)
+	choices := f.choices(binding.VersionID)
+	require.Equal(t, offeredClient, choices[offered])
+	require.Equal(t, leftoverClient, choices[leftover])
+	require.Equal(t, personalOrHeadersClient, choices[personalOrHeaders])
+	require.Equal(t, map[uuid.UUID]GapReason{
+		several:  GapSelectionRequired,
+		personal: GapPersonalRequiresUser,
+		mixed:    GapSelectionRequired,
+	}, reasons(binding))
 }

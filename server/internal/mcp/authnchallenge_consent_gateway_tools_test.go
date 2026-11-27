@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -288,13 +287,10 @@ func TestGatewayConsentListsConnectedSourcesWhenOneProviderIsMissing(t *testing.
 	docsID := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Docs", docsSlug, 2, connected.url)
 
 	// Each member signs in through its own provider; only Docs's is connected.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-a-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-b-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
-	associations := upstreamclientsrepo.New(ti.conn)
-	for member, client := range map[uuid.UUID]uuid.UUID{trackerID: clientA, docsID: clientB} {
-		_, err := associations.AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member, RemoteSessionClientID: client})
-		require.NoError(t, err)
-	}
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-a-"+uuid.NewString()[:8], "")
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-b-"+uuid.NewString()[:8], "")
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, trackerID, clientA, "remote_session")
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, docsID, clientB, "remote_session")
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, clientB, urn.NewUserSubject(mockidp.MockUserID), "token-docs", connected.url)
 
 	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)

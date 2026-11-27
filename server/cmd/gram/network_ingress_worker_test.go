@@ -4,11 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	authorizationv1 "k8s.io/api/authorization/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/fake"
-	ktesting "k8s.io/client-go/testing"
 )
 
 func TestValidateNetworkIngressWorkerTemporalTLS(t *testing.T) {
@@ -35,30 +30,25 @@ func TestValidateNetworkIngressWorkerTemporalTLS(t *testing.T) {
 	}
 }
 
-func TestCheckNetworkIngressWorkerKubernetesRequiresInventoryRBAC(t *testing.T) {
+func TestNetworkIngressWorkerExposesGatewayFlags(t *testing.T) {
 	t.Parallel()
-	for _, allowed := range []bool{true, false} {
-		t.Run(map[bool]string{true: "allowed", false: "denied"}[allowed], func(t *testing.T) {
-			t.Parallel()
-			clientset := fake.NewSimpleClientset()
-			clientset.PrependReactor("create", "selfsubjectaccessreviews", func(action ktesting.Action) (bool, runtime.Object, error) {
-				create, ok := action.(ktesting.CreateAction)
-				require.True(t, ok)
-				review, ok := create.GetObject().(*authorizationv1.SelfSubjectAccessReview)
-				require.True(t, ok)
-				require.Equal(t, "list", review.Spec.ResourceAttributes.Verb)
-				require.Equal(t, "namespaces", review.Spec.ResourceAttributes.Resource)
-				return true, &authorizationv1.SelfSubjectAccessReview{
-					ObjectMeta: metav1.ObjectMeta{},
-					Status:     authorizationv1.SubjectAccessReviewStatus{Allowed: allowed},
-				}, nil
-			})
-			err := checkNetworkIngressWorkerKubernetes(t.Context(), clientset)
-			if allowed {
-				require.NoError(t, err)
-			} else {
-				require.ErrorContains(t, err, "not allowed")
-			}
-		})
+	for _, name := range []string{
+		"network-ingress-gateway-tag", "network-ingress-gateway-slots", "network-ingress-tailscale-api-url",
+	} {
+		requireFlag(t, newNetworkIngressWorkerCommand().Flags, name)
+	}
+}
+
+func TestNetworkIngressWorkerDropsOperatorFlags(t *testing.T) {
+	t.Parallel()
+	names := map[string]bool{}
+	for _, flag := range newNetworkIngressWorkerCommand().Flags {
+		names[flag.Names()[0]] = true
+	}
+	for _, name := range []string{
+		"network-ingress-operator-provider-enabled", "network-ingress-operator-namespace", "network-ingress-gateway-enabled",
+		"network-ingress-attestor-image", "network-ingress-backend-pod-labels", "network-ingress-cluster-cidrs",
+	} {
+		require.False(t, names[name], name)
 	}
 }

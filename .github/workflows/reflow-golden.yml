@@ -1,0 +1,213 @@
+name: Reflow
+
+# Runs the Reflow collection's golden flows against a freshly booted local
+# stack. Pushes to main record the baseline that pull requests compare with.
+# Every pull request from this repository runs, so a change that breaks a
+# golden flow shows on its own pull request instead of on main after merge.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Exact Reflow CLI release; bump deliberately.
+  REFLOW_VERSION: 0.1.0-2580e083b41149307451
+  REFLOW_API: https://app.reflow.io
+
+jobs:
+  golden:
+    name: golden flows
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 100
+    permissions:
+      contents: read # the Reflow GitHub App writes the pull request comment
+    env:
+      GOMAXPROCS: 8
+      REFLOW_COLLECTION: ${{ vars.REFLOW_COLLECTION_ID }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          fetch-depth: 0 # ci run diffs against the pull request base
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # ./zero --agent builds the pinned Monty runtime for local Code Mode, and
+      # compiling it from scratch takes about ten minutes. With the installed
+      # binary restored, cargo install sees the pinned revision is already
+      # installed and skips the build. Use an exact key: a different pinned
+      # revision or toolchain must never reuse this binary.
+      - name: Restore pinned Monty installation
+        id: monty-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+        with:
+          path: agents/code-runner/target/monty
+          key: monty-blacksmith-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.mise-tasks/build/monty.sh', 'agents/code-runner/rust-toolchain.toml') }}
+
+      # Keep Project Assistant runtimes from starting. On a Linux runner each
+      # runtime container start or stop changes the host's network interfaces,
+      # and Chromium then closes its HTTP/2 sessions with ERR_NETWORK_CHANGED,
+      # failing whichever golden flow has a request in flight. No golden flow
+      # needs a running runtime (CI has no model key), so the tag names an
+      # image that is never built: assistants stay on in the dashboard and the
+      # runtime reports that its image is missing instead of starting.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          GRAM_ASSISTANT_RUNTIME_IMAGE_TAG = "ci-not-built"
+          TOML
+
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "reflow-golden@example.com"
+          git config user.name "Reflow Golden"
+
+      - name: Boot the stack
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+        run: ./zero --agent
+
+      # Save as soon as the build exists, not at the end of the job: a combined
+      # actions/cache step saves only when every step passes, and a failing
+      # golden flow would otherwise leave the next run compiling again.
+      # cargo install writes .crates2.json only after a complete install.
+      - name: Save pinned Monty installation
+        if: >-
+          !cancelled() &&
+          steps.monty-cache.outputs.cache-hit != 'true' &&
+          hashFiles('agents/code-runner/target/monty/.crates2.json') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: agents/code-runner/target/monty
+          key: ${{ steps.monty-cache.outputs.cache-primary-key }}
+
+      - name: Install Reflow
+        env:
+          REFLOW_INSTALLER_SHA256: ${{ vars.REFLOW_INSTALLER_SHA256 }}
+        run: |
+          installer="$RUNNER_TEMP/reflow-install.sh"
+          curl -fsSL -o "$installer" https://reflow.io/install.sh
+          echo "${REFLOW_INSTALLER_SHA256}  ${installer}" | sha256sum -c -
+          sh "$installer" --no-agent-setup --version "$REFLOW_VERSION"
+          echo "$HOME/.local/share/reflow-sidecar/bin" >> "$GITHUB_PATH"
+
+      - name: Connect Reflow
+        env:
+          REFLOW_TOKEN: ${{ secrets.REFLOW_TOKEN }}
+        run: |
+          printf '%s' "$REFLOW_TOKEN" | reflow-connection configure --api-url "$REFLOW_API" --app-url "$REFLOW_API"
+          reflow connection
+
+      - name: Bind the checkout to the collection
+        env:
+          REFLOW_TEAM: ${{ vars.REFLOW_TEAM_ID }}
+        run: |
+          mkdir -p .reflow
+          printf 'team: %s\ncollection: %s\nrepository: %s\n' "$REFLOW_TEAM" "$REFLOW_COLLECTION" "$GITHUB_REPOSITORY" > .reflow/app.yml
+          # The Reflow API sometimes answers 5xx for a short time. Try again
+          # on a 5xx only; any other failure (auth, a wrong collection) is
+          # not transient and fails at once.
+          for attempt in 1 2 3 4; do
+            if out=$(reflow init --collection "$REFLOW_COLLECTION" 2>&1); then
+              echo "$out"
+              exit 0
+            fi
+            echo "$out"
+            grep -q 'HTTP 5[0-9][0-9]' <<<"$out" || exit 1
+            [ "$attempt" -lt 4 ] && sleep $((attempt * 30))
+          done
+          exit 1
+
+      # A pull request can keep edits to Reflow-kept flows as PR drafts. Once it
+      # merges, promote the drafts its CI validated before main selects its
+      # golden flows. Promotion changes flows that other golden flows call, so
+      # main then runs every flow again instead of carrying earlier passes.
+      - name: Promote merged PR flow drafts
+        id: promote
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          reflow flows promote --collection "$REFLOW_COLLECTION" --commit "$GITHUB_SHA" --json > "$RUNNER_TEMP/reflow-promote.json"
+          echo "needs_fresh=$(jq -r '.needs_fresh' "$RUNNER_TEMP/reflow-promote.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Target the stack
+        run: mise run reflow:target --group "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --dir "$RUNNER_TEMP/reflow-target"
+
+      - name: Describe this CI run
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$HEAD_REF" \
+            --arg pr "$PR_NUMBER" \
+            --arg base "$BASE_SHA" \
+            --arg url "$RUN_URL" \
+            '{provider: "github-actions", repository: $repo, branch: $branch, run_url: $url}
+             + (if $pr == "" then {} else {pr_number: ($pr | tonumber), base_sha: $base} end)' \
+            > "$RUNNER_TEMP/reflow-ci.json"
+
+      - name: Run golden flows
+        id: golden
+        env:
+          BASE_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+          HEAD_REF: ${{ github.head_ref || github.ref_name }}
+          NEEDS_FRESH: ${{ steps.promote.outputs.needs_fresh }}
+        run: |
+          args=(--ci-context "$RUNNER_TEMP/reflow-ci.json" --branch "$HEAD_REF" --out-dir "$RUNNER_TEMP/reflow-ci" --publish)
+          if [ -n "$BASE_BRANCH" ]; then
+            args+=(--base-branch "$BASE_BRANCH" --post)
+          fi
+          if [ "$NEEDS_FRESH" = "true" ]; then
+            args+=(--fresh)
+          fi
+          mise run reflow:golden "${args[@]}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/reflow-ci/report.md" ]; then
+            cat "$RUNNER_TEMP/reflow-ci/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Collect stack logs
+        if: failure()
+        run: mise exec -- pitchfork logs --raw > "$RUNNER_TEMP/stack.log" 2>&1 || true
+
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reflow-golden-stack-logs
+          path: ${{ runner.temp }}/stack.log
+          retention-days: 7
+          if-no-files-found: ignore

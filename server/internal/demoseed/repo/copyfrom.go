@@ -9,6 +9,87 @@ import (
 	"context"
 )
 
+// iteratorForMemoryEvalCopyChatMessages implements pgx.CopyFromSource.
+type iteratorForMemoryEvalCopyChatMessages struct {
+	rows                 []MemoryEvalCopyChatMessagesParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForMemoryEvalCopyChatMessages) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForMemoryEvalCopyChatMessages) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].ChatID,
+		r.rows[0].ProjectID,
+		r.rows[0].Role,
+		r.rows[0].Content,
+		r.rows[0].UserID,
+		r.rows[0].Source,
+		r.rows[0].CreatedAt,
+		r.rows[0].RiskAnalyzedAt,
+	}, nil
+}
+
+func (r iteratorForMemoryEvalCopyChatMessages) Err() error {
+	return nil
+}
+
+func (q *Queries) MemoryEvalCopyChatMessages(ctx context.Context, arg []MemoryEvalCopyChatMessagesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"id", "chat_id", "project_id", "role", "content", "user_id", "source", "created_at", "risk_analyzed_at"}, &iteratorForMemoryEvalCopyChatMessages{rows: arg})
+}
+
+// iteratorForMemoryEvalCopyChats implements pgx.CopyFromSource.
+type iteratorForMemoryEvalCopyChats struct {
+	rows                 []MemoryEvalCopyChatsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForMemoryEvalCopyChats) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForMemoryEvalCopyChats) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].ProjectID,
+		r.rows[0].OrganizationID,
+		r.rows[0].UserID,
+		r.rows[0].ExternalUserID,
+		r.rows[0].ExternalChatID,
+		r.rows[0].Title,
+		r.rows[0].UserAccountID,
+		r.rows[0].CreatedAt,
+		r.rows[0].UpdatedAt,
+	}, nil
+}
+
+func (r iteratorForMemoryEvalCopyChats) Err() error {
+	return nil
+}
+
+func (q *Queries) MemoryEvalCopyChats(ctx context.Context, arg []MemoryEvalCopyChatsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"chats"}, []string{"id", "project_id", "organization_id", "user_id", "external_user_id", "external_chat_id", "title", "user_account_id", "created_at", "updated_at"}, &iteratorForMemoryEvalCopyChats{rows: arg})
+}
+
 // iteratorForRiskCopyChatMessages implements pgx.CopyFromSource.
 type iteratorForRiskCopyChatMessages struct {
 	rows                 []RiskCopyChatMessagesParams

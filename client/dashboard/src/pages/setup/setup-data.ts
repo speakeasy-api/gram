@@ -11,6 +11,7 @@ import {
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
 import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { agentEgressHosts, getServerURL } from "@/lib/utils";
 import type { AgentPlatform, PlatformSetupStep } from "./types";
 
@@ -216,9 +217,12 @@ export function getCoworkTeamSteps(
 
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
+// hooksServerURL is the --server-url speakeasy-hooks install needs, or null
+// when its default host already reaches this deployment.
 const setupAgentPlatforms = (
   origin: string,
   egressHosts: string[],
+  hooksServerURL: string | null,
 ): Array<{
   id: AgentProviderId;
   setupSteps: AgentPlatform["setupSteps"];
@@ -524,7 +528,7 @@ const setupAgentPlatforms = (
         description:
           "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
         code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
-speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
+speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}${hooksServerFlag(hooksServerURL)}`,
         language: "bash",
         requiresApiKey: true,
       },
@@ -534,24 +538,35 @@ speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
     id: "opencode",
     setupSteps: [
       {
-        title: "Install the speakeasy-hooks binary",
+        title: "Download the OpenCode observability plugin",
         description:
-          "opencode has no plugin marketplace, so the observability plugin is rendered straight into your repo by the speakeasy-hooks CLI. Install the binary first.",
-        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+          "Download a self-contained OpenCode plugin with a hooks-scoped credential embedded. Downloading requires a Speakeasy org admin and enabled project observability. Distribute the ZIP privately and never commit it or upload it publicly. It only adds hooks: install a Speakeasy plugin from the Plugins page for MCP servers.",
+        download: { platform: "opencode", label: "Download for OpenCode" },
+      },
+      {
+        title: "Extract it into your OpenCode config",
+        description:
+          "Extract into ~/.config/opencode for every project, or into a repo's .opencode/ for that project only. OpenCode loads it on its next start.",
+        code: "unzip observability-opencode.zip -d ~/.config/opencode",
         language: "bash",
       },
       {
-        title: "Render the plugin into your repo",
+        title: "Or render it with the speakeasy-hooks CLI",
         description:
-          "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
-        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
-speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}`,
+          "Instead of the ZIP, install the speakeasy-hooks binary and run it from the repo you use OpenCode in. It writes .opencode/plugin/agenthooks.ts, plus speakeasy.json at the repo root holding the hooks key, so keep that file out of version control.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh
+SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}${hooksServerFlag(hooksServerURL)}`,
         language: "bash",
         requiresApiKey: true,
       },
     ],
   },
 ];
+
+function hooksServerFlag(hooksServerURL: string | null): string {
+  return hooksServerURL ? ` --server-url=${hooksServerURL}` : "";
+}
 
 export function toAgentPlatform(
   id: AgentProviderId,
@@ -578,6 +593,7 @@ export function getAgentPlatforms(
   const platforms = setupAgentPlatforms(
     server.origin,
     agentEgressHosts(server.href),
+    clientServerURLOverride("hooks", server.href),
   );
   return [
     ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>

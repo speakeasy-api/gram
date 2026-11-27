@@ -307,7 +307,6 @@ func TestManagedClient_RegistrationReplaceRefusesManagedRow(t *testing.T) {
 
 	_, err = repo.New(ti.conn).ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
 		ClientID:                "rotated-" + uuid.NewString(),
-		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:        pgtype.Timestamptz{Time: updatedAt.Time, InfinityModifier: pgtype.Finite, Valid: true},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: updatedAt.Time, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: pgtype.Text{String: "client_secret_basic", Valid: true},

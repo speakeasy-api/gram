@@ -16,7 +16,6 @@ import {
   it,
   vi,
 } from "vitest";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { StripeSubscription } from "@gram/client/models/components/stripesubscription.js";
 import type { ProductTier } from "@/hooks/useProductTier";
@@ -34,7 +33,6 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   refetch: vi.fn(),
   hasAnyScope: vi.fn(),
-  flagResult: vi.fn(),
   portalMutate: vi.fn(),
   cancelMutate: vi.fn(),
   resumeMutate: vi.fn(),
@@ -67,12 +65,8 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
 }));
 
-// The no-payment state embeds the checkout CTA, which reads the rollout flag
-// and owns the checkout mutation.
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
-}));
-
+// The no-payment state embeds the checkout CTA, which owns the checkout
+// mutation.
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
   useCreateStripeCheckoutMutation: () => ({
     mutate: mocks.checkoutMutate,
@@ -211,7 +205,6 @@ describe("PaygPlanSection", () => {
     resetPaygCheckoutLocks();
     mocks.productTier.mockReturnValue("payg");
     mocks.hasAnyScope.mockReturnValue(true);
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.session.mockReturnValue({
       trial: null,
       activeOrganizationId: "org-1",

@@ -38,7 +38,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -128,10 +131,10 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil, guardianPolicy, nil)
 	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false, revoker)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger)
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger, true)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, true)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 
 	return ctx, &testInstance{
@@ -209,7 +212,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger),
@@ -229,7 +232,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil, guardianPolicy, nil)
 	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true, revoker)
 
 	return ctx, &testInstance{

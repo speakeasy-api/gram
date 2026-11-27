@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
 
 // seeder holds what every seed phase needs: the tenant, the transaction's
@@ -18,12 +21,26 @@ import (
 // shared demo org, the local development org, and the safety test's
 // adversarial tenant.
 type seeder struct {
-	spec   Spec
-	q      *repo.Queries
-	logger *slog.Logger
+	spec Spec
+	// catalog is the AI client catalog snapshot that names seeded connection apps.
+	catalog *aivendors.Snapshot
+	// enc is the environment's key, which seals the inert sessions' dummy token.
+	enc *encryption.Client
+	// assistantIssuer is the deployment's signing issuer origin, without a
+	// trailing slash. The seeded assistant trigger trust registration must
+	// name it, or runtime provisioning in the project cannot find or create
+	// its own registration.
+	assistantIssuer string
+	// serverURL is the deployment's own URL (GRAM_SERVER_URL). Linear's seeded
+	// client is a metadata document Speakeasy serves there, and sign-ins
+	// return to it.
+	serverURL *url.URL
+	q         *repo.Queries
+	logger    *slog.Logger
 	// now is the Postgres transaction's now(), read once at the start of the
 	// run, so Go-computed timestamps agree with any now() a query still uses
-	// and ClickHouse rows line up with the Postgres ones.
+	// and ClickHouse rows line up with the Postgres ones. runAt can pin it
+	// instead, so repeated runs generate the same rows.
 	now time.Time
 	// signalSequences joins synthetic readings to actual PostgreSQL message order.
 	signalSequences map[int]int64
@@ -69,21 +86,29 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		return fmt.Errorf("raise statement timeout: %w", err)
 	}
 
-	now, err := s.q.Now(ctx)
-	if err != nil {
-		return fmt.Errorf("read transaction time: %w", err)
+	if s.now.IsZero() {
+		now, err := s.q.Now(ctx)
+		if err != nil {
+			return fmt.Errorf("read transaction time: %w", err)
+		}
+		s.now = now.Time
 	}
-	s.now = now.Time
 
 	phases := []phase{
 		{"preflight and org", s.seedOrg},
 		{"roles and directory", s.seedRoles},
 		{"deployment and connections", s.seedDeployment},
 		{"mcp servers", s.seedServers},
+		{"connection health", s.seedConnectionHealth},
+		{"mcp server feedback", s.seedServerFeedback},
 		{"prompts and skills", s.seedSkills},
 		{"risk and chats", s.seedRiskAndChats},
+		{"team memory eval corpus", s.seedMemoryEval},
 		{"activity and billing", s.seedActivity},
+		{"agent owner sessions", s.seedAgentOwnerSessions},
 		{"signal conversations", s.seedSignalConversations},
+		{"channels", s.seedChannels},
+		{"fixture servers", s.seedFixtureServers},
 		{"postflight", s.postflight},
 	}
 	for _, p := range phases {

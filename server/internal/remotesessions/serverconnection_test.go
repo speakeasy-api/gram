@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	wire "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -22,8 +23,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -69,22 +68,14 @@ func TestServerConnectionUsesSignedInUserAndDoesNotExecuteTools(t *testing.T) {
 	}, withRemoteServer(upstream.URL))
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
 	signedIn := contextvalues.WithValidatedGramSession(ctx, &signedInUser, false)
-	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
+	offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	payload := &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()}
 	result, err := env.service.TestServerConnection(signedIn, payload)
-	require.Nil(t, result)
-	requireOopsCode(t, err, oops.CodeNotFound)
-	_, initializedBeforeEnable := methods.Load("initialize")
-	require.False(t, initializedBeforeEnable)
-	require.Zero(t, upstreamRequests.Load())
-	_, err = featurerepo.New(env.db).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: env.organizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-	require.NoError(t, err)
-	result, err = env.service.TestServerConnection(signedIn, payload)
 	require.NoError(t, err)
 	require.Equal(t, "ready", result.Status)
 	require.Equal(t, 1, *result.ToolCount)
@@ -97,15 +88,6 @@ func TestServerConnectionUsesSignedInUserAndDoesNotExecuteTools(t *testing.T) {
 	require.True(t, listed)
 	_, called := methods.Load("tools/call")
 	require.False(t, called)
-	requestsBeforeDisable := upstreamRequests.Load()
-	_, err = featurerepo.New(env.db).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: env.organizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-	require.NoError(t, err)
-	result, err = env.service.TestServerConnection(signedIn, payload)
-	require.Nil(t, result)
-	requireOopsCode(t, err, oops.CodeNotFound)
-	require.Equal(t, requestsBeforeDisable, upstreamRequests.Load())
-	_, err = featurerepo.New(env.db).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: env.organizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-	require.NoError(t, err)
 	other := *authCtx
 	other.UserID = "another-user"
 	result, err = env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &other, false), payload)
@@ -128,8 +110,6 @@ func TestServerConnectionDoesNotExposeForeignProjectServer(t *testing.T) {
 	ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, false)
 	// A valid connect grant must not bypass project-qualified selection.
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource))
-	_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-	require.NoError(t, err)
 	otherProject := createProject(t, ctx, ti.conn, "setup-foreign-project")
 	issuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "setup-foreign-issuer")
 	foreign := createImpactServer(t, ctx, ti, otherProject, "setup-foreign-server", issuer)
@@ -138,17 +118,17 @@ func TestServerConnectionDoesNotExposeForeignProjectServer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
+func TestServerConnectionSelectsOnlyOfferedClient(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name                string
-		associateUserClient bool
-		sharedIssuer        bool
-		wantStatus          string
+		name            string
+		offerUserClient bool
+		sharedIssuer    bool
+		wantStatus      string
 	}{
-		{"unassociated", false, false, "configuration_required"},
-		{"another client associated", false, true, "authorization_required"},
-		{"shared issuer with target client", true, true, "ready"},
+		{"no offer", false, false, "configuration_required"},
+		{"another client offered", false, true, "authorization_required"},
+		{"shared issuer with target client offered", true, true, "ready"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -171,23 +151,21 @@ func TestServerConnectionSelectsOnlyAssociatedClient(t *testing.T) {
 			}, withRemoteServer(upstream.URL))
 			target, err := mcpserversrepo.New(env.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: env.mcpServerID.UUID, ProjectID: env.projectID})
 			require.NoError(t, err)
-			if tc.associateUserClient {
-				associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, env.clientID)
+			if tc.offerUserClient {
+				offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, target.ID, env.clientID)
 			}
 			if tc.sharedIssuer {
 				other, _ := seedActiveClient(t, ctx, env.db, env.projectID, target.UserSessionIssuerID.UUID, env.organizationID, "other-associated")
-				if !tc.associateUserClient {
-					associate(t, ctx, env.db, env.organizationID, env.projectID, target.ID, other)
+				if !tc.offerUserClient {
+					offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, target.ID, other)
 				}
 			}
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 			require.NoError(t, err)
-			env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+			env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 			authCtx, _ := contextvalues.GetAuthContext(ctx)
 			signedInUser := *authCtx
 			signedInUser.UserID = env.subject.ID
-			_, err = featurerepo.New(env.db).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: env.organizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-			require.NoError(t, err)
 			result, err := env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &signedInUser, false), &gen.TestServerConnectionPayload{McpServerID: target.ID.String()})
 			require.NoError(t, err)
 			require.Equal(t, tc.wantStatus, result.Status)
@@ -251,13 +229,11 @@ func TestServerConnectionRefusesStaticAuthorizationHeader(t *testing.T) {
 	require.NoError(t, err)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
+	env.service.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(aivendorstest.NewStore(), testenv.NewLogger(t), env.db, env.enc, policy, env.mgr))
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	signedInUser := *authCtx
 	signedInUser.UserID = env.subject.ID
-	associate(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
-	_, err = featurerepo.New(env.db).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: env.organizationID, FeatureName: string(productfeatures.FeatureProviderSetup)})
-	require.NoError(t, err)
+	offerRegistration(t, ctx, env.db, env.organizationID, env.projectID, env.mcpServerID.UUID, env.clientID)
 	result, err := env.service.TestServerConnection(contextvalues.WithValidatedGramSession(ctx, &signedInUser, false), &gen.TestServerConnectionPayload{McpServerID: env.mcpServerID.UUID.String()})
 	require.NoError(t, err)
 	require.Equal(t, "configuration_required", result.Status)

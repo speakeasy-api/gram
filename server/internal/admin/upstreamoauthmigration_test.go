@@ -12,10 +12,13 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -48,8 +51,8 @@ func (o *migrationOrg) issuer() uuid.UUID {
 	return id
 }
 
-// client creates a project client bound to userIssuerID.
-func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
+// client creates a project registration without granting server access.
+func (o *migrationOrg) client() uuid.UUID {
 	o.t.Helper()
 	ctx := o.t.Context()
 	issuerID, clientID := uuid.New(), uuid.New()
@@ -66,7 +69,6 @@ func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
 		RemoteSessionIssuerID: issuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	require.NoError(o.t, o.q.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
 	return clientID
 }
 
@@ -85,7 +87,8 @@ func (o *migrationOrg) server(userIssuerID uuid.UUID) uuid.UUID {
 	return serverID
 }
 
-func (o *migrationOrg) session(userIssuerID uuid.UUID) {
+// session seeds a live user session and returns its credential id.
+func (o *migrationOrg) session(userIssuerID uuid.UUID) uuid.UUID {
 	o.t.Helper()
 	id := uuid.New()
 	require.NoError(o.t, o.q.SeedUserSessionFixture(o.t.Context(), selectionbackfill.SeedUserSessionFixtureParams{
@@ -96,75 +99,69 @@ func (o *migrationOrg) session(userIssuerID uuid.UUID) {
 		SubjectUrn:          urn.NewUserSubject("user-" + uuid.NewString()[:8]),
 		Jti:                 id.String(),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
-		CredentialID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CredentialID:        uuid.NullUUID{UUID: id, Valid: true},
 	}))
+	return id
 }
 
-func TestUpstreamOAuthMigration_MigratesAnOrganizationIdempotently(t *testing.T) {
+// A profile no turn has run under has no version. A run records it before
+// enforcement, so it is pending then. Under enforcement a turn records its own
+// profile, so it is reported apart and no longer blocks.
+func TestUpstreamOAuthMigration_EnforcedOrganizationReportsUnusedProfilesApart(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 
-	org := newMigrationOrg(t, ctx, db, "migrate-sole")
-	issuer := org.issuer()
-	org.client(issuer)
-	org.server(issuer)
-	org.session(issuer)
+	org := newMigrationOrg(t, ctx, db, "migrate-unused-profiles")
+	profiles := executionprofiles.New(db)
+	assistant, err := profiles.SeedAssistantFixture(ctx, executionprofiles.SeedAssistantFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, Name: "assistant"})
+	require.NoError(t, err)
+	trigger, err := profiles.SeedTriggerFixture(ctx, executionprofiles.SeedTriggerFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, Name: "trigger"})
+	require.NoError(t, err)
+	require.NoError(t, profiles.SeedWorkloadBindingFixture(ctx, executionprofiles.SeedWorkloadBindingFixtureParams{OrganizationID: org.id, ProjectID: org.projectID, AssistantID: assistant, TriggerID: trigger}))
+	contexts := int64(len(executionprofiles.Contexts))
 
 	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.False(t, before.Migrated)
-	require.Equal(t, int64(1), before.Servers)
-	require.Equal(t, int64(1), before.PendingAssociations)
-	require.Empty(t, before.UnresolvedServers)
-	require.Equal(t, int64(1), before.Credentials)
+	require.Equal(t, contexts, before.ExecutionProfiles.PendingVersions)
+	require.Equal(t, new(int64(0)), before.ExecutionProfiles.UnexercisedVersions)
+	require.False(t, before.ExecutionProfiles.Complete)
+	require.Contains(t, before.Enforcement.Blockers, "Assistant profiles are not all recorded.")
 
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
-	require.Equal(t, int64(1), run.AssociationsWritten)
-	require.Equal(t, int64(1), run.SelectionsWritten)
-	require.True(t, run.Status.Migrated)
-	require.Zero(t, run.Status.PendingAssociations)
-	require.Zero(t, run.Status.PendingSelections)
 
-	again, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	enforced, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.Zero(t, again.AssociationsWritten)
-	require.Zero(t, again.SelectionsWritten)
-	require.True(t, again.Status.Migrated)
+	require.Zero(t, enforced.ExecutionProfiles.PendingVersions)
+	require.Equal(t, new(contexts), enforced.ExecutionProfiles.UnexercisedVersions)
+	require.True(t, enforced.ExecutionProfiles.Complete)
+	require.NotContains(t, enforced.Enforcement.Blockers, "Assistant profiles are not all recorded.")
 }
 
-func TestUpstreamOAuthMigration_ReportsServersNeedingConfiguration(t *testing.T) {
+// A project registration not offered by any server is not a readiness gap.
+func TestUpstreamOAuthMigration_UnplacedRegistrationIsNotAReadinessGap(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 
-	// Two servers share an issuer whose two clients both hold grants for
-	// their upstream, so neither server's client is proven.
-	org := newMigrationOrg(t, ctx, db, "migrate-shared")
+	org := newMigrationOrg(t, ctx, db, "migrate-enforced")
 	issuer := org.issuer()
-	for _, clientID := range []uuid.UUID{org.client(issuer), org.client(issuer)} {
-		require.NoError(t, associationbackfill.New(db).SeedGrantFixture(ctx, associationbackfill.SeedGrantFixtureParams{
-			SubjectUrn:            urn.NewUserSubject("user-" + uuid.NewString()[:8]),
-			UserSessionIssuerID:   issuer,
-			RemoteSessionClientID: clientID,
-			Resource:              pgtype.Text{String: "https://upstream.example.com/mcp", Valid: true},
-		}))
-	}
-	first := org.server(issuer)
-	second := org.server(issuer)
-	org.session(issuer)
+	org.client()
+	org.server(issuer)
 
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.Zero(t, run.AssociationsWritten)
-	require.False(t, run.Status.Migrated)
-	unresolved := make([]string, 0, len(run.Status.UnresolvedServers))
-	for _, server := range run.Status.UnresolvedServers {
-		require.Equal(t, org.projectID.String(), server.ProjectID)
-		unresolved = append(unresolved, server.McpServerID)
-	}
-	require.ElementsMatch(t, []string{first.String(), second.String()}, unresolved)
+	require.Zero(t, before.PendingAssociations, "an unplaced registration is not server configuration")
+
+	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+
+	enforced, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Zero(t, enforced.PendingAssociations)
+	require.Empty(t, enforced.UnresolvedServers)
+	require.True(t, enforced.Migrated)
 }
 
 func TestUpstreamOAuthMigration_ListsOnlyOrganizationsWithIssuerServers(t *testing.T) {
@@ -195,45 +192,6 @@ func TestUpstreamOAuthMigration_RunRequiresStaff(t *testing.T) {
 	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
-func TestUpstreamOAuthMigration_RecordsAuthClientsWithoutGatingMigrated(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
-
-	org := newMigrationOrg(t, ctx, db, "migrate-auth-clients")
-	issuer := org.issuer()
-	org.client(issuer)
-	server := org.server(issuer)
-	org.session(issuer)
-
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), *run.AuthClientsWritten)
-	require.Equal(t, int64(1), *run.AuthClientLinksWritten)
-	require.Nil(t, run.AuthClientsError)
-	require.True(t, run.Status.Migrated)
-	require.NotNil(t, run.Status.AuthClients)
-	require.True(t, run.Status.AuthClients.Complete)
-	require.Equal(t, int64(1), run.Status.AuthClients.Associations)
-
-	// A missing link leaves auth clients incomplete without touching migrated.
-	require.NoError(t, authclientbackfill.New(db).SoftDeleteServerAuthClientLinksFixture(ctx, server))
-	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.True(t, status.Migrated)
-	require.False(t, status.AuthClients.Complete)
-	require.Equal(t, int64(1), status.AuthClients.PendingLinks)
-	require.Empty(t, status.AuthClients.FailedPhases)
-	byKind := map[string]*gen.AdminUpstreamOAuthMigrationAuthClientKind{}
-	for _, kind := range status.AuthClients.Kinds {
-		byKind[kind.Kind] = kind
-	}
-	require.Len(t, byKind, 3, "every kind is reported")
-	require.Equal(t, int64(1), byKind["oauth"].PendingLinks)
-	require.Zero(t, byKind["header"].PendingLinks)
-	require.Zero(t, byKind["ema"].PendingLinks)
-}
-
 func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
@@ -251,14 +209,55 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.True(t, status.AuthClients.InProgress)
 	require.False(t, status.AuthClients.Complete)
 
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.NotNil(t, run.AuthClientsError)
-	require.Contains(t, *run.AuthClientsError, "already in progress")
-
 	require.NoError(t, tx.Rollback(ctx))
 	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.False(t, status.AuthClients.InProgress)
 	require.Empty(t, status.AuthClients.Warnings)
+}
+
+// seedCoveredMigrationFixture explicitly offers a registration and records
+// the credential's typed choice without reconstructing legacy links.
+func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
+	t.Helper()
+	tx := testenv.BeginTx(t, ctx, db)
+	q := authclientbackfill.New(tx)
+	client, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true}, ClientType: "remote_session", Source: "admin",
+		RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, AuthClientID: client, Source: "admin",
+	}))
+	require.NoError(t, q.SeedOAuthSelectionFixture(ctx, authclientbackfill.SeedOAuthSelectionFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration, CredentialID: credential,
+	}))
+	require.NoError(t, q.SwapUpstreamAuthClientFixture(ctx, authclientbackfill.SwapUpstreamAuthClientFixtureParams{
+		McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true},
+	}))
+	require.NoError(t, authclientbackfill.ProvisionFromTypedOffers(ctx, tx, org.id))
+	require.NoError(t, tx.Commit(ctx))
+}
+
+func TestCountReconnectCredentials(t *testing.T) {
+	t.Parallel()
+	duplicate := uuid.New()
+	gaps := []authclientbackfill.SelectionGap{
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionAmbiguous},
+		{CredentialID: duplicate, Outcome: authclientbackfill.SelectionUnusable},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionStaleNoAuth},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionNoClient},
+		{CredentialID: uuid.New(), Outcome: authclientbackfill.SelectionSkippedRace},
+	}
+	require.EqualValues(t, 2, countReconnectCredentials(gaps))
+}
+
+func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {
+	t.Parallel()
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+	_, err := (&Service{logger: testenv.NewLogger(t)}).RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotImplemented, shareable.Code)
 }

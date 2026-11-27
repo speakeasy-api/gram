@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Internal resolution values intentionally omit zero-value optional fields.
+//nolint:exhaustruct_v5 // Internal resolution values intentionally omit zero-value optional fields.
 package platformmcp
 
 import (

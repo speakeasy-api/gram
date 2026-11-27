@@ -122,7 +122,7 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return fmt.Errorf("admit workload reconnect: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: endpoint.ProjectID.String(), ResourceKind: "", Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(admission.Owner, authz.Project(authz.ProjectIDOf(endpoint.ProjectID)).Read())
 	if err != nil {
 		return fmt.Errorf("authorize workload owner project access: %w", err)
 	}
@@ -150,6 +150,7 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 		AuthorizerImpersonated:   nil,
 		SignInID:                 nil,
 		FreshLoginForced:         false,
+		AccountSwitches:          0,
 		AgentAuthorizationTarget: nil,
 		ClientID:                 "",
 		RedirectURI:              "",

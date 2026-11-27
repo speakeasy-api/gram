@@ -16,6 +16,8 @@ import (
 	"golang.org/x/time/rate"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 const (
@@ -36,24 +38,45 @@ type TokenReviewer interface {
 	Create(context.Context, *authenticationv1.TokenReview, metav1.CreateOptions) (*authenticationv1.TokenReview, error)
 }
 
-type AttestorIngressLookup interface {
-	ByAttestor(context.Context, string, string) (Ingress, error)
+// GatewayIngressLookup resolves the gateway-hosted ingress serving a request
+// host and rechecks its serving state.
+type GatewayIngressLookup interface {
+	ByDNSName(context.Context, string) (Ingress, error)
 	Recheck(context.Context, Ingress) error
 }
 
+// cacheEntry is one reviewed token: rejected, or the tailnet gateway's. A
+// gateway token's ingress depends on the request host, so hosts holds one
+// resolution per canonical host.
 type cacheEntry struct {
+	expiresAt time.Time
+	rejected  bool
+	hosts     map[string]hostEntry
+}
+
+// hostEntry is one host's resolved ingress under a gateway token.
+type hostEntry struct {
 	ingress     Ingress
-	expiresAt   time.Time
-	rejected    bool
 	lastChecked time.Time
 }
 
+// maxGatewayHostsPerToken bounds the successfully resolved hosts cached under
+// one gateway token; unknown hosts are never stored. A gateway serves at most
+// the ingresses it hosts, so this is ample.
+const maxGatewayHostsPerToken = 256
+
 type AttestationVerifier struct {
 	reviewer TokenReviewer
-	lookup   AttestorIngressLookup
+	lookup   GatewayIngressLookup
 	audience string
 	maxTTL   time.Duration
 	now      func() time.Time
+
+	// gatewayNamespace and gatewayServiceAccount identify the shared tailnet
+	// gateway, the only workload whose tokens are accepted. Its requests
+	// resolve the ingress from the Host header. Empty rejects every token.
+	gatewayNamespace      string
+	gatewayServiceAccount string
 
 	mu             sync.Mutex
 	cache          map[[32]byte]cacheEntry
@@ -64,7 +87,7 @@ type AttestationVerifier struct {
 	telemetry      *Telemetry
 }
 
-func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration, telemetry ...*Telemetry) *AttestationVerifier {
+func NewAttestationVerifier(reviewer TokenReviewer, lookup GatewayIngressLookup, audience string, maxTTL time.Duration, telemetry ...*Telemetry) *AttestationVerifier {
 	if audience == "" {
 		audience = DefaultTokenAudience
 	}
@@ -76,22 +99,43 @@ func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup
 		metrics = telemetry[0]
 	}
 	return &AttestationVerifier{
-		reviewer:       reviewer,
-		lookup:         lookup,
-		audience:       audience,
-		maxTTL:         maxTTL,
-		now:            time.Now,
-		mu:             sync.Mutex{},
-		cache:          make(map[[32]byte]cacheEntry),
-		sourceLimiters: make(map[string]*rate.Limiter),
-		globalLimiter:  rate.NewLimiter(globalReviewRate, globalReviewBurst),
-		rechecks:       singleflight.Group{},
-		recheckJoined:  nil,
-		telemetry:      metrics,
+		reviewer:              reviewer,
+		lookup:                lookup,
+		audience:              audience,
+		maxTTL:                maxTTL,
+		now:                   time.Now,
+		gatewayNamespace:      "",
+		gatewayServiceAccount: "",
+		mu:                    sync.Mutex{},
+		cache:                 make(map[[32]byte]cacheEntry),
+		sourceLimiters:        make(map[string]*rate.Limiter),
+		globalLimiter:         rate.NewLimiter(globalReviewRate, globalReviewBurst),
+		rechecks:              singleflight.Group{},
+		recheckJoined:         nil,
+		telemetry:             metrics,
 	}
 }
 
-func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) (ingress Ingress, err error) {
+// UseGatewayPrincipal accepts the tailnet gateway's service account for any
+// gateway-hosted ingress, resolved by request host.
+func (v *AttestationVerifier) UseGatewayPrincipal(namespace, serviceAccount string) error {
+	if namespace == "" || serviceAccount == "" {
+		return errors.New("tailnet gateway principal requires a namespace and service account")
+	}
+	v.gatewayNamespace = namespace
+	v.gatewayServiceAccount = serviceAccount
+	return nil
+}
+
+func (v *AttestationVerifier) isGatewayPrincipal(namespace, serviceAccount string) bool {
+	return v.gatewayNamespace != "" && namespace == v.gatewayNamespace && serviceAccount == v.gatewayServiceAccount
+}
+
+// Verify authenticates the tailnet gateway's attestation token for a request
+// to host and resolves the ingress from host. The cache entry is keyed by
+// token so host values cannot force repeated token reviews, and each host's
+// resolution is cached and rechecked beneath that entry.
+func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host string) (ingress Ingress, err error) {
 	started := time.Now()
 	result, reason, provider := ResultError, ReasonDependencyFailed, ""
 	defer func() {
@@ -119,27 +163,18 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 			reason = ReasonNegativeCacheHit
 			return Ingress{}, fmt.Errorf("%w: token was recently rejected", ErrAttestationRejected)
 		}
-		if now.Sub(cached.lastChecked) >= servingStateRecheckTTL {
-			provider = cached.ingress.Provider
-			ingress, err = v.recheckCached(ctx, hash)
-			if err != nil {
-				if errors.Is(err, ErrAttestationRejected) {
-					reason = ReasonAuthorityRejected
-				}
-				return Ingress{}, err
-			}
-			reason = ReasonCacheHit
-			return ingress, nil
+		ingress, reason, err = v.gatewayHost(ctx, hash, host, now)
+		if err == nil {
+			provider = ingress.Provider
 		}
-		reason = ReasonCacheHit
-		return cached.ingress, nil
+		return ingress, err
 	}
 
 	if !v.allowSource(source) {
 		reason = ReasonRateLimited
 		return Ingress{}, errors.New("token review rate limit exceeded")
 	}
-	//nolint:exhaustruct // request populates only TokenReview spec; API server owns response metadata/status
+	//nolint:exhaustruct_v5 // request populates only TokenReview spec; API server owns response metadata/status
 	review, err := v.reviewer.Create(ctx, &authenticationv1.TokenReview{
 		Spec: authenticationv1.TokenReviewSpec{
 			Token:     token,
@@ -169,24 +204,115 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 		return Ingress{}, fmt.Errorf("%w: token expiry is invalid", ErrAttestationRejected)
 	}
 
-	ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
-	if errors.Is(err, ErrIngressUnavailable) {
-		reason = ReasonAuthorityRejected
-		v.storeRejected(hash, now)
-		return Ingress{}, fmt.Errorf("%w: attestor is not authorized", ErrAttestationRejected)
-	}
-	if err != nil {
-		reason = ReasonDependencyFailed
-		return Ingress{}, fmt.Errorf("lookup attestor ingress: %w", err)
-	}
-
 	cacheExpiry := now.Add(v.maxTTL)
 	if expiresAt.Before(cacheExpiry) {
 		cacheExpiry = expiresAt
 	}
-	reason = ReasonNone
-	v.storeCached(hash, cacheEntry{ingress: ingress, expiresAt: cacheExpiry, rejected: false, lastChecked: now})
-	return ingress, nil
+	if !v.isGatewayPrincipal(namespace, serviceAccount) {
+		reason = ReasonAuthorityRejected
+		v.storeRejected(hash, now)
+		return Ingress{}, fmt.Errorf("%w: service account is not the tailnet gateway", ErrAttestationRejected)
+	}
+	// The token is valid for any gateway-hosted ingress; which one is decided
+	// per host below and cached under this entry.
+	v.storeCached(hash, cacheEntry{expiresAt: cacheExpiry, rejected: false, hosts: make(map[string]hostEntry)})
+	ingress, reason, err = v.gatewayHost(ctx, hash, host, now)
+	if err == nil {
+		provider = ingress.Provider
+	}
+	return ingress, err
+}
+
+// gatewayHost resolves host under a cached gateway token. A fresh resolution
+// is served from the entry; a stale or missing one re-reads the host mapping,
+// which also confirms the ingress is still the single enabled gateway owner
+// of that name, before rechecking its serving state.
+func (v *AttestationVerifier) gatewayHost(ctx context.Context, hash [32]byte, host string, now time.Time) (Ingress, string, error) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil || canonical == "" {
+		return Ingress{}, ReasonAuthorityRejected, fmt.Errorf("%w: invalid request host", ErrAttestationRejected)
+	}
+	if cached, ok := v.cachedHost(hash, canonical); ok && now.Sub(cached.lastChecked) < servingStateRecheckTTL {
+		return cached.ingress, ReasonCacheHit, nil
+	}
+
+	results := v.rechecks.DoChan(string(hash[:])+"\x00"+canonical, func() (any, error) {
+		recheckCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), servingStateRecheckTimeout)
+		defer cancel()
+		previous, had := v.cachedHost(hash, canonical)
+		ingress, err := v.lookup.ByDNSName(recheckCtx, canonical)
+		if errors.Is(err, ErrIngressUnavailable) || (had && err == nil && ingress.ID != previous.ingress.ID) {
+			v.deleteHost(hash, canonical)
+			return zeroIngress(), fmt.Errorf("%w: host is not served by the gateway", ErrAttestationRejected)
+		}
+		if err != nil {
+			return zeroIngress(), fmt.Errorf("lookup gateway ingress by host: %w", err)
+		}
+		if err := v.lookup.Recheck(recheckCtx, ingress); err != nil {
+			if errors.Is(err, ErrIngressUnavailable) || errors.Is(err, ErrIngressChanged) {
+				v.deleteHost(hash, canonical)
+				return zeroIngress(), fmt.Errorf("%w: ingress authority is no longer active", ErrAttestationRejected)
+			}
+			return zeroIngress(), fmt.Errorf("recheck gateway ingress authority: %w", err)
+		}
+		v.storeHost(hash, canonical, hostEntry{ingress: ingress, lastChecked: v.now()})
+		return ingress, nil
+	})
+	if v.recheckJoined != nil {
+		v.recheckJoined()
+	}
+	var result singleflight.Result
+	select {
+	case result = <-results:
+	case <-ctx.Done():
+		return Ingress{}, ReasonDependencyFailed, fmt.Errorf("wait for gateway host resolution: %w", ctx.Err())
+	}
+	if result.Err != nil {
+		if errors.Is(result.Err, ErrAttestationRejected) {
+			return Ingress{}, ReasonAuthorityRejected, result.Err
+		}
+		return Ingress{}, ReasonDependencyFailed, result.Err
+	}
+	ingress, ok := result.Val.(Ingress)
+	if !ok {
+		return Ingress{}, ReasonDependencyFailed, errors.New("gateway host resolution returned an invalid result")
+	}
+	return ingress, ReasonNone, nil
+}
+
+func (v *AttestationVerifier) cachedHost(hash [32]byte, host string) (hostEntry, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	entry, ok := v.cache[hash]
+	if !ok || entry.rejected {
+		return hostEntry{ingress: zeroIngress(), lastChecked: time.Time{}}, false
+	}
+	cached, ok := entry.hosts[host]
+	return cached, ok
+}
+
+func (v *AttestationVerifier) storeHost(hash [32]byte, host string, cached hostEntry) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	entry, ok := v.cache[hash]
+	if !ok || entry.rejected {
+		return
+	}
+	if _, exists := entry.hosts[host]; !exists && len(entry.hosts) >= maxGatewayHostsPerToken {
+		for key := range entry.hosts {
+			delete(entry.hosts, key)
+			break
+		}
+	}
+	entry.hosts[host] = cached
+}
+
+func (v *AttestationVerifier) deleteHost(hash [32]byte, host string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if entry, ok := v.cache[hash]; ok && !entry.rejected {
+		delete(entry.hosts, host)
+	}
 }
 
 func (v *AttestationVerifier) cached(hash [32]byte, now time.Time) (cacheEntry, bool) {
@@ -194,11 +320,11 @@ func (v *AttestationVerifier) cached(hash [32]byte, now time.Time) (cacheEntry, 
 	defer v.mu.Unlock()
 	entry, ok := v.cache[hash]
 	if !ok {
-		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}}, false
+		return cacheEntry{expiresAt: time.Time{}, rejected: false, hosts: nil}, false
 	}
 	if !now.Before(entry.expiresAt) {
 		delete(v.cache, hash)
-		return cacheEntry{ingress: zeroIngress(), expiresAt: time.Time{}, rejected: false, lastChecked: time.Time{}}, false
+		return cacheEntry{expiresAt: time.Time{}, rejected: false, hosts: nil}, false
 	}
 	return entry, true
 }
@@ -211,10 +337,7 @@ func (v *AttestationVerifier) storeCached(hash [32]byte, entry cacheEntry) {
 }
 
 func (v *AttestationVerifier) storeRejected(hash [32]byte, now time.Time) {
-	v.storeCached(hash, cacheEntry{ingress: Ingress{
-		ID: uuid.Nil, OrganizationID: "", Provider: "", DNSName: "", IdentityRequired: false,
-		AttestorNamespace: "", AttestorServiceAccount: "",
-	}, expiresAt: now.Add(negativeCacheTTL), rejected: true, lastChecked: time.Time{}})
+	v.storeCached(hash, cacheEntry{expiresAt: now.Add(negativeCacheTTL), rejected: true, hosts: nil})
 }
 
 func (v *AttestationVerifier) sweepAndBoundCache(now time.Time) {
@@ -241,58 +364,6 @@ func (v *AttestationVerifier) sweepAndBoundCache(now time.Time) {
 	}
 }
 
-func (v *AttestationVerifier) recheckCached(ctx context.Context, hash [32]byte) (Ingress, error) {
-	results := v.rechecks.DoChan(string(hash[:]), func() (any, error) {
-		now := v.now()
-		cached, ok := v.cached(hash, now)
-		if !ok || cached.rejected {
-			return zeroIngress(), fmt.Errorf("%w: cached authority expired", ErrAttestationRejected)
-		}
-		if now.Sub(cached.lastChecked) < servingStateRecheckTTL {
-			return cached.ingress, nil
-		}
-		recheckCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), servingStateRecheckTimeout)
-		defer cancel()
-		if err := v.lookup.Recheck(recheckCtx, cached.ingress); err != nil {
-			if errors.Is(err, ErrIngressUnavailable) || errors.Is(err, ErrIngressChanged) {
-				v.deleteCached(hash)
-				return zeroIngress(), fmt.Errorf("%w: ingress authority is no longer active", ErrAttestationRejected)
-			}
-			return zeroIngress(), fmt.Errorf("recheck cached private ingress authority: %w", err)
-		}
-		v.markChecked(hash, now)
-		return cached.ingress, nil
-	})
-	if v.recheckJoined != nil {
-		v.recheckJoined()
-	}
-	var result singleflight.Result
-	select {
-	case result = <-results:
-	case <-ctx.Done():
-		return Ingress{}, fmt.Errorf("wait for private ingress recheck: %w", ctx.Err())
-	}
-	if result.Err != nil {
-		return Ingress{}, result.Err
-	}
-	ingress, ok := result.Val.(Ingress)
-	if !ok {
-		return Ingress{}, errors.New("private ingress recheck returned an invalid result")
-	}
-	return ingress, nil
-}
-
-func (v *AttestationVerifier) markChecked(hash [32]byte, now time.Time) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	entry, ok := v.cache[hash]
-	if !ok || entry.rejected {
-		return
-	}
-	entry.lastChecked = now
-	v.cache[hash] = entry
-}
-
 func (v *AttestationVerifier) allowSource(source string) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -313,16 +384,9 @@ func (v *AttestationVerifier) allowSource(source string) bool {
 	return limiter.Allow()
 }
 
-func (v *AttestationVerifier) deleteCached(hash [32]byte) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	delete(v.cache, hash)
-}
-
 func zeroIngress() Ingress {
 	return Ingress{
 		ID: uuid.Nil, OrganizationID: "", Provider: "", DNSName: "", IdentityRequired: false,
-		AttestorNamespace: "", AttestorServiceAccount: "",
 	}
 }
 
@@ -335,7 +399,7 @@ func parseServiceAccountSubject(subject string) (string, string, error) {
 }
 
 func tokenExpiry(token string) (time.Time, error) {
-	claims := jwt.RegisteredClaims{} //nolint:exhaustruct // ParseUnverified populates all relevant claims
+	claims := jwt.RegisteredClaims{} //nolint:exhaustruct_v5 // ParseUnverified populates all relevant claims
 	_, _, err := jwt.NewParser().ParseUnverified(token, &claims)
 	if err != nil || claims.ExpiresAt == nil {
 		return time.Time{}, fmt.Errorf("parse token expiry")

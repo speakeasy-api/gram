@@ -22,11 +22,6 @@ func CreateAssistantAssistantsPath() string {
 	return "/rpc/assistants.create"
 }
 
-// UpgradeAssistantIdentityAssistantsPath returns the URL path to the assistants service upgradeAssistantIdentity HTTP endpoint.
-func UpgradeAssistantIdentityAssistantsPath() string {
-	return "/rpc/assistants.upgradeIdentity"
-}
-
 // UpdateAssistantAssistantsPath returns the URL path to the assistants service updateAssistant HTTP endpoint.
 func UpdateAssistantAssistantsPath() string {
 	return "/rpc/assistants.update"
@@ -40,6 +35,11 @@ func DeleteAssistantAssistantsPath() string {
 // SendMessageAssistantsPath returns the URL path to the assistants service sendMessage HTTP endpoint.
 func SendMessageAssistantsPath() string {
 	return "/rpc/assistants.sendMessage"
+}
+
+// InferIntentAssistantsPath returns the URL path to the assistants service inferIntent HTTP endpoint.
+func InferIntentAssistantsPath() string {
+	return "/rpc/assistants.inferIntent"
 }
 
 // InterruptTurnAssistantsPath returns the URL path to the assistants service interruptTurn HTTP endpoint.

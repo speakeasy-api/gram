@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  WorkloadIdentityPolicy,
-  WorkloadIdentityPolicy$inboundSchema,
-} from "../models/components/workloadidentitypolicy.js";
+  WithdrawnWorkloadSubjectPolicy,
+  WithdrawnWorkloadSubjectPolicy$inboundSchema,
+} from "../models/components/withdrawnworkloadsubjectpolicy.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * withdrawSubject workloadIdentities
  *
  * @remarks
- * Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+ * Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
  */
 export function workloadIdentitiesWithdrawSubject(
   client: GramCore,
@@ -51,7 +51,7 @@ export function workloadIdentitiesWithdrawSubject(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    WorkloadIdentityPolicy,
+    WithdrawnWorkloadSubjectPolicy,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -79,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      WorkloadIdentityPolicy,
+      WithdrawnWorkloadSubjectPolicy,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -196,7 +196,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    WorkloadIdentityPolicy,
+    WithdrawnWorkloadSubjectPolicy,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -207,7 +207,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, WorkloadIdentityPolicy$inboundSchema),
+    M.json(200, WithdrawnWorkloadSubjectPolicy$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

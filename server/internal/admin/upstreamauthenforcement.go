@@ -45,32 +45,14 @@ func (s *Service) EnableUpstreamAuthEnforcement(ctx context.Context, p *gen.Enab
 	return s.upstreamOAuthMigrationStatus(ctx, organizationID)
 }
 
-func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, p *gen.DisableUpstreamAuthEnforcementPayload) (*gen.AdminUpstreamOAuthMigrationStatus, error) {
+// DisableUpstreamAuthEnforcement keeps the route for older staff clients but no
+// longer permits a return to legacy upstream auth.
+func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, _ *gen.DisableUpstreamAuthEnforcementPayload) (*gen.AdminUpstreamOAuthMigrationStatus, error) {
 	auth, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || auth == nil || auth.OIDCSubject == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	organizationID, err := s.canonicalAdminOrganizationID(ctx, p.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, s.logger)
-	}
-	actor, displayName, _ := adminActor(ctx)
-	if err := productfeatures.NewMutator(s.productFeatures, s.audit).SetFeature(ctx, organizationID, productfeatures.FeatureUpstreamAuthEnforced, false, productfeatures.MutationActor{Principal: actor, DisplayName: displayName, Slug: nil}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "disable upstream auth enforcement").LogError(ctx, s.logger)
-	}
-	if enabled {
-		s.logger.InfoContext(ctx, "upstream auth enforcement disabled",
-			attr.SlogAuditAction("upstream_auth_enforcement:disable"),
-			attr.SlogAuditSubject("organization"),
-			attr.SlogAuditSubjectID(organizationID),
-			attr.SlogAdminOIDCSubject(auth.OIDCSubject),
-		)
-	}
-	return s.upstreamOAuthMigrationStatus(ctx, organizationID)
+	return nil, oops.E(oops.CodeInvalid, nil, "upstream auth enforcement cannot be disabled")
 }
 
 // upstreamAuthEnforcement reads whether enforcement is on for the
@@ -80,9 +62,6 @@ func (s *Service) DisableUpstreamAuthEnforcement(ctx context.Context, p *gen.Dis
 // never falling back to another client.
 func (s *Service) upstreamAuthEnforcement(ctx context.Context, status *gen.AdminUpstreamOAuthMigrationStatus) *gen.AdminUpstreamAuthEnforcement {
 	blockers := []string{}
-	if !status.Migrated {
-		blockers = append(blockers, "The upstream OAuth migration is incomplete.")
-	}
 	switch a := status.AuthClients; {
 	case a == nil:
 		blockers = append(blockers, "Typed auth clients couldn't be checked.")

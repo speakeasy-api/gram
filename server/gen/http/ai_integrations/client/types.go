@@ -26,18 +26,30 @@ type UpsertAnthropicInferenceConfigRequestBody struct {
 // "upsertConfig" endpoint HTTP request body.
 type UpsertConfigRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
-	// Provider API key. Stored encrypted at rest; never returned on reads.
+	// Provider API key. For gemini_compliance, the Google service account JSON key
+	// file, unchanged. Empty keeps the saved key. Stored encrypted at rest; never
+	// returned on reads.
 	APIKey string `form:"api_key" json:"api_key" xml:"api_key"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID).
+	// UUID). Optional for gemini_compliance (an open Google Vault matter UUID);
+	// omit it and Speakeasy finds or creates its own matter.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as through domain-wide delegation. Omit to keep the saved value.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the Google Workspace organizational unit to export,
+	// from listOrgUnits. Select the root unit for the whole organization. Syncing
+	// starts once one is saved. Omit to keep the saved value.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.
 	BillingMode *string `form:"billing_mode,omitempty" json:"billing_mode,omitempty" xml:"billing_mode,omitempty"`
-	// Whether the integration should be active.
+	// Whether the integration should be active. gemini_compliance stays inactive
+	// until an organizational unit is saved.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
@@ -45,7 +57,8 @@ type UpsertConfigRequestBody struct {
 // "deleteConfig" endpoint HTTP request body.
 type DeleteConfigRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 }
 
@@ -53,7 +66,8 @@ type DeleteConfigRequestBody struct {
 // "setScheduleEnabled" endpoint HTTP request body.
 type SetScheduleEnabledRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -66,7 +80,8 @@ type SetScheduleEnabledRequestBody struct {
 // "retrySchedule" endpoint HTTP request body.
 type RetryScheduleRequestBody struct {
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -104,14 +119,25 @@ type GetConfigResponseBody struct {
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -150,14 +176,25 @@ type UpsertConfigResponseBody struct {
 	// Organization the config belongs to.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID); omitted for providers that do not need one.
+	// UUID); for gemini_compliance, the Google Vault matter exports are created
+	// in. Omitted for providers that do not need one.
 	ExternalOrganizationID *string `form:"external_organization_id,omitempty" json:"external_organization_id,omitempty" xml:"external_organization_id,omitempty"`
+	// gemini_compliance only: the Google Workspace admin email the service account
+	// acts as. Omitted for other providers.
+	DelegatedUser *string `form:"delegated_user,omitempty" json:"delegated_user,omitempty" xml:"delegated_user,omitempty"`
+	// gemini_compliance only: the selected Google Workspace organizational unit.
+	// Omitted until one is saved.
+	OrgUnitID *string `form:"org_unit_id,omitempty" json:"org_unit_id,omitempty" xml:"org_unit_id,omitempty"`
+	// gemini_compliance only: the selected organizational unit's path; "/" is the
+	// whole organization. Omitted until one is saved.
+	OrgUnitPath *string `form:"org_unit_path,omitempty" json:"org_unit_path,omitempty" xml:"org_unit_path,omitempty"`
 	// How the provider org is billed: 'metered' (pay-per-token; dashboard cost is
 	// real spend), 'flat_rate' (subscription seats; cost is an estimate), or
 	// 'unknown'. Empty/omitted when not declared.
@@ -186,6 +223,13 @@ type UpsertConfigResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// ISO 8601 timestamp of the most recent change. Omitted when no config is set.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// ListOrgUnitsResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body.
+type ListOrgUnitsResponseBody struct {
+	// Units the saved delegated admin can read, including the root.
+	OrgUnits []*AIIntegrationOrgUnitResponseBody `form:"org_units,omitempty" json:"org_units,omitempty" xml:"org_units,omitempty"`
 }
 
 // ListSchedulesResponseBody is the type of the "aiIntegrations" service
@@ -1396,6 +1440,192 @@ type DeleteConfigGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListOrgUnitsUnauthorizedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unauthorized"
+// error.
+type ListOrgUnitsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsForbiddenResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "forbidden" error.
+type ListOrgUnitsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsBadRequestResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "bad_request"
+// error.
+type ListOrgUnitsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsNotFoundResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "not_found" error.
+type ListOrgUnitsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsConflictResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "conflict" error.
+type ListOrgUnitsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsUnsupportedMediaResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListOrgUnitsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsInvalidResponseBody is the type of the "aiIntegrations" service
+// "listOrgUnits" endpoint HTTP response body for the "invalid" error.
+type ListOrgUnitsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "listOrgUnits" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListOrgUnitsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsUnexpectedResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "unexpected"
+// error.
+type ListOrgUnitsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListOrgUnitsGatewayErrorResponseBody is the type of the "aiIntegrations"
+// service "listOrgUnits" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListOrgUnitsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListSchedulesUnauthorizedResponseBody is the type of the "aiIntegrations"
 // service "listSchedules" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1962,6 +2192,19 @@ type RetryScheduleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AIIntegrationOrgUnitResponseBody is used to define fields on response body
+// types.
+type AIIntegrationOrgUnitResponseBody struct {
+	// Organizational unit ID, e.g. id:03ph8a2z1a2b3c4.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Full path; "/" is the root, covering the whole organization.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Display name. Empty when Google omits it.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Admin-entered description. Omitted when empty.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+}
+
 // AIIntegrationScheduleStateResponseBody is used to define fields on response
 // body types.
 type AIIntegrationScheduleStateResponseBody struct {
@@ -2016,6 +2259,8 @@ func NewUpsertConfigRequestBody(p *aiintegrations.UpsertConfigPayload) *UpsertCo
 		Provider:               p.Provider,
 		APIKey:                 p.APIKey,
 		ExternalOrganizationID: p.ExternalOrganizationID,
+		DelegatedUser:          p.DelegatedUser,
+		OrgUnitID:              p.OrgUnitID,
 		BillingMode:            p.BillingMode,
 		Enabled:                p.Enabled,
 	}
@@ -2539,6 +2784,9 @@ func NewGetConfigAIIntegrationConfigOK(body *GetConfigResponseBody) *aiintegrati
 		Provider:               *body.Provider,
 		ProjectID:              body.ProjectID,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
+		OrgUnitPath:            body.OrgUnitPath,
 		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 		HasAPIKey:              *body.HasAPIKey,
@@ -2713,6 +2961,9 @@ func NewUpsertConfigAIIntegrationConfigOK(body *UpsertConfigResponseBody) *aiint
 		Provider:               *body.Provider,
 		ProjectID:              body.ProjectID,
 		ExternalOrganizationID: body.ExternalOrganizationID,
+		DelegatedUser:          body.DelegatedUser,
+		OrgUnitID:              body.OrgUnitID,
+		OrgUnitPath:            body.OrgUnitPath,
 		BillingMode:            body.BillingMode,
 		Enabled:                *body.Enabled,
 		HasAPIKey:              *body.HasAPIKey,
@@ -3016,6 +3267,172 @@ func NewDeleteConfigUnexpected(body *DeleteConfigUnexpectedResponseBody) *goa.Se
 // NewDeleteConfigGatewayError builds a aiIntegrations service deleteConfig
 // endpoint gateway_error error.
 func NewDeleteConfigGatewayError(body *DeleteConfigGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsListAIIntegrationOrgUnitsResultOK builds a "aiIntegrations"
+// service "listOrgUnits" endpoint result from a HTTP "OK" response.
+func NewListOrgUnitsListAIIntegrationOrgUnitsResultOK(body *ListOrgUnitsResponseBody) *aiintegrations.ListAIIntegrationOrgUnitsResult {
+	v := &aiintegrations.ListAIIntegrationOrgUnitsResult{}
+	v.OrgUnits = make([]*aiintegrations.AIIntegrationOrgUnit, len(body.OrgUnits))
+	for i, val := range body.OrgUnits {
+		if val == nil {
+			v.OrgUnits[i] = nil
+			continue
+		}
+		v.OrgUnits[i] = unmarshalAIIntegrationOrgUnitResponseBodyToAiintegrationsAIIntegrationOrgUnit(val)
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnauthorized builds a aiIntegrations service listOrgUnits
+// endpoint unauthorized error.
+func NewListOrgUnitsUnauthorized(body *ListOrgUnitsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsForbidden builds a aiIntegrations service listOrgUnits
+// endpoint forbidden error.
+func NewListOrgUnitsForbidden(body *ListOrgUnitsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsBadRequest builds a aiIntegrations service listOrgUnits
+// endpoint bad_request error.
+func NewListOrgUnitsBadRequest(body *ListOrgUnitsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsNotFound builds a aiIntegrations service listOrgUnits
+// endpoint not_found error.
+func NewListOrgUnitsNotFound(body *ListOrgUnitsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsConflict builds a aiIntegrations service listOrgUnits
+// endpoint conflict error.
+func NewListOrgUnitsConflict(body *ListOrgUnitsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnsupportedMedia builds a aiIntegrations service listOrgUnits
+// endpoint unsupported_media error.
+func NewListOrgUnitsUnsupportedMedia(body *ListOrgUnitsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsInvalid builds a aiIntegrations service listOrgUnits endpoint
+// invalid error.
+func NewListOrgUnitsInvalid(body *ListOrgUnitsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsInvariantViolation builds a aiIntegrations service
+// listOrgUnits endpoint invariant_violation error.
+func NewListOrgUnitsInvariantViolation(body *ListOrgUnitsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsUnexpected builds a aiIntegrations service listOrgUnits
+// endpoint unexpected error.
+func NewListOrgUnitsUnexpected(body *ListOrgUnitsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListOrgUnitsGatewayError builds a aiIntegrations service listOrgUnits
+// endpoint gateway_error error.
+func NewListOrgUnitsGatewayError(body *ListOrgUnitsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3639,6 +4056,22 @@ func ValidateUpsertConfigResponseBody(body *UpsertConfigResponseBody) (err error
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListOrgUnitsResponseBody runs the validations defined on
+// ListOrgUnitsResponseBody
+func ValidateListOrgUnitsResponseBody(body *ListOrgUnitsResponseBody) (err error) {
+	if body.OrgUnits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_units", "body"))
+	}
+	for _, e := range body.OrgUnits {
+		if e != nil {
+			if err2 := ValidateAIIntegrationOrgUnitResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -5200,6 +5633,246 @@ func ValidateDeleteConfigGatewayErrorResponseBody(body *DeleteConfigGatewayError
 	return
 }
 
+// ValidateListOrgUnitsUnauthorizedResponseBody runs the validations defined on
+// listOrgUnits_unauthorized_response_body
+func ValidateListOrgUnitsUnauthorizedResponseBody(body *ListOrgUnitsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsForbiddenResponseBody runs the validations defined on
+// listOrgUnits_forbidden_response_body
+func ValidateListOrgUnitsForbiddenResponseBody(body *ListOrgUnitsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsBadRequestResponseBody runs the validations defined on
+// listOrgUnits_bad_request_response_body
+func ValidateListOrgUnitsBadRequestResponseBody(body *ListOrgUnitsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsNotFoundResponseBody runs the validations defined on
+// listOrgUnits_not_found_response_body
+func ValidateListOrgUnitsNotFoundResponseBody(body *ListOrgUnitsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsConflictResponseBody runs the validations defined on
+// listOrgUnits_conflict_response_body
+func ValidateListOrgUnitsConflictResponseBody(body *ListOrgUnitsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsUnsupportedMediaResponseBody runs the validations
+// defined on listOrgUnits_unsupported_media_response_body
+func ValidateListOrgUnitsUnsupportedMediaResponseBody(body *ListOrgUnitsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsInvalidResponseBody runs the validations defined on
+// listOrgUnits_invalid_response_body
+func ValidateListOrgUnitsInvalidResponseBody(body *ListOrgUnitsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsInvariantViolationResponseBody runs the validations
+// defined on listOrgUnits_invariant_violation_response_body
+func ValidateListOrgUnitsInvariantViolationResponseBody(body *ListOrgUnitsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsUnexpectedResponseBody runs the validations defined on
+// listOrgUnits_unexpected_response_body
+func ValidateListOrgUnitsUnexpectedResponseBody(body *ListOrgUnitsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListOrgUnitsGatewayErrorResponseBody runs the validations defined on
+// listOrgUnits_gateway_error_response_body
+func ValidateListOrgUnitsGatewayErrorResponseBody(body *ListOrgUnitsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListSchedulesUnauthorizedResponseBody runs the validations defined
 // on listSchedules_unauthorized_response_body
 func ValidateListSchedulesUnauthorizedResponseBody(body *ListSchedulesUnauthorizedResponseBody) (err error) {
@@ -5916,6 +6589,21 @@ func ValidateRetryScheduleGatewayErrorResponseBody(body *RetryScheduleGatewayErr
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAIIntegrationOrgUnitResponseBody runs the validations defined on
+// AIIntegrationOrgUnitResponseBody
+func ValidateAIIntegrationOrgUnitResponseBody(body *AIIntegrationOrgUnitResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

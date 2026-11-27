@@ -20,6 +20,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -133,14 +134,14 @@ func TestIdentityCommitOrganizationOrigin(t *testing.T) {
 
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 			require.NoError(t, err)
-			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), policy, nil, nil)
+			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), audit.NewLogger(), mustURL(t, movedOrigin), policy, nil, nil)
 			err = orgrepo.New(ti.conn).SetOrganizationDefaultHostForTest(ctx, orgrepo.SetOrganizationDefaultHostForTestParams{DefaultHost: pgtype.Text{String: tc.defaultHost, Valid: tc.defaultHost != ""}, ID: activeOrganizationID(t, ctx)})
 			require.NoError(t, err)
 			committer.SetCallbackOrigins(organizationCallbackOrigins(t))
 
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-origin-usi")
 			providerID := createServerIdentityProvider(t, ctx, ti, "dcr-origin-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-			plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
+			plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
 			plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
 			commit := committer.Prepare(plan)
 			require.NoError(t, commit.Preflight(ctx))
@@ -225,11 +226,11 @@ func TestIdentityCommitResolvesOriginBeforeBegin(t *testing.T) {
 			ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), audit.NewLogger(), mustURL(t, movedOrigin), nil, nil, nil)
+			committer := remotesessions.NewIdentityCommitter(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), audit.NewLogger(), mustURL(t, movedOrigin), nil, nil, nil)
 			committer.SetCallbackOrigins(organizationCallbackOrigins(t))
 			usi := createUserSessionIssuer(t, ctx, ti.conn, "origin-before-begin")
 			provider := createServerIdentityProvider(t, ctx, ti, "origin-provider", "", cimd, []string{"none", "client_secret_basic"})
-			plan := linkPlan(t, ctx, usi, provider, uuid.Nil)
+			plan := linkPlan(t, ctx, ti, usi, provider, uuid.Nil)
 			plan.Client = remotesessions.ManualClient(remotesessions.ClientCredentials{ClientID: "manual-origin", ClientSecret: "test-secret"})
 			if cimd {
 				plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{AllowCIMD: true})

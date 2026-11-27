@@ -30,6 +30,8 @@ import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
 import { HeadlessCallersSection } from "./HeadlessCallersSection";
 
+import { useSetupStep } from "./useSetupStep";
+
 export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
 
 /**
@@ -44,16 +46,28 @@ export function UpstreamCredentialsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canManage = hasScope("org:admin");
-  const query = useMcpServerAuthentication({ mcpServerId: mcpServer.id });
+  const query = useMcpServerAuthentication(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    { throwOnError: false },
+  );
   const [openClientId, setOpenClientId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const setupStep = useSetupStep();
+  const [addOverride, setAdding] = useState<boolean | null>(null);
+  const adding =
+    addOverride ??
+    (!query.isError &&
+      !!query.data &&
+      (setupStep === "credentials" ||
+        setupStep === "oauth-client" ||
+        setupStep === "sign-in"));
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
   return (
     <SettingsSection id={UPSTREAM_CREDENTIALS_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Identity</SettingsSection.Title>
+        <SettingsSection.Title>Upstream credentials</SettingsSection.Title>
         <SettingsSection.Description>
           How Speakeasy signs in to the upstream on a caller&apos;s behalf.
           {canManage ? "" : " Only organization admins can change these."}
@@ -69,10 +83,19 @@ export function UpstreamCredentialsSection({
             </AuthRow>
           ) : query.isError || !query.data ? (
             <AuthRow label="Credentials">
-              <FieldError>
-                The upstream credentials could not be loaded. Refresh the page
-                to try again.
-              </FieldError>
+              <div className="flex items-center gap-2">
+                <FieldError>
+                  The upstream credentials could not be loaded.
+                </FieldError>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  <Button.Text>Retry</Button.Text>
+                </Button>
+              </div>
             </AuthRow>
           ) : (
             <>
@@ -132,7 +155,7 @@ export function UpstreamCredentialsSection({
           )}
         </div>
       </SettingsSection.Panel>
-      {adding ? (
+      {canManage && adding ? (
         <AddCredentialSheet
           mcpServerId={mcpServer.id}
           projectId={mcpServer.projectId}
@@ -141,7 +164,7 @@ export function UpstreamCredentialsSection({
           onOpenChange={setAdding}
         />
       ) : null}
-      {openClient ? (
+      {!query.isError && openClient ? (
         <AuthClientSheet
           client={openClient}
           mcpServerId={mcpServer.id}
@@ -182,11 +205,16 @@ function RequirementRow({
     remoteMcpServerId ?? "",
     canManage && !!remoteMcpServerId,
   );
-  const detected = DETECTED_REQUIREMENT[probe];
   const presentation =
     status === "no_auth_required" && probe === "authentication-required"
       ? SIGN_IN_DETECTED_STATUS
       : enumPresentation(UPSTREAM_AUTH_STATUS, status, UNKNOWN_STATUS);
+  // When nothing can sign in, say what that costs rather than restating the
+  // probe.
+  const detected =
+    presentation.tone === "destructive" && probe === "authentication-required"
+      ? "The upstream turns away calls without credentials, so every tool call fails until one is turned on."
+      : DETECTED_REQUIREMENT[probe];
 
   return (
     <AuthRow label="Upstream sign-in" hint={presentation.hint}>

@@ -117,6 +117,7 @@ describe("useToolsetAuthTarget", () => {
     } as Toolset;
 
     const { result } = renderHook(() => useToolsetAuthTarget(toolset));
+    expect(result.current.mcpServerId).toBe(canonical.id);
 
     await act(() => result.current.linkUserSessionIssuer?.("issuer-id"));
 

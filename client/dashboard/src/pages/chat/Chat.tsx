@@ -30,16 +30,9 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import {
-  Pinned,
-  SortBy,
-  SortOrder,
-} from "@gram/client/models/operations/listchats";
+import { Pinned } from "@gram/client/models/operations/listchats";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
-import {
-  invalidateAllListChats,
-  useListChats,
-} from "@gram/client/react-query/listChats.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
@@ -55,8 +48,6 @@ import {
 } from "@/components/insights-context";
 import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
 import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
-import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
-import { useSlugs } from "@/contexts/Sdk";
 import {
   CHAT_LANDING_SUGGESTIONS,
   INSIGHTS_SUGGESTION_ICONS,
@@ -69,7 +60,9 @@ import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
+import { useProjectAssistantChats } from "@/hooks/useProjectAssistantChats";
 import { RequireScope } from "@/components/require-scope";
+import { RequireAssistantsAvailable } from "@/components/require-assistants-available";
 import { useProject } from "@/contexts/Auth";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -85,9 +78,11 @@ export function ChatRoot(): ReactElement {
   // The page IS the chat, so hide the floating dock across the /chat subtree.
   useHideInsightsDock();
   return (
-    <RequireScope scope="assistant:read" projectId={project.id} level="page">
-      <Outlet />
-    </RequireScope>
+    <RequireAssistantsAvailable>
+      <RequireScope scope="assistant:read" projectId={project.id} level="page">
+        <Outlet />
+      </RequireScope>
+    </RequireAssistantsAvailable>
   );
 }
 
@@ -621,44 +616,6 @@ function buildRecentEntries(
   return entries;
 }
 
-// Resolve the project's Project Assistant and list its conversations. Shared
-// by the pinned, recents, and compact sections so the assistant-resolution
-// logic lives in one place. Pass a pinned state to filter, or `pinnedFirst` to
-// list every chat with pinned ones ahead of the rest.
-function useProjectAssistantChats(
-  filter: { pinned: Pinned } | { pinnedFirst: true; limit: number },
-): {
-  chats: ChatOverview[];
-  loading: boolean;
-} {
-  const { projectSlug } = useSlugs();
-  // Reuse the dock's managed-assistant resolution to scope the list to this
-  // project's Project Assistant conversations.
-  const { assistantId, ready } = useServerAssistantTransport(
-    projectSlug ?? "",
-    true,
-  );
-  const enabled = Boolean(ready && assistantId);
-  const { data, isPending } = useListChats(
-    {
-      assistantId: assistantId || undefined,
-      // Mirror the Elements runtime request: hide onboarding/warmup threads
-      // from the recents lists.
-      excludeSourceKind: "setup",
-      sortBy: SortBy.LastMessageTimestamp,
-      sortOrder: SortOrder.Desc,
-      limit: 50,
-      ...filter,
-    },
-    undefined,
-    { enabled, throwOnError: false },
-  );
-  // A disabled query (no resolvable assistant) is never "loading" — report it
-  // as settled-empty so the UI shows the empty state instead of spinning
-  // forever.
-  return { chats: data?.chats ?? [], loading: enabled && isPending };
-}
-
 // Pinned conversations, shown above recents. Hidden entirely when none exist.
 function ChatHomePinned(): ReactElement | null {
   const { chats, loading } = useProjectAssistantChats({ pinned: Pinned.True });
@@ -1020,7 +977,10 @@ export function ChatConversation(): ReactElement {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    // A viewport height, not h-full: the dock's wrapper column above this
+    // page is sized by its content (the document scrolls), so h-full would
+    // let a long transcript grow the page and carry the composer with it.
+    <div className="flex h-[calc(100vh-var(--banner-offset,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">

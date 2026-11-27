@@ -9,13 +9,9 @@ import { TrialStatusCard } from "./trial-status-card";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  flag: vi.fn(),
   hasScope: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({ useSession: () => mocks.session() }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flag(),
-}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
@@ -88,7 +84,6 @@ beforeEach(() => {
     hasActiveSubscription: false,
     trial: activeTrial,
   });
-  mocks.flag.mockReturnValue({ status: "enabled" });
   mocks.hasScope.mockReturnValue(true);
 });
 afterEach(() => {
@@ -118,24 +113,20 @@ it.each([
     ).toBeTruthy();
   else expect(screen.queryByRole("progressbar")).toBeNull();
 });
-it.each(["member", "disabled flag"])(
-  "does not request a subscription for an active trial with %s",
-  async (reason) => {
-    if (reason === "member") mocks.hasScope.mockReturnValue(false);
-    else mocks.flag.mockReturnValue({ status: "disabled" });
-    const fetcher = setup();
-    await act(async () => {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 20);
-      });
+it("does not request a subscription for a member on an active trial", async () => {
+  mocks.hasScope.mockReturnValue(false);
+  const fetcher = setup();
+  await act(async () => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
     });
-    expect(fetcher).not.toHaveBeenCalled();
-    expect(screen.getByRole("progressbar")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: /add payment method/i }),
-    ).toBeNull();
-  },
-);
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(screen.getByRole("progressbar")).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: /add payment method/i }),
+  ).toBeNull();
+});
 it("reads the subscription for an eligible active trial before offering checkout", async () => {
   const fetcher = setup();
   await waitFor(() =>

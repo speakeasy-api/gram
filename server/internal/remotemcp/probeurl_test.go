@@ -260,6 +260,8 @@ func TestProbeRemoteMcpURL_FallsBackToInitializeWhenDiscoverIsUnknown(t *testing
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Nil(t, result.HTTPStatus)
 	require.Equal(t, []string{"server/discover", "initialize", "notifications/initialized"}, methods())
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "initialize-only", *result.ServerName)
 
 	headersMu.Lock()
 	defer headersMu.Unlock()
@@ -289,6 +291,34 @@ func TestProbeRemoteMcpURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
 	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
 	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
 	require.Equal(t, []string{"server/discover"}, methods(), "the upstream answers server/discover, so initialize is never sent")
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "upstream", *result.ServerName)
+}
+
+func TestProbeRemoteMcpURL_PrefersTheServersTitle(t *testing.T) {
+	t.Parallel()
+	server := mcp.NewServer(&mcp.Implementation{Name: "acme-wiki-mcp", Title: "Acme Wiki", Version: "1"}, nil)
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.NotNil(t, result.ServerName)
+	require.Equal(t, "Acme Wiki", *result.ServerName)
+}
+
+func TestProbeRemoteMcpURL_CleansTheReportedName(t *testing.T) {
+	t.Parallel()
+	title := "Acme\n\t\u202eWiki\u2066  " + strings.Repeat("x", 200)
+	server := mcp.NewServer(&mcp.Implementation{Name: "acme-wiki-mcp", Title: title, Version: "1"}, nil)
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+
+	result := remotemcp.ProbeRemoteMcpURL(t.Context(), newPermissivePolicy(t), upstream.URL)
+	require.Equal(t, remotemcp.ProbeOutcomeMCPAvailable, result.Outcome)
+	require.NotNil(t, result.ServerName)
+	require.Len(t, []rune(*result.ServerName), 100)
+	require.True(t, strings.HasPrefix(*result.ServerName, "Acme Wiki x"))
 }
 
 func TestVerifyURL_AcceptsDiscoverOnlyUpstream(t *testing.T) {
@@ -927,4 +957,73 @@ func requireValue[T any](t *testing.T, value *T) T {
 	t.Helper()
 	require.NotNil(t, value)
 	return *value
+}
+
+// signInServer is an MCP server whose sign-in provider lives on the same
+// host and advertises the registration methods given.
+func signInServer(t *testing.T, dcr bool, cimd bool) *httptest.Server {
+	t.Helper()
+	var base string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, base))
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": base + "/mcp", "authorization_servers": []string{base}})
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, _ *http.Request) {
+		doc := map[string]any{
+			"issuer":                                base,
+			"authorization_endpoint":                base + "/authorize",
+			"token_endpoint":                        base + "/token",
+			"response_types_supported":              []string{"code"},
+			"code_challenge_methods_supported":      []string{"S256"},
+			"token_endpoint_auth_methods_supported": []string{"none"},
+		}
+		if dcr {
+			doc["registration_endpoint"] = base + "/register"
+		}
+		if cimd {
+			doc["client_id_metadata_document_supported"] = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(doc)
+	})
+	server := httptest.NewServer(mux)
+	base = server.URL
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestProbeURL_ReportsHowSignInCanBeSetUp(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		dcr  bool
+		cimd bool
+		want string
+	}{
+		{name: "dynamic client registration", dcr: true, cimd: false, want: "dcr"},
+		{name: "client ID metadata document", dcr: false, cimd: true, want: "cimd"},
+		{name: "neither", dcr: false, cimd: false, want: "manual"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestServiceForProbe(t)
+			upstream := signInServer(t, tc.dcr, tc.cimd)
+
+			result, err := ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+				URL:              upstream.URL + "/mcp",
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+			})
+			require.NoError(t, err)
+			require.Equal(t, remotemcp.ProbeOutcomeAuthenticationRequired, result.Outcome)
+			require.Equal(t, tc.want, requireValue(t, result.SignInSetup))
+		})
+	}
 }

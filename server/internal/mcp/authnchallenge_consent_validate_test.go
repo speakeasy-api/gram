@@ -30,10 +30,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -415,9 +419,11 @@ func seedMetaValidationFixtureOn(t *testing.T, ctx context.Context, ti *testInst
 	endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
 
 	member := newValidationMember(t)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "")
 	issuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, prefix+"-member", member.url, conv.ToNullUUID(issuerID), 0)
+	server := createMetaMember(t, ctx, ti.conn, projectID, metaServerID, prefix+"-member", member.url, conv.ToNullUUID(issuerID), 0)
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, server.mcpServerID)
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
 	return validationFixture{
@@ -467,7 +473,8 @@ func seedStandaloneValidationFixtureWith(t *testing.T, prefix string, metaRuntim
 	challengeState.Endpoint.McpServerID = conv.ToNullUUID(serverID)
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, challengeState))
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "")
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, clientID, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
 	return ctx, validationFixture{
@@ -766,7 +773,7 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	ctx, fx := seedMetaValidationFixture(t, "aim204-refuse")
 	projectID, orgID := consentTestTenant(t, ctx)
 
-	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim204-refuse-unconnected", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim204-refuse-unconnected", "")
 	w, err := postValidate(t, fx, unconnected)
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
@@ -776,9 +783,11 @@ func TestServeConsentAction_ValidateRefusesUnconnectedAndUnroutable(t *testing.T
 	require.Empty(t, w.Header().Get("Location"))
 
 	// A grant qualified to another upstream is unroutable on this gateway.
-	elsewhere := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim204-refuse-elsewhere", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	elsewhere := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim204-refuse-elsewhere", "")
 	elsewhereIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, elsewhere)
-	createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "aim204-refuse-claimant", "https://claimed.example.com/mcp", conv.ToNullUUID(elsewhereIssuer), 1)
+	claimantServer := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "aim204-refuse-claimant", "https://claimed.example.com/mcp", conv.ToNullUUID(elsewhereIssuer), 1)
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, orgID, claimantServer.mcpServerID)
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, claimantServer.mcpServerID, elsewhere, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, elsewhere, fx.subject, "token-elsewhere", "https://elsewhere.example.com/mcp")
 	_, err = postValidate(t, fx, elsewhere)
 	require.Error(t, err)
@@ -904,9 +913,11 @@ func TestServeConsentAction_ValidateTunneledMetaMemberRoutesAsDispatchDoes(t *te
 	endpoint, stateID, subject := mintFirstPartyConsentState(t, ctx, ti, projectID, orgID, shared, "aim204-tunnel-gw")
 	endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel-gw", "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel-gw", "")
 	issuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
 	member := createTunneledMetaMember(t, ctx, ti.conn, projectID, metaServerID, "aim204-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, member.mcpServerID)
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	serverRow, err := mcpservers_repo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.mcpServerID, ProjectID: projectID})
 	require.NoError(t, err)
 
@@ -1005,7 +1016,8 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 	endpoint, stateID, subject := mintFirstPartyConsentState(t, ctx, ti, projectID, orgID, shared, "aim204-tunnel")
 	endpoint.McpServerID = conv.ToNullUUID(server.ID)
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel", "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-tunnel", "")
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.ID, clientID, authz.AuthClientTypeRemoteSession)
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-tunnel", "")
 
@@ -1034,8 +1046,8 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 	require.Equal(t, map[string]int64{"valid": 1, "unknown": 1}, validationCounts(t, fx.reader))
 }
 
-// createOrgLevelConsentRemoteClient mints an organization-level issuer and client (project_id NULL) on the given user session issuers.
-func createOrgLevelConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
+// createOrgLevelConsentRemoteClient mints an organization-level provider and its unplaced registration.
+func createOrgLevelConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
 	t.Helper()
 	asBase := "https://" + slug + "-as.example.com"
 	q := remotesessions_repo.New(conn)
@@ -1061,12 +1073,6 @@ func createOrgLevelConsentRemoteClient(t *testing.T, ctx context.Context, conn *
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	for _, usi := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: rsc.ID,
-			UserSessionIssuerID:   usi,
-		}))
-	}
 	return rsc.ID
 }
 
@@ -1083,9 +1089,11 @@ func TestServeConsentAction_ValidateOrgLevelClient(t *testing.T) {
 	endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
 
 	member := newValidationMember(t)
-	clientID := createOrgLevelConsentRemoteClient(t, ctx, ti.conn, orgID, "aim204-org", []uuid.UUID{shared})
+	clientID := createOrgLevelConsentRemoteClient(t, ctx, ti.conn, orgID, "aim204-org")
 	issuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, "aim204-org-member", member.url, conv.ToNullUUID(issuerID), 0)
+	server := createMetaMember(t, ctx, ti.conn, projectID, metaServerID, "aim204-org-member", member.url, conv.ToNullUUID(issuerID), 0)
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, orgID, server.mcpServerID)
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, server.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-org", member.url)
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: "aim204-org-member", server: "aim204-org-member"}
@@ -1144,7 +1152,7 @@ func TestServeConsentAction_ValidatePersistsVerdictAfterRefresh(t *testing.T) {
 			require.NoError(t, err)
 			refreshEncrypted, err := fx.ti.enc.Encrypt([]byte("refresh-validation-token"))
 			require.NoError(t, err)
-			configured, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			configured, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 				SubjectUrn:            fx.subject,
 				UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 				RemoteSessionClientID: fx.clientID,
@@ -1212,7 +1220,8 @@ func TestServeConsentAction_ToolsetEndpointOffersNoRecheck(t *testing.T) {
 	endpoint.ToolsetID = conv.ToNullUUID(uuid.New())
 
 	member := newValidationMember(t)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-toolset", "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim204-toolset", "")
+	seedConsentSignInPlacement(t, ctx, ti, shared, clientID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-aim204-toolset", member.url)
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: member, clientID: clientID, name: ""}
@@ -1243,7 +1252,7 @@ func TestServeConsentAction_ValidateReconnectMidProbeLeavesNewGrantUnvalidated(t
 		if err != nil {
 			return fmt.Errorf("encrypt: %w", err)
 		}
-		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            fx.subject,
 			UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 			RemoteSessionClientID: fx.clientID,
@@ -1318,6 +1327,40 @@ func introspectionServer(t *testing.T, body *atomic.Pointer[string]) string {
 	}))
 	t.Cleanup(srv.Close)
 	return srv.URL
+}
+
+func seedHostedGatewayValidationFixture(t *testing.T, prefix string) (context.Context, validationFixture) {
+	t.Helper()
+	ctx, fx := seedMetaValidationFixture(t, prefix)
+	projectID, orgID := consentTestTenant(t, ctx)
+	hosted := seedHostedMetaMember(t, ctx, fx.ti, fx.endpoint.MetaMcpServerID.UUID, "Hosted verify", 1, mcpservers.VisibilityPublic)
+	assigned := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-assigned", "")
+	_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID: orgID, ProjectID: projectID, McpServerID: hosted.serverID, RemoteSessionClientID: assigned,
+	})
+	require.NoError(t, err)
+	var body atomic.Pointer[string]
+	body.Store(conv.PtrEmpty(`{"active":false}`))
+	_, err = testrepo.New(fx.ti.conn).ForceRemoteSessionIssuerEnrichmentEndpointsFixture(ctx, testrepo.ForceRemoteSessionIssuerEnrichmentEndpointsFixtureParams{
+		UserinfoEndpoint: pgtype.Text{}, IntrospectionEndpoint: conv.ToPGText(introspectionServer(t, &body)), JwksUri: pgtype.Text{},
+		RemoteSessionClientID: assigned, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, assigned, fx.subject, "assigned-token", "")
+	fx.clientID = assigned
+	fx.server = hosted.slug
+	return ctx, fx
+}
+
+func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-verify")
+	rec := recordValidationAttempts(t, ctx, fx)
+	requireValidated(t, fx)
+	require.Empty(t, fx.member.drain(), "hosted Verify must not send its grant to the proxied member")
+	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, fx.clientID.String(), row.RemoteSessionClientID)
 }
 
 // Only introspection can tell a member's rejection from a token the provider no longer honours.
@@ -1419,7 +1462,7 @@ func TestServeConsentAction_ValidateWithNoRecordedOutageShowsNotice(t *testing.T
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
@@ -1469,7 +1512,7 @@ func TestServeConsentAction_ValidateWhileRefreshIsBusySaysWait(t *testing.T) {
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
@@ -1507,7 +1550,7 @@ func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) 
 	require.NoError(t, err)
 	access, err := fx.ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,

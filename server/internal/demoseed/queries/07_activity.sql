@@ -24,6 +24,30 @@ DELETE FROM ai_integration_configs WHERE organization_id = @organization_id AND 
 INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, enabled)
 VALUES (@id, @organization_id, @project_id, 'anthropic_inference', '', false);
 
+-- No real credentials and no polling: this is a paused setup example.
+-- name: ActivityDeleteGeminiComplianceConfig :exec
+DELETE FROM ai_integration_configs WHERE organization_id = @organization_id AND provider = 'gemini_compliance';
+
+-- name: ActivityInsertGeminiComplianceConfig :exec
+INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, external_organization_id, enabled)
+VALUES (@id, @organization_id, @project_id, 'gemini_compliance', '', @matter_id, false);
+
+-- The dashboard reads a config through its primary sync row, so the paused
+-- example needs one. The disabled config keeps it out of poll candidates.
+-- name: ActivityInsertGeminiComplianceSync :exec
+INSERT INTO ai_integration_syncs (id, ai_integration_config_id, schedule, kind)
+VALUES (@id, @config_id, 'gemini_compliance', 'cursor');
+
+-- name: ActivityCountSafeGeminiComplianceConfig :one
+SELECT count(*) FROM ai_integration_configs
+WHERE organization_id = @organization_id AND project_id = @project_id
+  AND provider = 'gemini_compliance' AND NOT enabled AND api_key_encrypted = '';
+
+-- name: ActivityCountGeminiComplianceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = @project_id::uuid AND chat_id = @chat_id::uuid
+  AND source = 'gemini' AND role IN ('user', 'assistant');
+
 -- agent_id names the Speakeasy agent principal that produced the session, as
 -- hook capture stamps it. NULL for the human-driven sessions.
 -- name: ActivityInsertChat :exec
@@ -32,13 +56,22 @@ VALUES (@id, @project_id, @organization_id, @user_id::text, @external_user_id::t
         sqlc.narg(session_surface)::text, sqlc.narg(agent_id)::uuid,
         now() - @created_age::interval, now() - @updated_age::interval);
 
--- Columns a message does not set (content_raw, tool_calls, source, model) are
--- passed as NULL, which is what omitting them wrote.
+-- A session an agent credential drove: the agent is the actor and there is no
+-- user to name, as the chat completions path records it. Its owner reads it
+-- through ownership rather than chat:read.
+-- name: ActivityInsertAgentChat :exec
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
+VALUES (@id, @project_id, @organization_id, NULL, NULL, @title::text,
+        sqlc.narg(session_surface)::text, @agent_id::uuid,
+        now() - @created_age::interval, now() - @updated_age::interval);
+
+-- Columns a message does not set (content_raw, tool_calls, source, model,
+-- tool_call_id) are passed as NULL, which is what omitting them wrote.
 -- name: ActivityInsertChatMessage :exec
-INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, created_at, risk_analyzed_at)
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, tool_call_id, created_at, risk_analyzed_at)
 VALUES (@id, @chat_id, @project_id::uuid, @role, @content,
         sqlc.narg(content_raw)::jsonb, sqlc.narg(tool_calls)::jsonb,
-        sqlc.narg(source)::text, sqlc.narg(model)::text,
+        sqlc.narg(source)::text, sqlc.narg(model)::text, sqlc.narg(tool_call_id)::text,
         now() - @age::interval, now());
 
 -- name: ActivitySetClaudeTagChatSlack :exec

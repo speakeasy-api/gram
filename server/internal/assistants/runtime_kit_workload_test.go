@@ -644,7 +644,7 @@ func TestKitAttachmentEditRequiresRetirement(t *testing.T) {
 	_, err = core.UpdateAssistant(t.Context(), key.ProjectID, key.AssistantID, nil, nil, nil, []*types.AssistantToolsetRef{}, []*types.AssistantMCPServerRef{}, nil, nil, nil, nil, nil)
 	require.ErrorIs(t, err, errAssistantValidation)
 	require.ErrorContains(t, err, "retire the Kit runtime")
-	rows, err := loadAssistantMcpServers(t.Context(), db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
+	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(t.Context(), assistantrepo.LoadAssistantMcpServersParams{ProjectID: key.ProjectID, AssistantIds: []uuid.UUID{key.AssistantID}})
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "rejected edit must roll back its writes")
 }

@@ -121,6 +121,27 @@ func TestGatewayOfferCapabilityFollowsServingResolver(t *testing.T) {
 	}
 }
 
+func TestGatewayOfferCapabilityRequiresPinnedRegistration(t *testing.T) {
+	t.Parallel()
+	server, pinned, sibling, pinnedAuth, siblingAuth := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	kind := pgtype.Text{String: authClientTypeRemoteSession, Valid: true}
+	member := metaMember{serverID: server, tunneledServerID: validUUID(uuid.New())}
+	offer := configuredAuthOffer{clients: []upstreamclientsrepo.ListServerConsentAuthClientsRow{
+		{AuthClientID: validUUID(pinnedAuth), ClientType: kind, RemoteSessionClientID: validUUID(pinned)},
+		{AuthClientID: validUUID(siblingAuth), ClientType: kind, RemoteSessionClientID: validUUID(sibling)},
+	}}
+	capable := upstreamclientsrepo.GetAuthClientSelectionRow{
+		AuthClientID: validUUID(siblingAuth), ClientID: validUUID(siblingAuth), ClientType: kind,
+		ClientEnabled: pgtype.Bool{Bool: true, Valid: true}, ClientDeleted: pgtype.Bool{Valid: true},
+		RegistrationID: validUUID(sibling), RegistrationLive: true, RegistrationAttached: true,
+		Associated: true, RequiresUpstreamAuth: true, Tunneled: true,
+	}
+	metadata := gatewayOfferMetadata{selections: map[[2]uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow{{server, siblingAuth}: capable}}
+	require.True(t, gatewayOfferCapability(member, offer, metadata), "ordinary discovery can use the capable sibling")
+	require.False(t, gatewayOfferCapability(member, offer.forPersonalRegistration(pinned), metadata), "a sibling cannot authorize the pinned grant")
+	require.True(t, gatewayOfferCapability(member, offer.forPersonalRegistration(sibling), metadata))
+}
+
 func TestGatewayOfferCapabilityDropsDeletedRegistration(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_gateway_offer_registration_gone")
@@ -255,7 +276,9 @@ func TestGatewayOfferMetadataBatchesMembersAndClients(t *testing.T) {
 		require.True(t, gatewayOfferCapability(member, offers[member.serverID], metadata))
 		for _, client := range offers[member.serverID].clients {
 			single, err := upstreamclientsrepo.New(pool).GetAuthClientSelection(t.Context(), upstreamclientsrepo.GetAuthClientSelectionParams{
-				Proposed: true, ProposedAuthClientID: client.AuthClientID, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: f.orgID,
+				// Discovery only runs under enforcement, so the serving
+				// resolver it must agree with reads typed state.
+				Proposed: true, ProposedAuthClientID: client.AuthClientID, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: f.orgID, TypedOnly: true,
 			})
 			require.NoError(t, err)
 			require.Len(t, single, 1)

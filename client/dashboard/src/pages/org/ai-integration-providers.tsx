@@ -27,10 +27,21 @@ export type AIIntegrationProvider = {
   providerId: AgentProviderId;
   apiKeyLabel: string;
   apiKeyPlaceholder: string;
+  apiKeyMultiline?: boolean;
   requiresOrganizationId: boolean;
   organizationIdLabel?: string;
   organizationIdPlaceholder?: string;
   helpText?: ReactNode;
+  // A Workspace admin email saved beside the key, which the service account
+  // acts as (gemini_compliance's delegated admin).
+  delegatedUser?: {
+    label: string;
+    placeholder: string;
+    helpText?: string;
+  };
+  // After the first save, pick the Workspace organizational unit to export;
+  // syncing waits until one is saved.
+  selectsOrgUnit?: boolean;
 };
 
 type AIIntegrationScheduleKind = "events" | "metrics";
@@ -73,6 +84,14 @@ export function providerSchedules(
       },
     ]
   );
+}
+
+// The root unit ("/") covers the whole organization.
+export function orgUnitLabel(unit: { path: string; name: string }): string {
+  if (unit.path !== "/") return unit.path;
+  return unit.name
+    ? `Entire organization (${unit.name})`
+    : "Entire organization";
 }
 
 const CURSOR_AI_INTEGRATION: AIIntegrationProvider = {
@@ -358,9 +377,70 @@ const CHATGPT_AI_INTEGRATION: AIIntegrationProvider = {
   ),
 };
 
+const GEMINI_AI_INTEGRATION: AIIntegrationProvider = {
+  provider: "gemini_compliance",
+  name: "Gemini Conversations",
+  description:
+    "Import Gemini text chats through Google Vault batch exports for security review.",
+  schedules: [
+    {
+      schedule: "gemini_compliance",
+      name: "Conversation messages",
+      description:
+        "Imports retained Gemini text chats from Google Vault exports.",
+      cadence: "Hourly",
+      kind: "events",
+      signal: "gemini.conversations",
+      destination: { label: "Agent Sessions", path: "agent-sessions" },
+    },
+  ],
+  onboardingDescription:
+    "Connect Google Vault to import retained Gemini text chats. Exports run in batches, not in real time.",
+  setupGuide: {
+    steps: [
+      {
+        title: "Prepare Google Vault",
+        description:
+          'Make sure Google Vault retains the Gemini conversations you need: set a Gemini retention rule, and give every user whose chats you want a Vault license. Speakeasy creates its own Vault matter, "Speakeasy Gemini import", the first time you save.',
+        helpLink: {
+          url: "https://vault.google.com/",
+          linkLabel: "Google Vault",
+          sentence: "Manage retention in {LINK}",
+        },
+      },
+      {
+        title: "Create a delegated service account",
+        description:
+          "In Google Cloud, enable the Google Vault API and the Admin SDK API, create a service account, and download its JSON key. In the Workspace Admin console, authorize the service account's client ID for domain-wide delegation with https://www.googleapis.com/auth/ediscovery, https://www.googleapis.com/auth/devstorage.read_only and https://www.googleapis.com/auth/admin.directory.orgunit.readonly. Choose a delegated admin with a Vault license, the Manage Matters, Manage Searches and Manage Exports privileges, and permission to read organizational units.",
+      },
+      {
+        title: "Connect and choose what to export",
+        description:
+          "Paste the JSON key file and the delegated admin's email, then save. Speakeasy checks them with Google and lists your organizational units: choose the root unit, shown as Entire organization, to cover everyone. Syncing starts once a unit is saved. Speakeasy imports text chats from completed UTC days, initially looking back 30 days; exports are not real-time and availability depends on retention.",
+        showsForm: true,
+      },
+    ],
+  },
+  providerId: "gemini",
+  apiKeyLabel: "Service account JSON key",
+  apiKeyPlaceholder: 'Paste the key file: {"type": "service_account", …}',
+  apiKeyMultiline: true,
+  requiresOrganizationId: false,
+  helpText:
+    "Paste the key file as downloaded. It is hidden and cleared when you close this panel.",
+  delegatedUser: {
+    label: "Delegated admin email",
+    placeholder: "vault-export@example.com",
+    helpText:
+      "The Workspace admin the service account acts as. Use a dedicated account with only the Vault and organizational-unit privileges above.",
+  },
+  selectsOrgUnit: true,
+};
+
 export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
   CURSOR_AI_INTEGRATION,
   ANTHROPIC_AI_INTEGRATION,
   CODEX_AI_INTEGRATION,
   CHATGPT_AI_INTEGRATION,
+  GEMINI_AI_INTEGRATION,
 ];

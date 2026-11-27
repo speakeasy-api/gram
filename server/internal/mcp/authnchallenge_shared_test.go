@@ -22,8 +22,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -441,6 +444,43 @@ func TestSharedAuthorizationServer_AuthorizeRefusesMissingOrForeignResource(t *t
 	}
 }
 
+func TestSharedAuthorizationServer_DashboardRefusalUsesCurrentCallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedSharedIssuer(t, ctx, ti)
+	const clientID = "speakeasy-dashboard-inspect"
+	const callback = "https://dashboard.example.test/inspect/oauth/callback"
+	const previousCallback = "https://previous.example.test/inspect/oauth/callback"
+	ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	var noText pgtype.Text
+	var noExpiry pgtype.Timestamptz
+	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     f.issuer.ID,
+		ClientID:                clientID,
+		ClientName:              "Dashboard Inspect test client",
+		RedirectUris:            []string{previousCallback},
+		TokenEndpointAuthMethod: "none",
+		ClientSecretHash:        noText, ClientSecretExpiresAt: noExpiry, ClientJwks: nil, ClientJwksUri: noText,
+	})
+	require.NoError(t, err)
+	f.client = client
+	challenge := pkceChallenge(pkceVerifier(t))
+
+	old := sharedAuthorize(t, ctx, ti, f, challenge)
+	require.Equal(t, http.StatusBadRequest, old.Code)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, old, http.StatusBadRequest).Code)
+
+	f.client.RedirectUris = []string{callback}
+	current := sharedAuthorize(t, ctx, ti, f, challenge)
+	// The HTTPS callback is linked, not automatically followed before sign-in.
+	redirect := oauthtest.RequireAuthorizationErrorCallback(t, current, http.StatusBadRequest)
+	require.Equal(t, "invalid_target", redirect.Query().Get("error"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	redirect.RawQuery = ""
+	require.Equal(t, callback, redirect.String())
+}
+
 func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *testing.T) {
 	t.Parallel()
 
@@ -784,13 +824,26 @@ func TestSharedAuthorizationServer_ModeSwitchClosesInFlightFlows(t *testing.T) {
 // A remote session connect from the shared consent page returns there, while
 // keeping its consent parent: the callback still checks that parent's browser
 // binding.
+// placeHostedConsentRegistration configures the selected hosted endpoint only.
+func placeHostedConsentRegistration(t *testing.T, ctx context.Context, ti *testInstance, slug string, registration uuid.UUID) {
+	t.Helper()
+	auth := requireProjectAuthContext(t, ctx)
+	server, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), slug, mcproute.MCP)
+	require.NoError(t, err)
+	require.True(t, server.ToolsetID.Valid)
+	require.True(t, server.McpServerID.Valid)
+	_, err = authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: server.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: server.McpServerID.UUID, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+}
+
 func TestSharedAuthorizationServer_RemoteConnectReturnsToSharedConsent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	f := seedSharedIssuer(t, ctx, ti)
-	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "", []uuid.UUID{f.issuer.ID})
+	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "")
+	placeHostedConsentRegistration(t, ctx, ti, f.slugA, remoteClientID)
 
 	authorized := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)), f.resource(ti, f.slugA))
 	require.Equal(t, http.StatusFound, authorized.Code, authorized.Body.String())

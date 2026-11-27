@@ -3,7 +3,9 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -148,11 +150,75 @@ func normalizedRemoteMCPSourceName(name *string) pgtype.Text {
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
 }
 
+// remoteMCPDisplayName is the name the server is shown with: the one given,
+// or else one read from its address.
 func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 	if name.Valid {
 		return name.String
 	}
+	if readable := readableServiceName(rawURL); readable != "" {
+		return readable
+	}
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+}
+
+// sharedHostingDomains are domains under which anyone can host a site, so the
+// label before them names the platform, not the service.
+var sharedHostingDomains = []string{
+	"amazonaws.com", "appspot.com", "azurecontainerapps.io", "azurewebsites.net",
+	"cloudfunctions.net", "deno.dev", "firebaseapp.com", "fly.dev", "github.io",
+	"herokuapp.com", "modal.run", "netlify.app", "ngrok-free.app", "ngrok.app",
+	"ngrok.io", "onrender.com", "pages.dev", "railway.app", "replit.app",
+	"run.app", "trycloudflare.com", "vercel.app", "web.app", "workers.dev",
+}
+
+// secondLevelSuffixes precede a two-letter country code in public suffixes
+// such as co.uk, or.jp or edu.au.
+var secondLevelSuffixes = map[string]bool{
+	"ac": true, "co": true, "com": true, "edu": true, "go": true, "gob": true, "gov": true, "ltd": true, "me": true, "mil": true, "ne": true, "net": true, "nom": true, "or": true, "org": true, "plc": true, "sch": true,
+}
+
+// readableServiceName reads the service's name from a URL's host:
+// https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
+// "Acme Wiki". It gives "" when the host does not name a service: IP
+// addresses, single-label hosts such as localhost, internationalised
+// domains, and sites on shared hosting domains such as vercel.app. The
+// dashboard suggests names by the same rules (readableServiceNameFromUrl).
+func readableServiceName(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	labels := strings.Split(host, ".")
+	last := labels[len(labels)-1]
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") {
+		return ""
+	}
+	for _, r := range host {
+		if r > unicode.MaxASCII {
+			return ""
+		}
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "xn--") {
+			return ""
+		}
+	}
+	for _, domain := range sharedHostingDomains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return ""
+		}
+	}
+	suffix := 1
+	if len(labels) >= 3 && len(last) == 2 && secondLevelSuffixes[labels[len(labels)-2]] {
+		suffix = 2
+	}
+	words := strings.FieldsFunc(labels[len(labels)-1-suffix], func(r rune) bool { return r == '-' || r == '_' })
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // createRemoteMCPSource owns the source row, its derived identifier, and the

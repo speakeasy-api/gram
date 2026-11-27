@@ -52,6 +52,10 @@ type RemoteSessionClient struct {
 	// The organization JSON Web Key Set attached to this client, set on create or
 	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string
+	// The identity provider connection that manages this client. Null for a client
+	// administrators manage directly. A managed client is changed through its
+	// connection and cannot be duplicated or used as a template.
+	IdentityProviderConnectionID *string
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
 	Scope []string

@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+
+	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
 // postflightIDCheck is one count assert: the count must equal want. msg is
@@ -59,6 +61,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 	for i, u := range demoUsers {
 		userIDs[i] = s.userID(u.handle)
 	}
+	healthHeld := int64(0)
+	for _, session := range s.healthSessions() {
+		if session.deleted == nil {
+			healthHeld++
+		}
+	}
 
 	identity := []postflightIDCheck{
 		{byOrg(s.q.PostflightIDInferenceGrants), 2, "demo seed postflight: expected only 2 explicit inference grants, found %d"},
@@ -88,13 +96,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID:        proj,
 				RemoteSessionIds: []uuid.UUID{s.det("attachment-session"), s.det("attachment-session-expired")},
 			})
-		}, 2, "demo seed postflight: expected 2 inert reachable exact-session attachments, found %d"},
+		}, 2, "demo seed postflight: expected 2 reachable exact-session attachments, found %d"},
 		{byOrg(s.q.PostflightIDSessionBindings), 2, "demo seed postflight: expected 2 principal session bindings, found %d"},
-		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 8, "demo seed postflight: expected 8 user-owned upstream sessions, found %d"},
+		{byProj(s.q.PostflightIDUserOwnedUpstreamSessions), 6, "demo seed postflight: expected 6 user-owned upstream sessions, found %d"},
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDInertUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
-		}, 6, "demo seed postflight: expected 6 inert validated-spread upstream sessions, found %d"},
-		{byOrg(s.q.PostflightIDAgents), 6, "demo seed postflight: expected 6 managed agents, found %d"},
+			return s.q.PostflightIDPerUserUpstreamSessions(ctx, s.det("remote-identity-client-linear"))
+		}, 6, "demo seed postflight: expected 6 Example OAuth server upstream sessions (4 validated-spread, 2 attached), found %d"},
+		{byOrg(s.q.PostflightIDAgents), 7, "demo seed postflight: expected 7 managed agents, found %d"},
 		{byOrg(s.q.PostflightIDAgentSessions), 1, "demo seed postflight: expected 1 managed agent session, found %d"},
 		// This External OAuth row drives the metadata recommendation. Keep its
 		// count stable so a rerun cannot duplicate it or silently drop the demo
@@ -135,8 +143,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the inert Jamf Pro self client, found %d"},
 		// Nobody connects a self client, and no MCP server uses this one.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDJamfClientIssuerBindings(ctx, jamfClient)
-		}, 0, "demo seed postflight: Jamf Pro self client must not be bound to a user session issuer, found %d bindings"},
+			return s.q.PostflightIDJamfClientOffers(ctx, repo.PostflightIDJamfClientOffersParams{JamfClient: jamfClient, OrgID: org, ProjectID: proj})
+		}, 0, "demo seed postflight: Jamf Pro self client must not be offered on an MCP server, found %d offers"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDJamfClientSessions(ctx, jamfClient)
 		}, 0, "demo seed postflight: Jamf Pro self client must have no remote sessions, found %d"},
@@ -147,11 +155,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// credential kind, plus the pre-column row. A rerun that dropped or
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
-		// Two upstream MCP issuers, two independent gateway issuers, one
-		// Connections issuer, and Notion's issuer; GitHub and DeepWiki use the
-		// organization workforce issuer.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
-		{byProj(s.q.PostflightIDGatewayIssuers), 2, "demo seed postflight: expected 2 distinct gateway issuers, found %d"},
+		// Example OAuth's and Example Shared Credential's issuers, three
+		// independent gateway issuers, one Connections issuer, Linear's,
+		// Notion's, Support Tools' (the Shadow MCP official server) and the
+		// connection health provider's.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 10, "demo seed postflight: expected 10 project user session issuers, found %d"},
+		{byProj(s.q.PostflightIDGatewayIssuers), 4, "demo seed postflight: expected 4 distinct gateway issuers, found %d"},
+		// The workforce issuer. The local fixtures add the Enterprise Sign-In
+		// (ID-JAG) Server's own federated sign-in after this check.
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {
@@ -160,9 +171,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:           org,
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
-		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
-		// EMA: two ready bindings, no cached credentials, and one saved
-		// provider order. The workforce issuer accepts ID-JAGs from the
+		{byProj(s.q.PostflightIDUserSessionClients), 9 + int64(len(healthClients)), "demo seed postflight: expected 14 registered agents, found %d"},
+		// EMA: Acme Wiki's ready binding, no cached credentials, and its
+		// saved provider order. The workforce issuer accepts ID-JAGs from the
 		// fictional provider, but interactive sign-in does not go through it.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDWorkforceInboundEMATrust(ctx, repo.PostflightIDWorkforceInboundEMATrustParams{
@@ -173,72 +184,72 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the workforce issuer to trust Acme Identity for inbound EMA only, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
-		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
+		}, 1, "demo seed postflight: expected 1 ready EMA binding, found %d"},
 		{byOrg(s.q.PostflightIDEMACredentials), 0, "demo seed postflight: expected no EMA credentials, found %d"},
 		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
 		{byOrg(s.q.PostflightIDSavedEMAProviders), 1, "demo seed postflight: expected 1 saved EMA provider, found %d"},
-		// Linear's remote identity provider, the identity chaining example, Jamf
-		// Pro, and the two EMA services' authorization servers.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 5, "demo seed postflight: expected 5 project remote session issuers, found %d"},
+		// Example OAuth's remote identity provider, the identity chaining
+		// example, Jamf Pro, Acme Wiki's authorization server, Linear and
+		// Notion.
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 6, "demo seed postflight: expected 6 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
-		}, 1, "demo seed postflight: expected 1 Remote MCP identity client, found %d"},
-		{byProj(s.q.PostflightIDRemoteIdentityBindings), 3, "demo seed postflight: expected 3 Remote MCP User Identity bindings, found %d"},
-		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
-		// derive: every live client bound to Linear's user session issuer names
-		// one remote issuer, and it is the stamped one. The query returns no
-		// row when its HAVING fails (the SQL's IF NOT FOUND), so a row counts
-		// as 1 and no row as 0.
+		}, 3, "demo seed postflight: expected 3 Remote MCP identity clients (Example OAuth's, Linear's and Notion's), found %d"},
+		// The Example OAuth server has one live personal offer from its stamped provider.
 		{func(ctx context.Context) (int64, error) {
-			_, err := s.q.PostflightIDLinearIssuerStamp(ctx, repo.PostflightIDLinearIssuerStampParams{
-				LinearIssuer:       s.det("issuer-linear"),
+			return s.q.PostflightIDLinearPersonalOffer(ctx, repo.PostflightIDLinearPersonalOfferParams{
+				LinearServer:       s.det("mcpserver-linear"),
+				ProjectID:          proj,
+				OrgID:              org,
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				return 0, nil
-			case err != nil:
-				return 0, fmt.Errorf("linear issuer stamp: %w", err)
-			}
-			return 1, nil
-		}, 1, "demo seed postflight: Linear user session issuer must bind clients of exactly one remote issuer, its stamped provider"},
+		}, 1, "demo seed postflight: expected one personal typed offer from the Example OAuth server's provider, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDLinearStampedServers(ctx, repo.PostflightIDLinearStampedServersParams{
 				ProjectID:          proj,
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
-		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
-		// Linear's two clients, and each EMA service's own client.
-		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
-		// One per server each seeded sign-in reaches: the Linear and Slack
-		// sign-ins on their own server, the gateway sign-ins on both members.
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDLinearProtectedResource(ctx, repo.PostflightIDLinearProtectedResourceParams{
+				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
+			})
+		}, 1, "demo seed postflight: expected the Example OAuth server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
+		// The Example OAuth, Linear, and Notion OAuth registrations.
+		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
+		// One per server each seeded sign-in reaches: the Example OAuth server
+		// and Example Shared Credential server sign-ins on their own server, the gateway
+		// sign-ins on both members, and the organization sign-ins' no-auth
+		// choice on Support Tools and on the connection health servers.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
-				GithubServerID:     s.det("mcpserver-github"),
-				GithubAuthClientID: s.det("auth-client-github-forwarded"),
+				OrgNoAuthServerIds: append(s.healthServerIDs(), s.det("mcpserver-shadow-official")),
 				ProjectID:          proj,
+				HealthIssuerID:     s.healthIssuer(),
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				LinearServerID:     s.det("mcpserver-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 32, "demo seed postflight: expected exactly 32 matching upstream client choices, found %d"},
+		}, 41, "demo seed postflight: expected exactly 41 matching upstream client choices, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDHealthUpstreamClientChoices(ctx, repo.PostflightIDHealthUpstreamClientChoicesParams{ProjectID: proj, HealthIssuerID: s.healthIssuer()})
+		}, healthHeld * int64(len(healthServers)), "demo seed postflight: expected no upstream sign-in on every connection health server for each held sign-in, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID(), s.det("mcpserver-notion"), s.det("mcpserver-deepwiki")},
-				GithubServerID:     s.det("mcpserver-github"),
-				GithubAuthClientID: s.det("auth-client-github-forwarded"),
+				OrgNoAuthServerIds: append(s.healthServerIDs(), s.det("mcpserver-shadow-official")),
 				ProjectID:          proj,
+				HealthIssuerID:     s.healthIssuer(),
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended Linear client or Slack no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Example OAuth server client or Example Shared Credential server client"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,
@@ -246,7 +257,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID: s.det("mcpserver-linear"),
 				AuthClientID:   s.det("auth-client-github-token"),
 			})
-		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on Linear, found %d"},
+		}, 1, "demo seed postflight: expected the headless app's profile to choose the shared token on the Example OAuth server, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDExecutionProfileChoices(ctx, repo.PostflightIDExecutionProfileChoicesParams{
 				ProjectID:      proj,
@@ -254,15 +265,15 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID: s.det("mcpserver-linear"),
 				AuthClientID:   s.det("auth-client-github-token"),
 			})
-		}, 2, "demo seed postflight: expected the bound assistant's two profiles to choose the shared token on Linear, found %d"},
+		}, 2, "demo seed postflight: expected the bound assistant's two profiles to choose the shared token on the Example OAuth server, found %d"},
 		{byProj(s.q.PostflightIDServiceAccountHeaders), 1, "demo seed postflight: expected 1 Remote MCP Service Account header, found %d"},
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
 		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},
-		{byProj(s.q.PostflightIDConnections), 11, "demo seed postflight: expected 11 MCP connections, found %d"},
+		{byProj(s.q.PostflightIDConnections), 11 + healthHeld, "demo seed postflight: expected 11 MCP connections plus the connection health ones, found %d"},
 		// Spread across servers, not pooled on one: the connections tab groups
 		// by MCP server, and a single group makes that view look broken.
-		{byProj(s.q.PostflightIDConnectionServers), 4, "demo seed postflight: connections span %d MCP servers, expected 4"},
+		{byProj(s.q.PostflightIDConnectionServers), 5, "demo seed postflight: connections span %d MCP servers, expected 5"},
 		// Everyone holds one. A person whose usage panels show a week of
 		// traffic beside an empty connections tab reads as a broken join.
 		{func(ctx context.Context) (int64, error) {
@@ -292,6 +303,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:       org,
 				ProjectID:   proj,
 				AssistantID: s.det("assistant-bound"),
+				Issuer:      s.assistantIssuer,
+				JwksUri:     s.assistantIssuer + jwks.Path,
 				OwnerUserID: s.userID(demoUsers[0].handle),
 			})
 		}, 1, "demo seed postflight: identity-bound assistant root is incoherent"},
@@ -338,6 +351,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// unreviewed IS the absence of one — so the table stores just the two
 		// decided states, and both have to survive the reseed with their full
 		// complement of rows.
+		{byOrg(s.q.PostflightIDLinkedAITools), 5, "demo seed postflight: %d AI tool decisions linked to their catalog product, expected 5"},
 		{byOrg(s.q.PostflightIDApprovedAITools), 3, "demo seed postflight: %d approved AI tools, expected 3"},
 		{byOrg(s.q.PostflightIDBlockedAITools), 2, "demo seed postflight: %d blocked AI tools, expected 2"},
 		// Anything else in the column would be a row the seed no longer means
@@ -363,7 +377,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				DirectGrant:      s.det("github-direct-grant"),
 				WildcardGrant:    s.det("github-wildcard-grant"),
 			})
-		}, 3, "demo seed postflight: expected 3 GitHub Check Access grants, found %d"},
+		}, 3, "demo seed postflight: expected 3 Check Access grants for the Example Shared Credential server, found %d"},
 		{byOrg(s.q.PostflightIDSlackIdentityMappings), 6, "demo seed postflight: expected 6 Slack mapping examples, found %d"},
 		{byProj(s.q.PostflightIDMessageParticipants), 3, "demo seed postflight: expected 3 message participants, found %d"},
 		{byOrg(s.q.PostflightIDSlackDirectoryMemberships), 10, "demo seed postflight: expected 10 Slack workspace memberships, found %d"},

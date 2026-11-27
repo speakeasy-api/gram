@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { cn, getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +28,7 @@ import {
   RemoteOrganizationDefaultStep,
   RemoteSetupScriptStep,
 } from "./device-agent-cloud-setup";
+import { IntunePackageDownload } from "./intune-package-download";
 
 // Public, unauthenticated bucket the release pipeline publishes to. The
 // manifest (releases.json) lists the current version + per-platform URLs;
@@ -690,9 +692,24 @@ function ManualIdentity({ os }: { os: OsKey }) {
   // start the same sign-in, so the terminal command stays collapsed there.
   // Linux has no app, so the CLI is the only way.
   const hasApp = os !== "linux";
+  // Sign-in always goes to the agent's default host: the host override is read
+  // only from managed configuration, so on any other deployment a device needs
+  // managed.json even when it is the only one.
+  const controlPlaneURL = clientServerURLOverride("deviceAgent");
 
   return (
     <div className="flex flex-col gap-4">
+      {controlPlaneURL && (
+        <Alert variant="warning">
+          <AlertTitle>Use managed.json on this Speakeasy host</AlertTitle>
+          <AlertDescription>
+            Signing in connects the agent to its default Speakeasy host, not{" "}
+            <code>{controlPlaneURL}</code>. Set up identity with the{" "}
+            <code>managed.json</code> from the Fleet (MDM) tab instead, even on
+            a single device.
+          </AlertDescription>
+        </Alert>
+      )}
       <Text muted>
         On a device that isn't MDM-managed, set identity by signing in once
         after installing with no <code>managed.json</code> required.
@@ -785,6 +802,7 @@ function GenerateInlineButton({
 // tooling generally handles naming/update policy itself for profiles). Both
 // delivery methods work; if both are present, the profile wins per field.
 function ConfigurationProfileNote() {
+  const controlPlaneURL = clientServerURLOverride("deviceAgent");
   return (
     <div className="bg-secondary/30 border-border rounded-md border p-4">
       <SubHeading>Configuration Profile (preferred on macOS)</SubHeading>
@@ -803,7 +821,12 @@ function ConfigurationProfileNote() {
   <key>v</key><integer>1</integer>
   <key>email</key><string>jane.doe@example.com</string>
   <key>org_token</key><string>spk_org_…</string>
-  <key>org_slug</key><string>example-corp</string>
+  <key>org_slug</key><string>example-corp</string>${
+    controlPlaneURL
+      ? `
+  <key>_control_plane_url</key><string>${escapeXML(controlPlaneURL)}</string>`
+      : ""
+  }
 </dict>
 </plist>`}</CodeBlock>
       <Text small muted className="mt-2">
@@ -814,6 +837,13 @@ function ConfigurationProfileNote() {
       </Text>
     </div>
   );
+}
+
+function escapeXML(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 // managedAutoUpdate picks the update mode the example managed.json ships with.
@@ -843,6 +873,10 @@ export function ManagedProfileExample({
   // shows an MDM substitution placeholder ($EMAIL) rather than the viewing
   // admin's address — the MDM swaps it per device, or it's omitted and the user
   // enrolls manually.
+  //
+  // _control_plane_url points the agent at this deployment when the agent's
+  // default host does not reach it (another partition, dev, a local stack).
+  const controlPlaneURL = clientServerURLOverride("deviceAgent");
   const buildManagedJson = (orgToken: string) =>
     JSON.stringify(
       {
@@ -852,6 +886,7 @@ export function ManagedProfileExample({
         org_slug: orgSlug || "acme-corp",
         org_name: orgName || "Acme Corporation",
         auto_update: managedAutoUpdate(os),
+        ...(controlPlaneURL ? { _control_plane_url: controlPlaneURL } : {}),
       },
       null,
       2,
@@ -911,6 +946,13 @@ export function ManagedProfileExample({
           {hasExistingAgentKey ? "Re-generate token" : "Generate token"}
         </strong>{" "}
         in the example to mint the <code>org_token</code>.
+        {controlPlaneURL && (
+          <>
+            {" "}
+            Keep <code>_control_plane_url</code>: it connects the agent to this
+            Speakeasy host instead of its default.
+          </>
+        )}
       </Text>
       {os === undefined && (
         <Text small muted className="mt-2">
@@ -1282,7 +1324,7 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
 // manual/MDM on-ramp), so the direct-download URL is built from the resolved
 // version rather than read off the manifest artifacts.
 function WinInstallStep() {
-  const { data } = useAgentReleases();
+  const { data, isError: releasesFailed } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   // Without a stable link (a non-HTTPS server URL) the snippet builds the
   // versioned URL against the always-HTTPS release bucket instead.
@@ -1299,9 +1341,19 @@ msiexec /i speakeasy-agent.msi`;
       <AgentIntro />
       <div className="flex flex-col gap-3">
         <SubLabel>Deploy the msi with your MDM</SubLabel>
+        <IntunePackageDownload
+          version={version}
+          msiUrl={
+            version
+              ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+              : null
+          }
+          autoUpdate={managedAutoUpdate("windows")}
+          lookupFailed={releasesFailed}
+        />
         <InstallerDownload ext="msi" stablePath={STABLE_MSI_PATH} />
         <Text small muted>
-          Upload the msi to Intune or another MDM as a{" "}
+          For another MDM, upload the msi as a{" "}
           <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
           and assign it per machine. It installs the daemon, the CLI and the
           agent app under <code>C:\Program Files\Speakeasy\</code> and registers

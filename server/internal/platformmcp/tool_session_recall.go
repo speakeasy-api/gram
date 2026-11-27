@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -136,8 +136,9 @@ func continueSessionAnnotations() *mcp.ToolAnnotations {
 	return writeAnnotations(false, false, false)
 }
 
+// The link is made to be opened outside this connection, in another app.
 func createSessionHandoffLinkAnnotations() *mcp.ToolAnnotations {
-	return writeAnnotations(false, false, false)
+	return writeAnnotations(false, false, true)
 }
 
 // Each stub declares the audiences its live counterpart declares, so the tools

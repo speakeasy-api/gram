@@ -88,7 +88,7 @@ func (a *StaffAuthenticator) Authenticate(ctx context.Context, token string) (Pr
 	}
 	// Always supply the explicit, internally decrypted key. Authorize's cookie
 	// fallback is only reachable for empty keys, which are rejected above.
-	verifiedCtx, err := a.verifier.Authorize(ctx, browserSessionID, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct // Only the scheme name is checked by the admin verifier.
+	verifiedCtx, err := a.verifier.Authorize(ctx, browserSessionID, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct_v5 // Only the scheme name is checked by the admin verifier.
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
 			return Principal{}, errors.New("staff session is no longer authorized")

@@ -36,6 +36,7 @@ export const AgentPolicySelectorDisposition = {
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
+  Unannotated: "unannotated",
 } as const;
 /**
  * Tool disposition filter (MCP scopes only).

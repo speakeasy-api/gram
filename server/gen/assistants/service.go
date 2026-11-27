@@ -23,14 +23,6 @@ type Service interface {
 	GetAssistant(context.Context, *GetAssistantPayload) (res *types.Assistant, err error)
 	// Create an assistant.
 	CreateAssistant(context.Context, *CreateAssistantPayload) (res *types.Assistant, err error)
-	// Give an existing assistant an agent and per-trigger workload identities. By
-	// default a new agent is created with access to every MCP server and skill in
-	// the project and to administering this assistant. Passing agent_id points the
-	// assistant at an existing agent of the project instead; that agent keeps its
-	// policy and gains administration of this assistant. Either way the agent is
-	// managed like any other agent afterwards. Existing assistants are never
-	// upgraded implicitly; repeating the upgrade is safe.
-	UpgradeAssistantIdentity(context.Context, *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error)
 	// Update an assistant.
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
 	// Delete an assistant.
@@ -41,6 +33,12 @@ type Service interface {
 	// fresh chat id. The reply is delivered asynchronously; poll the chat service
 	// (loadChat) to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
+	// Infer what the calling user is trying to do from their recent dashboard
+	// activity, so the Project Assistant can open with a specific offer of help
+	// instead of an empty prompt. The activity journal is sent by the dashboard
+	// and is not stored. Returns no goal when the activity is too thin to infer a
+	// task.
+	InferIntent(context.Context, *InferIntentPayload) (res *AssistantIntent, err error)
 	// Stop whatever a conversation is currently generating. Cancels turns still
 	// queued on the conversation's thread and interrupts the turn in flight on the
 	// assistant runtime, so the reply stops where it is rather than finishing in
@@ -89,7 +87,18 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"listAssistants", "getAssistant", "createAssistant", "upgradeAssistantIdentity", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant", "listExecutionProfiles", "setExecutionProfileChoice"}
+var MethodNames = [12]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "inferIntent", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant", "listExecutionProfiles", "setExecutionProfileChoice"}
+
+// One thing the user did or saw in the dashboard.
+type AssistantActivityEntry struct {
+	// When it happened.
+	At string
+	// What kind of entry this is.
+	Kind string
+	// A short description, such as a page title, an action and its outcome, or an
+	// error message.
+	Detail string
+}
 
 // AssistantExecutionProfile is the result type of the assistants service
 // setExecutionProfileChoice method.
@@ -106,6 +115,27 @@ type AssistantExecutionProfile struct {
 	Servers []*ExecutionProfileServer
 }
 
+// AssistantIntent is the result type of the assistants service inferIntent
+// method.
+type AssistantIntent struct {
+	// The task the user appears to be working on. Absent when no task can be
+	// inferred.
+	Goal *string
+	// Where the user is in that task.
+	Stage *string
+	// What appears to be stopping the user. Absent when nothing is.
+	Blocker *string
+	// How stuck the user appears to be.
+	Frustration string
+	// A short, specific line the assistant can open with. Absent when there is
+	// nothing specific to say.
+	Opener *string
+	// Up to three short prompts the user can send.
+	SuggestedPrompts []string
+	// How sure the inference is, from 0 to 1.
+	Confidence float64
+}
+
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
 type CreateAssistantPayload struct {
@@ -115,6 +145,8 @@ type CreateAssistantPayload struct {
 	Name string
 	// The model identifier used by the assistant.
 	Model string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string
 	// The system instructions for the assistant.
 	Instructions string
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -194,6 +226,20 @@ type GetAssistantPayload struct {
 // GetManagedAssistantPayload is the payload type of the assistants service
 // getManagedAssistant method.
 type GetManagedAssistantPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// InferIntentPayload is the payload type of the assistants service inferIntent
+// method.
+type InferIntentPayload struct {
+	// The Project Assistant the inference is for.
+	AssistantID string
+	// The dashboard path the user is on, without the organization and project
+	// prefix.
+	CurrentPath *string
+	// The user's recent dashboard activity, oldest first.
+	Activity         []*AssistantActivityEntry
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -328,6 +374,8 @@ type UpdateAssistantPayload struct {
 	Name *string
 	// The model identifier used by the assistant.
 	Model *string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort *string
 	// The system instructions for the assistant.
 	Instructions *string
 	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
@@ -350,20 +398,6 @@ type UpdateAssistantPayload struct {
 	ExpectedRuntimeVersion *int
 	// The assistant status.
 	Status *string
-}
-
-// UpgradeAssistantIdentityPayload is the payload type of the assistants
-// service upgradeAssistantIdentity method.
-type UpgradeAssistantIdentityPayload struct {
-	// The assistant ID.
-	ID string
-	// An existing agent of the project to use instead of creating one. Requires
-	// owning the agent or agent:authorize on it.
-	AgentID *string
-	// The name of the new agent. Cannot be combined with agent_id.
-	AgentName        *string
-	SessionToken     *string
-	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

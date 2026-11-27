@@ -1,14 +1,56 @@
 // @vitest-environment node
+import { ListScopesResult$inboundSchema } from "@gram/client/models/components/listscopesresult.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import { listUserGrantsResultFromJSON } from "@gram/client/models/components/listusergrantsresult.js";
 import { queryKeyGrants } from "@gram/client/react-query/grants.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  canInGrants,
   exclusionScopesForScope,
   hasScopeInGrants,
   hasScopeInProject,
   resourceKindForScope,
   selectorMatches,
   selectorMatchesStrict,
+  canWriteMCPServerInGrants,
+  canWriteProjectMCPServersInGrants,
 } from "./useRBAC";
+import servedCatalogue from "../pages/access/listScopes.fixture.json";
+import * as authz from "@/lib/authz.gen";
+
+describe("Channels effective-grants contract", () => {
+  const scopes = ["channels:connect", "channels:admin", "channels:read_all"];
+
+  it("decodes successful grant responses containing Channels scopes", () => {
+    // These are real scope slugs, not unknown values to discard: rejecting a
+    // 200 response makes MembershipSyncGuard unmount the entire route outlet.
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: scopes.map((scope) => ({ scope, sub_scopes: [scope] })),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value?.grants.map((grant) => grant.scope)).toEqual(scopes);
+    expect(result.value?.grants.map((grant) => grant.subScopes)).toEqual(
+      scopes.map((scope) => [scope]),
+    );
+  });
+
+  it("preserves forward-compatible scopes without authorizing known permissions", () => {
+    const result = listUserGrantsResultFromJSON(
+      JSON.stringify({
+        grants: [{ scope: "unknown:permission" }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(
+      hasScopeInGrants(result.value!.grants, "channels:connect", "*"),
+    ).toBe(false);
+    expect(hasScopeInGrants(result.value!.grants, "project:write", "*")).toBe(
+      false,
+    );
+  });
+});
 
 describe("grants query key", () => {
   it("isolates effective grants by session", () => {
@@ -28,6 +70,11 @@ describe("resourceKindForScope", () => {
 
   it("returns 'project' for log scopes, which are granted per project", () => {
     expect(resourceKindForScope("log:read")).toBe("project");
+  });
+
+  it("returns 'project' for memory scopes, granted per project", () => {
+    expect(resourceKindForScope("memory:read")).toBe("project");
+    expect(resourceKindForScope("memory:write")).toBe("project");
   });
 
   it("returns 'mcp' for mcp scopes", () => {
@@ -278,10 +325,12 @@ describe("exclusionScopesForScope", () => {
       "project:blocked_write",
       "project:blocked_read",
     ]);
-    // The mcp:blocked_* scopes are independent of one another: a block on
-    // connect leaves read and write standing.
+    // A block on read also takes write away; connect's block stands alone.
     expect(exclusionScopesForScope("mcp:read")).toEqual(["mcp:blocked_read"]);
-    expect(exclusionScopesForScope("mcp:write")).toEqual(["mcp:blocked_write"]);
+    expect(exclusionScopesForScope("mcp:write")).toEqual([
+      "mcp:blocked_write",
+      "mcp:blocked_read",
+    ]);
     expect(exclusionScopesForScope("mcp:connect")).toEqual([
       "mcp:blocked_connect",
     ]);
@@ -299,10 +348,65 @@ describe("exclusionScopesForScope", () => {
       "assistant:blocked_write",
       "assistant:blocked_read",
     ]);
+    expect(exclusionScopesForScope("workload:read")).toEqual([
+      "workload:blocked_read",
+    ]);
+    expect(exclusionScopesForScope("workload:write")).toEqual([
+      "workload:blocked_write",
+      "workload:blocked_read",
+    ]);
+  });
+
+  // listScopes.fixture.json is written by the server's
+  // TestListScopes_DashboardFixture, so a scope the server pairs with an
+  // exclusion cannot be missing here.
+  it("pairs every scope with the exclusion scope the server declares", () => {
+    const served = ListScopesResult$inboundSchema.parse(servedCatalogue).scopes;
+    const declared = served.filter((entry) => entry.exclusionScope);
+    expect(declared.length).toBeGreaterThan(0);
+    for (const entry of declared) {
+      expect(
+        exclusionScopesForScope(entry.slug as Scope),
+        entry.slug,
+      ).toContain(entry.exclusionScope);
+    }
   });
 });
 
 describe("hasScopeInGrants", () => {
+  it("withdraws workload access for a workload block", () => {
+    const workloadWriter = {
+      scope: "workload:write",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+      subScopes: ["workload:read"],
+    };
+    const blockedRead = {
+      scope: "workload:blocked_read",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+    };
+    const blockedWrite = {
+      scope: "workload:blocked_write",
+      selectors: [{ resourceKind: "workload", resourceId: "*" }],
+    };
+
+    expect(hasScopeInGrants([workloadWriter], "workload:write")).toBe(true);
+    // A read block withdraws both, as the server's write check also
+    // honours it.
+    expect(
+      hasScopeInGrants([workloadWriter, blockedRead], "workload:read"),
+    ).toBe(false);
+    expect(
+      hasScopeInGrants([workloadWriter, blockedRead], "workload:write"),
+    ).toBe(false);
+    // A write block leaves read access in place.
+    expect(
+      hasScopeInGrants([workloadWriter, blockedWrite], "workload:write"),
+    ).toBe(false);
+    expect(
+      hasScopeInGrants([workloadWriter, blockedWrite], "workload:read"),
+    ).toBe(true);
+  });
+
   const skillWildcard = {
     scope: "skill:write",
     selectors: [{ resourceKind: "skill", resourceId: "*" }],
@@ -591,5 +695,117 @@ describe("plugin scope isolation", () => {
     const grants = [{ scope: "plugin:write" }];
     expect(hasScopeInGrants(grants, "skill:write", "project-a")).toBe(false);
     expect(hasScopeInGrants(grants, "mcp:write", "project-a")).toBe(false);
+  });
+});
+
+describe("MCP server write in one of two projects", () => {
+  const grants = [
+    {
+      scope: "mcp:write",
+      selectors: [
+        { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+      ],
+    },
+  ];
+
+  it("allows editing a gateway only in the project the grant names", () => {
+    expect(
+      canWriteMCPServerInGrants(grants, {
+        serverId: "gateway-a",
+        projectId: "project-a",
+      }),
+    ).toBe(true);
+    expect(
+      canWriteMCPServerInGrants(grants, {
+        serverId: "gateway-b",
+        projectId: "project-b",
+      }),
+    ).toBe(false);
+  });
+
+  it("allows adding servers only in the project the grant names", () => {
+    expect(canWriteProjectMCPServersInGrants(grants, "project-a")).toBe(true);
+    expect(canWriteProjectMCPServersInGrants(grants, "project-b")).toBe(false);
+  });
+});
+
+describe("canInGrants", () => {
+  const writeInProjectA = [
+    {
+      scope: "mcp:write",
+      subScopes: ["mcp:read"],
+      selectors: [
+        { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+      ],
+    },
+  ];
+
+  it("allows a server only in the project the grant names", () => {
+    expect(
+      canInGrants(
+        writeInProjectA,
+        authz.mcpServer("gateway-a", "project-a").write(),
+      ),
+    ).toBe(true);
+    expect(
+      canInGrants(
+        writeInProjectA,
+        authz.mcpServer("gateway-b", "project-b").write(),
+      ),
+    ).toBe(false);
+    expect(
+      canInGrants(writeInProjectA, authz.mcpServers("project-b").write()),
+    ).toBe(false);
+  });
+
+  it("answers a probe on a collection with any resource a grant reaches", () => {
+    const oneServer = [
+      {
+        scope: "mcp:read",
+        selectors: [
+          {
+            resourceKind: "mcp",
+            resourceId: "server-1",
+            projectId: "project-a",
+          },
+        ],
+      },
+    ];
+    expect(canInGrants(oneServer, authz.mcpServers("project-a").read())).toBe(
+      false,
+    );
+    expect(
+      canInGrants(oneServer, authz.mcpServers("project-a").read().probe()),
+    ).toBe(true);
+    expect(
+      canInGrants(oneServer, authz.mcpServers("project-b").read().probe()),
+    ).toBe(false);
+  });
+
+  it("refuses a check whose id cannot name a resource", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const everything = [{ scope: "mcp:write", subScopes: ["mcp:read"] }];
+    expect(canInGrants(everything, authz.mcpServer("s", "").write())).toBe(
+      false,
+    );
+    expect(canInGrants(everything, authz.mcpServer("*", "p").write())).toBe(
+      false,
+    );
+    expect(
+      canInGrants(everything, authz.mcpServer("$marker", "p").write()),
+    ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("has space", "p").write()),
+    ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("next\u0085line", "p").write()),
+    ).toBe(false);
+    expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
+      true,
+    );
+    expect(consoleError).toHaveBeenCalledTimes(5);
+    consoleError.mockRestore();
   });
 });

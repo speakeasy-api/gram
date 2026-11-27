@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
@@ -55,6 +56,9 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 	case errors.Is(err, context.Canceled):
 		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
 	default:
+		if address := guardian.AddressFailureOf(err, p.Identity.TunneledMCPServerID != ""); address != guardian.AddressFine {
+			return oops.E(oops.CodeGatewayError, err, "%s", address.EndUserMessage("This server", guardian.OwnAddress)).LogError(ctx, p.Logger)
+		}
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}
 }

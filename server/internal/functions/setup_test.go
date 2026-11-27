@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -112,9 +113,9 @@ func newTestFunctionsService(t *testing.T) (context.Context, *testInstance) {
 	ph := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := functions.NewService(logger, tracerProvider, conn, enc, tigrisStore)
-	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), authzEngine, auditLogger)
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+	svc := functions.NewService(logger, tracerProvider, conn, runnerkeys.WithoutOrganizationEncryption(logger, conn, enc), tigrisStore)
+	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, ph, testenv.DefaultSiteURL(t), authzEngine, auditLogger, true)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, true)
 
 	return ctx, &testInstance{
 		service:        svc,

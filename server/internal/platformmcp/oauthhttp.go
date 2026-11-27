@@ -1,12 +1,14 @@
-//nolint:exhaustruct // OAuth handlers intentionally use zero values for non-wire Platform MCP contract fields and third-party request structs.
+//nolint:exhaustruct_v5 // OAuth handlers intentionally use zero values for non-wire Platform MCP contract fields and third-party request structs.
 package platformmcp
 
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -54,6 +57,18 @@ const (
 
 //go:embed oauth_page.html
 var oauthPageHTML string
+
+// oauthPageScript is served as an external file because the ingress CSP
+// forbids inline scripts. The URL carries a content hash so it can be cached
+// as immutable.
+//
+//go:embed oauth_page.js
+var oauthPageScript []byte
+
+var oauthPageScriptURL = func() string {
+	sum := sha256.Sum256(oauthPageScript)
+	return "/platform-mcp/oauth-page-" + hex.EncodeToString(sum[:])[:8] + ".js"
+}()
 
 var (
 	oauthPageTemplate      = template.Must(template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML)).Parse(consentpage.LogoTemplate))
@@ -96,6 +111,7 @@ type oauthPageData struct {
 	State            string
 	CSRFToken        string
 	ScriptNonce      string
+	ScriptURL        string
 	AutoClose        bool
 	// WorkspaceName prefills the workspace form, and WorkspaceError explains
 	// why a submitted name was refused.
@@ -252,6 +268,9 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 // platform host is its own RFC 8707 resource with its own authorization
 // server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
+	// aiCatalog identifies CIMD clients for admission.
+	aiCatalog *aivendors.Store
+
 	// baseURL is the configured server URL. It is the origin for requests not
 	// stamped as a platform host.
 	baseURL       *url.URL
@@ -281,6 +300,9 @@ type OAuthHTTP struct {
 }
 
 type OAuthHTTPConfig struct {
+	// AICatalog identifies CIMD clients for admission. Required.
+	AICatalog *aivendors.Store
+
 	BaseURL       *url.URL
 	Environment   string
 	Cache         cache.Cache
@@ -304,7 +326,7 @@ type OAuthHTTPConfig struct {
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
-	if config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
+	if config.AICatalog == nil || config.BaseURL == nil || config.BaseURL.Scheme == "" || config.BaseURL.Host == "" || config.Cache == nil || config.Store == nil || config.Identity == nil || config.Gate == nil || config.Authorizer == nil || config.Organizations == nil || config.Signer == nil || config.Encryption == nil {
 		return nil, errors.New("platform oauth http configuration is incomplete")
 	}
 	credentials, err := NewCredentialCodec(config.Encryption)
@@ -331,6 +353,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		idpCallbackBaseURL = *config.IDPCallbackBaseURL
 	}
 	return &OAuthHTTP{
+		aiCatalog:     config.AICatalog,
 		baseURL:       &baseURL,
 		environment:   config.Environment,
 		cache:         cache.NewTypedObjectCache[oauthChallenge](nil, config.Cache, cache.SuffixNone),
@@ -376,6 +399,13 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
 	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
 	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
+	mux.Handle("GET", oauthPageScriptURL, serveOAuthPageScript)
+}
+
+func serveOAuthPageScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = w.Write(oauthPageScript)
 }
 
 func handlerFunc(handler http.Handler) http.HandlerFunc {
@@ -1630,6 +1660,7 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 	data.ScriptNonce = scriptNonce
+	data.ScriptURL = oauthPageScriptURL
 	data.Styles = consentpage.Styles
 
 	var page strings.Builder
@@ -1639,17 +1670,19 @@ func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, 
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
+	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(scriptNonce))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }
 
-func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
-	formAction := "'self'"
-	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
-		formAction += " " + uri.Scheme + "://" + uri.Host
-	}
-	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
+// oauthPageContentSecurityPolicy omits form-action on purpose. Chrome checks
+// form-action on every hop of the redirect chain after a form submission, and
+// OAuth clients such as ChatGPT redirect their callback onward to origins we
+// cannot know. Allowing only the registered callback origin blocks the final
+// navigation after the single-use state is already spent. The MCP consent page
+// leaves form-action unset for the same reason.
+func oauthPageContentSecurityPolicy(scriptNonce string) string {
+	return "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {

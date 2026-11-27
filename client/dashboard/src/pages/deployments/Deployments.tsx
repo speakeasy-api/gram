@@ -29,7 +29,7 @@ import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 
 export default function DeploymentsPage(): JSX.Element {
   return (
@@ -58,8 +58,6 @@ type DeploymentSummary = {
   openapiv3ToolCount: number;
   functionsAssetCount: number;
   functionsToolCount: number;
-  externalMcpAssetCount: number;
-  externalMcpToolCount: number;
 };
 
 function useDeploymentActions(
@@ -266,19 +264,13 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) =>
-        row.openapiv3AssetCount +
-        row.functionsAssetCount +
-        row.externalMcpAssetCount,
+      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) =>
-        row.openapiv3ToolCount +
-        row.functionsToolCount +
-        row.externalMcpToolCount,
+      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
       width: "120px",
     },
     {

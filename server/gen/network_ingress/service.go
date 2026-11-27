@@ -69,8 +69,8 @@ type CheckHealthPayload struct {
 type CreateIngressPayload struct {
 	SessionToken *string
 	Provider     string
-	// Lowercase DNS label
-	Hostname          string
+	// Lowercase DNS label; defaults to speakeasy
+	Hostname          *string
 	OauthClientID     string
 	OauthClientSecret string
 	IdentityRequired  *bool
@@ -105,6 +105,10 @@ type NetworkIngress struct {
 	Provider string
 	// Private DNS label advertised by the provider
 	Hostname string
+	// What hosts the ingress on the customer's tailnet: the Speakeasy tailnet
+	// gateway or the Tailscale Kubernetes operator. Fixed when the ingress is
+	// created.
+	Runtime string
 	// Pinned endpoint namespace
 	EndpointNamespaceKind string
 	// Pinned custom-domain ID when endpoint_namespace_kind is custom_domain
@@ -120,7 +124,12 @@ type NetworkIngress struct {
 	// Observed private DNS name
 	DNSName *string
 	// Latest redacted error code
-	LastError       *string
+	LastError *string
+	// The gateway's explanation of last_error when it is
+	// provider_certificate_unavailable: why the TLS certificate request failed,
+	// such as a Let's Encrypt rate limit, and when the gateway retries. Returned
+	// by getIngress only.
+	StatusDetail    *string
 	HealthCheckedAt *string
 	ConnectedSince  *string
 	CreatedAt       string
@@ -140,6 +149,10 @@ type NetworkIngressDeleteImpact struct {
 // getIngress method.
 type NetworkIngressResult struct {
 	Ingress *NetworkIngress
+	// Tailscale tag this environment's gateway nodes and services carry. The
+	// organization's tailnet policy must own it, auto-approve the connection's
+	// service for it, and the OAuth client must be scoped to it.
+	GatewayTag string
 }
 
 // RotateCredentialsPayload is the payload type of the networkIngress service

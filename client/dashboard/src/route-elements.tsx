@@ -8,6 +8,7 @@ import {
   RedirectToAddUnproxiedMcp,
   RedirectToCatalog,
   RedirectToCatalogDetail,
+  RedirectToMcp,
   RedirectToSourceDetail,
   RedirectToSources,
 } from "@/pages/mcp/add/LegacyRedirects";
@@ -47,6 +48,8 @@ export const legacyMcpRedirects = (
       path="mcp/x/:mcpServerSlug/*"
       element={<RedirectFromMcpXNamespace />}
     />
+    <Route path="playground/*" element={<RedirectToMcp />} />
+    <Route path="sdks" element={<RedirectToMcp />} />
   </>
 );
 
@@ -55,7 +58,7 @@ export const routesWithSubroutes = (routes: PagedRoute[]): JSX.Element[] => {
     .filter((item) => !item.external)
     .map((item) => (
       <Route
-        key={item.title}
+        key={item.url}
         path={item.url}
         element={
           item.component ? (

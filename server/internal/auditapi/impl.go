@@ -33,14 +33,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 const listAuditLogsPageSize = 50
-
-// Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
-// override) are shown under a collective label instead of the staff member's
-// email. Logs viewed within the Speakeasy org itself are not masked.
-const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 type Service struct {
 	tracer trace.Tracer
@@ -48,20 +44,27 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+
+	// staffOrg is the deployment's Speakeasy staff organization. Its members'
+	// actions in customer orgs (e.g. via the dev-tools org override) are shown
+	// under a collective label instead of the staff member's email. Logs viewed
+	// within the staff organization itself are not masked.
+	staffOrg staff.Organization
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, staffOrg staff.Organization) *Service {
 	logger = logger.With(attr.SlogComponent("audit"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		staffOrg: staffOrg,
 	}
 }
 
@@ -84,7 +87,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
@@ -196,15 +199,16 @@ func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the
-// Speakeasy org, so their identities can be masked in customer-facing feeds.
-// It returns nil when the viewer is the Speakeasy org itself.
+// staff organization, so their identities can be masked in customer-facing
+// feeds. It returns nil when the viewer is the staff organization itself or the
+// deployment has no staff organization.
 func (s *Service) speakeasyActorIDs(ctx context.Context, viewerOrganizationID string, actorIDs []string) (map[string]bool, error) {
-	if viewerOrganizationID == speakeasyTeamOrganizationID || len(actorIDs) == 0 {
+	if !s.staffOrg.Configured() || s.staffOrg.Is(viewerOrganizationID) || len(actorIDs) == 0 {
 		return nil, nil
 	}
 
 	memberIDs, err := orgrepo.New(s.db).FilterOrganizationMemberUserIDs(ctx, orgrepo.FilterOrganizationMemberUserIDsParams{
-		OrganizationID: speakeasyTeamOrganizationID,
+		OrganizationID: s.staffOrg.ID(),
 		UserIds:        actorIDs,
 	})
 	if err != nil {
@@ -224,7 +228,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 

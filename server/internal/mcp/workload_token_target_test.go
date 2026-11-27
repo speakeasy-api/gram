@@ -87,13 +87,15 @@ func TestWorkloadTokenTargetFor_NoWorkloadGrant(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	hostLegacyToolset(t, f.fixtureContext(t), f.ti, toolset, slug, "private", noIssuer())
+	hostToolset(t, f.fixtureContext(t), f.ti, toolset, slug, "private", noIssuer())
 
 	base := strings.TrimSuffix(f.ti.serverURL.String(), "/")
 	for _, mcpURL := range []string{
 		base + "/mcp/" + slug,
 		base + "/mcp/does-not-exist-" + uuid.NewString()[:8],
 		base + "/x/mcp/" + slug,
+		base + "/mcp/gateway/org%2Fprojects%2Fproject",
+		base + "/mcp/gateway/org%2Fother/projects/project",
 		"https://unregistered.example.com/mcp/" + slug,
 	} {
 		target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), mcpURL)

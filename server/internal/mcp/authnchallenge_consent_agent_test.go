@@ -71,8 +71,9 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 		AuthorizerImpersonated:   new(bool),
 		AgentAuthorizationTarget: &target,
 		Endpoint: mcp.EndpointRef{
-			McpSlug:   toolset.McpSlug.String,
-			RouteBase: mcproute.MCP,
+			McpSlug:     toolset.McpSlug.String,
+			McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+			RouteBase:   mcproute.MCP,
 		},
 		ClientID:            client.ClientID,
 		RedirectURI:         client.RedirectUris[0],
@@ -305,12 +306,13 @@ func seedAgentOutageConnection(t *testing.T, ctx context.Context, ti *testInstan
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], providerURL, []uuid.UUID{fx.client.UserSessionIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, fx.orgID, "agent-outage-"+uuid.NewString()[:8], providerURL)
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, *authCtx.ProjectID, fx.toolset.ID, clientID)
 	access, err := ti.enc.Encrypt([]byte("expired"))
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: urn.NewUserSubject(fx.userID), UserSessionIssuerID: fx.client.UserSessionIssuerID, RemoteSessionClientID: clientID,
 		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{},

@@ -95,3 +95,57 @@ func (q *Queries) listHookInstalls(ctx context.Context, organizationID string, s
 	}
 	return page, nil
 }
+
+// HookVersionMixRow counts one organization's installs that last reported
+// one binary version and endpoint generation. LegacyEvents counts the hook
+// rows those installs sent to legacy per-tool endpoints.
+type HookVersionMixRow struct {
+	OrganizationID     string
+	BinaryVersion      string
+	EndpointGeneration string
+	Installs           uint64
+	Events             uint64
+	LegacyEvents       uint64
+}
+
+const hookVersionMixQuery = `
+SELECT organization_id, binary_version, endpoint_generation,
+       count() AS installs, sum(events) AS events, sum(legacy_events) AS legacy_events
+FROM (
+  SELECT organization_id,
+         argMaxIfMerge(binary_version) AS binary_version,
+         argMaxIfMerge(endpoint_generation) AS endpoint_generation,
+         sum(event_count) AS events,
+         arraySum(mapValues(mapFilter((k, v) -> startsWith(k, 'legacy_'), sumMap(events_by_generation)))) AS legacy_events
+  FROM hook_install_summaries
+  WHERE organization_id NOT IN ('', 'org_gram_demo_workspace')
+    AND day >= toDate(?) AND day < toDate(?)
+  GROUP BY organization_id, gram_project_id, user_email, hostname, harness
+)
+GROUP BY organization_id, binary_version, endpoint_generation
+ORDER BY organization_id, binary_version, endpoint_generation`
+
+// ListHookVersionMix counts installs per organization, version and endpoint
+// generation over the UTC days in [from, to). Staff-only: it spans every
+// tenant and must not be reached from a customer-facing surface.
+func (q *Queries) ListHookVersionMix(ctx context.Context, from, to time.Time) ([]HookVersionMixRow, error) {
+	rows, err := q.conn.Query(ctx, hookVersionMixQuery, from.UTC(), to.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("querying hook version mix: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+
+	out := []HookVersionMixRow{}
+	for rows.Next() {
+		var row HookVersionMixRow
+		if err := rows.Scan(&row.OrganizationID, &row.BinaryVersion, &row.EndpointGeneration,
+			&row.Installs, &row.Events, &row.LegacyEvents); err != nil {
+			return nil, fmt.Errorf("scanning hook version mix row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating hook version mix rows: %w", err)
+	}
+	return out, nil
+}

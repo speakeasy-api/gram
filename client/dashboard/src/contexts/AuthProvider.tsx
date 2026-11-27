@@ -45,7 +45,6 @@ import {
   useSessionData,
   useUser,
   usePylonInAppChat,
-  useFermatPixel,
 } from "./Auth";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 
@@ -60,6 +59,7 @@ const SLUG_EXEMPT_PATHS = [
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
+  "/ack",
   "/blocks",
   "/shared",
 ];
@@ -166,7 +166,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // organization-targeted feature flags resolve on the lockout pages too.
   useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
-  useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
   // Sync isAdmin into the SDK fetcher so it can attach X-Gram-Scope-Override in production.
   isPlatformAdminRef.current = session?.user.isAdmin ?? false;
@@ -303,8 +302,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Skip all slug-based redirect logic for exempt paths
-  const isSlugExempt = SLUG_EXEMPT_PATHS.some((p) =>
-    location.pathname.startsWith(p),
+  // Match whole path segments, so an org slug that only starts with an
+  // exempt path (e.g. /ackermann for /ack) still gets slug handling.
+  const isSlugExempt = SLUG_EXEMPT_PATHS.some(
+    (p) => location.pathname === p || location.pathname.startsWith(`${p}/`),
   );
 
   const pathParts = location.pathname.split("/").filter(Boolean);

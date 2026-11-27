@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -144,7 +145,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	// prevent the initiating browser from completing its login (including retries).
 	if federation := challengeState.Federation; federation != nil && federation.StartPhase == "ready" {
 		if err := validateChallengeBrowser(r, challengeState, true); err != nil {
-			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
+			s.connections.Step(ctx, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
 			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
 	}
@@ -153,14 +154,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	// state, so a copied callback URL cannot end the owner's sign-in.
 	if browser := challengeState.Browser; challengeState.FirstParty && challengeState.Federation == nil && browser != nil {
 		if browserBindingExpired(challengeState, time.Now()) {
-			s.endAttemptOnce(ctx, logger, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeExpired, mcpconnectionattempts.FromRequest(r))
+			s.endAttemptOnce(ctx, logger, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeExpired, mcpconnectionattempts.FromRequest(r))
 			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, errChallengeBrowserExpired, "sign-in took too long").LogWarn(ctx, logger), oauthui.ReasonExpired))
 		}
 		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
 			return s.continueFirstPartyBrowserHandoff(w, r, endpoint, challengeState)
 		}
 		if (browser.Handoff != "" && browser.Handoff != browserHandoffLogin) || !browserCookieMatches(r, browser.CookieID, browser.CallbackHash) {
-			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
+			s.connections.Step(ctx, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
 			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "sign-in browser binding is invalid").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
 		}
 	}
@@ -170,8 +171,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	// The state is spent, so whatever does not redirect onward ends the attempt.
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.FromRequest(r))
-	t.Attach(challengeState.connectionAttempt(endpoint))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(s.aiCatalog.SnapshotFor(ctx), challengeState.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.FromRequest(r))
+	t.Attach(challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint))
 	t.Consumed()
 	defer t.Finish(ctx)
 	onward := func(err error) error {
@@ -366,6 +367,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
 		if !optionalRefused {
+			// The login's credentials are retained once verified, and the code
+			// cannot be redeemed twice, so the organization's key must be able
+			// to seal them before the provider is asked.
+			if s.federatedLoginConsumer != nil {
+				if err := s.remoteChallengeMgr.UpstreamTokens().RequireUsable(ctx, nil, conv.ToPGText(endpoint.OrganizationID)); err != nil {
+					// Retryable for the caller, but recorded as a Speakeasy
+					// fault: the identity provider was never asked.
+					logger.WarnContext(ctx, "organization key cannot store federated login credentials", attr.SlogError(err))
+					return finishFederation(mcpconnectionattempts.CodeTransientFailure, oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable, "Sign-in is temporarily unavailable. Try again shortly", false)
+				}
+			}
 			verified, err = s.remoteChallengeMgr.ExchangeFederatedCode(ctx, provider, federation.CallbackURL, code, federation.Nonce, federation.Verifier)
 			if err != nil {
 				return failFederationDependency(err, "Federated identity verification failed. Restart login or contact your administrator")
@@ -417,10 +429,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
 			Evidence: signins.Evidence{
-				HostedDomain:       idpUser.Evidence.HostedDomain,
-				TenantID:           idpUser.Evidence.TenantID,
-				VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-				IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+				HostedDomain:        idpUser.Evidence.HostedDomain,
+				HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+				TenantID:            idpUser.Evidence.TenantID,
+				VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+				IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 			},
 			Impersonated:    impersonated,
 			AuthenticatedAt: authenticatedAt,
@@ -497,7 +510,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				return oops.E(oops.CodeBadRequest, nil, "this sign-in was revoked; sign in again from the start").LogWarn(ctx, logger)
 			}
-			return onward(s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID))
+			challengeState.FreshLoginForced = true
+			restartErr := s.restartSignIn(w, r, logger, endpoint, challengeState, signInRestart{
+				WorkOSSessionID: exchange.WorkOSSessionID, Stage: mcpmetrics.OAuthFlowStageIDPCallback, MustEnd: false, LoginHint: "", WorkOSOrganizationID: "",
+			})
+			return onward(restartErr)
 		}
 	}
 
@@ -602,43 +619,71 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(&subject))
+	s.connections.Step(ctx, challengeState.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(&subject))
 	t.Continue()
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }
 
-// restartRevokedSignIn ends a WorkOS session whose sign-in was revoked, then
-// sends the browser back to authenticate again, once, so the client is not
-// left retrying a grant that can never be vouched for.
-func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, workosSessionID string) error {
+// signInRestart is the WorkOS session a restarted sign-in ends and how the
+// new sign-in is steered.
+type signInRestart struct {
+	WorkOSSessionID string
+	Stage           mcpmetrics.OAuthFlowStage
+	// MustEnd stops before anything changes when the session can't be ended.
+	MustEnd bool
+	// LoginHint pre-fills the sign-in screen's email.
+	LoginHint string
+	// WorkOSOrganizationID is selected for the person on the sign-in screen.
+	WorkOSOrganizationID string
+}
+
+// reason names why the sign-in restarts, for logs.
+func (r signInRestart) reason() string {
+	if r.MustEnd {
+		return "account_switch"
+	}
+	return "sign_in_revoked"
+}
+
+// restartSignIn ends a WorkOS session, then sends the browser back to
+// authenticate again with a fresh login (OIDC Core 1.0 section 3.1.2.1,
+// prompt=login). A revoked sign-in restarts once (the caller sets
+// FreshLoginForced), so the client is not left retrying a grant that can
+// never be vouched for; a person switching accounts restarts from the
+// consent page.
+func (s *Service) restartSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, restart signInRestart) error {
 	ctx := r.Context()
-	issuerID, mcpSlug := challengeState.UserSessionIssuerID.String(), endpoint.Slug
+	issuerID, mcpSlug, stage := challengeState.UserSessionIssuerID.String(), endpoint.Slug, restart.Stage
 	// Ended even when another organization uses it: AuthKit would otherwise
 	// hand it back and the user could never get past this login.
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokedSignInRevokeTimeout)
-	if err := s.sessions.RevokeSession(revokeCtx, workosSessionID); err != nil {
-		logger.WarnContext(ctx, "end revoked workos session before fresh login", attr.SlogError(err))
-	}
+	err := s.idpSessions.RevokeSession(revokeCtx, restart.WorkOSSessionID)
 	cancel()
+	if err != nil && !signins.WorkOSSessionGone(err) {
+		if restart.MustEnd {
+			return oops.E(oops.CodeUnavailable, err, switchAccountRetry).LogError(ctx, logger)
+		}
+		logger.WarnContext(ctx, "end workos session before fresh login", attr.SlogError(err))
+	}
+	// The session is gone now: finish even if the browser goes away.
+	ctx = context.WithoutCancel(ctx)
 	challengeState.ID = uuid.NewString()
-	challengeState.FreshLoginForced = true
 	// The person's browser is here: its binding starts over, so the restart
 	// does not inherit the time already spent.
 	handoff := ""
 	if challengeState.FirstParty && challengeState.Federation == nil && challengeState.Browser != nil {
-		var err error
 		if handoff, err = s.rebindFirstPartyBrowser(w, endpoint, &challengeState, time.Now()); err != nil {
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 			return oops.E(oops.CodeUnexpected, err, "rebind sign-in browser").LogError(ctx, logger)
 		}
 	}
-	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+	if err = s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 	if handoff != "" {
-		logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
+		logger.InfoContext(ctx, "requiring a fresh login", attr.SlogReason(restart.reason()))
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		http.Redirect(w, r, handoff, http.StatusFound)
@@ -646,7 +691,8 @@ func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, l
 	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		s.dropRestartedChallenge(ctx, logger, challengeState.ID)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 	}
 	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
@@ -654,17 +700,32 @@ func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, l
 		Scope:           "",
 		State:           challengeState.ID,
 		ScopesSupported: nil,
-		LoginHint:       "",
+		LoginHint:       restart.LoginHint,
 		ScreenHint:      "",
 		Prompt:          "login",
+		OrganizationID:  restart.WorkOSOrganizationID,
 	})
 	if err != nil {
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		s.dropRestartedChallenge(ctx, logger, challengeState.ID)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, stage)
 		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 	}
-	logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
-	http.Redirect(w, r, idpURL.String(), http.StatusFound)
+	logger.InfoContext(ctx, "requiring a fresh login", attr.SlogReason(restart.reason()))
+	// A form post continues with GET (RFC 9110 section 15.4.4).
+	status := http.StatusFound
+	if r.Method == http.MethodPost {
+		status = http.StatusSeeOther
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, idpURL.String(), status)
 	return nil
+}
+
+// dropRestartedChallenge removes a restart's stored challenge whose sign-in never started.
+func (s *Service) dropRestartedChallenge(ctx context.Context, logger *slog.Logger, id string) {
+	if err := s.authnChallengeCache.DeleteByKey(ctx, "authnChallenge:"+id); err != nil {
+		logger.WarnContext(ctx, "remove unstarted sign-in challenge", attr.SlogError(err))
+	}
 }
 
 // revokedSignInRevokeTimeout bounds ending a revoked WorkOS session inline.

@@ -4,7 +4,6 @@ import type { ToolsFilter } from "@/elements/types";
 import type { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
-import { trackError } from "@/elements/lib/errorTracking";
 import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 import {
   createLoadSkillTool,
@@ -23,6 +22,7 @@ interface NormalizedServer {
   /** Namespace prefix for this server's tools; only consulted when more than one server is configured. */
   name: string | undefined;
   environment: string | undefined;
+  accessToken?: string;
 }
 
 export function useMCPTools({
@@ -54,9 +54,16 @@ export function useMCPTools({
   const authQueryKey = Object.entries(auth.headers ?? {}).map(
     ([k, v]) => `${k}:${String(v)}`,
   );
-  const serversQueryKey = servers.map(
-    (s) => `${s.url}|${s.name ?? ""}|${s.environment ?? ""}`,
+  // Token rotation must reconnect without putting the bearer in the query key.
+  const hasServerTokens = servers.some((server) => server.accessToken);
+  const tokenSignature = hasServerTokens
+    ? JSON.stringify(servers.map((server) => server.accessToken))
+    : undefined;
+  const tokenRevision = useMemo(
+    () => (tokenSignature ? crypto.randomUUID() : undefined),
+    [tokenSignature],
   );
+  const serversQueryKey = servers.map((s) => [s.url, s.name, s.environment]);
 
   // Each MCP transport stores a direct reference to its headers object and
   // spreads it on every send, so writes propagate to subsequent tool-call
@@ -91,7 +98,13 @@ export function useMCPTools({
   const mcpHeaders = headersProxyRef.current;
 
   const queryResult = useQuery({
-    queryKey: ["mcpTools", serversQueryKey, envQueryKey, authQueryKey],
+    queryKey: [
+      "mcpTools",
+      serversQueryKey,
+      envQueryKey,
+      authQueryKey,
+      tokenRevision,
+    ],
     queryFn: async () => {
       assert(!auth.isLoading, "No auth found");
       assert(servers.length > 0, "No MCP server configured");
@@ -104,6 +117,9 @@ export function useMCPTools({
         headers: {
           ...envHeaders,
           ...authHeaders,
+          ...(server.accessToken && {
+            Authorization: `Bearer ${server.accessToken}`,
+          }),
           ...(server.environment && {
             "Gram-Environment": server.environment,
           }),
@@ -117,6 +133,15 @@ export function useMCPTools({
       let skillDiscoveryFailed = false;
       const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
+          if (server.accessToken && new URL(server.url).protocol !== "https:") {
+            throw new Error("MCP bearer authentication requires HTTPS");
+          }
+          // Both the transport and the separate skill probe send bearer headers.
+          const fetchFn: typeof fetch = (input, init) =>
+            globalThis.fetch(
+              input,
+              server.accessToken ? { ...init, redirect: "error" } : init,
+            );
           const client = await createMCPClientWithVersionFallback({
             clientName: "gram-elements-mcp-client",
             transport: {
@@ -126,8 +151,7 @@ export function useMCPTools({
               // @ai-sdk/mcp stores this on the transport instance and calls it
               // as `this.fetchFn(...)`; handing it bare `window.fetch` throws
               // "Illegal invocation" in browsers, so bind it via a wrapper.
-              fetch: (...args: Parameters<typeof fetch>) =>
-                globalThis.fetch(...args),
+              fetch: fetchFn,
             },
           });
           const tools = await client.tools();
@@ -136,6 +160,7 @@ export function useMCPTools({
             server,
             headers,
             tools,
+            fetchFn,
           );
           if (!withSkills.discovered) skillDiscoveryFailed = true;
           return { server, tools: withSkills.tools };
@@ -149,12 +174,11 @@ export function useMCPTools({
         const result = settled[i]!;
         if (result.status === "rejected") {
           rejected++;
-          trackError(result.reason, {
-            source: "custom",
-            scope: "mcp-tools",
-            serverName: server.name ?? deriveNameFromUrl(server.url),
-            serverUrl: server.url,
-          });
+          // The error can carry the endpoint URL and response body, so log
+          // only which server failed.
+          console.error(
+            `Failed to list MCP tools from ${server.name ?? deriveNameFromUrl(server.url)}.`,
+          );
           continue;
         }
         const prefix = namespaced
@@ -189,7 +213,7 @@ export function useMCPTools({
     // Errors surface inline via mcpToolsError, not an error boundary, even
     // under a host QueryClient that defaults to throwing.
     throwOnError: false,
-    gcTime: Infinity,
+    gcTime: hasServerTokens ? 0 : Infinity,
   });
 
   // Filter tools outside of the query to ensure filtering is applied whenever
@@ -228,6 +252,7 @@ function normalizeServers(
       url: entry.url,
       name: entry.name,
       environment: entry.environment,
+      accessToken: entry.accessToken,
     }));
   }
   if (mcp) {
@@ -294,6 +319,7 @@ async function withSkillTool(
   server: NormalizedServer,
   headers: Record<string, string>,
   tools: MCPToolsResult,
+  fetchFn: typeof fetch,
 ): Promise<{ tools: MCPToolsResult; discovered: boolean }> {
   if (!serverServesSkills(client) || LOAD_SKILL_TOOL_NAME in tools) {
     return { tools, discovered: true };
@@ -303,6 +329,7 @@ async function withSkillTool(
       url: server.url,
       headers,
       protocolVersion: client.initializeResult.protocolVersion,
+      fetchFn,
     });
     if (skills.length === 0) return { tools, discovered: true };
     return {
@@ -315,13 +342,12 @@ async function withSkillTool(
       },
       discovered: true,
     };
-  } catch (error) {
-    trackError(error, {
-      source: "custom",
-      scope: "mcp-skills",
-      serverName: server.name ?? deriveNameFromUrl(server.url),
-      serverUrl: server.url,
-    });
+  } catch {
+    // The error can carry the endpoint URL and response body, so log only
+    // which server failed.
+    console.error(
+      `Failed to list MCP skills from ${server.name ?? deriveNameFromUrl(server.url)}.`,
+    );
     return { tools, discovered: false };
   }
 }

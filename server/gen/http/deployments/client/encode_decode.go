@@ -2486,24 +2486,6 @@ func unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(v *Deploymen
 	return res
 }
 
-// unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP
-// builds a value of type *types.DeploymentExternalMCP from a value of type
-// *DeploymentExternalMCPResponseBody.
-func unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(v *DeploymentExternalMCPResponseBody) *types.DeploymentExternalMCP {
-	if v == nil {
-		return nil
-	}
-	res := &types.DeploymentExternalMCP{
-		ID:                      *v.ID,
-		RegistryID:              v.RegistryID,
-		Name:                    *v.Name,
-		Slug:                    types.Slug(*v.Slug),
-		RegistryServerSpecifier: *v.RegistryServerSpecifier,
-	}
-
-	return res
-}
-
 // unmarshalDeploymentResponseBodyToTypesDeployment builds a value of type
 // *types.Deployment from a value of type *DeploymentResponseBody.
 func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody) *types.Deployment {
@@ -2526,7 +2508,7 @@ func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody)
 		ClonedFrom:           v.ClonedFrom,
 		Openapiv3ToolCount:   *v.Openapiv3ToolCount,
 		FunctionsToolCount:   *v.FunctionsToolCount,
-		ExternalMcpToolCount: *v.ExternalMcpToolCount,
+		ExternalMcpToolCount: v.ExternalMcpToolCount,
 	}
 	res.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {
@@ -2553,16 +2535,6 @@ func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody)
 			continue
 		}
 		res.Packages[i] = unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage(val)
-	}
-	if v.ExternalMcps != nil {
-		res.ExternalMcps = make([]*types.DeploymentExternalMCP, len(v.ExternalMcps))
-		for i, val := range v.ExternalMcps {
-			if val == nil {
-				res.ExternalMcps[i] = nil
-				continue
-			}
-			res.ExternalMcps[i] = unmarshalDeploymentExternalMCPResponseBodyToTypesDeploymentExternalMCP(val)
-		}
 	}
 
 	return res
@@ -2711,8 +2683,8 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 		Openapiv3ToolCount:    *v.Openapiv3ToolCount,
 		FunctionsAssetCount:   *v.FunctionsAssetCount,
 		FunctionsToolCount:    *v.FunctionsToolCount,
-		ExternalMcpAssetCount: *v.ExternalMcpAssetCount,
-		ExternalMcpToolCount:  *v.ExternalMcpToolCount,
+		ExternalMcpAssetCount: v.ExternalMcpAssetCount,
+		ExternalMcpToolCount:  v.ExternalMcpToolCount,
 	}
 
 	return res

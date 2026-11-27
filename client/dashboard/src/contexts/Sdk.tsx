@@ -32,7 +32,7 @@ export const useSdkClient = (): Gram => {
 };
 
 // Preserve QueryClient across HMR to prevent cache loss
-const createQueryClient = () =>
+export const createQueryClient = (): QueryClient =>
   new QueryClient({
     // A Speakeasy API 401 means the session is dead (expired, revoked, or — in
     // local dev — overwritten by another worktree's stack, since the cookie is

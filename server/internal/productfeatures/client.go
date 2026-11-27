@@ -354,8 +354,36 @@ var OrganizationDefaultFeatures = []Feature{
 // never had a row for. A soft-deleted row is an administrator choice and stays
 // disabled, so repeating the call does not turn a feature back on.
 func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	return enableIfNeverConfiguredTx(ctx, tx, organizationID, OrganizationDefaultFeatures)
+}
+
+// NewOrganizationFeatures are enabled only when an organization is created.
+// Unlike OrganizationDefaultFeatures, they are never seeded onto an
+// organization that already exists, since an existing organization can hold
+// state that has to be migrated first.
+//
+// FeatureUpstreamAuthEnforced is here because a new organization has no
+// legacy auth state to migrate, so it passes the enforcement readiness checks
+// by construction. Staff can still disable it through the admin enforcement
+// endpoint.
+var NewOrganizationFeatures = []Feature{
+	FeatureUpstreamAuthEnforced,
+}
+
+// SeedNewOrganizationDefaultsTx enables OrganizationDefaultFeatures and
+// NewOrganizationFeatures for an organization created in the same transaction.
+// Call it only from organization creation; use SeedOrganizationDefaultsTx for
+// an organization that already exists.
+func SeedNewOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	if err := SeedOrganizationDefaultsTx(ctx, tx, organizationID); err != nil {
+		return err
+	}
+	return enableIfNeverConfiguredTx(ctx, tx, organizationID, NewOrganizationFeatures)
+}
+
+func enableIfNeverConfiguredTx(ctx context.Context, tx pgx.Tx, organizationID string, features []Feature) error {
 	q := repo.New(tx)
-	for _, feature := range OrganizationDefaultFeatures {
+	for _, feature := range features {
 		if _, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),

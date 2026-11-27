@@ -132,9 +132,6 @@ function buildSourceMap(
   for (const fn of deployment.functionsAssets ?? []) {
     map.set(fn.id, { name: fn.name, slug: fn.slug, type: "function" });
   }
-  for (const mcp of deployment.externalMcps ?? []) {
-    map.set(mcp.id, { name: mcp.name, slug: mcp.slug, type: "externalmcp" });
-  }
 
   return map;
 }

@@ -247,26 +247,6 @@ export function useCaptureEnterpriseGateViewed({
   }, [email, organizationId, organizationName, organizationSlug, telemetry]);
 }
 
-export function useRegisterChatTelemetry({
-  chatId,
-  chatUrl,
-}: {
-  chatId: string;
-  chatUrl: string;
-}): void {
-  const telemetry = useTelemetry();
-
-  useEffect(() => {
-    if (!chatId) return;
-    if (!chatUrl) return;
-
-    telemetry.register({
-      chat_id: chatId,
-      chat_url: chatUrl,
-    });
-  }, [chatId, chatUrl, telemetry]);
-}
-
 export function useRegisterEnvironmentTelemetry({
   environmentSlug,
 }: {
@@ -280,21 +260,6 @@ export function useRegisterEnvironmentTelemetry({
       environment_slug: environmentSlug,
     });
   }, [environmentSlug, telemetry]);
-}
-
-export function useRegisterToolsetTelemetry({
-  toolsetSlug,
-}: {
-  toolsetSlug: string;
-}): void {
-  const telemetry = useTelemetry();
-
-  useEffect(() => {
-    if (!toolsetSlug) return;
-    telemetry.register({
-      toolset_slug: toolsetSlug,
-    });
-  }, [toolsetSlug, telemetry]);
 }
 
 /**
@@ -336,7 +301,7 @@ export function useRegisterProjectForTelemetry({
 
     // PostHog caps a project at 5 group types; "organization" and "slug" are the
     // only org/project slots that exist, so we register just those two. Other
-    // group types (project_id, project_slug, chat_id, toolset_slug, …) are
+    // group types (project_id, project_slug, environment_slug, …) are
     // dropped at ingestion; their values still ship as register() properties.
     telemetry.group("organization", organizationSlug, {});
     telemetry.group("slug", `${organizationSlug}/${projectSlug}`, {});

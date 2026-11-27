@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -30,13 +30,13 @@ const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
 	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode chosen at sign-in decides how the gateway exposes the servers your access reaches. " +
-	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
+	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool, using execute_read_only_tool instead of execute_tool for tools annotated read-only. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
 	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
 
 // organizationGatewayNextAction gives each tool discovery mode its own first
 // step: only Progressive exposes list_servers.
 const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, choosing a tool discovery mode. " +
-	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
+	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool, using execute_read_only_tool instead of execute_tool for tools annotated read-only. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
@@ -94,12 +94,6 @@ func (s *OrganizationGatewayService) valid() bool {
 // Get returns the principal's organization gateway.
 func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
 	return s.get(ctx, principal, orggateway.Availability)
-}
-
-// getForPlatformMCP is Get as Platform MCP's own use of the gateway sees it:
-// on unless an administrator turned it off explicitly.
-func (s *OrganizationGatewayService) getForPlatformMCP(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
-	return s.get(ctx, principal, orggateway.PlatformAvailability)
 }
 
 func (s *OrganizationGatewayService) get(ctx context.Context, principal Principal, availability func(context.Context, usersessionsrepo.DBTX, repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)) (GetMyOrganizationGatewayOutput, error) {
@@ -196,7 +190,7 @@ func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewa
 
 // GetMyProjectGatewayInput selects one exact project in the caller's organization.
 type GetMyProjectGatewayInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"Exact slug of a project in your organization; required, with no default project fallback"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
 }
 
 // GetProject returns the same organization-authorized connection limited to one
@@ -220,7 +214,7 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 	}
 	// Match ResolveProjectRead's exact project:read check using the live grants
 	// loaded by external admission. Refuse hidden projects like absent projects.
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Project(authz.ProjectIDOf(project.ID)).Read())
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("authorize project gateway discovery: %w", err)
 	}

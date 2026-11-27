@@ -79,14 +79,13 @@ func (s bindingWriteScope) resync(ctx context.Context, tx pgx.Tx, projectID uuid
 		return err //nolint:wrapcheck // The conflict passes through to the caller.
 	}
 	for _, id := range s.projects {
+		if captured != uuid.Nil {
+			if err := upstreamclients.CaptureSoleConsumers(ctx, tx, s.organizationID, id, userIssuerIDs, []uuid.UUID{captured}); err != nil {
+				return fmt.Errorf("capture client on its issuers' servers: %w", err)
+			}
+		}
 		if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, s.organizationID, id, userIssuerIDs); err != nil {
 			return err
-		}
-		if captured == uuid.Nil {
-			continue
-		}
-		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, s.organizationID, id, userIssuerIDs, []uuid.UUID{captured}); err != nil {
-			return fmt.Errorf("capture client on its issuers' servers: %w", err)
 		}
 	}
 	return nil

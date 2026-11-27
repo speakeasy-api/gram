@@ -3,16 +3,22 @@
 // reports the pairs existing configuration does not decide. It records
 // through the same statement issuance uses, so a run is idempotent and agrees
 // with what a new sign-in would record. It runs after the association
-// backfill, since a choice is only recorded for an associated client.
+// backfill, since a choice is only recorded for an associated client. For an
+// organization enforcing upstream auth, coverage and writes read the auth
+// clients a server offers instead of its associations, as issuance does there.
 package selectionbackfill
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -35,11 +41,13 @@ const (
 	OutcomeUnusableClient Outcome = "unusable_client"
 
 	// OutcomeClient is a pair whose server has exactly one associated client
-	// the credential's issuer also binds; that client is chosen.
+	// the credential's issuer also binds; that client is chosen. Under
+	// enforcement the server's clients are the ones it offers.
 	OutcomeClient Outcome = "client"
 
-	// OutcomeNoAuth is a pair whose server has no associated client; an
-	// explicit no-auth choice is recorded.
+	// OutcomeNoAuth is a pair whose server has no associated client, or under
+	// enforcement offers no enabled OAuth-backed auth client; an explicit
+	// no-auth choice is recorded.
 	OutcomeNoAuth Outcome = "no_auth"
 
 	// OutcomeAmbiguous is a pair with several eligible clients. Only the
@@ -83,7 +91,9 @@ func Classify(row ListUpstreamClientSelectionCoverageRow) Outcome {
 
 // Options controls one run.
 type Options struct {
-	// OrganizationID limits the run to one organization when non-empty.
+	// OrganizationID limits trusted offline maintenance to one organization
+	// when non-empty. Empty is the existing all-organization maintenance mode;
+	// request-driven lifecycle reconciliation requires a non-empty tenant.
 	OrganizationID string
 
 	// Apply records the decided choices; otherwise the run only predicts.
@@ -91,6 +101,8 @@ type Options struct {
 
 	// PageSize overrides defaultPageSize when positive.
 	PageSize int
+	// TypedOnly limits maintenance to typed offers, regardless of feature state.
+	TypedOnly bool
 }
 
 // Gap is one credential and server pair left without a choice.
@@ -124,6 +136,17 @@ type Report struct {
 	// any write.
 	Pairs map[Outcome]int `json:"pairs"`
 
+	// ConsentScoped counts the pairs in Pairs that configuration decides, that
+	// hold no recorded choice, and that belong to a credential issued for the
+	// servers approved at consent. Issuance recorded that credential's choices
+	// for those servers only, and it is refused anywhere else, so these are
+	// not choices it is missing. A pair with a recorded choice that no longer
+	// serves is not counted: the server was approved, and a run replaces the
+	// choice. Which servers were approved is not kept, so a run with Apply
+	// records the counted pairs all the same: a choice for a server the
+	// credential is never presented to grants nothing.
+	ConsentScoped int `json:"consent_scoped"`
+
 	// Written counts choices this run recorded.
 	Written int64 `json:"written"`
 
@@ -145,6 +168,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		Credentials:    0,
 		FullyCovered:   0,
 		Pairs:          make(map[Outcome]int),
+		ConsentScoped:  0,
 		Written:        0,
 		Gaps:           []Gap{},
 	}
@@ -158,6 +182,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
 			Cursor:         cursor,
 			OrganizationID: opts.OrganizationID,
+			IssuerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			PageSize:       int32(pageSize), // #nosec G115 -- bounded by defaultPageSize or an operator flag
 		})
 		if err != nil {
@@ -167,10 +192,22 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, nil
 		}
 		for _, credential := range credentials {
+			// Read for each credential, right before its choices are decided,
+			// so a run that outlives an enforcement change writes the rest under
+			// the new state, and a run with no organization decides every
+			// credential by its own organization.
+			typedOnly := opts.TypedOnly
+			if !typedOnly {
+				typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+				if err != nil {
+					return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+				}
+			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,
 				CredentialKind:      upstreamclients.CredentialKindUserSession,
 				CredentialID:        credential.CredentialID,
+				TypedOnly:           typedOnly,
 			}
 			coverage, err := q.ListUpstreamClientSelectionCoverage(ctx, coverageParams)
 			if err != nil {
@@ -180,22 +217,16 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			for _, row := range coverage {
 				outcome := Classify(row)
 				report.Pairs[outcome]++
+				if credential.ConsentScoped && !row.Recorded && (outcome == OutcomeClient || outcome == OutcomeNoAuth) {
+					report.ConsentScoped++
+				}
 				if !opts.Apply && !outcome.Decided() {
 					covered = false
 					report.Gaps = append(report.Gaps, Gap{CredentialID: credential.CredentialID, MCPServerID: row.McpServerID, Outcome: outcome})
 				}
 			}
 			if opts.Apply {
-				written, err := sessions.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{
-					UserSessionIssuerID: credential.UserSessionIssuerID,
-					CredentialKind:      upstreamclients.CredentialKindUserSession,
-					CredentialID:        credential.CredentialID,
-					Source:              upstreamclients.SelectionSourceBackfill,
-					PickedMcpServerIds:  []uuid.UUID{},
-					PickedClientIds:     []uuid.UUID{},
-					PickedAuthClientIds: nil,
-					ScopeMcpServerIds:   nil,
-				})
+				written, err := recordCredentialSelections(ctx, sessions, credential.UserSessionIssuerID, []uuid.UUID{credential.CredentialID}, nil, typedOnly, false)
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)
 				}
@@ -224,4 +255,80 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			return report, fmt.Errorf("backfill interrupted: %w", err)
 		}
 	}
+}
+
+// ReconcileTypedIssuerScopeInLockedTransaction is the live issuer-move path;
+// compatibility parent rows are never input to choice repair.
+func ReconcileTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) (int64, error) {
+	if err := RecordTypedIssuerScopeInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs, movedCredentialIDs); err != nil {
+		return 0, err
+	}
+	skipped, err := authclientbackfill.ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, serverIDs)
+	if err != nil {
+		return skipped, fmt.Errorf("map typed issuer credential choices: %w", err)
+	}
+	return skipped, nil
+}
+
+// RecordTypedIssuerScopeInLockedTransaction uses only deliberate typed offers.
+func RecordTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs, movedCredentialIDs []uuid.UUID) error {
+
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
+	}
+	if serverIDs != nil && len(serverIDs) == 0 && len(movedCredentialIDs) == 0 {
+		return nil
+	}
+	fullReach := make(map[uuid.UUID]bool, len(movedCredentialIDs))
+	for _, id := range movedCredentialIDs {
+		fullReach[id] = true
+	}
+	q, sessions := New(tx), usersessionsrepo.New(tx)
+	cursor := uuid.Nil
+	for {
+		credentials, err := q.ListLiveUserSessionCredentials(ctx, ListLiveUserSessionCredentialsParams{
+			Cursor: cursor, OrganizationID: organizationID, PageSize: defaultPageSize, IssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("list issuer credentials: %w", err)
+		}
+		var existingIDs, movedIDs []uuid.UUID
+		for _, credential := range credentials {
+			if fullReach[credential.CredentialID] {
+				movedIDs = append(movedIDs, credential.CredentialID)
+			} else {
+				existingIDs = append(existingIDs, credential.CredentialID)
+			}
+			cursor = credential.CredentialID
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, existingIDs, serverIDs, true, true); err != nil {
+			return fmt.Errorf("record existing issuer credential choices: %w", err)
+		}
+		if _, err := recordCredentialSelections(ctx, sessions, issuerID, movedIDs, nil, true, true); err != nil {
+			return fmt.Errorf("record moved issuer credential choices: %w", err)
+		}
+		if len(credentials) < defaultPageSize {
+			return nil
+		}
+	}
+}
+
+func recordCredentialSelections(ctx context.Context, q *usersessionsrepo.Queries, issuerID uuid.UUID, credentialIDs, serverIDs []uuid.UUID, typedOnly, typedOfferRepair bool) (int64, error) {
+	if len(credentialIDs) == 0 || (serverIDs != nil && len(serverIDs) == 0) {
+		return 0, nil
+	}
+	written, err := q.RecordUpstreamClientSelectionsForCredentials(ctx, usersessionsrepo.RecordUpstreamClientSelectionsForCredentialsParams{
+		CredentialIds:       credentialIDs,
+		UserSessionIssuerID: issuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		// These choices are inferred for existing credentials, not explicit
+		// administrator choices; consolidation uses the same backfill source.
+		Source:             upstreamclients.SelectionSourceBackfill,
+		PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+		PickedAuthClientIds: nil, ScopeMcpServerIds: serverIDs, TypedOnly: typedOnly, TypedOfferRepair: typedOfferRepair,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("record credential selections: %w", err)
+	}
+	return written, nil
 }

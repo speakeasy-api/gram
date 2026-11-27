@@ -5,12 +5,15 @@
 import { accessApplyDirectoryRoleSetup } from "../funcs/accessApplyDirectoryRoleSetup.js";
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessCreateTemporaryGrant } from "../funcs/accessCreateTemporaryGrant.js";
+import { accessDecideAccessRequest } from "../funcs/accessDecideAccessRequest.js";
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
+import { accessFindShadowMCPInventoryServers } from "../funcs/accessFindShadowMCPInventoryServers.js";
 import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
+import { accessListAccessRequests } from "../funcs/accessListAccessRequests.js";
 import { accessListAgentPolicyScopes } from "../funcs/accessListAgentPolicyScopes.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
@@ -41,18 +44,23 @@ import { accessRevokeTemporaryGrant } from "../funcs/accessRevokeTemporaryGrant.
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
+import { accessSetShadowMCPOfficialServer } from "../funcs/accessSetShadowMCPOfficialServer.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
 import { accessUpdateDirectoryReviewSettings } from "../funcs/accessUpdateDirectoryReviewSettings.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
+import { accessWithdrawAccessRequest } from "../funcs/accessWithdrawAccessRequest.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
+import { AccessRequest } from "../models/components/accessrequest.js";
 import { ApplyDirectoryRoleSetupResult } from "../models/components/applydirectoryrolesetupresult.js";
 import { DirectoryReviewSettings } from "../models/components/directoryreviewsettings.js";
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
+import { FindShadowMCPInventoryServersResult } from "../models/components/findshadowmcpinventoryserversresult.js";
+import { ListAccessRequestsResult } from "../models/components/listaccessrequestsresult.js";
 import { ListAgentPolicyScopesResult } from "../models/components/listagentpolicyscopesresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
@@ -93,6 +101,10 @@ import {
   CreateTemporaryGrantSecurity,
 } from "../models/operations/createtemporarygrant.js";
 import {
+  DecideAccessRequestRequest,
+  DecideAccessRequestSecurity,
+} from "../models/operations/decideaccessrequest.js";
+import {
   DeleteDirectoryRoleMappingRequest,
   DeleteDirectoryRoleMappingSecurity,
 } from "../models/operations/deletedirectoryrolemapping.js";
@@ -105,6 +117,10 @@ import {
   ExplainResourceAccessSecurity,
 } from "../models/operations/explainresourceaccess.js";
 import {
+  FindShadowMCPInventoryServersRequest,
+  FindShadowMCPInventoryServersSecurity,
+} from "../models/operations/findshadowmcpinventoryservers.js";
+import {
   GetDirectoryReviewSettingsRequest,
   GetDirectoryReviewSettingsSecurity,
 } from "../models/operations/getdirectoryreviewsettings.js";
@@ -116,6 +132,10 @@ import {
   GetShadowMCPInventoryServerRequest,
   GetShadowMCPInventoryServerSecurity,
 } from "../models/operations/getshadowmcpinventoryserver.js";
+import {
+  ListAccessRequestsRequest,
+  ListAccessRequestsSecurity,
+} from "../models/operations/listaccessrequests.js";
 import {
   ListAgentPolicyScopesRequest,
   ListAgentPolicyScopesSecurity,
@@ -182,6 +202,7 @@ import {
 } from "../models/operations/listscopes.js";
 import {
   ListShadowMCPInventoryRequest,
+  ListShadowMCPInventoryResponse,
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import {
@@ -237,6 +258,10 @@ import {
   SetResourceAudienceSecurity,
 } from "../models/operations/setresourceaudience.js";
 import {
+  SetShadowMCPOfficialServerRequest,
+  SetShadowMCPOfficialServerSecurity,
+} from "../models/operations/setshadowmcpofficialserver.js";
+import {
   SyncDirectoryGroupsRequest,
   SyncDirectoryGroupsSecurity,
 } from "../models/operations/syncdirectorygroups.js";
@@ -256,7 +281,12 @@ import {
   UpdateShadowMCPInventoryServerNameRequest,
   UpdateShadowMCPInventoryServerNameSecurity,
 } from "../models/operations/updateshadowmcpinventoryservername.js";
+import {
+  WithdrawAccessRequestRequest,
+  WithdrawAccessRequestSecurity,
+} from "../models/operations/withdrawaccessrequest.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Access extends ClientSDK {
   /**
@@ -317,6 +347,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * decideAccessRequest access
+   *
+   * @remarks
+   * Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.
+   */
+  async decideAccessRequest(
+    request: DecideAccessRequestRequest,
+    security?: DecideAccessRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AccessRequest> {
+    return unwrapAsync(accessDecideAccessRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteDirectoryRoleMapping access
    *
    * @remarks
@@ -366,6 +415,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ExplainResourceAccessResult> {
     return unwrapAsync(accessExplainResourceAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * findShadowMCPInventoryServers access
+   *
+   * @remarks
+   * Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async findShadowMCPInventoryServers(
+    request: FindShadowMCPInventoryServersRequest,
+    security?: FindShadowMCPInventoryServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<FindShadowMCPInventoryServersResult> {
+    return unwrapAsync(accessFindShadowMCPInventoryServers(
       this,
       request,
       security,
@@ -461,6 +529,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAIDetectionsResult> {
     return unwrapAsync(accessListAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAccessRequests access
+   *
+   * @remarks
+   * List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.
+   */
+  async listAccessRequests(
+    request?: ListAccessRequestsRequest | undefined,
+    security?: ListAccessRequestsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAccessRequestsResult> {
+    return unwrapAsync(accessListAccessRequests(
       this,
       request,
       security,
@@ -744,8 +831,8 @@ export class Access extends ClientSDK {
     request: ListShadowMCPInventoryRequest,
     security?: ListShadowMCPInventorySecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListShadowMCPInventoryResult> {
-    return unwrapAsync(accessListShadowMCPInventory(
+  ): Promise<PageIterator<ListShadowMCPInventoryResponse, { cursor: string }>> {
+    return unwrapResultIterator(accessListShadowMCPInventory(
       this,
       request,
       security,
@@ -852,7 +939,7 @@ export class Access extends ClientSDK {
    * requestAccess access
    *
    * @remarks
-   * Request access to a scope by sending an email notification to organization administrators.
+   * Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
    */
   async requestAccess(
     request: RequestAccessRequest,
@@ -1001,6 +1088,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * setShadowMCPOfficialServer access
+   *
+   * @remarks
+   * Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async setShadowMCPOfficialServer(
+    request: SetShadowMCPOfficialServerRequest,
+    security?: SetShadowMCPOfficialServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessSetShadowMCPOfficialServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * syncDirectoryGroups access
    *
    * @remarks
@@ -1088,6 +1194,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessUpdateShadowMCPInventoryServerName(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * withdrawAccessRequest access
+   *
+   * @remarks
+   * Withdraw a pending access request you made. Only the requester can withdraw it.
+   */
+  async withdrawAccessRequest(
+    request: WithdrawAccessRequestRequest,
+    security?: WithdrawAccessRequestSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AccessRequest> {
+    return unwrapAsync(accessWithdrawAccessRequest(
       this,
       request,
       security,

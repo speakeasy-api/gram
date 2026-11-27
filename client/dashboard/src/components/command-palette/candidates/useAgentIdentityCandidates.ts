@@ -1,4 +1,4 @@
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import {
   useProjectSlugForRequests,
   useSdkClient,
@@ -10,14 +10,15 @@ import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
+const AGENT_INVENTORY_STALE_TIME_MS = 30_000;
+
 /**
  * Registered agents, opening the same canonical identity pages as the identity
- * roster. Agent names are identities too, so these candidates remain fuzzy-only
- * and are never sent to the intent service.
+ * roster. Candidates are matched locally by name and aliases.
  */
 export function useAgentIdentityCandidates({
   enabled,
@@ -30,6 +31,8 @@ export function useAgentIdentityCandidates({
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
   const { projectSlug: routeProjectSlug } = useSlugs();
+  const project = useProject();
+  const projectId = routeProjectSlug === project.slug ? project.id : undefined;
   const routes = useRoutes({ projectSlug });
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -39,6 +42,7 @@ export function useAgentIdentityCandidates({
   // impersonated, and demo sessions.
   const queryEnabled =
     enabled &&
+    (!routeProjectSlug || Boolean(projectId)) &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
     !session.impersonatorEmail;
@@ -50,8 +54,8 @@ export function useAgentIdentityCandidates({
     isFetchingNextPage,
     isFetchNextPageError,
   } = useInfiniteQuery({
-    // This is the identities index's key, so opening Command K after that page
-    // reuses its inventory instead of issuing a duplicate list request.
+    // Reuse the unfiltered Agents roster within a project. The org shell
+    // has no project scope and keeps its organization-wide inventory.
     queryKey: [
       "identities",
       "registered-agents",
@@ -63,30 +67,43 @@ export function useAgentIdentityCandidates({
       "[]",
       "",
       scopeOverride,
+      projectId,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
         sdk,
-        { cursor: pageParam, limit: 50, search: "", sortOrder: "asc" },
+        {
+          projectId,
+          cursor: pageParam,
+          limit: 50,
+          search: "",
+          sortOrder: "asc",
+        },
         signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: queryEnabled,
+    // Reopening the palette used to mark every loaded cursor page stale and
+    // refetch the full inventory immediately. Keep a short freshness window so
+    // quick close/reopen cycles reuse the complete inventory already fetched.
+    staleTime: AGENT_INVENTORY_STALE_TIME_MS,
     throwOnError: false,
     retry: false,
   });
 
   // The inventory is cursor-paginated; loading just its first page would make
-  // older or later-named agents disappear from global name search.
+  // older or later-named agents disappear from global name search. A failed
+  // page gets one retry on the next palette open without looping while open.
+  const opens = useRef(0);
+  const lastFetchOpen = useRef(0);
   useEffect(() => {
-    if (
-      !queryEnabled ||
-      !hasNextPage ||
-      isFetchingNextPage ||
-      isFetchNextPageError
-    )
-      return;
+    if (queryEnabled) opens.current += 1;
+  }, [queryEnabled]);
+  useEffect(() => {
+    if (!queryEnabled || !hasNextPage || isFetchingNextPage) return;
+    if (isFetchNextPageError && lastFetchOpen.current === opens.current) return;
+    lastFetchOpen.current = opens.current;
     void fetchNextPage().catch(() => undefined);
   }, [
     queryEnabled,
@@ -110,7 +127,6 @@ export function useAgentIdentityCandidates({
           detail: "Agent identity",
           keywords: ["agent", agent.id, urn],
           verbs: ["open"],
-          fuzzyOnly: true,
           icon: "bot",
           group: "Identities",
           run: () => {

@@ -58,6 +58,8 @@ import TrialEnded from "./pages/demo/TrialEnded";
 import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
 import { useRoutes, useOrgRoutes } from "./routes";
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
+import { InspectOAuthCallback } from "@/pages/mcp/inspect/InspectOAuthCallback";
+import { INSPECT_OAUTH_CALLBACK } from "@/lib/inspect-oauth";
 
 // Logout may have navigated here after Clear-Site-Data emptied localStorage.
 // theme-init.ts already restores when it can; this covers the module path
@@ -100,6 +102,12 @@ export default function App(): JSX.Element {
     const initialTheme = savedTheme || "light";
     applyTheme(initialTheme);
   }, []);
+
+  // Keep the authorization code out of analytics and session replay.
+  // The issuer always reaches this path by full-page navigation.
+  if (window.location.pathname === INSPECT_OAUTH_CALLBACK) {
+    return <InspectOAuthCallback />;
+  }
 
   return (
     <ConfigProvider theme={theme} setTheme={applyTheme}>
@@ -242,8 +250,8 @@ const RouteProvider = () => {
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
   // the real current page. We record the EXACT path (not the section base) so a
-  // detail page like /sources/externalmcp/notion is its own entry — labelled by
-  // the item slug ("notion") rather than the section ("Sources").
+  // detail page like /sources/openapi/petstore is its own entry — labelled by
+  // the item slug ("petstore") rather than the section ("Sources").
   useEffect(() => {
     // Wait until the user id resolves before recording — otherwise the early
     // write lands on the shared anonymous key instead of the per-user one.
@@ -254,6 +262,9 @@ const RouteProvider = () => {
     // so recording one would file a redirect under the reader's recent pages
     // instead of the page they actually ended up on.
     if (orgRoutes.killswitch.active) return;
+    // Channels is hidden from navigation, so a visit must not resurface it in
+    // Command K either.
+    if (routes.channels.active) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -398,6 +409,9 @@ const RouteProvider = () => {
           path="/risk-policy-challenge/acknowledge"
           element={<RiskPolicyChallengeAcknowledge />}
         />
+        {/* Short form of the acknowledge link, /ack#<token>, for surfaces
+            that cut a hook message off after a line or two (Claude Cowork). */}
+        <Route path="/ack" element={<RiskPolicyChallengeAcknowledge />} />
         <Route path="/blocks/:id" element={<BlockPage />} />
         <Route
           path={`${SHARED_SKILL_BASE_PATH}/:token`}

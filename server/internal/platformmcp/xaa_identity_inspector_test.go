@@ -339,10 +339,10 @@ func TestXAAReadinessToolReportsConnectionScopes(t *testing.T) {
 		{ProjectID: f.projectID.String(), McpServerID: f.serverID.String(), State: "connected", IssuerID: &issuerID, ResourceIndicator: upstream},
 	}}}
 	inspector := &postgresXAAIdentityInspector{db: conn, governor: nil, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
-	session := xaaTestSession(t, &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return true, nil }, identity: fixtureOrgInspector{inner: inspector, organizationID: f.organizationID}}, false)
+	session := xaaTestSessionWithProjects(t, &xaaReadinessService{connections: reader, identity: fixtureOrgInspector{inner: inspector, organizationID: f.organizationID}}, false, slugProjects{"xaa-fixture": f.projectID})
 	call := func() (XAAIdentityChainingBinding, map[string]any) {
 		t.Helper()
-		result := xaaCall(t, session, f.projectID.String(), f.serverID.String())
+		result := xaaCall(t, session, "xaa-fixture", f.serverID.String())
 		if result.IsError {
 			text, _ := result.Content[0].(*mcp.TextContent)
 			require.FailNow(t, "tool error", "%+v", text)
@@ -363,14 +363,14 @@ func TestXAAReadinessToolReportsConnectionScopes(t *testing.T) {
 	}
 
 	binding, raw := call()
-	require.Equal(t, []string{"read"}, binding.ConnectionScopes, "an unlinked client has no connection to follow, so it reports the recorded scopes")
+	require.Equal(t, []string{"read"}, binding.ConnectionScopes, "a client without an offer reports the recorded scopes")
 	require.False(t, binding.ScopesOutOfDate)
 	require.Contains(t, raw, "scopes_out_of_date")
 
 	q := remotesessionsrepo.New(conn)
 	current, err := q.GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: upstream})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: current.RemoteSessionClientID.UUID, UserSessionIssuerID: f.userIssuer}))
+	offerMemberMCPClient(t, ctx, conn, f.organizationID, f.projectID, f.serverID, current.RemoteSessionClientID.UUID)
 	rmcp := remotemcprepo.New(conn)
 	_, err = rmcp.UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
 		ProjectID: f.projectID, OrganizationID: f.organizationID, ResourceIdentifier: upstream,

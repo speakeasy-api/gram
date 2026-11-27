@@ -1,9 +1,11 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -175,4 +177,17 @@ func rejectCodeForOops(code oops.Code) int {
 	default:
 		return RejectCodeInternalError
 	}
+}
+
+// withConnectionReference adds the reference of the row this refusal wrote. A kill-switch
+// note is shown exactly as set. It copies, since a rejection can be a shared value.
+func withConnectionReference(ctx context.Context, reject *RejectError) *RejectError {
+	if _, exact := reject.Data.(KillswitchRejectionData); exact {
+		return reject
+	}
+	message := contextvalues.AppendConnectionReference(ctx, reject.Message)
+	if message == reject.Message {
+		return reject
+	}
+	return &RejectError{Code: reject.Code, Message: message, Data: reject.Data}
 }

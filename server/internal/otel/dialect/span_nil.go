@@ -2,6 +2,7 @@ package dialect
 
 import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -35,8 +36,11 @@ func (e NilSpan) ResponseID(span *otelv1.InboundSpan) (key string, val string, e
 	return
 }
 
-func (NilSpan) Provider(*otelv1.InboundSpan) (string, string, error)        { return "", "", nil }
-func (NilSpan) Surface(*otelv1.InboundSpan) (string, string, error)         { return "", "", nil }
+func (NilSpan) Provider(*otelv1.InboundSpan) (string, string, error) { return "", "", nil }
+func (NilSpan) Surface(*otelv1.InboundSpan) (string, string, error)  { return "", "", nil }
+func (NilSpan) Identity(*otelv1.InboundSpan) (string, aivendors.Identity, error) {
+	return "", aivendors.Identity{ProductID: "", Client: aivendors.ClientUnknown}, nil
+}
 func (NilSpan) EventName(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
 func (NilSpan) EventType(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }
 func (NilSpan) SubjectID(*otelv1.InboundSpan) (string, string, error)       { return "", "", nil }

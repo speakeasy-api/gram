@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -66,7 +66,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	}, meta, create)
 	addTool(reg, &mcp.Tool{
 		Name: "update_mcp_access_role", Title: "Update an MCP Access Role",
-		Description: "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to connect rules can also add or remove servers in plugins assigned to this role and queue publication; read and write rules never change plugin contents; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
+		Description: "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to connect rules can also add or remove servers in plugins assigned to this role that have auto_add_servers_enabled on, and queue publication; read and write rules never change plugin contents; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, update)
 	addTool(reg, &mcp.Tool{
@@ -81,7 +81,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	}, meta, authClientAccess)
 	addTool(reg, &mcp.Tool{
 		Name: operationOfferMCPUpstreamCredential, Title: "Share a Credential with Another Server",
-		Description: "Let one more configured MCP offer an upstream credential another server already offers, instead of creating a copy. Read get_mcp_connection_settings on the server that offers it and pass the auth_client_id it reports. The credential stays one credential: changing, rotating or disabling it changes every server that offers it. Offering it grants nobody permission to use it or access to the server; set who may use it with set_mcp_role_auth_client_access. A credential confined to another project, hosted toolsets, and header credentials on tunneled servers are refused. New credentials and their secret values are created in the dashboard. This tool only adds an administrator-owned offer. Review removal in the dashboard; legacy OAuth-association detach is not its inverse and preserves administrator-owned offers. Requires explicit confirmation.",
+		Description: "Let one more configured MCP offer an upstream credential another server already offers, instead of creating a copy. Read get_mcp_connection_settings on the server that offers it and pass the auth_client_id it reports. The credential stays one credential: changing, rotating or disabling it changes every server that offers it. Offering it grants nobody permission to use it or access to the server; set who may use it with set_mcp_role_auth_client_access. A credential that signs each member in with their own account keeps one upstream grant per member, so on a second server a member's sign-in for one can replace the grant the other uses; warn the user, and prefer a separate sign-in created in the dashboard. A credential confined to another project, hosted toolsets, and header credentials on tunneled servers are refused. New credentials and their secret values are created in the dashboard. This tool only adds an administrator-owned offer. Review removal in the dashboard; legacy OAuth-association detach is not its inverse and preserves administrator-owned offers. Requires explicit confirmation.",
 		Annotations: writeAnnotations(false, false, false),
 	}, meta, offerCredential)
 	addTool(reg, &mcp.Tool{

@@ -1,5 +1,10 @@
 package mcpconnectionattempts
 
+import (
+	"maps"
+	"slices"
+)
+
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string
 
@@ -13,6 +18,9 @@ const (
 	// the recorder has no way to write it.
 	OutcomeAbandoned Outcome = "abandoned"
 )
+
+// allOutcomes are every Outcome.
+var allOutcomes = []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined, OutcomeAbandoned}
 
 // WhoFixes is the party that has to act, not necessarily the one that caused it.
 type WhoFixes string
@@ -66,6 +74,13 @@ var (
 	StepDiscoveryListing = Step{"discovery_listing"}
 	StepDiscoveryMember  = Step{"discovery_member"}
 )
+
+// allSteps are every Step.
+var allSteps = []Step{
+	StepInboundAuthorize, StepInboundSignIn, StepInboundConsent, StepInboundToken, StepProviderSignIn,
+	StepProviderToken, StepProviderRefresh, StepSignInRenewal, StepUpstreamEMA, StepMCPRequest,
+	StepDiscoveryListing, StepDiscoveryMember,
+}
 
 // Happened is what a call site says about a step: a success Result, or a Code
 // for anything else. Only this package implements it.
@@ -129,6 +144,12 @@ type Meaning struct {
 	// WhatToDo says what to do next in one short sentence.
 	WhatToDo string
 
+	// WhatHappenedForAdmin says what happened for an organization administrator, in the third person.
+	WhatHappenedForAdmin string
+
+	// Technical is a precise technical fact for administrators, empty when the code's causes share none.
+	Technical string
+
 	result Result
 }
 
@@ -137,7 +158,16 @@ var catalog = map[string]Meaning{}
 // MeaningOf returns the meaning of a stored reason.
 func MeaningOf(reason string) (Meaning, bool) {
 	meaning, ok := catalog[reason]
+	if ok {
+		admin := adminMeanings[Code{reason}]
+		meaning.WhatHappenedForAdmin, meaning.Technical = admin.whatHappened, admin.technical
+	}
 	return meaning, ok
+}
+
+// Codes returns every stored reason code, sorted.
+func Codes() []string {
+	return slices.Sorted(maps.Keys(catalog))
 }
 
 func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code {
@@ -148,7 +178,7 @@ func defineResult(name string, result Result, outcome Outcome, who WhoFixes, wha
 	if _, duplicate := catalog[name]; duplicate {
 		panic("duplicate connection attempt code: " + name)
 	}
-	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, result: result}
+	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, WhatHappenedForAdmin: "", Technical: "", result: result}
 	return Code{name}
 }
 
@@ -199,6 +229,7 @@ var (
 
 	// Enterprise-managed sign-in to Speakeasy.
 	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this kind of connection.", "Ask for it to be allowed.")
+	CodeGatewayMachineAccessDisabled   = define("gateway_machine_access_disabled", OutcomeBlocked, WhoSpeakeasy, "Machine access to this gateway is disabled.", "Ask Speakeasy to enable machine access to this gateway for this organization.")
 	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask for this identity to be allowed.")
 	CodeClientNotCIMD                  = define("client_not_cimd", OutcomeBlocked, WhoApp, "This app cannot use this kind of sign-in.", "Use an app that publishes its details at a public address.")
 	CodeSubjectNotProvisioned          = define("subject_not_provisioned", OutcomeBlocked, WhoAdmin, "This account is not set up in the organization's directory.", "Ask to be added to the directory and the organization.")
@@ -242,7 +273,8 @@ var (
 	CodeIDPTransientFailure      = define("idp_transient_failure", OutcomeFailed, WhoProvider, "Your sign-in service had a temporary problem.", "Try again in a few minutes.")
 	CodeProviderTransientFailure = define("provider_transient_failure", OutcomeFailed, WhoProvider, "The service had a temporary problem.", "Try again in a few minutes.")
 	CodeReauthenticationRequired = define("reauthentication_required", OutcomeFailed, WhoPerson, "Your company sign-in is missing or has expired.", "Sign in again.")
-	CodeIneligibleIdentity       = define("ineligible_identity", OutcomeBlocked, WhoAdmin, "This account cannot be used for company-managed sign-in here.", "Use an allowed account, or ask for this sign-in method to be allowed.")
+	CodeIneligibleIdentity       = define("ineligible_identity", OutcomeBlocked, WhoAdmin, "This account cannot be used for company-managed sign-in here.", "Use an allowed account, or ask your admin to allow this one.")
+	CodeUnmanagedAccount         = define("unmanaged_account", OutcomeBlocked, WhoPerson, "You signed in to Speakeasy with an account your company doesn't manage.", "Use your own account for the service, or sign out of Speakeasy and use a company account.")
 
 	// Every MCP request.
 	CodeToolPermissionDenied       = define("tool_permission_denied", OutcomeBlocked, WhoAdmin, "This person is not allowed to use this tool.", "Ask for permission to use the tool.")
@@ -252,7 +284,7 @@ var (
 	CodeToolNotApproved            = define("tool_not_approved", OutcomeBlocked, WhoPerson, "This tool was not picked when you connected.", "Connect again and pick this tool.")
 	CodeInvalidBearerToken         = define("invalid_bearer_token", OutcomeFailed, WhoPerson, "Your sign-in for this server is no longer valid.", "Connect to the server again.")
 	CodeAuthCheckUnavailable       = define("auth_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check your sign-in right now.", "Try again in a few minutes. You do not need to sign in again.")
-	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "Your connection to this service is missing or has expired.", "Reconnect to the service.")
+	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "You don't have a usable connection to this service for this request.", "Connect to the service, or choose another connection if you have one.")
 	CodeCredentialMisconfigured    = define("credential_misconfigured", OutcomeFailed, WhoAdmin, "The connection to this service is not set up correctly.", "Check the connection settings for this server.")
 	CodeRemoteSessionUnavailable   = define("remote_session_unavailable", OutcomeFailed, WhoProvider, "The service's sign-in system is temporarily unavailable.", "Wait a few minutes and try again.")
 	CodeProviderRejected           = define("provider_rejected", OutcomeFailed, WhoPerson, "The service rejected your access.", "Reconnect. If it keeps happening, ask your admin.")
@@ -294,4 +326,15 @@ var (
 	CodeRefreshTokenUsedByOtherApp = define("refresh_token_used_by_other_app", OutcomeFailed, WhoPerson, "This connection ended because another app used its sign-in.", "Connect to the server again. If it keeps happening, report it to the app's makers.")
 	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoPerson, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
 	CodeSignInRevokedByAdmin       = define("sign_in_revoked_by_admin", OutcomeBlocked, WhoAdmin, "Your admin ended this sign-in.", "Ask your admin if you still need access.")
+	CodeStoredSignInUnreadable     = define("stored_sign_in_unreadable", OutcomeFailed, WhoPerson, "Your saved sign-in for this server can't be used anymore.", "Reconnect to fix it.")
+
+	// Token requests from workloads and assistants.
+	CodeUpstreamCredentialDenied    = define("upstream_credential_denied", OutcomeBlocked, WhoAdmin, "This identity is not allowed to use this server's sign-in for the service.", "Ask for access to that sign-in.")
+	CodeUpstreamCredentialNotChosen = define("upstream_credential_not_chosen", OutcomeFailed, WhoAdmin, "This server has more than one sign-in for the service, and none was chosen.", "Choose which sign-in this identity uses for the server.")
+	CodeSignInMethodNotAccepted     = define("sign_in_method_not_accepted", OutcomeFailed, WhoApp, "This server does not accept this kind of sign-in.", "Connect to a server that accepts it, or use another way to sign in.")
+	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
+
+	// Configured addresses Speakeasy did not dial.
+	CodeAddressNotAllowed = define("address_not_allowed", OutcomeFailed, WhoAdmin, "This server or its sign-in uses a private or internal address Speakeasy can't reach.", "Use a public address, or connect the private network with a tunnel.")
+	CodeAddressNotFound   = define("address_not_found", OutcomeFailed, WhoAdmin, "The address for this server or its sign-in doesn't exist.", "Check the server and sign-in addresses.")
 )

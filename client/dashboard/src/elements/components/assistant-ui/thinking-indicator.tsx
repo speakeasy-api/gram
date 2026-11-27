@@ -3,92 +3,11 @@
 import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
-import { isToolCallAnnotation } from "@/elements/lib/toolCallAnnotation";
+import { isThinkingIndicatorActive } from "@/elements/lib/thinkingIndicator";
+import { THINKING_VERBS } from "@/elements/lib/thinkingVerbs";
 import { RainbowSpinner } from "@/components/ui/Spinner";
+import { usePrefersReducedMotion } from "@/elements/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
-
-/**
- * Whimsical verbs cycled while the assistant is "thinking" — i.e. the message
- * is running but no answer text has streamed in yet (or it is waiting on a tool
- * call / reasoning). The word shown is cosmetic and NOT tied to the actual work
- * being done, mirroring the playful verbs Claude shows while it works. To make
- * them reflect the real action instead, map from the streamed tool name in
- * `ThinkingIndicator` below.
- */
-const THINKING_VERBS = [
-  "Thinking",
-  "Reasoning",
-  "Pondering",
-  "Synthesizing",
-  "Connecting",
-  "Analyzing",
-  "Inspecting",
-  "Correlating",
-  "Digging",
-  "Untangling",
-  "Assembling",
-  "Sketching",
-  "Reticulating",
-  "Wrangling",
-  "Distilling",
-  "Surveying",
-  "Mapping",
-  "Cross-referencing",
-  "Investigating",
-  "Considering",
-  "Formulating",
-  "Piecing",
-  "Tracing",
-  "Computing",
-  "Noodling",
-  "Percolating",
-  "Marshalling",
-  "Crunching",
-  "Orchestrating",
-  "Composing",
-  "Ruminating",
-  "Cogitating",
-  "Deliberating",
-  "Brewing",
-  "Simmering",
-  "Mulling",
-  "Parsing",
-  "Sifting",
-  "Scouring",
-  "Combing",
-  "Sleuthing",
-  "Probing",
-  "Excavating",
-  "Unraveling",
-  "Threading",
-  "Stitching",
-  "Weaving",
-  "Charting",
-  "Plotting",
-  "Calibrating",
-  "Tabulating",
-  "Aggregating",
-  "Collating",
-  "Triangulating",
-  "Reconciling",
-  "Conjuring",
-  "Divining",
-  "Indexing",
-  "Querying",
-  "Scanning",
-  "Spelunking",
-  "Tinkering",
-  "Whittling",
-  "Churning",
-  "Gathering",
-  "Decoding",
-  "Pattern-matching",
-  "Joining the dots",
-  "Connecting the dots",
-  "Following the trail",
-  "Chasing leads",
-  "Triple-checking",
-] as const;
 
 // Cadence: hold each verb, then crossfade to the next.
 const HOLD_MS = 2000;
@@ -101,31 +20,6 @@ function shuffled<T>(items: readonly T[]): T[] {
     [copy[i], copy[j]] = [copy[j]!, copy[i]!];
   }
   return copy;
-}
-
-/** Tracks the user's `prefers-reduced-motion` setting, updating if it changes. */
-function usePrefersReducedMotion(): boolean {
-  const query = "(prefers-reduced-motion: reduce)";
-  const [reduced, setReduced] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(query).matches,
-  );
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    )
-      return;
-    const mql = window.matchMedia(query);
-    const onChange = () => setReduced(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  return reduced;
 }
 
 /**
@@ -175,38 +69,14 @@ function useThinkingVerb(
 
 /**
  * Shows a rainbow spinner alongside a cycling "thinking" verb whenever the
- * assistant is running but has not yet produced visible answer text. Once text
- * starts streaming, this hides and the inline trailing dot (see the
- * `aui-md[data-status="running"]` rules in global.css) takes over.
+ * assistant is running and no other working signal is on screen — see
+ * {@link isThinkingIndicatorActive} for how it hands off to the streaming-text
+ * dot and the tool and reasoning shimmers.
  */
 export const ThinkingIndicator: FC = () => {
-  const active = useAuiState(({ message }) => {
-    if (message.status?.type !== "running") return false;
-    const parts = message.parts;
-    // Skip trailing empty text and lone annotations (the next batch's
-    // heading, mid-flight) — they don't end the current tool run.
-    let i = parts.length - 1;
-    while (i >= 0) {
-      const part = parts[i];
-      if (
-        part?.type === "text" &&
-        (part.text.trim().length === 0 || isToolCallAnnotation(part.text))
-      ) {
-        i--;
-        continue;
-      }
-      break;
-    }
-    if (i < 0) return true;
-    const last = parts[i];
-    if (!last) return true;
-    // A trailing tool group is still "open" (shimmering heading) for the
-    // whole streaming run — a second global loader would be noise.
-    if (last.type === "tool-call") return false;
-    if (last.type === "reasoning") return true;
-    if (last.type === "text") return last.text.trim().length === 0;
-    return false;
-  });
+  const active = useAuiState(({ message }) =>
+    isThinkingIndicatorActive(message),
+  );
 
   const reducedMotion = usePrefersReducedMotion();
   const { verb, visible } = useThinkingVerb(active, reducedMotion);

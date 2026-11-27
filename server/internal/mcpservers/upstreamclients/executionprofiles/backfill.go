@@ -18,6 +18,12 @@ type Report struct {
 	// would record.
 	VersionsWritten int `json:"versions_written"`
 
+	// FirstVersions counts the versions in VersionsWritten that are a
+	// profile's first: no turn has run under that assistant, trigger and
+	// execution context since profiles were recorded. A turn records its own
+	// profile when its credential is issued.
+	FirstVersions int `json:"first_versions"`
+
 	// Gaps counts, per execution context, the profile and server pairs the
 	// profiles' latest versions hold no choice for, by reason.
 	Gaps map[Context]map[GapReason]int `json:"gaps"`
@@ -31,7 +37,7 @@ type Report struct {
 // for that profile. It is idempotent: a rerun only adds choices for servers
 // that had none and can now be decided.
 func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bool) (Report, error) {
-	report := Report{Mode: "dry_run", Targets: 0, VersionsWritten: 0, Gaps: make(map[Context]map[GapReason]int)}
+	report := Report{Mode: "dry_run", Targets: 0, VersionsWritten: 0, FirstVersions: 0, Gaps: make(map[Context]map[GapReason]int)}
 	if apply {
 		report.Mode = "apply"
 	}
@@ -49,23 +55,26 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 				TriggerID:      t.TriggerID.UUID,
 				Context:        execCtx,
 			}
-			var written bool
+			var written, first bool
 			var gaps []Gap
 			if apply {
 				binding, err := Bind(ctx, db, target, SourceBackfill)
 				if err != nil {
 					return report, err
 				}
-				written, gaps = binding.Written, binding.Gaps
+				written, first, gaps = binding.Written, binding.Version == 1, binding.Gaps
 			} else {
 				p, err := previewTarget(ctx, db, target)
 				if err != nil {
 					return report, err
 				}
-				written, gaps = p.writes(), p.gaps
+				written, first, gaps = p.writes(), p.version == 0, p.gaps
 			}
 			if written {
 				report.VersionsWritten++
+				if first {
+					report.FirstVersions++
+				}
 			}
 			for _, gap := range gaps {
 				if report.Gaps[execCtx] == nil {

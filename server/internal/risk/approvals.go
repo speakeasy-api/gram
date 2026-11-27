@@ -107,7 +107,7 @@ func (s *Service) approvalViewer(ctx context.Context, authCtx *contextvalues.Aut
 }
 
 // enforcedOrgAdmin reports whether RBAC checked the caller's org admin grant.
-// Evaluate answers true when RBAC is not enforced at all, as for a legacy API
+// Decide answers true when RBAC is not enforced at all, as for a legacy API
 // key, and that must not widen what the caller sees.
 func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (bool, error) {
 	enforced, err := s.authz.ShouldEnforce(ctx)
@@ -117,11 +117,11 @@ func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (
 	if !enforced {
 		return false, nil
 	}
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
 	}
-	return isAdmin, nil
+	return decision.AllAllowed, nil
 }
 
 func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -129,7 +129,7 @@ func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.Au
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	return authCtx, nil

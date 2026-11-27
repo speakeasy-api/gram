@@ -29,10 +29,6 @@ type Client struct {
 	// createAssistant endpoint.
 	CreateAssistantDoer goahttp.Doer
 
-	// UpgradeAssistantIdentity Doer is the HTTP client used to make requests to
-	// the upgradeAssistantIdentity endpoint.
-	UpgradeAssistantIdentityDoer goahttp.Doer
-
 	// UpdateAssistant Doer is the HTTP client used to make requests to the
 	// updateAssistant endpoint.
 	UpdateAssistantDoer goahttp.Doer
@@ -44,6 +40,10 @@ type Client struct {
 	// SendMessage Doer is the HTTP client used to make requests to the sendMessage
 	// endpoint.
 	SendMessageDoer goahttp.Doer
+
+	// InferIntent Doer is the HTTP client used to make requests to the inferIntent
+	// endpoint.
+	InferIntentDoer goahttp.Doer
 
 	// InterruptTurn Doer is the HTTP client used to make requests to the
 	// interruptTurn endpoint.
@@ -88,10 +88,10 @@ func NewClient(
 		ListAssistantsDoer:            doer,
 		GetAssistantDoer:              doer,
 		CreateAssistantDoer:           doer,
-		UpgradeAssistantIdentityDoer:  doer,
 		UpdateAssistantDoer:           doer,
 		DeleteAssistantDoer:           doer,
 		SendMessageDoer:               doer,
+		InferIntentDoer:               doer,
 		InterruptTurnDoer:             doer,
 		GetManagedAssistantDoer:       doer,
 		EnsureManagedAssistantDoer:    doer,
@@ -177,30 +177,6 @@ func (c *Client) CreateAssistant() goa.Endpoint {
 	}
 }
 
-// UpgradeAssistantIdentity returns an endpoint that makes HTTP requests to the
-// assistants service upgradeAssistantIdentity server.
-func (c *Client) UpgradeAssistantIdentity() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpgradeAssistantIdentityRequest(c.encoder)
-		decodeResponse = DecodeUpgradeAssistantIdentityResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpgradeAssistantIdentityRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpgradeAssistantIdentityDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("assistants", "upgradeAssistantIdentity", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // UpdateAssistant returns an endpoint that makes HTTP requests to the
 // assistants service updateAssistant server.
 func (c *Client) UpdateAssistant() goa.Endpoint {
@@ -268,6 +244,30 @@ func (c *Client) SendMessage() goa.Endpoint {
 		resp, err := c.SendMessageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// InferIntent returns an endpoint that makes HTTP requests to the assistants
+// service inferIntent server.
+func (c *Client) InferIntent() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeInferIntentRequest(c.encoder)
+		decodeResponse = DecodeInferIntentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInferIntentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InferIntentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "inferIntent", err)
 		}
 		return decodeResponse(resp)
 	}

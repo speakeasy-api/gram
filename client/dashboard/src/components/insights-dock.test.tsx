@@ -42,6 +42,8 @@ const mocks = vi.hoisted(() => ({
   permissionsLoading: false,
   getSkillIds: undefined as (() => string[]) | undefined,
   activeRoute: "detail" as "detail" | "new" | "home" | "page",
+  dockDismissed: false,
+  resumeDock: vi.fn(),
   assistantReady: true,
   composerSetText: vi.fn(),
   composerText: "",
@@ -67,6 +69,12 @@ const mocks = vi.hoisted(() => ({
       ],
     },
   })),
+  intent: null as {
+    opener?: string;
+    suggestedPrompts: string[];
+  } | null,
+  intentActive: vi.fn((_active: boolean) => undefined),
+  activityFlag: "enabled" as "enabled" | "disabled",
 }));
 
 vi.mock("@/elements", async () => {
@@ -178,6 +186,26 @@ vi.mock("@/hooks/useServerAssistantTransport", () => ({
     };
   },
 }));
+vi.mock("@/components/assistant-activity", () => ({
+  useRecordDashboardActivity: vi.fn(),
+  // Mirrors the real hook's gates: no intent without the feature or a
+  // managed assistant.
+  useAssistantIntent: ({
+    active,
+    enabled,
+    assistantId,
+  }: {
+    active: boolean;
+    enabled: boolean;
+    assistantId: string | undefined;
+  }) => {
+    mocks.intentActive(active);
+    return enabled && assistantId ? mocks.intent : null;
+  },
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.activityFlag }),
+}));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: vi.fn(),
 }));
@@ -219,7 +247,17 @@ vi.mock("@/lib/assistantEntityLinks", () => ({
 vi.mock("@/hooks/useInsightsDockCta", () => ({
   INSIGHTS_DOCK_CONTENT_VT_CLASS: "",
   INSIGHTS_DOCK_VT_CLASS: "",
-  useInsightsDockCta: () => ({ dismissed: false, dismiss: vi.fn() }),
+  useInsightsDockCta: () => {
+    const [dismissed, setDismissed] = useState(mocks.dockDismissed);
+    return {
+      dismissed,
+      dismiss: vi.fn(),
+      resume: () => {
+        mocks.resumeDock();
+        setDismissed(false);
+      },
+    };
+  },
 }));
 vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
@@ -244,6 +282,9 @@ vi.mock("react-router", async (importOriginal) => ({
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.intent = null;
+  mocks.intentActive.mockClear();
+  mocks.activityFlag = "enabled";
   mocks.recentChats = undefined;
   mocks.listeners.clear();
   mocks.elementsConfig.mockClear();
@@ -602,6 +643,58 @@ describe("InsightsProvider", () => {
       expect(mounts).toBe(1);
     });
 
+    describe("opening the panel", () => {
+      afterEach(() => {
+        mocks.dockDismissed = false;
+        mocks.resumeDock.mockClear();
+      });
+
+      function Opener({ hideDock }: { hideDock?: boolean }): JSX.Element {
+        const { setIsExpanded, registerDockHide } = useInsightsState();
+        useEffect(
+          () => (hideDock ? registerDockHide() : undefined),
+          [hideDock, registerDockHide],
+        );
+        return <button onClick={() => setIsExpanded(true)}>Open</button>;
+      }
+
+      function open(hideDock = false): void {
+        render(
+          <InsightsProvider
+            mcpConfig={{ projectSlug: "project" } as never}
+            title="Assistant"
+            subtitle=""
+          >
+            <Opener hideDock={hideDock} />
+          </InsightsProvider>,
+        );
+        fireEvent.click(screen.getByText("Open"));
+      }
+
+      const panel = (): HTMLElement | null =>
+        screen.queryByLabelText("Close Project Assistant");
+
+      it("brings back a dismissed dock", () => {
+        mocks.dockDismissed = true;
+        open();
+        expect(mocks.resumeDock).toHaveBeenCalledTimes(1);
+        expect(panel()).not.toBeNull();
+      });
+
+      it("leaves a visible dock alone", () => {
+        open();
+        expect(mocks.resumeDock).not.toHaveBeenCalled();
+        expect(panel()).not.toBeNull();
+      });
+
+      it("keeps the dock dismissed on a page that hides it", () => {
+        mocks.dockDismissed = true;
+        open(true);
+        expect(mocks.resumeDock).not.toHaveBeenCalled();
+        expect(panel()).toBeNull();
+      });
+    });
+
     it("exposes the runtime as ready only once it can be read", () => {
       const seen: boolean[] = [];
       function ReadinessProbe(): null {
@@ -778,6 +871,42 @@ describe("InsightsProvider", () => {
       await waitFor(() => expect(mocks.composerText).toBe("pending draft"));
       expect(mocks.runtimeMount).toHaveBeenCalledTimes(1);
       expect(mocks.switchToNewThread).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens with what the user seems to be doing", () => {
+      mocks.intent = {
+        opener: "Discover keeps failing for billing-api. Want me to check it?",
+        suggestedPrompts: ["Why does Discover fail?"],
+      };
+      render(page());
+      act(() => screen.getByLabelText("Shared composer").focus());
+      expect(mocks.intentActive).toHaveBeenLastCalledWith(true);
+      expect(
+        screen.getByText(
+          "Discover keeps failing for billing-api. Want me to check it?",
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Why does Discover fail?" }),
+      ).toBeTruthy();
+    });
+
+    it("keeps the page suggestions when activity context is off", () => {
+      mocks.activityFlag = "disabled";
+      mocks.intent = {
+        opener: "Discover keeps failing for billing-api. Want me to check it?",
+        suggestedPrompts: ["Why does Discover fail?"],
+      };
+      render(page());
+      act(() => screen.getByLabelText("Shared composer").focus());
+      expect(
+        screen.queryByText(
+          "Discover keeps failing for billing-api. Want me to check it?",
+        ),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Why does Discover fail?" }),
+      ).toBeNull();
     });
 
     it("does not replay the focus shortcut when connection hands over a draft", () => {

@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -66,7 +67,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 		userEmails = emails
 	}
 
-	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.SnapshotFor(ctx), telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		TargetID:             "",
 		Categories:           nil,
@@ -88,12 +89,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 	if err != nil || ac.ProjectID == nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing project auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   ac.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
@@ -105,7 +101,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 		return nil, oops.E(oops.CodeBadRequest, nil, "employee email is required").LogError(ctx, s.logger)
 	}
 
-	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, s.aiCatalog.SnapshotFor(ctx), telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		TargetID:             "",
 		Categories:           nil,
@@ -156,7 +152,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var egErr error
-		summary, egErr = s.listAIDetectionModels(egCtx, telemetryrepo.ListAIDetectionSummariesParams{
+		summary, egErr = s.listAIDetectionModels(egCtx, s.aiCatalog.SnapshotFor(egCtx), telemetryrepo.ListAIDetectionSummariesParams{
 			OrganizationID:       ac.ActiveOrganizationID,
 			TargetID:             targetID,
 			Categories:           nil,
@@ -168,7 +164,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	})
 	eg.Go(func() error {
 		var egErr error
-		rows, egErr = telemetryrepo.New(s.chConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
+		rows, egErr = telemetryrepo.New(s.chReadConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
 			OrganizationID:       ac.ActiveOrganizationID,
 			TargetID:             targetID,
 			CanonicalIdentityOrg: canonicalOrg,
@@ -205,8 +201,8 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	return &gen.ListAIDetectionUsersResult{Detection: summary.Detections[0], Users: users}, nil
 }
 
-func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
-	rows, err := telemetryrepo.New(s.chConn).ListAIDetectionSummaries(ctx, params)
+func (s *Service) listAIDetectionModels(ctx context.Context, clientCatalog *aivendors.Snapshot, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
+	rows, err := telemetryrepo.New(s.chReadConn).ListAIDetectionSummaries(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)
 	}
@@ -219,7 +215,7 @@ func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrep
 	// tools list under their stored ids and read unreviewed. Nothing is
 	// enforced from here, so a degraded status column beats no inventory.
 	var catalog *aitargets.OrganizationList
-	if list, err := aitargets.LoadOrganizationList(ctx, queries, params.OrganizationID); err != nil {
+	if list, err := aitargets.LoadOrganizationList(ctx, queries, params.OrganizationID, clientCatalog); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; listing detections as stored", attr.SlogError(err))
 		catalog = &aitargets.OrganizationList{Entries: nil, Snapshot: aitargets.NewSnapshot(0, nil)}
 	} else {
@@ -300,7 +296,7 @@ type AIDetectionsReadInput struct {
 // Returns the full row. Every caller of this section is an organization
 // administrator; the one endpoint that is not, listEmployeeAIDetections, does
 // not read through here.
-func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadInput) (*gen.ListAIDetectionsResult, error) {
+func (s *Service) ReadAIDetections(ctx context.Context, clientCatalog *aivendors.Snapshot, input AIDetectionsReadInput) (*gen.ListAIDetectionsResult, error) {
 	if strings.TrimSpace(input.OrganizationID) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "organization id is required").LogError(ctx, s.logger)
 	}
@@ -310,7 +306,7 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown detection category %q", category).LogError(ctx, s.logger)
 	}
 
-	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
+	result, err := s.listAIDetectionModels(ctx, clientCatalog, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       input.OrganizationID,
 		TargetID:             "",
 		Categories:           nil,

@@ -12,128 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const autoAttachMemberProviderClient = `-- name: AutoAttachMemberProviderClient :execrows
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT c.id, $1
-FROM mcp_server_remote_session_clients AS a
-JOIN remote_session_clients AS c
-  ON c.id = a.remote_session_client_id
-JOIN mcp_servers AS s
-  ON s.id = a.mcp_server_id
- AND s.project_id = a.project_id
-JOIN projects AS p
-  ON p.id = $2
-LEFT JOIN remote_session_client_user_session_issuers AS own
-  ON own.remote_session_client_id = c.id
- AND own.user_session_issuer_id = s.user_session_issuer_id
-WHERE a.mcp_server_id = $3
-  AND a.project_id = $2
-  AND a.deleted IS FALSE
-  AND c.remote_session_issuer_id = $4
-  AND c.deleted IS FALSE
-  AND (c.project_id = $2
-       OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS l2
-    JOIN remote_session_clients AS c2
-      ON c2.id = l2.remote_session_client_id
-     AND c2.deleted IS FALSE
-    WHERE l2.user_session_issuer_id = $1
-      AND c2.remote_session_issuer_id = $4
-  )
-ORDER BY own.remote_session_client_id IS NULL, c.created_at
-LIMIT 1
-ON CONFLICT DO NOTHING
-`
-
-type AutoAttachMemberProviderClientParams struct {
-	GatewayIssuerID uuid.UUID
-	ProjectID       uuid.UUID
-	MemberServerID  uuid.UUID
-	RemoteIssuerID  uuid.UUID
-}
-
-// Bind the client the member is associated with to the gateway's issuer so
-// consent can offer the member's provider. A member can hold several clients
-// of one upstream, one per gateway it joined, so the client on its own issuer
-// wins, then the oldest. No-op when the gateway's issuer already holds a client
-// for that upstream (one client per upstream per issuer), or when the member
-// has no live association to the upstream. Tenancy mirrors the resync
-// derivation: the member's own project client, or an org-level client.
-func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAttachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoAttachMemberProviderClient,
-		arg.GatewayIssuerID,
-		arg.ProjectID,
-		arg.MemberServerID,
-		arg.RemoteIssuerID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const autoDetachMemberProviderClient = `-- name: AutoDetachMemberProviderClient :execrows
-DELETE FROM remote_session_client_user_session_issuers AS l
-USING remote_session_clients AS c
-WHERE l.remote_session_client_id = c.id
-  AND l.user_session_issuer_id = $1
-  AND c.remote_session_issuer_id = $2
-  AND NOT EXISTS (
-    -- All consumers of the gateway issuer live in its project (the issuer is
-    -- project-scoped), so scope the scan there — both for tenancy and to keep
-    -- the anti-join off a cross-tenant sequential scan.
-    SELECT 1
-    FROM mcp_servers AS s
-    JOIN mcp_server_remote_session_clients AS a
-      ON a.mcp_server_id = s.id
-     AND a.project_id = s.project_id
-     AND a.deleted IS FALSE
-    JOIN remote_session_clients AS consumer_client
-      ON consumer_client.id = a.remote_session_client_id
-     AND consumer_client.remote_session_issuer_id = $2
-     AND consumer_client.deleted IS FALSE
-    JOIN remote_session_issuers AS provider
-      ON provider.id = consumer_client.remote_session_issuer_id
-     AND provider.deleted IS FALSE
-    JOIN meta_mcp_server_members AS m
-      ON m.project_id = s.project_id
-     AND m.mcp_server_id = s.id
-     AND m.deleted IS FALSE
-    JOIN meta_mcp_servers AS mm
-      ON mm.project_id = m.project_id
-     AND mm.id = m.meta_mcp_server_id
-     AND mm.deleted IS FALSE
-    WHERE s.deleted IS FALSE
-      AND s.project_id = $3
-      AND mm.user_session_issuer_id = $1
-  )
-`
-
-type AutoDetachMemberProviderClientParams struct {
-	GatewayIssuerID uuid.UUID
-	RemoteIssuerID  uuid.UUID
-	ProjectID       uuid.UUID
-}
-
-// Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
-// client(s) for a removed member's upstream so the provider stops appearing on
-// the gateway's consent screen. The binding is scoped to the user_session_issuer,
-// so it must survive as long as ANY live member of a meta server on the issuer
-// (issuers can be shared across gateways) still fronts the upstream. Callers
-// must check CountServersOnGatewayIssuer first: a server directly on the issuer
-// has no association to prove which provider it uses.
-// Run after the member row is soft-deleted so the just-removed member is
-// already excluded by the deleted filter below.
-func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -178,32 +56,6 @@ func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg Cou
 		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countServersOnGatewayIssuer = `-- name: CountServersOnGatewayIssuer :one
-SELECT count(*)
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = $1
- AND p.deleted IS FALSE
-WHERE s.user_session_issuer_id = $2
-  AND s.deleted IS FALSE
-`
-
-type CountServersOnGatewayIssuerParams struct {
-	OrganizationID  string
-	GatewayIssuerID uuid.NullUUID
-}
-
-// Live servers signing in directly through a gateway's issuer, across the
-// organization because an issuer can be organization-level. A gateway's issuer
-// is expected to serve only gateways, so this should be zero.
-func (q *Queries) CountServersOnGatewayIssuer(ctx context.Context, arg CountServersOnGatewayIssuerParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countServersOnGatewayIssuer, arg.OrganizationID, arg.GatewayIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -731,8 +583,6 @@ SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
-    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
-    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -772,7 +622,6 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 	MetaMcpServerID uuid.UUID
 	Name            string
 	Slug            string
-	CustomDomainID  uuid.NullUUID
 	Deleted         bool
 	IsDomainRoot    pgtype.Bool
 	CustomDomain    pgtype.Text
@@ -780,9 +629,8 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 }
 
 // Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
-// matching unless a live endpoint now holds the slug in that namespace (callers also
-// drop ones a legacy toolset alias holds); the existence check mirrors the global
-// unique index, so it is not project-scoped.
+// matching unless a live endpoint now holds the slug in that namespace; the
+// existence check mirrors the global unique index, so it is not project-scoped.
 func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
 	if err != nil {
@@ -796,7 +644,6 @@ func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Contex
 			&i.MetaMcpServerID,
 			&i.Name,
 			&i.Slug,
-			&i.CustomDomainID,
 			&i.Deleted,
 			&i.IsDomainRoot,
 			&i.CustomDomain,
@@ -1421,6 +1268,13 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS mcp_server_feedback_tool_enabled,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
         FROM mcp_server_remote_session_clients AS a
@@ -1474,6 +1328,7 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerEnvironmentID          uuid.NullUUID
 	McpServerToolVariationsGroupID  uuid.NullUUID
 	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerFeedbackToolEnabled    bool
 	McpServerAssociationProviderIds []uuid.UUID
 	TunneledResourceIdentifier      string
 }
@@ -1514,6 +1369,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerFeedbackToolEnabled,
 			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 		); err != nil {
@@ -1599,7 +1455,10 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2::uuid
+  AND (
+    project_id = $2::uuid
+    OR (project_id IS NULL AND organization_id = $3::text)
+  )
   AND deleted IS FALSE
 FOR UPDATE
 `
@@ -1607,13 +1466,14 @@ FOR UPDATE
 type LockUserSessionIssuerForMetaMCPParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
-// Lock a live user session issuer in the caller's project. Meta MCP
-// create/update hold this lock while validating the reference so a concurrent
-// issuer delete cannot race the attach.
+// Lock a live issuer owned by the caller's project or shared by its organization.
+// Gateway create/update hold this lock while validating the reference so a
+// concurrent issuer delete cannot race the attach.
 func (q *Queries) LockUserSessionIssuerForMetaMCP(ctx context.Context, arg LockUserSessionIssuerForMetaMCPParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, lockUserSessionIssuerForMetaMCP, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

@@ -350,7 +350,7 @@ func TestResolveAuthClientAccessTokens_RefreshesAConsentFromAnotherSignIn(t *tes
 	require.NoError(t, err)
 	refreshEnc, err := env.enc.Encrypt([]byte("owner-refresh"))
 	require.NoError(t, err)
-	expired, err := repo.New(env.db).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refreshEnc), Scopes: []string{}})
+	expired, err := repo.New(env.db).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refreshEnc), Scopes: []string{}})
 	require.NoError(t, err)
 
 	tokens, err = env.mgr.ResolveAuthClientAccessTokens(workloadCtx, request(caller))
@@ -369,7 +369,7 @@ func TestAuthClientNeedsReconnect_ExpiredTokenWithoutARefreshGrant(t *testing.T)
 	refreshEnc, err := f.enc.Encrypt([]byte("refresh-token"))
 	require.NoError(t, err)
 	upsert := func(refresh pgtype.Text) {
-		_, err := repo.New(f.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: refresh, Scopes: []string{}})
+		_, err := repo.New(f.ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: refresh, Scopes: []string{}})
 		require.NoError(t, err)
 	}
 

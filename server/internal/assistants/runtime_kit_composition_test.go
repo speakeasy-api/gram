@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/stretchr/testify/require"
@@ -102,6 +103,17 @@ func TestKitCompositionCustomDomainResource(t *testing.T) {
 	require.True(t, kitResourceAttached(a, origin, constructed))
 	onPlatform, _ := url.Parse("https://platform.example/mcp/attached")
 	require.False(t, kitResourceAttached(a, origin, onPlatform))
+}
+
+func TestKitCompositionHostedDomainRootResource(t *testing.T) {
+	t.Parallel()
+	origin, _ := url.Parse("https://platform.example")
+	a := assistantRecord{MCPServers: []assistantMCPServerRow{{EndpointSlug: "attached", EndpointDomain: "mcp.customer.example", EndpointIsDomainRoot: true, ToolsetSlug: pgtype.Text{String: "attached", Valid: true}, Visibility: "private"}}}
+	root, _ := url.Parse("https://mcp.customer.example")
+	require.Equal(t, root.String(), a.MCPServers[0].endpointURL(origin).String())
+	require.True(t, kitResourceAttached(a, origin, root))
+	onSlug, _ := url.Parse("https://mcp.customer.example/mcp/attached")
+	require.False(t, kitResourceAttached(a, origin, onSlug))
 }
 
 func TestKitCompositionBootstrapRejectsUnattachedDisabledAndWrongOrigin(t *testing.T) {

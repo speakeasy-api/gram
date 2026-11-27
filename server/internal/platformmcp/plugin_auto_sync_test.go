@@ -19,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -258,7 +260,7 @@ func TestSetPluginAutoSyncRefusesTurningOffWithUnsyncedChanges(t *testing.T) {
 	require.NoError(t, err)
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 		"idempotency_key": "refused-off", "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
@@ -321,7 +323,7 @@ func TestSetPluginAutoSyncUsesThePluginsServiceCheck(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_set_plugin_auto_sync_service")
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, fixture.conn))
 	fixture.service.WithAutoSyncGuard(management)
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Checked", "checked")
 	off := func(key string) error {
@@ -354,7 +356,7 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_auto_sync_collision")
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
+	management := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), fixture.conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, fixture.conn))
 	fixture.service.WithAutoSyncGuard(management)
 	plugin := seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Tools", "tools")
 	seedPlugin(t, ctx, fixture.conn, fixture.principal.OrganizationID, fixture.project.ID, "Conflicting Tools", "tools-codex")
@@ -368,7 +370,7 @@ func TestSetPluginAutoSyncRefusesPackageDirectoryCollisions(t *testing.T) {
 	}
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 		"idempotency_key": "off-collision", "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	var refusal pluginMetadataRefusal
@@ -423,7 +425,7 @@ func TestPluginAutoSyncInputSchemas(t *testing.T) {
 	require.NotContains(t, required, "auto_sync_enabled")
 
 	properties, required = schema(operationSetPluginAutoSync)
-	require.ElementsMatch(t, []string{"project_id", "plugin", "auto_sync_enabled", "idempotency_key", "confirmed"}, required)
+	require.ElementsMatch(t, []string{"project_slug", "plugin", "auto_sync_enabled", "idempotency_key", "confirmed"}, required)
 	require.Len(t, properties, len(required))
 }
 
@@ -436,7 +438,7 @@ func TestSetPluginAutoSyncRequiresConfirmationAndPluginWrite(t *testing.T) {
 	descriptor := fixture.descriptor(t, operationSetPluginAutoSync)
 	arguments := func(confirmed bool) map[string]any {
 		return map[string]any{
-			"project_id": fixture.project.ID.String(), "plugin": plugin.ID.String(), "auto_sync_enabled": false,
+			"project_slug": fixture.project.Slug, "plugin": plugin.ID.String(), "auto_sync_enabled": false,
 			"idempotency_key": uuid.NewString(), "confirmed": confirmed,
 		}
 	}
@@ -469,7 +471,7 @@ func TestSetPluginAutoSyncIsUnavailableWithoutTheTurnOffCheck(t *testing.T) {
 	require.False(t, fixture.service.autoSyncMutationValid())
 
 	payload := invokePluginMetadataRefusal(t, fixture.descriptor(t, operationSetPluginAutoSync), map[string]any{
-		"project_id": fixture.project.ID.String(), "plugin": "anything", "auto_sync_enabled": false,
+		"project_slug": fixture.project.Slug, "plugin": "anything", "auto_sync_enabled": false,
 		"idempotency_key": uuid.NewString(), "confirmed": true,
 	}, ContextWithPrincipal(ctx, fixture.principal))
 	require.Contains(t, payload, pluginMetadataFeature)

@@ -16,7 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -25,6 +26,7 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -33,17 +35,12 @@ func TestDirectUpstreamNoAuthNeverChains(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_no_auth")
 	require.NoError(t, err)
-	for _, mode := range []string{"off", "shadow", "enforced"} {
+	for _, mode := range []string{"not_enrolled", "enforced"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
 			if mode == "enforced" {
 				f.enforce()
-			}
-			if mode == "shadow" {
-				flags := new(feature.InMemory)
-				flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
-				f.service.features = flags
 			}
 			selector := f.choose(uuid.NullUUID{})
 			issuerID := uuid.New()
@@ -68,6 +65,49 @@ func TestDirectUpstreamNoAuthNeverChains(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, remotesessions.UpstreamToken{}, token)
 				require.True(t, authentication.chosenNoAuth)
+			}
+		})
+	}
+}
+
+// A recorded session must not borrow the issuer's registration when the
+// typed choice is missing or a formerly valid no-auth choice becomes stale.
+func TestDirectUpstreamMissingAndStaleChoicesNeverChain(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_stale_choice")
+	require.NoError(t, err)
+	for _, name := range []string{"missing", "stale_no_auth"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			credentialID := uuid.New()
+			if name == "stale_no_auth" {
+				credentialID = f.choose(uuid.NullUUID{}).credentialID
+			}
+			f.oauthClient(authClientTypeRemoteSession)
+			subject := urn.NewUserSubject("user_1")
+			proof := validatedSessionProof(t, subject)
+			ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), proof)
+			ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
+			ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: subject.ID, ActiveOrganizationID: f.orgID})
+			issuerID := uuid.New()
+			require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), Slug: "issuer"}))
+			require.NoError(t, f.q.SeedUserSessionFixture(ctx, authclientbackfill.SeedUserSessionFixtureParams{
+				ProjectID: validUUID(f.projectID), OrganizationID: text(f.orgID), UserSessionIssuerID: issuerID,
+				SubjectUrn: subject, Jti: proof.JTI(), CredentialID: validUUID(credentialID),
+			}))
+			f.service.identityChainer = unusedChainer{}
+			for _, tunneled := range []bool{false, true} {
+				authentication := &issuerGateAuthentication{
+					endpoint: &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: issuerID, McpServerID: validUUID(f.serverID)},
+					subject:  subject, refreshableUserSession: true,
+				}
+				w := httptest.NewRecorder()
+				token, err := f.service.resolveDirectUpstreamToken(ctx, w, testenv.NewLogger(t), authentication, "https://upstream.example.com", tunneled, validUUID(f.issuerID))
+				require.Error(t, err)
+				require.Contains(t, w.Header().Get("WWW-Authenticate"), "invalid_token")
+				require.Empty(t, token)
+				require.False(t, authentication.chosenNoAuth)
 			}
 		})
 	}
@@ -146,4 +186,52 @@ func TestAgentKeyUngatedChallengeHasResourceMetadata(t *testing.T) {
 	}
 	require.True(t, found, "reconnect must record rejection telemetry")
 
+}
+
+// A chaining refusal on a direct server writes one request row naming who fixes it.
+func TestDirectUpstreamChainingRefusalWritesARequestRow(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_direct_chaining_refusal")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		stage   identitychaining.Stage
+		reason  identitychaining.Reason
+		code    mcpconnectionattempts.Code
+		who     mcpconnectionattempts.WhoFixes
+		message string
+	}{
+		{identitychaining.StageAuthorization, identitychaining.ReasonReauthenticationRequired, mcpconnectionattempts.CodeReauthenticationRequired, mcpconnectionattempts.WhoPerson, ""},
+		// At runtime only the signer refuses an account as ineligible.
+		{identitychaining.StageExchange, identitychaining.ReasonIneligibleIdentity, mcpconnectionattempts.CodeIneligibleIdentity, mcpconnectionattempts.WhoAdmin, "Company sign-in for this server isn't working. Contact your administrator."},
+		{identitychaining.StageAuthorization, identitychaining.ReasonUnmanagedAccount, mcpconnectionattempts.CodeUnmanagedAccount, mcpconnectionattempts.WhoPerson, "Company sign-in for this server can't use your account, because your company doesn't manage it."},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			f := newAuthClientFixture(t, pool)
+			subject := urn.NewUserSubject("user_1")
+			proof := validatedSessionProof(t, subject)
+			ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), proof)
+			ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
+			ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: "user_1", ActiveOrganizationID: f.orgID})
+			f.service.upstreamTokens = &fakeUpstreamTokens{issuerID: uuid.New()}
+			chainer := &recordingChainer{outcome: identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, governs: true}
+			f.service.identityChainer = chainer
+			rec := mcpconnectionattemptstest.New(t)
+			f.service.connections = rec.Recorder
+			authentication := &issuerGateAuthentication{
+				// A toolset endpoint has no stored choice, so the preset client chains.
+				endpoint: &ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: uuid.New(), McpServerID: uuid.NullUUID{}, ToolsetID: validUUID(uuid.New())},
+				subject:  subject, chosenClient: validUUID(f.registration),
+			}
+			_, err := f.service.resolveDirectUpstreamToken(ctx, httptest.NewRecorder(), testenv.NewLogger(t), authentication, "https://upstream.example.com", false, validUUID(f.issuerID))
+			if tc.message != "" {
+				require.EqualError(t, err, tc.message, "a refused account is told why, not challenged")
+			}
+			require.Len(t, chainer.requests, 1)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.code)
+			require.Equal(t, subject.String(), row.SubjectURN)
+			require.Equal(t, string(tc.who), row.WhoFixes)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
 }

@@ -1,4 +1,5 @@
 import { IdentityLink } from "@/components/identity-link";
+import { useHideInsightsDock } from "@/components/insights-context";
 import {
   encodeIdentityUrn,
   identityRefForUserKey,
@@ -7,12 +8,16 @@ import {
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
-import { shadowAIBreadcrumbSubstitutions } from "@/pages/shadow-ai/tabs";
 import { RequireScope } from "@/components/require-scope";
+import { RetryButton } from "@/components/retry-button";
+import { Spinner } from "@/components/ui/Spinner";
+import { describeApiError } from "@/lib/api-error";
+import { handleError } from "@/lib/errors";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
 import { MetricCard, type MetricCardProps } from "@/components/ui/MetricCard";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import {
@@ -25,9 +30,19 @@ import {
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "@/components/shadow-mcp/shadowMCPPolicyChange";
+import {
   MoreToggle,
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
+import { OfficialServerPanel } from "@/components/shadow-mcp/OfficialServerPanel";
+import {
+  SHADOW_MCP_OFFICIAL_STATE_LABEL,
+  shadowMCPOfficialState,
+} from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
@@ -123,9 +138,7 @@ function UserSources({
 }
 
 // MetricCard defaults to the roomier p-6/gap-4 the deployment page uses. This
-// strip shares a row with the review header and sits above dense hairline
-// tables, so it matches their rhythm, and px-3 puts its labels on the same left
-// rail as the fact lists below.
+// strip sits above dense hairline tables, so it matches their rhythm.
 const SUMMARY_TILE_CLASS = "gap-2 px-3 py-3";
 
 /** Day without the time, for a figure that has to read at a glance. */
@@ -164,26 +177,33 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
 }
 
 /**
- * The server at a glance: status, traffic, and recency as one bordered strip.
- *
- * Handed to the review as its `summary` so the two share a row. It replaced a
- * badge and two lines of prose in a full-width block, where the status sat
- * alone on the left and the figures had nowhere to go that did not read as an
- * island — giving every figure the same shape and its own column fills the
- * width by construction instead.
+ * The server at a glance: status, traffic, and recency as one bordered strip,
+ * first on the page so the answer comes before the detail.
  */
 function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
   const status = shadowMCPInventoryStatus(server);
+  // The same rule as the inventory row: a linked server reads as onboarded
+  // unless someone is waiting on a request for the direct URL.
+  // Where it is served is the panel's job, so the tile only names the state.
+  const officialState = shadowMCPOfficialState(server, status === "pending");
 
   return (
     <MetricCard.Group className="flex-wrap">
       <MetricCard
         label="Status"
-        value={shadowMCPInventoryStatusLabel(status)}
-        tone={statusTone(status)}
+        value={
+          officialState
+            ? SHADOW_MCP_OFFICIAL_STATE_LABEL[officialState]
+            : shadowMCPInventoryStatusLabel(status)
+        }
+        tone={officialState ? "success" : statusTone(status)}
         size="xs"
         className={SUMMARY_TILE_CLASS}
-        description={shadowMCPInventoryStatusDescription(server)}
+        description={
+          officialState
+            ? "Agents are sent to the official server"
+            : shadowMCPInventoryStatusDescription(server)
+        }
       />
       {/* First-seen rides under the call count rather than taking a tile of
           its own: it is the span those calls happened over, not a figure
@@ -336,13 +356,18 @@ function TopUsersTable({
   );
 }
 
-function DetailActionButtons({
+function DecideAccessButton({
+  actionLabel,
+  actionReady,
   disabled,
   onOpenDecide,
   policiesUnavailable,
   server,
-  projectSlug,
 }: {
+  /** The action the policy makes applicable to this server. */
+  actionLabel: string;
+  /** The applicable action depends on the policy, so it waits for it. */
+  actionReady: boolean;
   disabled: boolean;
   onOpenDecide: () => void;
   /**
@@ -352,31 +377,21 @@ function DetailActionButtons({
    */
   policiesUnavailable: boolean;
   server: ShadowMCPInventoryServer;
-  projectSlug: string;
 }) {
   const pendingReview = server.approvalRequest?.status === "requested";
 
   return (
-    <div className="flex items-center gap-2">
-      {server.approvalRequest && (
-        <RefreshEvidenceButton
-          requestId={server.approvalRequest.id}
-          projectSlug={projectSlug}
-          ready={!disabled}
-        />
-      )}
-      <Button
-        disabled={disabled || policiesUnavailable}
-        onClick={onOpenDecide}
-        variant={pendingReview ? "primary" : "secondary"}
-        size="sm"
-        title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
-      >
-        <Button.Text>
-          {pendingReview ? "Review Request" : "Decide Access"}
-        </Button.Text>
-      </Button>
-    </div>
+    <Button
+      disabled={disabled || policiesUnavailable || !actionReady}
+      onClick={onOpenDecide}
+      variant={pendingReview ? "primary" : "secondary"}
+      size="sm"
+      title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
+    >
+      <Button.Text>
+        {pendingReview ? "Review request" : actionLabel}
+      </Button.Text>
+    </Button>
   );
 }
 
@@ -393,8 +408,9 @@ function EnsureServerReview({
 }) {
   const project = useProject();
   const queryClient = useQueryClient();
-  const ensure = useEnsureMcpServerReviewMutation();
+  const ensure = useEnsureMcpServerReviewMutation({ onError: () => {} });
   const [failed, setFailed] = useState(false);
+  const [failureReason, setFailureReason] = useState("");
   const [attempt, setAttempt] = useState(0);
   // Keyed by server and project (and retry attempt), not a bare boolean, so
   // navigating from one unreviewed server to another gathers for the new one
@@ -421,11 +437,12 @@ function EnsureServerReview({
             ensureServerReviewRequestBody: { target: canonicalServerUrl },
           },
         });
-      } catch {
+      } catch (err) {
         // A failure only marks the run it belongs to: navigating away starts
         // a new run — even one that repeats this run's key — and a stale
         // rejection must not overwrite that run's state.
         if (activeRunRef.current === runToken) {
+          setFailureReason(describeApiError(err).message);
           setFailed(true);
         }
         return;
@@ -444,24 +461,22 @@ function EnsureServerReview({
           Evidence could not be gathered
         </Text>
         <Text muted small className="mt-1 max-w-md">
-          Collecting this server's evidence failed. It may be a temporary
-          problem — try again.
+          {failureReason}
         </Text>
-        <Button
+        <RetryButton
           className="mt-3"
-          variant="secondary"
-          onClick={() => setAttempt((current) => current + 1)}
-        >
-          <Button.Text>Retry</Button.Text>
-        </Button>
+          isRetrying={ensure.isPending}
+          onRetry={() => setAttempt((current) => current + 1)}
+        />
       </div>
     );
   }
 
   return (
     <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+      <Spinner className="text-muted-foreground mr-0 mb-2 size-5" />
       <Text variant="body" className="font-medium">
-        Gathering evidence
+        Gathering evidence…
       </Text>
       <Text muted small className="mt-1 max-w-md">
         Collecting what this server declares about itself — its identity,
@@ -472,15 +487,33 @@ function EnsureServerReview({
   );
 }
 
+/** A section title on this page, in the same serif as the access review's. */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Heading variant="h3" className="text-lg font-thin">
+      {children}
+    </Heading>
+  );
+}
+
 export default function ShadowMCPServerDetail(): JSX.Element {
+  // The Project Assistant cannot read this server's inventory or review,
+  // so its dock stays off the Shadow MCP pages.
+  useHideInsightsDock();
   const { serverSlug = "" } = useParams<{ serverSlug: string }>();
   const project = useProject();
   const routes = useRoutes();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const policiesQuery = useRiskListPolicies();
-  const membersQuery = useMembers();
-  const rolesQuery = useRoles();
+  // Every read on this page reports its own failure inline (with the
+  // reason and a Retry), so none rethrows to the page error boundary.
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  const membersQuery = useMembers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   let shadowMCPPolicies: ShadowMCPPolicy[] = [];
   if (!policiesQuery.isError) {
     shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
@@ -497,7 +530,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       serverSlug,
     },
     undefined,
-    { enabled: queryEnabled },
+    { enabled: queryEnabled, throwOnError: false },
   );
   const server = serverQuery.data;
   const serverDisplayName =
@@ -521,8 +554,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     : { projectId: project.id, serverUrl: serverURL, limit: USERS_PAGE_LIMIT };
   const usersQuery = useShadowMCPInventoryUsers(usersRequest, undefined, {
     enabled: usersQueryEnabled,
+    throwOnError: false,
   });
-  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
+  const updateServerName = useUpdateShadowMCPInventoryServerNameMutation({
+    onError: () => {},
+  });
   const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
     null,
   );
@@ -605,9 +641,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     setUsersCursor(nextUsersCursor);
   };
 
-  // Built once and rendered wherever the review puts it: inside the evidence
-  // for a server that has one, standalone under its own heading for a server
-  // that does not.
   const usersPanel =
     usersQuery.isLoading && !hasLoadedUserPages ? (
       <SkeletonTable />
@@ -616,6 +649,14 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         <Text variant="body" className="font-medium">
           Users could not be loaded
         </Text>
+        <Text muted small className="max-w-md">
+          {describeApiError(usersQuery.error).message}
+        </Text>
+        <RetryButton
+          className="mt-2"
+          isRetrying={usersQuery.isFetching}
+          onRetry={() => void usersQuery.refetch()}
+        />
       </div>
     ) : (
       <TopUsersTable
@@ -649,9 +690,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
         invalidateAllShadowMCPInventoryServer(queryClient),
         invalidateAllShadowMCPInventory(queryClient),
       ]);
+      toast.success(name ? `Renamed to “${name}”` : "Server name cleared");
       return true;
-    } catch {
-      toast.error("Unable to update Shadow MCP server name");
+    } catch (err) {
+      handleError(err, { title: "Couldn't rename the server" });
       return false;
     }
   };
@@ -673,6 +715,35 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     );
   }
 
+  const awaitingDecision = server?.approvalRequest?.status === "requested";
+  let accessReview: React.ReactNode = null;
+  if (server?.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0">
+        <ApprovalReview
+          requestId={server.approvalRequest.id}
+          title="Access review"
+          collapseEvidence
+          evidenceAction={
+            <RefreshEvidenceButton
+              requestId={server.approvalRequest.id}
+              projectSlug={project.slug}
+              ready={decideTarget === null}
+            />
+          }
+        />
+      </section>
+    );
+  }
+  if (server && !server.approvalRequest) {
+    accessReview = (
+      <section className="shrink-0 space-y-3">
+        <SectionHeading>Access review</SectionHeading>
+        <EnsureServerReview canonicalServerUrl={server.canonicalServerUrl} />
+      </section>
+    );
+  }
+
   const openDecide = () => {
     if (!server) return;
     setDecideTarget({
@@ -682,20 +753,31 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
   return (
     <Page>
       <Page.Header>
+        {/* The page is opened from the Shadow MCP page, where the sidebar
+            puts it too, so the trail leads back there rather than through
+            the Shadow AI section its URL still carries. */}
         <Page.Header.Breadcrumbs
+          skipSegments={["shadow-ai"]}
           substitutions={{
-            ...shadowAIBreadcrumbSubstitutions,
+            mcps: routes.shadowMCP.title,
             [serverSlug]: server?.serverName || server?.urlHost,
+          }}
+          urlSubstitutions={{
+            "/shadow-ai/mcps": `/${routes.shadowMCP.url}`,
           }}
         />
       </Page.Header>
-      <Page.Body fullHeight className="pb-8">
+      {/* Until the server is known, the page loader stands in for the whole
+          body: a placeholder title, the raw slug and a skeleton read as a
+          page that loaded empty rather than one still on its way. */}
+      <Page.Body fullHeight className="pb-8" isLoading={pageLoading}>
         {/* Organization admin to view: the server and users reads behind
             this page both require org:admin, so a narrower gate would show
             the chrome and rename control over a detail that never loads. */}
@@ -709,29 +791,42 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             </Page.Section.Description>
             <Page.Section.CTA>
               {server && (
-                <DetailActionButtons
+                <DecideAccessButton
+                  actionLabel={
+                    policiesQuery.data
+                      ? decisionActionLabel(
+                          applicableDecision(
+                            disposition,
+                            standingDecisionOf(server),
+                          ),
+                        )
+                      : "Decide access"
+                  }
+                  actionReady={!!policiesQuery.data}
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}
                   server={server}
-                  projectSlug={project.slug}
                 />
               )}
             </Page.Section.CTA>
             <Page.Section.Body>
-              {pageLoading ? (
-                <SkeletonTable />
-              ) : serverQuery.error || !server ? (
+              {serverQuery.error || !server ? (
                 <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
                   <Text variant="body" className="font-medium">
                     Shadow MCP server could not be loaded
                   </Text>
                   <Text muted small className="max-w-md">
-                    Refresh the page or try again later.
+                    {describeApiError(serverQuery.error).message}
                   </Text>
+                  <RetryButton
+                    className="mt-2"
+                    isRetrying={serverQuery.isFetching}
+                    onRetry={() => void serverQuery.refetch()}
+                  />
                 </div>
               ) : (
-                <div className="flex min-h-0 flex-col gap-6 pb-8">
+                <div className="flex min-h-0 flex-col gap-8 pb-8">
                   {/* pb-8: the last thing on this page is a disclosure
                       toggle, and a control flush against the bottom edge
                       reads as cut off rather than as the end of the page. */}
@@ -747,40 +842,18 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
-                  <section className="min-h-0 space-y-3">
-                    {/* The review owns its own heading: the request's status
-                        shares that row, and only the review has it. Observed
-                        traffic goes in with the evidence rather than trailing
-                        it as a section of its own — who calls the server is
-                        one of the questions a reviewer is asking. */}
-                    {server.approvalRequest ? (
-                      <ApprovalReview
-                        requestId={server.approvalRequest.id}
-                        title="Access review"
-                        usage={usersPanel}
-                        summary={<ServerSummary server={server} />}
-                      />
-                    ) : (
-                      <>
-                        {/* No dossier yet, so the review has no header to
-                            share a row with — the strip stands alone until
-                            the gather lands and the two-column row appears. */}
-                        <ServerSummary server={server} />
-                        <EnsureServerReview
-                          canonicalServerUrl={server.canonicalServerUrl}
-                        />
-                        <div>
-                          <Text variant="subheading">
-                            Who is currently using it?
-                          </Text>
-                          <Text muted small>
-                            Users with observed calls to this Shadow MCP server.
-                          </Text>
-                        </div>
-                        {usersPanel}
-                      </>
-                    )}
+                  {/* State first. A request someone is waiting on is the
+                      task, so its review comes next; otherwise the review
+                      is detail below the two outcomes: serve it as an
+                      official server, and who it affects. */}
+                  <ServerSummary server={server} />
+                  {awaitingDecision && accessReview}
+                  <OfficialServerPanel server={server} />
+                  <section className="shrink-0 space-y-3">
+                    <SectionHeading>Who uses it</SectionHeading>
+                    {usersPanel}
                   </section>
+                  {!awaitingDecision && accessReview}
                 </div>
               )}
             </Page.Section.Body>

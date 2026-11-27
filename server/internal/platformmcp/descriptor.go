@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"reflect"
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
@@ -195,6 +195,13 @@ type Registrar struct {
 	// cardLinks builds the dashboard links on result cards. Without a
 	// dashboard URL, cards are drawn without a page link.
 	cardLinks cardLinks
+
+	// projects resolves the project_slug a tool names for handlers that act
+	// on the project's ID. Without it, those tools are unavailable.
+	projects SkillProjectResolver
+
+	// aiCatalog identifies OAuth clients. The runtime injects it.
+	aiCatalog *aivendors.Store
 }
 
 // withDashboardLinks lets result cards link to dashboard pages.
@@ -203,7 +210,15 @@ func (r *Registrar) withDashboardLinks(links cardLinks) {
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil, instructions: "", cardLinks: cardLinks{dashboardURL: nil, serverURL: nil, projectSlug: nil}, projects: nil, aiCatalog: nil}
+}
+
+// withProjects lets tools name their project by slug while their handlers act
+// on its ID.
+func (r *Registrar) withProjects(projects SkillProjectResolver) {
+	if r != nil {
+		r.projects = projects
+	}
 }
 
 func (r *Registrar) withLogger(logger *slog.Logger) {
@@ -216,6 +231,36 @@ func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
 	if r != nil {
 		r.externalAuthorizer = authorizer
 	}
+}
+
+// requireAICatalog fails composition when no catalog was injected, so a
+// runtime missing one never starts serving.
+func (r *Registrar) requireAICatalog() {
+	if r == nil || r.aiCatalog == nil {
+		panic("platformmcp: runtime composed without an AI client catalog store; call WithAICatalog")
+	}
+}
+
+func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
+	if r != nil {
+		r.aiCatalog = catalog
+	}
+}
+
+// withAICatalogSnapshot pins one catalog snapshot for the rest of a request.
+func (r *Registrar) withAICatalogSnapshot(ctx context.Context) context.Context {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.Pin(ctx)
+}
+
+// aiCatalogSnapshot returns the request's pinned snapshot, or captures one.
+func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.SnapshotFor(ctx)
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
@@ -249,8 +294,6 @@ func (r *Registrar) For(audience Audience) []Descriptor {
 // FilterExternalTools applies caller-specific discovery policy to an already
 // composed tools/list result. This is only a discovery filter: exact resource
 // checks remain in each handler and run again when a listed tool is called.
-// A client with a tool allowlist (see clientToolAllowlist) sees only those
-// tools, intersected with what its grants make discoverable.
 func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal, tools []*mcp.Tool) []*mcp.Tool {
 	if r == nil || principal.UserID == "" || principal.OrganizationID == "" {
 		return []*mcp.Tool{}
@@ -262,16 +305,10 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
-	allowlist := clientToolAllowlist(principal.ClientID)
-	// The small discovery surface reaches every tool by design, so the
-	// allowlist only narrows the full catalogue.
-	if discoveryModeFromContext(ctx) != discoveryFull {
-		allowlist = nil
-	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)
@@ -304,31 +341,7 @@ func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal
 
 func grantsAuthorizeAnyScope(grants []authz.Grant, organizationID string, scopes []authz.Scope) bool {
 	for _, scope := range scopes {
-		if grantsAuthorizeAnyResource(grants, organizationID, scope) {
-			return true
-		}
-	}
-	return false
-}
-
-func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, scope authz.Scope) bool {
-	for _, grant := range grants {
-		if grant.Scope != authz.ScopeRoot && !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), scope) {
-			continue
-		}
-		resourceID := grant.Selector.ResourceID()
-		if scope.Parts().Resource == "org" {
-			resourceID = organizationID
-		} else if resourceID == "" || resourceID == authz.WildcardResource {
-			resourceID = "platform-mcp-catalogue-probe"
-		}
-		dimensions := maps.Clone(grant.Selector)
-		delete(dimensions, authz.SelectorKeyResourceKind)
-		delete(dimensions, authz.SelectorKeyResourceID)
-		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
-		})
-		if err == nil && allowed {
+		if authz.GrantsReachSomeResource(grants, scope, organizationID) {
 			return true
 		}
 	}
@@ -339,14 +352,14 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 // admitted to a resource cannot tell it apart from one that does not exist.
 func (r *Registrar) ResourceFor(audience Audience, uri string) (ResourceDescriptor, bool) {
 	if r == nil {
-		return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+		return ResourceDescriptor{}, false //nolint:exhaustruct_v5 // The zero descriptor is the "not found" signal.
 	}
 	for _, resource := range r.resources {
 		if resource.URI == uri && resource.Meta.servesAudience(audience) {
 			return resource, true
 		}
 	}
-	return ResourceDescriptor{}, false //nolint:exhaustruct // The zero descriptor is the "not found" signal.
+	return ResourceDescriptor{}, false //nolint:exhaustruct_v5 // The zero descriptor is the "not found" signal.
 }
 
 // addResource registers one resource with the MCP server and records the
@@ -372,11 +385,12 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 			if err != nil {
 				return nil, err
 			}
-			return &mcp.ReadResourceResult{ //nolint:exhaustruct // MCP SDK metadata is intentionally omitted.
+			return &mcp.ReadResourceResult{ //nolint:exhaustruct_v5 // MCP SDK metadata is intentionally omitted.
 				Contents: []*mcp.ResourceContents{{
 					URI:      resource.URI,
 					MIMEType: resource.MIMEType,
 					Text:     text,
+					Blob:     nil,
 					// MCP Apps hosts read a view's presentation hints from
 					// the contents they render.
 					Meta: resource.Meta,
@@ -404,6 +418,17 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 // that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
 	inputSchema, resolved := prepareInputSchema[In](tool)
+	projectTarget, resolvesProject := projectSlugTargetFor[In](tool.Name)
+	// handle resolves a project named by slug, then runs the handler.
+	handle := func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
+		if resolvesProject {
+			if err := r.resolveProjectSlug(ctx, projectTarget, &input, meta.ProjectScope == ProjectScopeExplicit); err != nil {
+				var output Out
+				return nil, output, err
+			}
+		}
+		return handler(ctx, request, input)
+	}
 	if meta.servesAudience(AudienceExternal) && meta.Authorization == "" {
 		panic(fmt.Sprintf("platformmcp: external tool %q declares no authorization policy", tool.Name))
 	}
@@ -433,7 +458,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			var output Out
 			err := r.authorizeExternal(ctx, meta.Authorization)
 			if err == nil {
-				result, output, err = handler(ctx, request, input)
+				result, output, err = handle(ctx, request, input)
 			}
 			if err == nil {
 				return card(ctx, result, output, input), output, nil
@@ -469,9 +494,9 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 					return nil, fmt.Errorf("decode %s arguments: %w", tool.Name, err)
 				}
 			}
-			//nolint:exhaustruct // A direct call has no MCP session or params; handlers read the principal from ctx.
+			//nolint:exhaustruct_v5 // A direct call has no MCP session or params; handlers read the principal from ctx.
 			request := &mcp.CallToolRequest{}
-			result, output, err := handler(ctx, request, input)
+			result, output, err := handle(ctx, request, input)
 			if err != nil {
 				return nil, r.failSafe(ctx, tool.Name, err)
 			}

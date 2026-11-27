@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -56,7 +57,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -85,7 +88,22 @@ type Service struct {
 	telemetryService *telemetry.Service
 	billingRepo      billing.Repository
 	audit            *audit.Logger
-	riskFindings     *chatfindings.Reader
+
+	// staffOrg is the deployment's Speakeasy staff organization, which the
+	// credit balance gate never blocks.
+	staffOrg     staff.Organization
+	riskFindings *chatfindings.Reader
+
+	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
+	// unless some project reads through shadows.
+	transcriptShadow *transcriptstore.Store
+
+	// transcriptShadowReadProjects are the projects whose chat reads open
+	// shadows instead of plaintext.
+	transcriptShadowReadProjects map[uuid.UUID]struct{}
+	// access is the per-chat gate, shared with services that reveal session
+	// content under another name (see SessionAccess).
+	access *SessionAccess
 	// turnStream carries assistant turn frames to dashboard subscribers. Nil
 	// disables streaming — turns still complete and the dashboard falls back
 	// to loading the reply once it lands.
@@ -101,6 +119,18 @@ type Service struct {
 	streamMaxAge time.Duration
 
 	workloadInference WorkloadInferenceAuthorizer
+
+	// summaries switches Summarize onto the masked summary path for
+	// organizations with Organizational Memory turned on. Nil keeps the
+	// legacy path.
+	summaries *SummaryGenerator
+}
+
+// WithMaskedSummaries routes Summarize through the masked summary generator
+// for organizations with Organizational Memory turned on.
+func (s *Service) WithMaskedSummaries(summaries *SummaryGenerator) *Service {
+	s.summaries = summaries
+	return s
 }
 
 // WithTurnStream enables streaming assistant turn frames to subscribers.
@@ -116,6 +146,18 @@ func (s *Service) WithTurnStream(stream *TurnStream) *Service {
 func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge time.Duration) *Service {
 	s.streamMetrics = httpstream.NewMetrics(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat"), s.logger)
 	s.streamMaxAge = maxAge
+	return s
+}
+
+// WithTranscriptShadowReads makes chat reads for the listed projects open
+// message bodies from encrypted shadows instead of plaintext. An empty list or
+// a nil store leaves every project on plaintext.
+func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projectIDs ...uuid.UUID) *Service {
+	s.transcriptShadow = store
+	s.transcriptShadowReadProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
+	for _, projectID := range projectIDs {
+		s.transcriptShadowReadProjects[projectID] = struct{}{}
+	}
 	return s
 }
 
@@ -155,33 +197,40 @@ func NewService(
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
 	auditLogger *audit.Logger,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		db:               db,
-		sessions:         sessions,
-		chatSessions:     chatSessions,
-		assistantTokens:  assistantTokens,
-		logger:           logger,
-		repo:             repo.New(db),
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:       openRouter,
-		completionClient: completionClient,
-		contextWindow:    contextWindow,
-		assetStorage:     assetStorage,
-		posthog:          posthog,
-		telemetryService: telemetryService,
-		billingRepo:      billingRepo,
-		audit:            auditLogger,
-		riskFindings:     nil,
-		turnStream:       nil, // opt in via WithTurnStream
-		streamMetrics:    nil, // opt in via WithStreamRotation
-		streamMaxAge:     0,   // opt in via WithStreamRotation
+		auth:                         auth.New(logger, db, sessions, authzEngine),
+		authz:                        authzEngine,
+		db:                           db,
+		sessions:                     sessions,
+		chatSessions:                 chatSessions,
+		assistantTokens:              assistantTokens,
+		logger:                       logger,
+		repo:                         repo.New(db),
+		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:                   openRouter,
+		completionClient:             completionClient,
+		contextWindow:                contextWindow,
+		assetStorage:                 assetStorage,
+		posthog:                      posthog,
+		telemetryService:             telemetryService,
+		billingRepo:                  billingRepo,
+		audit:                        auditLogger,
+		staffOrg:                     staffOrg,
+		riskFindings:                 nil,
+		transcriptShadow:             nil,
+		transcriptShadowReadProjects: nil,
+		access:                       NewSessionAccess(logger, db, authzEngine),
+		turnStream:                   nil, // opt in via WithTurnStream
+		streamMetrics:                nil, // opt in via WithStreamRotation
+		streamMaxAge:                 0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
+
+		summaries: nil, // opt in via WithMaskedSummaries
 	}
 }
 
@@ -545,12 +594,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -667,11 +711,11 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
-		if !allowed {
+		if !decision.AllAllowed {
 			return nil, oops.C(oops.CodeForbidden)
 		}
 	}
@@ -1043,7 +1087,7 @@ const (
 // can't be made we fall back to own-sessions rather than failing.
 func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string, agentSessions agentSessionScope) (chatVisibility, error) {
 	// An assistant principal is set only on the assistant runtime path and only
-	// the managed-assistant platform toolset surfaces chat tools, so treat it as
+	// the managed assistant's platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
@@ -1055,10 +1099,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	// owner-matching, not via chat:read.
 	//
 	// When RBAC is not enforced for the org we must NOT fall through to "see all"
-	// — Evaluate short-circuits to true when enforcement is off, so check
+	// — Decide short-circuits to true when enforcement is off, so check
 	// ShouldEnforce explicitly and treat the disabled case as constrained.
 	//
-	// Use Evaluate rather than Require here: this is a visibility branch, not an
+	// Use Decide rather than Require here: this is a visibility branch, not an
 	// access gate. Members legitimately hold no chat:read grant and fall through
 	// to own-session visibility, so a denial is the expected, non-error outcome.
 	// Require would stamp a chat:read "DENIED" authz challenge on every such
@@ -1069,14 +1113,14 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
 			// failing the listing.
 			s.logger.WarnContext(ctx, "chat:read visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		} else {
-			canReadAllSessions = allowed
+			canReadAllSessions = decision.AllAllowed
 		}
 	}
 
@@ -1138,31 +1182,24 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
-	allowed, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.
 		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
 		return nil, nil
 	}
 
-	editable := make([]uuid.UUID, 0, len(allowed))
-	for _, raw := range allowed {
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "parse editable agent id").LogError(ctx, s.logger)
+	editable := make([]uuid.UUID, 0, len(agentIDs))
+	for i, id := range agentIDs {
+		if decisions.Each[i].Allowed {
+			editable = append(editable, id)
 		}
-		editable = append(editable, id)
 	}
 	return editable, nil
 }
 
 func agentWriteCheck(agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        authz.ScopeAgentWrite,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
-	}
+	return authz.Agent(authz.AgentIDOf(agentID)).Write()
 }
 
 // unionAgentIDs merges agent id lists without repeating an id.
@@ -1179,170 +1216,6 @@ func unionAgentIDs(lists ...[]uuid.UUID) []uuid.UUID {
 		}
 	}
 	return merged
-}
-
-// chatAccess selects which scope a non-owner needs to reach a chat. Reads and
-// destructive mutations are deliberately separate scopes: a session reviewer
-// holding chat:read can open every transcript in the project and pin one as a
-// shared bookmark, but deleting or otherwise mutating someone else's session
-// is destructive and needs chat:write. Owners bypass both.
-type chatAccess int
-
-const (
-	chatAccessRead chatAccess = iota + 1
-	chatAccessWrite
-)
-
-func (a chatAccess) check(chatID string) authz.Check {
-	if a == chatAccessWrite {
-		return authz.ChatWriteCheck(chatID)
-	}
-	return authz.ChatReadCheck(chatID)
-}
-
-// authorizeChatRead decides whether the caller may read a chat's content.
-//
-// It is shared by every path that hands a transcript to a caller — LoadChat
-// and the turn stream — because they expose the same data and so must answer
-// this the same way. The turn stream originally checked only that the chat
-// belonged to the caller's project, which let an embedded chat-session token
-// watch any other user's chat in that project.
-func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
-	return s.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead, nil)
-}
-
-// authorizeChatAccess is the shared gate behind every per-chat endpoint.
-//
-// Project scoping lives here as well as in the SQL so it cannot be dropped by
-// one call site, and so the turn stream (which keeps its own lookup) answers
-// the ownership question identically.
-func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess, filteredGrant *bool) error {
-	// older chat_messages may not have project_id in the model, but it will
-	// always exist on the chat
-	if chat.ProjectID != *authCtx.ProjectID {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// External-user and chat-session-token callers must match the chat owner.
-	// First-party project credentials read any session in their project: the
-	// dashboard session, the managed-assistant runtime, and a direct API key,
-	// which the RBAC engine already treats as self-scoped (see
-	// authz.Engine.ShouldEnforce).
-	//
-	// A chat-session token minted via an API key restores that key's APIKeyID
-	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
-	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Direct legacy
-	// Gram-Key auth carries scopes, while direct principal auth is
-	// identified by its private mode. API-key-minted chat tokens may retain legacy
-	// mode but have no scopes, so they still go through owner matching.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	apiKeyMode, hasAPIKeyAuthorization := contextvalues.APIKeyAuthorization(ctx)
-	isDirectLegacyAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModeLegacy && len(authCtx.APIKeyScopes) > 0
-	isDirectPrincipalAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModePrincipal
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && (isDirectLegacyAPIKey || isDirectPrincipalAPIKey)
-	isAPIKeyChatSession := authCtx.APIKeyID != "" && !isDirectAPIKeyCall
-	surface, _ := contextvalues.GetActingSurface(ctx)
-	actor, authenticated := contextvalues.AuthenticatedActor(ctx)
-	isPlatformMember := surface == contextvalues.ActingSurfacePlatformMCP && authenticated && authCtx.UserID != "" && actor.Type == urn.PrincipalTypeUser && actor.ID == authCtx.UserID
-	// OAuth-authenticated Platform members use the owner/grant gate below, just
-	// like dashboard members, rather than an embedded external-user token gate.
-	if authCtx.SessionID == nil && !isDirectAPIKeyCall && !isPlatformMember {
-		if !isAssistantCall {
-			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return oops.C(oops.CodeUnauthorized)
-			}
-			if isAPIKeyChatSession {
-				externalOwnerMatches := chat.ExternalUserID.Valid && chat.ExternalUserID.String != "" && chat.ExternalUserID.String == authCtx.ExternalUserID
-				userOwnerMatches := chat.UserID.Valid && chat.UserID.String != "" && chat.UserID.String == authCtx.UserID
-				if !externalOwnerMatches && !userOwnerMatches {
-					return oops.C(oops.CodeUnauthorized)
-				}
-			}
-		}
-	}
-
-	// Gate dashboard access on chat:read or chat:write. The check is a no-op
-	// unless RBAC is enforced for the request (see authz.Engine.ShouldEnforce —
-	// API-key and sessionless callers are exempt). Members can always reach
-	// sessions they own, so bypass the scope check for the owner; reaching
-	// anyone else's session requires an explicit grant, which no system role
-	// holds. The managed-assistant runtime is exempt — it consumes transcripts
-	// programmatically, not as a reviewer.
-	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
-	// An agent's session has no human owner, so the agent's owner and its
-	// editors (agent:write) stand in for one, for reading only. A session that
-	// also carries a human identity (user_id or external_user_id) stays that
-	// human's, whatever agent_id says. Deleting or otherwise mutating what the
-	// agent did still needs chat:write.
-	agentOnlySession := chat.AgentID.Valid && !chat.UserID.Valid && (!chat.ExternalUserID.Valid || chat.ExternalUserID.String == "")
-	if !isAssistantCall && !isOwner && access == chatAccessRead && authCtx.UserID != "" && agentOnlySession {
-		answers, err := s.answersForAgent(ctx, authCtx, chat)
-		if err != nil {
-			return err
-		}
-		isOwner = answers
-	}
-	if !isAssistantCall && !isOwner {
-		if filteredGrant != nil {
-			if !*filteredGrant {
-				return oops.C(oops.CodeForbidden)
-			}
-			return nil
-		}
-		if err := s.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// answersForAgent reports whether the caller owns the agent behind an
-// agent-only session or holds agent:write on it. The write check is evaluated
-// only when RBAC is enforced: a disabled check allows everything and must not
-// turn every agent's sessions into the caller's.
-func (s *Service) answersForAgent(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) (bool, error) {
-	owns, err := s.repo.IsAgentOwner(ctx, repo.IsAgentOwnerParams{
-		AgentID:        chat.AgentID.UUID,
-		OrganizationID: chat.OrganizationID,
-		OwnerUserID:    authCtx.UserID,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "resolve agent owner").LogError(ctx, s.logger)
-	}
-	if owns {
-		return true, nil
-	}
-
-	enforce, err := s.authz.ShouldEnforce(ctx)
-	if err != nil {
-		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for agent session access", attr.SlogError(err))
-		return false, nil
-	}
-	if !enforce {
-		return false, nil
-	}
-	// A grant on a deleted or foreign agent id answers for nothing, as the
-	// listing's candidate agents exclude them.
-	live, err := s.repo.IsLiveAgent(ctx, repo.IsLiveAgentParams{
-		AgentID:        chat.AgentID.UUID,
-		OrganizationID: chat.OrganizationID,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "resolve agent").LogError(ctx, s.logger)
-	}
-	if !live {
-		return false, nil
-	}
-	// Evaluate, not Require: falling through to the chat:read gate below is
-	// the expected outcome for a non-editor, not a denial worth recording.
-	canEdit, err := s.authz.Evaluate(ctx, agentWriteCheck(chat.AgentID.UUID))
-	if err != nil {
-		s.logger.WarnContext(ctx, "agent:write check failed for agent session access", attr.SlogError(err))
-		return false, nil
-	}
-	return canEdit, nil
 }
 
 // loadAuthorizedChat loads a chat by id and applies the shared access gate
@@ -1372,7 +1245,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 		return none, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
-	if err := s.authorizeChatAccess(ctx, authCtx, chat, access, nil); err != nil {
+	if err := s.access.authorizeChatAccess(ctx, authCtx, chat, access, nil); err != nil {
 		return none, err
 	}
 
@@ -1525,6 +1398,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1574,6 +1450,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
+		if err := openShadowRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
 		for i := range rows {
 			r := rows[i]
@@ -1621,6 +1500,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
+		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
 	case payload.FromStart && payload.BeforeSeq == nil:
@@ -1647,6 +1529,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		// carries source inference + ClickHouse enrichment like the newest page.
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 
@@ -1677,6 +1562,9 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		hasMoreAfter = payload.BeforeSeq != nil
 		if isInitialLatest {
 			latestPageRows = rows
+		}
+		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
 	}
@@ -1904,20 +1792,14 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 
 	userAgent := r.Header.Get("User-Agent")
 
-	ipAddress := r.Header.Get("X-Forwarded-For")
-	if ipAddress == "" {
-		ipAddress = r.Header.Get("X-Real-IP")
-	}
-	if ipAddress == "" {
-		ipAddress = r.RemoteAddr
-	}
+	resolved, _ := requestip.FromContext(r.Context())
 
 	source := r.Header.Get(constants.HeaderSource)
 
 	return httpMetadata{
 		Origin:    origin,
 		UserAgent: userAgent,
-		IPAddress: ipAddress,
+		IPAddress: resolved.String(),
 		Source:    source,
 	}
 }
@@ -1925,13 +1807,13 @@ func extractHTTPMetadata(r *http.Request) httpMetadata {
 // checkCreditBalance rejects the request when the org has consumed its granted
 // credits. Reads only the cached period usage so the gate stays cheap; on
 // cache miss we fail open and rely on the OpenRouter per-key monthly limit as
-// the hard backstop. Speakeasy-internal orgs (specialLimitOrgs) bypass.
+// the hard backstop. The staff organization bypasses it.
 //
 // Phase 0: only enforce the hard gate on free-tier orgs. Pro/enterprise stay
 // bounded by the OpenRouter monthly key cap (creditsAccountTypeMap) until the
 // two limit sources are unified — see AGE-2122.
 func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType string) error {
-	if openrouter.IsSpecialLimitOrg(orgID) {
+	if s.staffOrg.Is(orgID) {
 		return nil
 	}
 
@@ -2781,6 +2663,10 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		}
 	}
 
+	if s.summaries != nil && OrgMemoryEnabled(ctx, s.logger, s.db, authCtx.ActiveOrganizationID) {
+		return s.summarizeMasked(ctx, chat, payload.Regenerate)
+	}
+
 	if chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !payload.Regenerate {
 		return &gen.SummarizeChatResult{
 			Summary:            chat.Summary.String,
@@ -2857,9 +2743,11 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	}
 
 	updated, err := s.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
-		Summary:   pgtype.Text{String: summary, Valid: true},
-		ID:        chatID,
-		ProjectID: *authCtx.ProjectID,
+		Summary:         pgtype.Text{String: summary, Valid: true},
+		SummaryRedacted: false,
+		CoveredThrough:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ID:              chatID,
+		ProjectID:       *authCtx.ProjectID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -2871,6 +2759,35 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	return &gen.SummarizeChatResult{
 		Summary:            updated.Summary.String,
 		SummaryGeneratedAt: updated.SummaryGeneratedAt.Time.Format(time.RFC3339),
+		Cached:             false,
+	}, nil
+}
+
+// summarizeMasked serves Summarize from the shared masked summary. A stored
+// summary is reused only when it was built from the redacted transcript;
+// older unmasked summaries are replaced on first view.
+func (s *Service) summarizeMasked(ctx context.Context, chat repo.GetChatRow, regenerate bool) (*gen.SummarizeChatResult, error) {
+	if chat.SummaryRedacted && chat.Summary.Valid && strings.TrimSpace(chat.Summary.String) != "" && !regenerate {
+		return &gen.SummarizeChatResult{
+			Summary:            chat.Summary.String,
+			SummaryGeneratedAt: chat.SummaryGeneratedAt.Time.Format(time.RFC3339),
+			Cached:             true,
+		}, nil
+	}
+
+	generated, err := s.summaries.Generate(ctx, chat.OrganizationID, chat.ProjectID, chat.ID)
+	switch {
+	case errors.Is(err, ErrNothingToSummarize):
+		return nil, oops.E(oops.CodeBadRequest, err, "chat has no summarizable messages").LogError(ctx, s.logger)
+	case errors.Is(err, ErrSummaryChatNotFound):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)
+	}
+
+	return &gen.SummarizeChatResult{
+		Summary:            generated.Summary,
+		SummaryGeneratedAt: generated.GeneratedAt.Format(time.RFC3339),
 		Cached:             false,
 	}, nil
 }
@@ -3096,9 +3013,9 @@ func buildSummarizeTranscript(messages []repo.ChatMessage) string {
 		if msg.Role != "user" && msg.Role != "assistant" {
 			continue
 		}
-		// Strip allowlisted harness envelopes (<message-context>, <notification>)
-		// so the summarizer sees the human turn, not framing boilerplate — same
-		// canonical tags title generation mines.
+		// Strip allowlisted harness envelopes so the summarizer sees the human
+		// turn, not framing boilerplate — same canonical tags title generation
+		// mines.
 		content := StripLeadingEnvelopes(msg.Content)
 		if content == "" {
 			continue

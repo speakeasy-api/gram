@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,7 +83,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 		Content:      "",
 		ToolCalls:    nil,
 		FinishReason: nil,
-		Usage:        openrouter.Usage{}, //nolint:exhaustruct // zero usage until a chunk carries it
+		Usage:        openrouter.Usage{}, //nolint:exhaustruct_v5 // zero usage until a chunk carries it
 	}
 	var content strings.Builder
 	toolCalls := map[int]openrouter.ToolCall{}
@@ -185,7 +186,10 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 	if err != nil {
 		return nil, s.classifyCompletionError(ctx, "get completion stream", err)
 	}
-	defer o11y.NoLogDefer(func() error { return streamBody.Close() })
+	// Closing records the stream's span attributes. The fallback below closes
+	// it early so the plain completion it returns is what the span describes.
+	closeStream := sync.OnceValue(streamBody.Close)
+	defer o11y.NoLogDefer(closeStream)
 
 	// Publishing rides the request context: if the caller goes away the turn is
 	// abandoned anyway, and a detached publish would outlive its only reader.
@@ -212,6 +216,9 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 		s.logger.WarnContext(ctx, "teed completion produced no content; falling back to a plain completion",
 			attr.SlogChatID(chatID.String()),
 		)
+		if closeErr := closeStream(); closeErr != nil {
+			s.logger.WarnContext(ctx, "close empty completion stream", attr.SlogError(closeErr))
+		}
 		plain, plainErr := s.completionClient.GetCompletion(ctx, req)
 		if plainErr != nil {
 			return nil, s.classifyCompletionError(ctx, "completion failed", plainErr)

@@ -239,7 +239,7 @@ func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDel
 		}
 		err = d.idp.RevokeSession(ctx, row.Target)
 		switch {
-		case err == nil, workosSessionGone(err):
+		case err == nil, WorkOSSessionGone(err):
 			return pushDelivered, nil
 		case workosSessionRejected(err):
 			return pushRejected, nil
@@ -280,9 +280,9 @@ func workosSessionRejected(err error) bool {
 	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity
 }
 
-// workosSessionGone reports a WorkOS session that no longer exists, which is
+// WorkOSSessionGone reports a WorkOS session that no longer exists, which is
 // what ending it wanted.
-func workosSessionGone(err error) bool {
+func WorkOSSessionGone(err error) bool {
 	if workos.IsNotFound(err) {
 		return true
 	}

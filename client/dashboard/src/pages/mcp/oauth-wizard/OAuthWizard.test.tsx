@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     createUserSessionIssuer: vi.fn().mockResolvedValue({ id: "usi-1" }),
     fetchRemoteSessionIssuerMetadata: vi.fn().mockResolvedValue({}),
     createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
+    attachServerClientAssociation: vi.fn().mockResolvedValue(undefined),
     createRemoteSessionClient: vi.fn().mockResolvedValue({ id: "rsc-1" }),
     linkToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
@@ -103,14 +104,12 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ activeOrganizationId: "org-1" }),
 }));
 
-vi.mock("@/contexts/Fetcher", () => ({
-  useFetcher: () => ({
-    fetch: vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
-  }),
-}));
-
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({}),
+  useSdkClient: () => ({
+    remoteSessions: {
+      attachServerClientAssociation: mocks.attachServerClientAssociation,
+    },
+  }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
@@ -169,25 +168,6 @@ const toolset = {
   oauthEnablementMetadata: { oauth2SecurityCount: 0 },
 } as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
 
-const oauthToolset = {
-  ...toolset,
-  rawTools: [
-    {
-      externalMcpToolDefinition: {
-        requiresOauth: true,
-        slug: "my-oauth-server",
-        name: "proxy",
-        registryServerName: "My OAuth Server",
-        oauthVersion: "2.1",
-        oauthAuthorizationEndpoint: "https://idp.example/oauth/authorize",
-        oauthTokenEndpoint: "https://idp.example/oauth/token",
-        oauthRegistrationEndpoint: "https://idp.example/oauth/register",
-        oauthScopesSupported: ["read"],
-      },
-    },
-  ],
-} as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
-
 function renderWizard(
   props: Partial<Parameters<typeof ConnectOAuthModal>[0]> = {},
 ) {
@@ -232,17 +212,6 @@ describe("OAuthWizard — rendering", () => {
     expect(screen.getByText("Connect OAuth")).toBeTruthy();
     expect(screen.getByRole("button", { name: /OAuth Proxy/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /External OAuth/ })).toBeTruthy();
-  });
-
-  it("keeps auto-configure labeled as OAuth Proxy when user-session onboarding is enabled", () => {
-    mocks.isFeatureEnabled.mockReturnValue(true);
-    renderWizard({ toolset: oauthToolset });
-    expect(
-      screen.getByText(
-        "Automatically set up OAuth Proxy based on pre-discovered details about this MCP server.",
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByText("Interactive auth enabled")).toBeNull();
   });
 });
 
@@ -664,6 +633,16 @@ describe("OAuthWizard — happy proxy create", () => {
       tokenEndpointAuthMethodsSupported: [],
     });
     expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
+    expect(mocks.attachServerClientAssociation).toHaveBeenCalledWith(
+      {
+        serverClientAssociationForm: {
+          mcpServerId: "toolset-1",
+          remoteSessionClientId: "rsc-1",
+        },
+      },
+      undefined,
+      expect.anything(),
+    );
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
       expect.anything(),

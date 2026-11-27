@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -37,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -152,6 +153,9 @@ type mintSessionParams struct {
 	// AuthClientPicks is the typed auth client picked per MCP server, recorded
 	// with the registration UpstreamClientPicks names for it.
 	AuthClientPicks map[uuid.UUID]uuid.UUID
+	// DeferredServerIDs are servers a headless issuance left for the person
+	// to connect later: the new credential records no choice for them.
+	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -250,6 +254,7 @@ type tokenGrantAuthenticatedHandler func(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -349,9 +354,9 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	}
 	creds := extractClientCredentials(r)
 	grant, ok := s.tokenGrantFor(r, grantType, creds)
-	// A workload's assertion signs in a workload, and an organization gateway
-	// serves users only.
-	if ok && grant.clientless != nil && endpoint.IsOrganizationGateway() {
+	// A workload's assertion signs in a workload, and an organization-wide
+	// gateway serves users only.
+	if ok && grant.clientless != nil && endpoint.IsOrganizationWideGateway() {
 		ok = false
 	}
 	if !ok {
@@ -386,16 +391,19 @@ func (s *Service) serveTokenGrant(
 	// derived from it.
 	baseURL := s.resourceBaseURL(r, endpoint)
 
+	// One snapshot drives admission and attribution for the whole exchange.
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
+
 	var grantErr error
 	clientID := creds.clientID
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
-		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, logger, grantType, creds, grant.resolveMode, baseURL)
+		clientRow, err := s.authenticateTokenClient(ctx, w, r, endpoint, clientCatalog, logger, grantType, creds, grant.resolveMode, baseURL)
 		if clientRow == nil {
 			return err
 		}
 		clientID = clientRow.ClientID
-		grantErr = grant.authenticated(ctx, w, r, endpoint, clientRow, baseURL, creds.method, logger)
+		grantErr = grant.authenticated(ctx, w, r, endpoint, clientCatalog, clientRow, baseURL, creds.method, logger)
 	case grant.clientAuth == tokenClientAuthNone && grant.clientless != nil:
 		grantErr = grant.clientless(ctx, w, r, endpoint, creds, baseURL, logger)
 	default:
@@ -431,6 +439,7 @@ func (s *Service) authenticateTokenClient(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	logger *slog.Logger,
 	grantType string,
 	creds presentedClientCredentials,
@@ -455,7 +464,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
-	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientCatalog, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)
@@ -531,7 +540,7 @@ func (s *Service) authenticateTokenClient(
 	//
 	// Access tokens already minted stay valid until they expire, same as the
 	// disabled case (AIS-406).
-	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
+	if err := s.checkAIToolGatewayBlock(ctx, logger, clientCatalog, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
 			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "ai_tool_blocked", mcpmetrics.IDJAGRejectionClientBlocked)
 			// This refusal ends an authorization-code exchange before the grant
@@ -562,6 +571,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -569,27 +579,35 @@ func (s *Service) handleTokenJWTBearerGrant(
 ) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
+		mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
+	defer t.Finish(ctx)
 	// Only a CIMD client the issuer's admission gate let through may exchange
 	// an ID-JAG. Each exchange starts a new authorization, so presets applies
 	// here, unlike on refresh: retiring a catalog entry stops its exchanges on
 	// every presets-mode issuer, while sessions already minted are unaffected.
 	if !clientRow.ClientIDMetadataUri.Valid {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, string(mcpmetrics.IDJAGRejectionClientNotCIMD), exchange.reject(mcpmetrics.IDJAGRejectionClientNotCIMD, nil)...)
+		t.Refuse(ctx, mcpconnectionattempts.CodeClientNotCIMD)
 		return writeTokenPolicyError(ctx, w, logger, oauthwire.GrantTypeJWTBearer, "this client is not allowed to use the ID-JAG grant")
 	}
 	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request", exchange.reject(mcpmetrics.IDJAGRejectionInvalidRequest, nil)...)
+		s.refusedWithoutRow(ctx, t, "token_missing_assertion")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	canonicalResource, err := endpoint.RootURL(baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build ID-JAG resource identifier").LogError(ctx, logger)
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch", exchange.reject(mcpmetrics.IDJAGRejectionResourceMismatch, nil)...)
+		s.refusedWithoutRow(ctx, t, "token_resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 	// The assertion is addressed to the issuer the authorization server
@@ -597,6 +615,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	// authorization server is shared or on the authentication host.
 	assertionAudience, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build ID-JAG assertion audience").LogError(ctx, logger)
 	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
@@ -607,6 +626,13 @@ func (s *Service) handleTokenJWTBearerGrant(
 		ResourceIndicated:   len(req.Resources) > 0,
 		ClientID:            clientRow.ClientID,
 	})
+	if err != nil {
+		if code, detail, unrecorded := idJAGAssertionHappened(ctx, err); unrecorded != "" {
+			s.refusedWithoutRow(ctx, t, unrecorded)
+		} else {
+			t.Refuse(ctx, code, detail)
+		}
+	}
 	if idjag.ReasonOf(err) == idjag.ReasonResourceNotIndicated {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
@@ -644,15 +670,18 @@ func (s *Service) handleTokenJWTBearerGrant(
 	// The session does not exist yet, but authz treats an AuthContext without a
 	// session as an internal call. A namespaced assertion JTI makes this context
 	// session-like solely while loading and checking the resolved user's grants.
+	t.With(mcpconnectionattempts.Subject(&result.Subject))
+	noServers := false
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
 		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, mandatorySurfaceTokenIssuance, endpoint)
 		if err == nil && len(members) == 0 {
+			noServers = true
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
+		connect := authz.MCPServer(authz.MCPServerIDOf(endpoint.connectResourceID()), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
 			err = s.authz.Require(authorizationCtx, connect)
@@ -661,14 +690,21 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
+			denied := mcpconnectionattempts.CodeNoServerAccess
+			if noServers {
+				denied = mcpconnectionattempts.CodeResourceNotAvailable
+			}
 			// The assertion is already spent; without a resource claim the request alone chose this server.
 			if result.Claims.Resource == "" {
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.reject(mcpmetrics.IDJAGRejectionResourceNotAvailable, nil)...)
+				t.Refuse(ctx, denied, mcpconnectionattempts.Detail(string(mcpmetrics.IDJAGRejectionResourceNotAvailable)))
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is not available to this user")
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized", exchange.reject(mcpmetrics.IDJAGRejectionSubjectNotAuthorized, nil)...)
+			t.Refuse(ctx, denied, mcpconnectionattempts.Detail(string(mcpmetrics.IDJAGRejectionSubjectNotAuthorized)))
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
 	}
 
@@ -676,19 +712,25 @@ func (s *Service) handleTokenJWTBearerGrant(
 	// credential it uses: that is decided like any headless caller's.
 	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(tokenParamUpstreamAuthClient))
 		return err
 	}
-	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested)
+	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true, workloadServers: nil}, requested)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+			err = withConnectPage(endpoint, canonicalResource, err)
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
+			code, detail := workloadGrantHappened(err)
+			t.Refuse(ctx, code, detail)
 			return err
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "decide upstream credentials").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "begin ID-JAG session transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
@@ -709,19 +751,32 @@ func (s *Service) handleTokenJWTBearerGrant(
 		ToolSelection:          nil,
 		UpstreamClientPicks:    upstreamPicks,
 		AuthClientPicks:        authClientPicks,
+		DeferredServerIDs:      deferred,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
+		// The issuer was retired after the assertion was checked.
+		if errors.Is(err, pgx.ErrNoRows) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("issuer_retired"))
+		} else {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		}
 		return err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("session_not_committed"))
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
 	committed = true
 	exchange.accept()
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "", exchange.acceptedAttrs()...)
 
-	return writeTokenSuccess(ctx, w, logger, minted.Body)
+	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
+		return err
+	}
+	t.Succeed(ctx, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.UserSession(minted.ID))
+	return nil
 }
 
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
@@ -737,6 +792,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -749,7 +805,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// deliberately records neither: refresh is not part of an initial flow.
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID)), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	defer t.Finish(ctx)
 
@@ -873,6 +929,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri does not match the original request")
 	}
+	if clientRow.ClientID == dashboardInspectClientID && !slices.Contains(s.dashboardInspectRedirectURIs(), req.RedirectURI) {
+		const reason = "redirect_uri_no_longer_registered"
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", reason)
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return rejectGrant(mcpconnectionattempts.CodeRedirectURIMismatch, "redirect_uri is no longer registered for this client", mcpconnectionattempts.Detail(reason))
+	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
@@ -947,7 +1009,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(grant.ClientID))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, grant.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				s.refuseRemoteSessionUnavailable(ctx, t, cerr)
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
@@ -993,7 +1055,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// selection is bound to another endpoint's resource — rejected at use
 		// time anyway, but failing the redemption is cheaper than a
 		// 200-then-401 loop.
-		if toolPolicy.Resource != endpointToolSelectionResource(endpoint) {
+		if !endpointAcceptsToolSelectionResource(endpoint, toolPolicy.Resource) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "tool_selection_resource_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return rejectGrant(mcpconnectionattempts.CodeResourceMismatch, "authorization code is bound to a different MCP endpoint")
@@ -1061,6 +1123,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
 		AuthClientPicks:        grant.AuthClientPicks,
+		DeferredServerIDs:      nil,
 		Catalog:                catalog,
 	}, logger)
 	if err != nil {
@@ -1115,6 +1178,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
+	clientCatalog *aivendors.Snapshot,
 	clientRow *usersessions_repo.UserSessionClient,
 	baseURL string,
 	presentedAuthMethod string,
@@ -1122,7 +1186,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
-	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID)), mcpconnectionattempts.StepInboundToken,
+	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientCatalog, clientRow.ClientID, mcpconnectionattempts.ClientIDAdmitted)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer tracker.Finish(ctx)
 
@@ -1291,7 +1355,7 @@ func (s *Service) rotateRefreshToken(
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
 		selection, selectionErr := toolfilter.ParseSessionPolicy(refreshSession.ToolSelection)
-		selectionMatches := selectionErr == nil && (selection == nil || selection.Resource == endpointToolSelectionResource(endpoint))
+		selectionMatches := selectionErr == nil && (selection == nil || endpointAcceptsToolSelectionResource(endpoint, selection.Resource))
 		if selectionMatches {
 			credential, admissionErr := loadAgentSessionCredential(
 				endpoint, refreshSession.SubjectUrn, refreshSession.SubjectUrn, refreshSession.OrganizationID,
@@ -1433,18 +1497,21 @@ func (s *Service) rotateRefreshToken(
 
 			failureReason, description := "refresh_token_unknown_or_already_used", "refresh_token is unknown or already used"
 			var failureSubject *urn.SessionSubject
-			expiredSubject, expiredErr := usersessions_repo.New(s.db).GetExpiredUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetExpiredUserSessionByRefreshTokenHashParams{
+			spent, spentErr := usersessions_repo.New(s.db).GetSpentUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetSpentUserSessionByRefreshTokenHashParams{
 				UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				UserSessionClientID: clientRow.ID,
 				RefreshTokenHash:    refreshTokenHash,
 			})
 			switch {
-			case expiredErr == nil:
+			case spentErr == nil && spent.Expired:
 				// The session was retired by reaching its length limit; that outlives the replay grace.
 				failureReason, description = "refresh_token_expired", "refresh_token has expired"
-				failureSubject = &expiredSubject
-			case !errors.Is(expiredErr, pgx.ErrNoRows):
-				logger.WarnContext(ctx, "failed to load expired refresh token session", attr.SlogError(expiredErr))
+				failureSubject = &spent.SubjectUrn
+			case spentErr == nil:
+				// Rotated or revoked: only the row names the owner.
+				failureSubject = &spent.SubjectUrn
+			case !errors.Is(spentErr, pgx.ErrNoRows):
+				logger.WarnContext(ctx, "failed to load spent refresh token session", attr.SlogError(spentErr))
 			}
 
 			published := s.storeRefreshTokenReplayFailure(ctx, replayKey, clientRow.ID, failureSubject, failureReason, description, logger)
@@ -1536,7 +1603,7 @@ func (s *Service) rotateRefreshToken(
 		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
 		return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "tool_selection_malformed", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 	}
-	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
+	if oldSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, oldSelection.Resource) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
 		writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 		return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "tool_selection_resource_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
@@ -1583,6 +1650,7 @@ func (s *Service) rotateRefreshToken(
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
+		DeferredServerIDs:      nil,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
@@ -1669,6 +1737,28 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if endpoint.MetaMcpServerID.Valid {
 		return upstreamRefreshServed
 	}
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		registrationID, err := s.hostedRegistration(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			return upstreamRefreshReconnect
+		}
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream assignment before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		if registrationID == uuid.Nil || !s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject) {
+			return upstreamRefreshServed
+		}
+		reconnect, err := s.remoteChallengeMgr.HostedRegistrationNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject: subject, RegistrationID: registrationID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream grant before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		return upstreamRefreshOf(reconnect)
+	}
 	// Where the auth client resolver serves the organization it decides the
 	// refresh: a choice it cannot use sends the session to reconnect rather
 	// than refreshing into the same rejection. Only a registration identity
@@ -1682,7 +1772,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshOf(resolverReconnect)
 	}
 	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return upstreamRefreshCheckFailed
@@ -2191,6 +2281,7 @@ func (s *Service) mintSession(
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
 		AuthClientPicks:        params.AuthClientPicks,
+		DeferredServerIDs:      params.DeferredServerIDs,
 		Catalog:                params.Catalog,
 	}, logger)
 }
@@ -2269,6 +2360,9 @@ type sessionIssuance struct {
 	// AuthClientPicks is the typed auth client picked per MCP server, recorded
 	// with the registration UpstreamClientPicks names for it.
 	AuthClientPicks map[uuid.UUID]uuid.UUID
+	// DeferredServerIDs are servers a headless issuance left for the person
+	// to connect later: the new credential records no choice for them.
+	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -2387,15 +2481,16 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
+		picks := usersessions_repo.RecordIssuedAuthClientChoicesParams{
 			UserSessionIssuerID: issuance.UserSessionIssuerID,
-			CredentialKind:      upstreamclients.CredentialKindUserSession,
 			CredentialID:        session.ID,
-			Source:              upstreamclients.SelectionSourceIssuance,
 			ScopeMcpServerIds:   nil,
+			ExcludeMcpServerIds: issuance.DeferredServerIDs,
 			PickedMcpServerIds:  nil,
 			PickedClientIds:     nil,
 			PickedAuthClientIds: nil,
+			PickedExplicit:      nil,
+			AllowSoleOffer:      false,
 		}
 		if issuance.Catalog != nil {
 			picks = issuance.Catalog.upstreamChoices(session.ID)
@@ -2405,6 +2500,7 @@ func (s *Service) issueSession(
 				picks.PickedClientIds = append(picks.PickedClientIds, clientID)
 				// The zero id is read as no typed pick.
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, issuance.AuthClientPicks[serverID])
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 			for serverID, authClientID := range issuance.AuthClientPicks {
 				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
@@ -2414,9 +2510,10 @@ func (s *Service) issueSession(
 				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
 				picks.PickedClientIds = append(picks.PickedClientIds, uuid.Nil)
 				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, authClientID)
+				picks.PickedExplicit = append(picks.PickedExplicit, true)
 			}
 		}
-		if _, err := queries.RecordUpstreamClientSelections(ctx, picks); err != nil {
+		if _, err := queries.RecordIssuedAuthClientChoices(ctx, picks); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
 	}

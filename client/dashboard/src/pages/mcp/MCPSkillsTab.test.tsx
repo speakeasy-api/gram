@@ -1,6 +1,12 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +26,14 @@ const state = vi.hoisted(() => ({
   picker: vi.fn(),
 }));
 
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 vi.mock("@/components/page-layout", () => {
   const Section = ({ children }: { children: ReactNode }) => (
     <section>{children}</section>
@@ -261,7 +275,7 @@ describe("MCPSkillsTab", () => {
     state.grants = [readSkills, writeServer];
     state.links.mockReturnValue(infinite([{ result: { links: [] } }]));
     renderTab();
-    expect(screen.getByText("No skills served yet")).toBeDefined();
+    expect(screen.getByText("Give connected agents skills")).toBeDefined();
     expect(screen.getByText("Add skill")).toBeDefined();
   });
 
@@ -304,7 +318,11 @@ describe("MCPSkillsTabRoute", () => {
     renderTab(
       <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />,
     );
-    expect(screen.getByText("Access restricted")).toBeDefined();
+    expect(
+      within(screen.getByRole("alert")).getByRole("heading", {
+        name: "You don't have access to this page",
+      }),
+    ).toBeDefined();
     expect(state.links).not.toHaveBeenCalled();
   });
 

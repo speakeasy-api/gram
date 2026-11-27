@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -210,6 +211,8 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 	return &workloadGrantError{reason: reason, outcome: workloadGrantUnavailable, retryAfter: workloadGrantUnavailableRetryAfter, err: err}
 }
 
+var errGatewayMachineAccessDisabled = errors.New("gateway machine access is disabled")
+
 // presentedWorkload is what an assertion claims before and after verification:
 // the iss and sub it presented, and the issuer row iss resolved to once it
 // has. It is what a rejection log line records.
@@ -220,6 +223,10 @@ type presentedWorkload struct {
 	jwksURI                string
 	assertionPolicyChecked bool
 	allowAssertionReuse    bool
+
+	// signatureVerified reports the assertion's signature verified, so issuer
+	// and subject are proven even when a later check refused it.
+	signatureVerified bool
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
@@ -239,7 +246,7 @@ func admitWorkloadAssertion(
 ) (presentedWorkload, error) {
 	presented := presentedWorkload{
 		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
-		assertionPolicyChecked: false, allowAssertionReuse: false,
+		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false,
 	}
 
 	token, err := assertioncore.ParseSigned(raw, workloadAssertionMaxBytes)
@@ -299,6 +306,10 @@ func admitWorkloadAssertion(
 		MaxLifetime:         workloadAssertionMaxLifetime,
 		AllowAssertionReuse: presented.allowAssertionReuse,
 	}); err != nil {
+		if rejected, ok := errors.AsType[*workload.Error](err); ok && rejected.SignatureVerified {
+			presented.signatureVerified = true
+			presented.subject = rejected.Subject
+		}
 		reason := workload.ReasonOf(err)
 		switch {
 		case errors.Is(err, jwks.ErrRefreshRateLimited), errors.Is(err, jwks.ErrFetchRateLimited):
@@ -315,6 +326,8 @@ func admitWorkloadAssertion(
 			return presented, refuseWorkloadGrant(string(reason), err)
 		}
 	}
+
+	presented.signatureVerified = true
 
 	err = admitWorkloadIdentity(ctx, grant.identities, tenancy, issuer.ID, claims.Subject)
 	switch {
@@ -384,7 +397,14 @@ func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint
 	if s.workloadGrant == nil {
 		return false
 	}
-	_, ok := agentAuthorizationTarget(endpoint)
+	if _, ok := agentAuthorizationTarget(endpoint); ok {
+		return true
+	}
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return false
+	}
+	_, ok := gateway.authorizationTarget(endpoint.ProjectID)
 	return ok
 }
 
@@ -410,12 +430,15 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return err
 	}
 
+	// Until the assertion's signature verifies, nothing proves a real workload: a refusal is a metric, never a row.
 	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
 	resources := r.PostForm[oauthwire.ParamResource]
 	switch {
 	case assertion == "":
+		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+string(workload.ReasonAssertionMissing))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	case len(resources) == 0:
+		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_resource_missing")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is required")
 	}
 	canonicalResource, err := endpoint.RootURL(baseURL)
@@ -423,6 +446,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return oops.E(oops.CodeUnexpected, err, "build workload grant resource identifier").LogError(ctx, logger)
 	}
 	if err := oauthwire.ValidateResourceIndicators(resources, canonicalResource); err != nil {
+		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -431,21 +455,50 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return oops.E(oops.CodeUnexpected, err, "build workload assertion audiences").LogError(ctx, logger)
 	}
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	if err != nil && !presented.signatureVerified {
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
 	}
 
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppWorkload), mcpconnectionattempts.StepInboundToken,
+		workloadGrantRowOptions(r, endpoint.UserSessionIssuerID, presented, subject)...)
+	defer t.Finish(ctx)
+	if err != nil {
+		refuseWorkloadGrantRow(ctx, t, err)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
+
 	if _, _, err := subject.Workload(); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
+		refusal := refuseWorkloadGrant("assertion_subject_invalid", err)
+		refuseWorkloadGrantRow(ctx, t, refusal)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
+	if gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint); gatewayErr == nil {
+		target, ok = gateway.authorizationTarget(endpoint.ProjectID)
+		if ok {
+			enabled, rolloutErr := s.gatewayMachineAccess(ctx, gateway)
+			if rolloutErr != nil {
+				refusal := workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", rolloutErr)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
+			if !enabled {
+				refusal := refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
+		}
+	}
 	if !ok {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
+		refusal := refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy"))
+		refuseWorkloadGrantRow(ctx, t, refusal)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
 	}
 	// The same check the MCP side applies to the stored row, so a session it
@@ -455,20 +508,23 @@ func (s *Service) handleWorkloadAssertionGrant(
 		delegatedGrants, pgtype.Int4{Int32: int32(version), Valid: true},
 	)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "validate workload session policy").LogError(ctx, logger)
 	}
 	issuerURL, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 
 	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(tokenParamUpstreamAuthClient))
 		return err
 	}
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
-		client: nil, beforeCommit: nil,
+		client: nil, beforeCommit: nil, tracker: t,
 		presented:            presented,
 		credential:           credential,
 		projectID:            &projectID,
@@ -483,6 +539,35 @@ func (s *Service) handleWorkloadAssertionGrant(
 			audience:            canonicalResource,
 		}, subject, credential),
 	})
+}
+
+// refuseUnverifiedWorkloadGrant answers a workload grant refused before its assertion's signature
+// verified. Nothing proves a real workload yet, so the refusal is a metric, never a row.
+func (s *Service) refuseUnverifiedWorkloadGrant(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, presented presentedWorkload, err error) error {
+	reason := "workload_grant_failed"
+	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+		reason = refusal.reason
+	}
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+reason)
+	return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+}
+
+// workloadGrantRowOptions describe a workload grant whose assertion's signature verified. Anyone
+// can mint new subjects at a public issuer, so its refusals fold per workload issuer.
+func workloadGrantRowOptions(r *http.Request, userSessionIssuerID uuid.UUID, presented presentedWorkload, subject urn.SessionSubject) []mcpconnectionattempts.Option {
+	return []mcpconnectionattempts.Option{
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
+		mcpconnectionattempts.UserSessionIssuer(userSessionIssuerID), mcpconnectionattempts.Subject(&subject),
+		mcpconnectionattempts.FoldRefusedSubjects("workload_issuer:" + presented.issuerID.String()),
+	}
+}
+
+// trackSharedWorkloadGrant follows a verified workload grant at a shared authorization server,
+// which serves every MCP server of its issuer, so its row names the issuer and no one server.
+func (s *Service) trackSharedWorkloadGrant(r *http.Request, issuer *sharedIssuer, presented presentedWorkload, subject urn.SessionSubject) *mcpconnectionattempts.Tracker {
+	shared := issuer.authorizationServer
+	scope := mcpconnectionattempts.AuthorizationServerScope(issuer.organizationID, shared.projectID, shared.issuerID, mcpconnectionattempts.AppWorkload)
+	return s.connections.Track(scope, mcpconnectionattempts.StepInboundToken, workloadGrantRowOptions(r, shared.issuerID, presented, subject)...)
 }
 
 // refuseUnservedWorkloadGrant refuses a workload grant the deployment does
@@ -506,6 +591,9 @@ func (s *Service) refuseUnservedWorkloadGrant(
 type workloadGrantIssuance struct {
 	client       *usersessions_repo.UserSessionClient
 	beforeCommit func(context.Context, pgx.Tx, *mintedSession) error
+
+	// tracker records the grant's connection row, or nil for none.
+	tracker *mcpconnectionattempts.Tracker
 
 	// presented is the identity the assertion presented, for logs.
 	presented presentedWorkload
@@ -578,6 +666,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
+		DeferredServerIDs:      nil,
 		Catalog:                nil,
 	}
 }
@@ -593,6 +682,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
 	minted, err := s.mintWorkloadGrantSession(ctx, logger, grant)
 	if err != nil {
+		refuseWorkloadGrantRow(ctx, grant.tracker, err)
 		if _, ok := errors.AsType[*workloadGrantError](err); ok {
 			return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
 		}
@@ -600,8 +690,10 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		grant.tracker.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
 		return err
 	}
+	grant.tracker.Succeed(ctx, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.UserSession(minted.ID))
 	logger.InfoContext(ctx, "workload session issued",
 		attr.SlogOAuthGrant(oauthwire.GrantTypeJWTBearer),
 		attr.SlogWorkloadIssuerID(grant.presented.issuerID.String()),
@@ -694,8 +786,15 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
+	var workloadServers []consentAuthServer
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, workloadServers, err = s.requireGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
+	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+	}
+	if _, ok := errors.AsType[*workloadGrantError](err); ok {
+		return nil, err
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
@@ -705,8 +804,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	}
 
 	if grant.choosesUpstream && grant.endpoint != nil {
-		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject}
-		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients)
+		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false, workloadServers: workloadServers}
+		// A workload cannot connect later, so nothing is deferred.
+		upstreamPicks, authClientPicks, _, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 				// The workload was admitted, so naming why its choice failed
@@ -737,6 +837,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant)
 	}
 	if err != nil {
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return nil, err
+		}
 		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
 			return nil, refuseWorkloadGrant("agent_admission_denied", err)
 		}
@@ -796,6 +899,41 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	}
 }
 
+// A gateway-bound workload session must reach at least one member. Gateway
+// entry and member authorization remain separate decisions: the endpoint grant
+// admits the gateway, while the normal member snapshot applies visibility and
+// each member's own mcp:connect authorization.
+func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []consentAuthServer, error) {
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return ctx, nil, nil
+	}
+	if _, ok := gateway.authorizationTarget(endpoint.ProjectID); !ok {
+		return ctx, nil, nil
+	}
+
+	ctx = authz.WithoutCredentialCeiling(ctx)
+	var members []metaMember
+	if endpoint.IsProjectGateway() {
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID, false)
+	} else {
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint)
+	}
+	if err != nil {
+		return ctx, nil, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
+	}
+	if len(members) == 0 {
+		return ctx, nil, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
+	}
+	servers := make([]consentAuthServer, 0, len(members))
+	for _, member := range members {
+		if member.backend == metaMemberBackendProxied {
+			servers = append(servers, consentAuthServer{id: member.serverID, projectID: member.projectID})
+		}
+	}
+	return ctx, servers, nil
+}
+
 // retryAfterSeconds renders a Retry-After delay in whole seconds, never less
 // than one.
 func retryAfterSeconds(d time.Duration) string {
@@ -808,11 +946,24 @@ func retryAfterSeconds(d time.Duration) string {
 func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
 	var checks []authz.Check
 	if grant.endpoint != nil {
-		target, ok := agentAuthorizationTarget(grant.endpoint)
-		if !ok {
-			return errCredentialRejected
+		if gateway, gatewayErr := gatewayTargetFromEndpoint(grant.endpoint); gatewayErr == nil {
+			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok {
+				return errCredentialRejected
+			}
+			enabled, err := s.gatewayMachineAccess(ctx, gateway)
+			if err != nil {
+				return workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", err)
+			}
+			if !enabled {
+				return refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
+			}
+		} else {
+			target, ok := agentAuthorizationTarget(grant.endpoint)
+			if !ok {
+				return errCredentialRejected
+			}
+			checks = append(checks, target.connectCheck())
 		}
-		checks = append(checks, target.connectCheck())
 	}
 	if grant.session.Audience == InferenceResource {
 		checks = append(checks, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
@@ -820,11 +971,11 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 	if len(checks) == 0 {
 		return nil
 	}
-	allowed, err := s.authz.Evaluate(ctx, checks...)
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
 	if err != nil {
 		return fmt.Errorf("recheck workload grant authority: %w", err)
 	}
-	if !allowed {
+	if !decisions.AllAllowed {
 		return errCredentialRejected
 	}
 	return nil

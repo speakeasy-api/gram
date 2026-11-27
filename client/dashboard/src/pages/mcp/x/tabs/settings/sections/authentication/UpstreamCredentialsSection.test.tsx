@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   probe: "idle",
   probed: vi.fn(),
   admin: true,
+  read: "success" as "success" | "loading" | "error",
+  refetch: vi.fn(),
   authentication: {
     status: "no_auth_required",
     requiresUpstreamAuth: false,
@@ -29,9 +32,10 @@ vi.mock("@/lib/remote-identity", () => ({
 
 vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   useMcpServerAuthentication: () => ({
-    isLoading: false,
-    isError: false,
-    data: mocks.authentication,
+    isLoading: mocks.read === "loading",
+    isError: mocks.read === "error",
+    data: mocks.read === "loading" ? undefined : mocks.authentication,
+    refetch: mocks.refetch,
   }),
 }));
 
@@ -39,16 +43,22 @@ vi.mock("@gram/client/react-query/updateAuthClient.js", () => ({
   useUpdateAuthClientMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-function renderSection(server: Partial<McpServer>) {
+vi.mock("./AddCredentialSheet", () => ({
+  AddCredentialSheet: () => <div data-testid="add-credential-sheet" />,
+}));
+
+function renderSection(server: Partial<McpServer>, url = "/") {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <TooltipProvider>
-        <UpstreamCredentialsSection
-          mcpServer={
-            { id: "server-1", projectId: "project-1", ...server } as McpServer
-          }
-        />
-      </TooltipProvider>
+      <MemoryRouter initialEntries={[url]}>
+        <TooltipProvider>
+          <UpstreamCredentialsSection
+            mcpServer={
+              { id: "server-1", projectId: "project-1", ...server } as McpServer
+            }
+          />
+        </TooltipProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -58,6 +68,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.probe = "idle";
   mocks.admin = true;
+  mocks.read = "success";
   mocks.authentication = {
     status: "no_auth_required",
     requiresUpstreamAuth: false,
@@ -71,13 +82,13 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(mocks.probed).toHaveBeenCalledWith("remote-1", true);
-    expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+    expect(screen.getByText(/every tool call fails/)).toBeTruthy();
   });
 
   it.each([
     ["configured", "Credentials set up"],
-    ["setup_incomplete", "Authentication setup incomplete"],
-    ["no_auth_required", "No authentication required"],
+    ["setup_incomplete", "Setup incomplete"],
+    ["no_auth_required", "No authentication"],
   ])("states the %s status without a control to change it", (status, label) => {
     mocks.authentication = { ...mocks.authentication, status };
     renderSection({ remoteMcpServerId: "remote-1" });
@@ -92,8 +103,8 @@ describe("UpstreamCredentialsSection", () => {
     mocks.probe = "authentication-required";
     renderSection({ remoteMcpServerId: "remote-1" });
 
-    expect(screen.getByText("Authentication setup incomplete")).toBeTruthy();
-    expect(screen.getByText(/it asks for sign-in/)).toBeTruthy();
+    expect(screen.getByText("Setup incomplete")).toBeTruthy();
+    expect(screen.getByText(/every tool call fails/)).toBeTruthy();
   });
 
   it("leaves the derived status alone for people who cannot change it", () => {
@@ -102,7 +113,7 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(mocks.probed).toHaveBeenCalledWith("remote-1", false);
-    expect(screen.getByText("No authentication required")).toBeTruthy();
+    expect(screen.getByText("No authentication")).toBeTruthy();
     expect(screen.queryByText("Add credential")).toBeNull();
   });
 
@@ -111,8 +122,38 @@ describe("UpstreamCredentialsSection", () => {
     renderSection({ remoteMcpServerId: "remote-1" });
 
     expect(screen.getByText("Status unavailable")).toBeTruthy();
-    expect(screen.queryByText("No authentication required")).toBeNull();
+    expect(screen.queryByText("No authentication")).toBeNull();
   });
+
+  it.each([true, false])(
+    "opens a credential repair deep link only for an organization admin (%s)",
+    (admin) => {
+      mocks.admin = admin;
+      renderSection(
+        { remoteMcpServerId: "remote-1" },
+        "/settings?setup=credentials#authentication",
+      );
+      expect(!!screen.queryByTestId("add-credential-sheet")).toBe(admin);
+    },
+  );
+
+  it.each([
+    ["loading", "Loading…"],
+    ["error", "The upstream credentials could not be loaded."],
+  ] as const)(
+    "does not expose repair actions while typed credentials are %s",
+    (read, message) => {
+      mocks.read = read;
+      renderSection(
+        { remoteMcpServerId: "remote-1" },
+        "/settings?setup=credentials#authentication",
+      );
+      expect(screen.getByText(message)).toBeTruthy();
+      expect(screen.queryByText("Add credential")).toBeNull();
+      expect(screen.queryByTestId("add-credential-sheet")).toBeNull();
+      expect(screen.queryByText("No authentication")).toBeNull();
+    },
+  );
 
   it("does not probe a server with no remote upstream", () => {
     renderSection({ tunneledMcpServerId: "tunnel-1" });

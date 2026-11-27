@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
 
@@ -86,6 +87,10 @@ func (f Fallback) Provider(span *otelv1.InboundSpan) (string, string, error) {
 
 func (f Fallback) Surface(span *otelv1.InboundSpan) (string, string, error) {
 	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, string, error) { return d.Surface(r) })
+}
+
+func (f Fallback) Identity(span *otelv1.InboundSpan) (string, aivendors.Identity, error) {
+	return firstFallback(f, span, func(d SpanDialect, r *otelv1.InboundSpan) (string, aivendors.Identity, error) { return d.Identity(r) })
 }
 
 func (f Fallback) EventName(span *otelv1.InboundSpan) (string, string, error) {

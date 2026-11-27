@@ -81,11 +81,11 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 				if tc.denied {
 					return AssistantWorkloadToken{}, refuseWorkloadGrant("policy", errors.New("denied"))
 				}
-				return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+				return AssistantWorkloadToken{AssistantID: uuid.New(), AgentID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 			})
 			r := newTokenDispatchRequest(t, url.Values{"resource": {tc.resource}, "scope": {tc.scope}})
 			w := httptest.NewRecorder()
-			require.NoError(t, s.handleAssistantClientCredentialsGrant(r.Context(), w, r, endpoint, client, "https://gram.example", "client_secret_post", s.logger))
+			require.NoError(t, s.handleAssistantClientCredentialsGrant(r.Context(), w, r, endpoint, s.aiCatalog.Snapshot(), client, "https://gram.example", "client_secret_post", s.logger))
 			require.Equal(t, tc.status, w.Code)
 			if tc.status == 200 {
 				require.Equal(t, 1, calls)

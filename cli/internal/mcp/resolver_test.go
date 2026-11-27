@@ -76,7 +76,6 @@ func testToolset(mcpSlug, envSlug *types.Slug) *types.Toolset {
 		SecurityVariables:            nil,
 		ServerVariables:              nil,
 		FunctionEnvironmentVariables: nil,
-		ExternalMcpHeaderDefinitions: nil,
 		OauthEnablementMetadata:      nil,
 		Tools:                        nil,
 		ToolUrns:                     nil,

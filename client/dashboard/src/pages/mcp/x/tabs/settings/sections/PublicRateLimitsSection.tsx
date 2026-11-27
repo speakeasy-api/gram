@@ -1,8 +1,10 @@
+import { useSettingsSectionHeading } from "@/components/detail/settings-layout";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { RequireScope } from "@/components/require-scope";
+import { TechnicalDetails } from "@/components/technical-details";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -98,6 +100,8 @@ function PublicRateLimits({
   // The stored values the draft was last synced from, so a refetch that
   // changes them only replaces an untouched draft and never clobbers edits.
   const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  useSettingsSectionHeading("Anonymous rate limit", root);
 
   const { publicRequestRatePerSecond, publicRequestBurst } = tunneledMcpServer;
   useEffect(() => {
@@ -171,34 +175,40 @@ function PublicRateLimits({
   };
 
   return (
-    <div className="border p-6">
+    <div ref={setRoot} className="border p-6">
       <Text
         variant="subheading"
         id="tunneled-mcp-public-rate-limits-label"
         className="mb-1"
       >
-        Anonymous Rate Limit
+        Anonymous rate limit
       </Text>
-      <Text muted small className="mb-4 max-w-3xl">
-        Caps how many requests anonymous callers can send to MCP servers
-        fronting this source, across every MCP method. One token bucket is
-        shared by all callers, so it bounds the total load on your server rather
-        than fairness between callers. Requests over the limit get HTTP 429 with
-        a Retry-After header.
+      <Text muted small className="mb-2 max-w-3xl">
+        Caps the total requests that anonymous callers can send to MCP servers
+        fronting this source. All anonymous callers share one limit, so it
+        protects your server from overload but does not split the limit fairly
+        between callers. Requests over the limit are refused until capacity
+        frees up again.
         {tunneledMcpServer.allowPublic ? null : (
           <>
             {" "}
-            Applies once{" "}
+            Applies once the server&apos;s{" "}
             <Link
               to={`#${MCP_PUBLIC_ACCESS_SECTION_ID}`}
               className="underline underline-offset-2"
             >
-              Public Access
+              visibility
             </Link>{" "}
-            is enabled.
+            is public.
           </>
         )}
       </Text>
+      <div className="mb-4">
+        <TechnicalDetails>
+          One token bucket covers every MCP method. Requests over the limit get
+          HTTP 429 with a Retry-After header.
+        </TechnicalDetails>
+      </div>
 
       <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
         <dt>

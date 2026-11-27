@@ -16,8 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -184,9 +186,10 @@ func newSelfClientEndpointWithEmptyCatalog(t *testing.T, ctx context.Context, ti
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)
 
-	// The client handlers stamp the server's issuer after each binding change;
-	// a self credential routes by it.
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID}))
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID, client.ID)
+	authClientID := seedServerAuthOffer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServer.ID, client.ID, authz.AuthClientTypeServiceAccount)
+	require.NoError(t, remotesessions.RestampMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID}))
+	seedPrincipalGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, authClientID.String())
 
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
@@ -405,4 +408,48 @@ func TestServePublic_SelfClientRenewalOutageAsksForRetry(t *testing.T) {
 	require.NotEmpty(t, w.Header().Get("Retry-After"))
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 	require.Equal(t, []string{"Bearer revoked-token"}, gate.authorizations())
+}
+
+// A handshake whose credential renewal hit an outage is recorded as that outage, not as a rejected credential.
+func TestServePublic_SelfClientRenewalOutageOnInitializeRecordsTheOutage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token"}, remintErr: &remotesessions.TokenEndpointError{Transport: true}, forgettable: true}
+	ti.clientCredentials.use(source)
+	gate := newAuthorizationGate(t, func(string) bool { return false })
+	endpoint := newSelfClientEndpoint(t, ctx, ti, gate.URL)
+
+	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`)
+	w, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, body, endpoint.token, nil)
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, []string{"Bearer revoked-token"}, gate.authorizations())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+	require.Equal(t, "initialize", row.SubReason)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// A tool call whose credential renewal hit an outage is recorded as that outage, not as a rejected credential.
+func TestServePublic_SelfClientRenewalOutageOnToolsCallRecordsTheOutage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token"}, remintErr: &remotesessions.TokenEndpointError{Transport: true}, forgettable: true}
+	ti.clientCredentials.use(source)
+	gate := newAuthorizationGate(t, func(string) bool { return false })
+	endpoint := newSelfClientEndpoint(t, ctx, ti, gate.URL)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, toolsCallBody(t), endpoint.token, nil)
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, []string{"Bearer revoked-token"}, gate.authorizations())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
 }

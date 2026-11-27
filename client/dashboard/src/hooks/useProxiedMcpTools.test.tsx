@@ -1,5 +1,6 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProxiedMcpTools } from "./useProxiedMcpTools";
@@ -44,6 +45,56 @@ describe("useProxiedMcpTools", () => {
       { _meta: { "com.speakeasy/inspect": true } },
       { cursor: "page-2", _meta: { "com.speakeasy/inspect": true } },
     ]);
+  });
+
+  it("keeps a known unavailable reason and drops an unknown one", async () => {
+    listTools.mockResolvedValueOnce({
+      tools: [
+        {
+          name: "blocked_tool",
+          _meta: {
+            "com.speakeasy/unavailable": true,
+            "com.speakeasy/unavailable_reason": "blocked",
+          },
+        },
+        {
+          name: "read_only_tool",
+          _meta: {
+            "com.speakeasy/unavailable": true,
+            "com.speakeasy/unavailable_reason": "read_only",
+          },
+        },
+        {
+          name: "future_tool",
+          _meta: {
+            "com.speakeasy/unavailable": true,
+            "com.speakeasy/unavailable_reason": "future_reason",
+          },
+        },
+      ],
+    });
+
+    const { result } = renderHook(
+      () =>
+        useProxiedMcpTools("https://mcp.example", {
+          throwOnError: false,
+          inspect: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tools).toBeDefined());
+    expect(result.current.tools?.blocked_tool?.unavailableReason).toBe(
+      "blocked",
+    );
+    expect(result.current.tools?.read_only_tool?.unavailableReason).toBe(
+      "read_only",
+    );
+    // An unknown reason must not fail the decode or hide the tool.
+    expect(result.current.tools?.future_tool?.unavailable).toBe(true);
+    expect(
+      result.current.tools?.future_tool?.unavailableReason,
+    ).toBeUndefined();
   });
 
   it("fails rather than following pages without end", async () => {

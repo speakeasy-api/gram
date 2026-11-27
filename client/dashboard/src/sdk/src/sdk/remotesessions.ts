@@ -3,6 +3,7 @@
  */
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
+import { remoteSessionsAttachServerClientAssociation } from "../funcs/remoteSessionsAttachServerClientAssociation.js";
 import { remoteSessionsBeginBindingRefresh } from "../funcs/remoteSessionsBeginBindingRefresh.js";
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
 import { remoteSessionsCompleteBindingRefresh } from "../funcs/remoteSessionsCompleteBindingRefresh.js";
@@ -16,6 +17,7 @@ import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessi
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
 import { remoteSessionsTestServerConnection } from "../funcs/remoteSessionsTestServerConnection.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AttachServerClientAssociationResult } from "../models/components/attachserverclientassociationresult.js";
 import { BindingRefreshAttempt } from "../models/components/bindingrefreshattempt.js";
 import { BindingRefreshResult } from "../models/components/bindingrefreshresult.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
@@ -29,6 +31,10 @@ import {
   AttachBindingRequest,
   AttachBindingSecurity,
 } from "../models/operations/attachbinding.js";
+import {
+  AttachServerClientAssociationRequest,
+  AttachServerClientAssociationSecurity,
+} from "../models/operations/attachserverclientassociation.js";
 import {
   BeginBindingRefreshRequest,
   BeginBindingRefreshSecurity,
@@ -102,6 +108,25 @@ export class RemoteSessions extends ClientSDK {
   }
 
   /**
+   * attachServerClientAssociation remoteSessions
+   *
+   * @remarks
+   * Associate one MCP server with a reachable upstream OAuth client. The association identifies the server's exact registration without requiring or creating a user session issuer binding. A server may have only one registration, and a per-user client cannot be shared by proxied servers at different upstream addresses. Attaching to a hosted server records that upstream authentication is required. When upstream auth enforcement is on, attaching can restore the derived auth client link removed by a previous detach. Requires mcp:write on the server.
+   */
+  async attachServerClientAssociation(
+    request: AttachServerClientAssociationRequest,
+    security?: AttachServerClientAssociationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AttachServerClientAssociationResult> {
+    return unwrapAsync(remoteSessionsAttachServerClientAssociation(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * beginBindingRefresh remoteSessions
    *
    * @remarks
@@ -124,7 +149,7 @@ export class RemoteSessions extends ClientSDK {
    * commitServerIdentityConfiguration remoteSessions
    *
    * @remarks
-   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+   * Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and offers an existing client, creates a manual client, or automatically prefers CIMD over DCR. Requires mcp:write on the target and any servers explicitly named for replacement. Creating a provider or client also requires project:write. The commit changes server offers, not issuer-client bindings. Unsupported automatic registration returns manual_setup_required without changing local state.
    */
   async commitServerIdentityConfiguration(
     request: CommitServerIdentityConfigurationRequest,
@@ -200,7 +225,7 @@ export class RemoteSessions extends ClientSDK {
    * detachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.
+   * Remove one MCP server's association with an upstream OAuth client. The client, its issuer bindings, and its associations with other servers are untouched. Derived auth client links are synchronized; administrator-owned typed links are untouched. A hosted server that requires upstream authentication remains configured to require it and needs a replacement registration before it can use upstream OAuth. Requires mcp:write on the server.
    */
   async detachServerClientAssociation(
     request: DetachServerClientAssociationRequest,
@@ -276,7 +301,7 @@ export class RemoteSessions extends ClientSDK {
    * listServerClientAssociations remoteSessions
    *
    * @remarks
-   * List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Associations are recorded ahead of the serving path that will read them; until then the server keeps signing in through its user session issuer's bindings. Requires mcp:read on the server.
+   * List the upstream OAuth clients an MCP server is associated with. An association is a per-server configuration fact: one client can serve several servers, and server_count reports how many live servers share each client, since editing or rotating a shared client changes every one of them. Hosted servers use this placement to select the upstream registration; a downstream sign-in issuer does not select a registration for a hosted server. Requires mcp:read on the server.
    */
   async listServerClientAssociations(
     request: ListServerClientAssociationsRequest,
@@ -314,7 +339,7 @@ export class RemoteSessions extends ClientSDK {
    * testServerConnection remoteSessions
    *
    * @remarks
-   * Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+   * Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused.
    */
   async testServerConnection(
     request: TestServerConnectionRequest,

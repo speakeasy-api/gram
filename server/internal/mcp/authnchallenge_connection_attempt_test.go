@@ -28,6 +28,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -106,7 +107,7 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	require.Equal(t, *authCtx.ProjectID, rows[0].ProjectID)
 	require.WithinDuration(t, stored.CreatedAt, rows[0].AttemptStartedAt, time.Microsecond)
 	require.Equal(t, toolset.ID.String(), rows[0].ServerID)
-	require.Equal(t, "toolset", rows[0].ServerKind)
+	require.Equal(t, "mcp", rows[0].ServerKind)
 	require.Equal(t, mcpconnectionattempts.StepInboundAuthorize.String(), rows[0].Step)
 	require.Equal(t, mcpconnectionattempts.ResultAccepted.String(), rows[0].StepResult)
 	require.False(t, rows[0].IsFinal)
@@ -143,10 +144,11 @@ func TestAuthorize_DeviceKeyFromTheRiskKeyring(t *testing.T) {
 
 	q := url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {"http://example.com/cb"}, "state": {"state-123"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
-	req.Header.Set("X-Forwarded-For", "198.51.100.1, 203.0.113.7")
+	req.Header.Set("X-Forwarded-For", "198.51.100.1, 198.51.100.2")
+	req.Header.Set("X-Client-IP", "203.0.113.7")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	req = req.WithContext(requestip.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx), requestip.Resolve(req)))
 
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleAuthorize(w, req))
@@ -233,8 +235,10 @@ func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "claimed member", memberSlug, 0, mcpservers.VisibilityPublic)
 	member, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(memberSlug), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{member.UserSessionIssuerID.UUID, gateway.issuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "")
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{member.UserSessionIssuerID.UUID}))
+	seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, member.ID, client, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, gateway.subject.ID, member.ID.String())
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), gateway.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)

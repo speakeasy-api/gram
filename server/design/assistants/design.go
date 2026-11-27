@@ -82,30 +82,6 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 	})
 
-	Method("upgradeAssistantIdentity", func() {
-		Description("Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.")
-		Payload(func() {
-			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
-			Attribute("agent_id", String, "An existing agent of the project to use instead of creating one. Requires owning the agent or agent:authorize on it.", func() { Format(FormatUUID) })
-			Attribute("agent_name", String, "The name of the new agent. Cannot be combined with agent_id.", func() {
-				MinLength(1)
-				MaxLength(120)
-			})
-			Required("id")
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-		Result(shared.Assistant)
-		HTTP(func() {
-			POST("/rpc/assistants.upgradeIdentity")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "upgradeAssistantIdentity")
-		Meta("openapi:extension:x-speakeasy-name-override", "upgradeIdentity")
-	})
-
 	Method("updateAssistant", func() {
 		Description("Update an assistant.")
 
@@ -195,6 +171,39 @@ var _ = Service("assistants", func() {
 		Meta("openapi:operationId", "sendAssistantMessage")
 		Meta("openapi:extension:x-speakeasy-name-override", "sendMessage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
+	})
+
+	Method("inferIntent", func() {
+		Description("Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.")
+
+		Payload(func() {
+			Attribute("assistant_id", String, "The Project Assistant the inference is for.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("current_path", String, "The dashboard path the user is on, without the organization and project prefix.", func() {
+				MaxLength(500)
+			})
+			Attribute("activity", ArrayOf(AssistantActivityEntry), "The user's recent dashboard activity, oldest first.", func() {
+				MaxLength(60)
+			})
+			Required("assistant_id", "activity")
+
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(AssistantIntent)
+
+		HTTP(func() {
+			POST("/rpc/assistants.inferIntent")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "inferAssistantIntent")
+		Meta("openapi:extension:x-speakeasy-name-override", "inferIntent")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "InferAssistantIntent", "type": "mutation"}`)
 	})
 
 	Method("interruptTurn", func() {
@@ -348,6 +357,7 @@ var CreateAssistantForm = Type("CreateAssistantForm", func() {
 
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high"); Default("medium") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
 	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
@@ -366,6 +376,7 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	})
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
+	Attribute("reasoning_effort", String, "The reasoning effort used by the assistant.", func() { Enum("none", "low", "medium", "high") })
 	Attribute("instructions", String, "The system instructions for the assistant.")
 	Attribute("toolsets", ArrayOf(shared.AssistantToolsetRef), "Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.")
 	Attribute("mcp_servers", ArrayOf(shared.AssistantMCPServerRef), "MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.")
@@ -392,6 +403,41 @@ var SendMessageAttachment = Type("SendMessageAttachment", func() {
 var ListAssistantsResult = Type("ListAssistantsResult", func() {
 	Attribute("assistants", ArrayOf(shared.Assistant), "Assistants for the current project.")
 	Required("assistants")
+})
+
+var AssistantActivityEntry = Type("AssistantActivityEntry", func() {
+	Description("One thing the user did or saw in the dashboard.")
+	Attribute("at", String, "When it happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("kind", String, "What kind of entry this is.", func() {
+		Enum("page", "action", "error", "signal")
+	})
+	Attribute("detail", String, "A short description, such as a page title, an action and its outcome, or an error message.", func() {
+		MaxLength(300)
+	})
+	Required("at", "kind", "detail")
+})
+
+var AssistantIntent = Type("AssistantIntent", func() {
+	Description("What the user appears to be trying to do, inferred from their recent activity.")
+	Attribute("goal", String, "The task the user appears to be working on. Absent when no task can be inferred.")
+	Attribute("stage", String, "Where the user is in that task.")
+	Attribute("blocker", String, "What appears to be stopping the user. Absent when nothing is.")
+	Attribute("frustration", String, "How stuck the user appears to be.", func() {
+		Enum("none", "low", "medium", "high")
+	})
+	Attribute("opener", String, "A short, specific line the assistant can open with. Absent when there is nothing specific to say.")
+	Attribute("suggested_prompts", ArrayOf(String, func() {
+		MaxLength(120)
+	}), "Up to three short prompts the user can send.", func() {
+		MaxLength(3)
+	})
+	Attribute("confidence", Float64, "How sure the inference is, from 0 to 1.", func() {
+		Minimum(0)
+		Maximum(1)
+	})
+	Required("frustration", "suggested_prompts", "confidence")
 })
 
 var InterruptTurnResult = Type("InterruptTurnResult", func() {

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -130,7 +131,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		WithRiskAnalysisStatus(NewRiskAnalysisStatusService(logger, pool, nil)).
 		WithRiskFindings(NewRiskFindingsService(pool, nil, key), budget).
 		WithRiskFindingList(NewRiskFindingListService(pool, nil, key), budget).
-		WithChatMetadata(NewChatMetadataService(pool, chatfindings.New(pool, findings), budget, key)).
+		WithChatMetadata(NewChatMetadataService(pool, liveEngine, chatfindings.New(pool, findings), budget, key)).
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle)
 
@@ -205,5 +206,6 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, nil), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
+	registrar.withAICatalog(aivendorstest.NewStore())
 	return registrar
 }

@@ -12,6 +12,7 @@ import { mcpServersList } from "../funcs/mcpServersList.js";
 import { mcpServersListForOrg } from "../funcs/mcpServersListForOrg.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersListToolMetadata } from "../funcs/mcpServersListToolMetadata.js";
+import { mcpServersSetSetupGuideCompleted } from "../funcs/mcpServersSetSetupGuideCompleted.js";
 import { mcpServersSetToolMetadata } from "../funcs/mcpServersSetToolMetadata.js";
 import { mcpServersSetToolMetadataBatch } from "../funcs/mcpServersSetToolMetadataBatch.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
@@ -64,6 +65,10 @@ import {
   ListMcpServerToolMetadataRequest,
   ListMcpServerToolMetadataSecurity,
 } from "../models/operations/listmcpservertoolmetadata.js";
+import {
+  SetMcpServerSetupGuideCompletedRequest,
+  SetMcpServerSetupGuideCompletedSecurity,
+} from "../models/operations/setmcpserversetupguidecompleted.js";
 import {
   SetMcpServerToolMetadataRequest,
   SetMcpServerToolMetadataSecurity,
@@ -262,6 +267,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListToolMetadataResult> {
     return unwrapAsync(mcpServersListToolMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSetupGuideCompleted mcpServers
+   *
+   * @remarks
+   * Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.
+   */
+  async setSetupGuideCompleted(
+    request: SetMcpServerSetupGuideCompletedRequest,
+    security?: SetMcpServerSetupGuideCompletedSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<McpServer> {
+    return unwrapAsync(mcpServersSetSetupGuideCompleted(
       this,
       request,
       security,

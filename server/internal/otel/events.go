@@ -68,7 +68,7 @@ func (s *Service) authorizeOrgEventRead(ctx context.Context, from, to string) (o
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", 0, 0, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return "", 0, 0, err
 	}
 
@@ -337,7 +337,7 @@ func parseEventTimeRange(from, to string) (timeStart, timeEnd int64, err error) 
 }
 
 // calculateEventInterval determines the bucket width for a time range,
-// mirroring the telemetry service's calculateInterval.
+// mirroring the telemetry service's CalculateInterval.
 func calculateEventInterval(timeStart, timeEnd int64) int64 {
 	durationHours := (timeEnd - timeStart) / int64(time.Hour)
 

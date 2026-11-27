@@ -959,6 +959,48 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 	return v, nil
 }
 
+// BuildFindShadowMCPInventoryServersPayload builds the payload for the access
+// findShadowMCPInventoryServers endpoint from CLI flags.
+func BuildFindShadowMCPInventoryServersPayload(accessFindShadowMCPInventoryServersProjectID string, accessFindShadowMCPInventoryServersServerUrls string, accessFindShadowMCPInventoryServersSessionToken string) (*access.FindShadowMCPInventoryServersPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessFindShadowMCPInventoryServersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverUrls []string
+	{
+		err = json.Unmarshal([]byte(accessFindShadowMCPInventoryServersServerUrls), &serverUrls)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for serverUrls, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(serverUrls) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 1, true))
+		}
+		if len(serverUrls) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 50, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessFindShadowMCPInventoryServersSessionToken != "" {
+			sessionToken = &accessFindShadowMCPInventoryServersSessionToken
+		}
+	}
+	v := &access.FindShadowMCPInventoryServersPayload{}
+	v.ProjectID = projectID
+	v.ServerUrls = serverUrls
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateShadowMCPInventoryServerNamePayload builds the payload for the
 // access updateShadowMCPInventoryServerName endpoint from CLI flags.
 func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInventoryServerNameBody string, accessUpdateShadowMCPInventoryServerNameSessionToken string) (*access.UpdateShadowMCPInventoryServerNamePayload, error) {
@@ -988,6 +1030,42 @@ func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInvento
 		ProjectID: body.ProjectID,
 		ServerURL: body.ServerURL,
 		Name:      body.Name,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetShadowMCPOfficialServerPayload builds the payload for the access
+// setShadowMCPOfficialServer endpoint from CLI flags.
+func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody string, accessSetShadowMCPOfficialServerSessionToken string) (*access.SetShadowMCPOfficialServerPayload, error) {
+	var err error
+	var body SetShadowMCPOfficialServerRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetShadowMCPOfficialServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keep_shadow\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetShadowMCPOfficialServerSessionToken != "" {
+			sessionToken = &accessSetShadowMCPOfficialServerSessionToken
+		}
+	}
+	v := &access.SetShadowMCPOfficialServerPayload{
+		ProjectID:   body.ProjectID,
+		ServerURL:   body.ServerURL,
+		McpServerID: body.McpServerID,
+		KeepShadow:  body.KeepShadow,
 	}
 	v.SessionToken = sessionToken
 
@@ -1497,15 +1575,23 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 	{
 		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"duration\": \"2h\",\n      \"message\": \"aaa\",\n      \"requested_until\": \"1970-01-01T00:00:01Z\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
 		}
-		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "plugin:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write" || body.Scope == "inference:execute" || body.Scope == "log:read" || body.Scope == "agent:read" || body.Scope == "agent:write" || body.Scope == "agent:authorize" || body.Scope == "agent:transfer" || body.Scope == "workload:read" || body.Scope == "workload:write" || body.Scope == "org:device_agent_sync" || body.Scope == "org:hooks_ingest" || body.Scope == "channels:connect" || body.Scope == "channels:admin" || body.Scope == "channels:read_all") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all"}))
 		}
 		if body.Message != nil {
 			if utf8.RuneCountInString(*body.Message) > 1000 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
 			}
+		}
+		if body.Duration != nil {
+			if !(*body.Duration == "1h" || *body.Duration == "2h" || *body.Duration == "4h") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.duration", *body.Duration, []any{"1h", "2h", "4h"}))
+			}
+		}
+		if body.RequestedUntil != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.requested_until", *body.RequestedUntil, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -1524,10 +1610,12 @@ func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAcce
 		}
 	}
 	v := &access.RequestAccessPayload{
-		Scope:        body.Scope,
-		ResourceID:   body.ResourceID,
-		ResourceName: body.ResourceName,
-		Message:      body.Message,
+		Scope:          body.Scope,
+		ResourceID:     body.ResourceID,
+		ResourceName:   body.ResourceName,
+		Message:        body.Message,
+		Duration:       body.Duration,
+		RequestedUntil: body.RequestedUntil,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -1885,7 +1973,7 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 	{
 		err = json.Unmarshal([]byte(accessCreateTemporaryGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector != nil {
 			if err2 := ValidateSelectorRequestBody(body.Selector); err2 != nil {
@@ -1897,6 +1985,9 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 			if utf8.RuneCountInString(*body.Reason) > 1000 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1000, false))
 			}
+		}
+		if len(body.ChallengeIds) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.challenge_ids", body.ChallengeIds, len(body.ChallengeIds), 200, false))
 		}
 		if err != nil {
 			return nil, err
@@ -1916,6 +2007,12 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 	}
 	if body.Selector != nil {
 		v.Selector = marshalSelectorRequestBodyToAccessSelector(body.Selector)
+	}
+	if body.ChallengeIds != nil {
+		v.ChallengeIds = make([]string, len(body.ChallengeIds))
+		for i, val := range body.ChallengeIds {
+			v.ChallengeIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 
@@ -2006,6 +2103,102 @@ func BuildRevokeTemporaryGrantPayload(accessRevokeTemporaryGrantBody string, acc
 		}
 	}
 	v := &access.RevokeTemporaryGrantPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListAccessRequestsPayload builds the payload for the access
+// listAccessRequests endpoint from CLI flags.
+func BuildListAccessRequestsPayload(accessListAccessRequestsStatus string, accessListAccessRequestsMine string, accessListAccessRequestsSessionToken string) (*access.ListAccessRequestsPayload, error) {
+	var err error
+	var status *string
+	{
+		if accessListAccessRequestsStatus != "" {
+			status = &accessListAccessRequestsStatus
+		}
+	}
+	var mine bool
+	{
+		if accessListAccessRequestsMine != "" {
+			mine, err = strconv.ParseBool(accessListAccessRequestsMine)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for mine, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAccessRequestsSessionToken != "" {
+			sessionToken = &accessListAccessRequestsSessionToken
+		}
+	}
+	v := &access.ListAccessRequestsPayload{}
+	v.Status = status
+	v.Mine = mine
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDecideAccessRequestPayload builds the payload for the access
+// decideAccessRequest endpoint from CLI flags.
+func BuildDecideAccessRequestPayload(accessDecideAccessRequestBody string, accessDecideAccessRequestSessionToken string) (*access.DecideAccessRequestPayload, error) {
+	var err error
+	var body DecideAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessDecideAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"approve\": false,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDecideAccessRequestSessionToken != "" {
+			sessionToken = &accessDecideAccessRequestSessionToken
+		}
+	}
+	v := &access.DecideAccessRequestPayload{
+		ID:        body.ID,
+		Approve:   body.Approve,
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildWithdrawAccessRequestPayload builds the payload for the access
+// withdrawAccessRequest endpoint from CLI flags.
+func BuildWithdrawAccessRequestPayload(accessWithdrawAccessRequestBody string, accessWithdrawAccessRequestSessionToken string) (*access.WithdrawAccessRequestPayload, error) {
+	var err error
+	var body WithdrawAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessWithdrawAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessWithdrawAccessRequestSessionToken != "" {
+			sessionToken = &accessWithdrawAccessRequestSessionToken
+		}
+	}
+	v := &access.WithdrawAccessRequestPayload{
 		ID: body.ID,
 	}
 	v.SessionToken = sessionToken

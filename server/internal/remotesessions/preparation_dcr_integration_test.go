@@ -13,6 +13,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	orgencryptionrepo "github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +50,7 @@ func restartPreparationService(t *testing.T, ti *testInstance) *remotesessions.S
 	origin, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 	enc := testenv.NewEncryptionClient(t)
-	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, audit.NewLogger(), origin, policy, nil, nil), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features, nil)
+	return remotesessions.NewService(logger, tracer, meter, ti.conn, ti.sessionManager, authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, clientsecretstest.New(t, ti.conn, enc), ti.envEntries, policy, nil, audit.NewLogger(), origin, remotesessions.NewIdentityCommitter(logger, ti.conn, enc, clientsecretstest.New(t, ti.conn, enc), audit.NewLogger(), origin, policy, nil, nil), remotesessions.NewRefreshService(logger, meter, ti.conn, enc, policy, nil, ti.redisCache), ti.features, nil)
 }
 func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *testInstance, remotesessions.PreparationInput, uuid.UUID) {
 	t.Helper()
@@ -58,9 +62,6 @@ func preparationDCRFixture(t *testing.T, endpoint string) (context.Context, *tes
 	interactive := in.ClientID
 	err = testrepo.New(ti.conn).SetPreparationFixtureInteractiveClient(ctx, testrepo.SetPreparationFixtureInteractiveClientParams{ID: interactive, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
 	require.NoError(t, err)
-	attached, err := testrepo.New(ti.conn).AttachPreparationFixtureInteractiveClient(ctx, testrepo.AttachPreparationFixtureInteractiveClientParams{ID: interactive, UserID: in.UserSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, attached)
 	in.ClientID = uuid.Nil
 	in.Mechanism = "dcr"
 	in.TokenEndpointAuthMethod = "client_secret_basic"
@@ -80,9 +81,6 @@ func assertPreparationInteractiveUntouched(t *testing.T, ctx context.Context, ti
 	require.Equal(t, "interactive-ciphertext", secret)
 	require.Equal(t, []string{"authorization_code", "refresh_token"}, grants)
 	require.Equal(t, []string{"openid"}, scopes)
-	attached, err := testrepo.New(ti.conn).CountPreparationFixtureAttachments(ctx, testrepo.CountPreparationFixtureAttachmentsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), ID: id, UserID: user})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, attached)
 }
 func TestPreparationDCRIntegration_TimeoutRestartDoesNotReplay(t *testing.T) {
 	t.Parallel()
@@ -607,4 +605,38 @@ func TestPreparationDCRIntegration_TypedCatalogFailureRollsBack(t *testing.T) {
 	_, err = ti.service.PrepareIdentityChaining(ctx, in)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), posts.Load(), "an externally completed registration must never be replayed")
+}
+
+func TestPreparationDCRIntegration_KeyOutageClaimsNothing(t *testing.T) {
+	t.Parallel()
+	var posts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	ctx, ti, in, interactive := preparationDCRFixture(t, server.URL)
+
+	// The organization's client secrets are past platform_key and this
+	// process has no organization encryption to seal a returned secret with.
+	_, err := orgencryptionrepo.New(ti.conn).CreateEncryptionTransition(ctx, orgencryptionrepo.CreateEncryptionTransitionParams{
+		OrganizationID:          activeOrganizationID(t, ctx),
+		UseCase:                 string(orgencryption.UseCaseOAuthClientSecrets),
+		State:                   string(orgencryption.TransitionStateDualWrite),
+		PlatformCopiesClearedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	service := restartPreparationService(t, ti)
+
+	_, err = service.PrepareIdentityChaining(ctx, in)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.Zero(t, posts.Load(), "nothing is registered when the secret could not be stored")
+
+	status, err := service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.NotEqual(t, "indeterminate", status.State, "a key outage leaves no claim behind, so a retry can register")
+	require.NotEqual(t, "in_progress", status.State)
+	assertPreparationInteractiveUntouched(t, ctx, ti, interactive, in.UserSessionIssuerID)
 }

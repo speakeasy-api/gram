@@ -18,11 +18,14 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // A buffered tools/call failure must leave session cleanup to the SDK, which
@@ -83,7 +86,9 @@ func memberClientFixture(t *testing.T, endpoint string) (*Service, memberProxyBu
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	return &Service{guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
+	return &Service{
+		aiCatalog:      aivendorstest.NewStore(),
+		guardianPolicy: policy}, func(context.Context) (*proxy.Proxy, error) {
 		return &proxy.Proxy{
 			GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: tp.Tracer("test"),
 			NonStreamingTimeout: 5 * time.Second, StreamingTimeout: 5 * time.Second,
@@ -131,8 +136,9 @@ func TestMemberClientPreservesRichToolResult(t *testing.T) {
 			defer cancel()
 			session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 			require.NoError(t, err)
-			got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 			require.NoError(t, err)
+			require.True(t, isError, "the SDK's own decode of the result reports isError")
 			require.NoError(t, session.Close())
 			require.Equal(t, result, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 		})
@@ -263,7 +269,7 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
+	raw, _, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	require.True(t, ok)
@@ -288,7 +294,7 @@ func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
 	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
-	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
+	_, _, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
 	require.Error(t, err)
 	require.True(t, invocation.rejected)
 	require.NoError(t, session.Close())
@@ -344,8 +350,9 @@ func TestMemberClientCapturesFinalMultiRoundTripResult(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
-	got, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+	got, isError, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
 	require.NoError(t, err)
+	require.False(t, isError)
 	require.NoError(t, session.Close())
 	require.Equal(t, final, string(got)) //nolint:testifylint // JSONEq converts numbers to float64 and would hide precision loss.
 	mu.Lock()
@@ -437,20 +444,25 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 func TestMemberClientFailureRetriesOnlyTransportFailuresARetryCanChange(t *testing.T) {
 	t.Parallel()
 
+	const noAnswer = `server "fixture" did not answer: upstream unreachable or timed out`
 	for name, tc := range map[string]struct {
 		err       error
 		retryable bool
+		text      string
 	}{
-		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true},
-		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false},
-		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false},
+		"connection reset": {err: &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, retryable: true, text: noAnswer},
+		"i/o timeout":      {err: &net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded}, retryable: false, text: noAnswer},
+		"blocked address":  {err: fmt.Errorf("dial member: %w", guardian.ErrBlockedIP), retryable: false, text: `server "fixture" can't connect: its address is a private or internal one that Speakeasy can't reach. Waiting won't fix this. Ask your administrator to fix the server's address.`},
+		"no such host":     {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}, retryable: false, text: `server "fixture" can't connect: its address doesn't exist. Waiting won't fix this. Ask your administrator to fix the server's address.`},
+		"lookup failing":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "server misbehaving", Name: "member.example.com", IsTemporary: true}}, retryable: true, text: noAnswer},
+		"lookup timeout":   {err: &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true, IsTemporary: true}}, retryable: false, text: noAnswer},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			attempt := newMemberAttempt(nil)
-			attempt.recordFailure(true, tc.err)
+			attempt.recordFailure(true, false, false, tc.err)
 			got := memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, metaMember{slug: "fixture"}, tc.err)
-			require.EqualError(t, got, `server "fixture" did not answer: upstream unreachable or timed out`)
+			require.EqualError(t, got, tc.text)
 			failure, ok := errors.AsType[memberDiscoveryError](got)
 			require.True(t, ok, "%v", got)
 			require.Equal(t, tc.retryable, failure.retryable)
@@ -513,6 +525,143 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 			require.Equal(t, tc.retryable, failure.retryable)
 			_, outage := errors.AsType[memberUnavailableError](got)
 			require.Equal(t, tc.discovery, outage, "the connection status reads this as an outage")
+		})
+	}
+}
+
+// A member's 401 or 403 is recorded as a rejected credential only as on a direct server: a 401,
+// or a 403 whose challenge says invalid_token, to a credential the final request still carried.
+func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		status    int
+		challenge string
+		redirect  bool
+		bodyFails bool
+		tunneled  bool
+		want      mcpconnectionattempts.Code
+	}{
+		"401":                             {status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 invalid_token":               {status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 insufficient_scope":          {status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope", scope="repo"`, want: mcpconnectionattempts.Code{}},
+		"403 without challenge":           {status: http.StatusForbidden, want: mcpconnectionattempts.Code{}},
+		"401 after cross-origin redirect": {status: http.StatusUnauthorized, redirect: true, want: mcpconnectionattempts.Code{}},
+		"401 whose body fails":            {status: http.StatusUnauthorized, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 invalid_token, body fails":   {status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
+		"tunneled 401 after a forward":    {status: http.StatusUnauthorized, tunneled: true, want: mcpconnectionattempts.CodeProviderRejected},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var sawAuthorization sync.Map
+			final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				sawAuthorization.Store(r.Header.Get("Authorization") != "", true)
+				if tc.challenge != "" {
+					w.Header().Set("WWW-Authenticate", tc.challenge)
+				}
+				if tc.tunneled {
+					w.Header().Set(wire.HeaderTunnelAgentSession, "agent-session")
+				}
+				if tc.bodyFails {
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("Content-Length", "64")
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte("{"))
+					_ = http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(final.Close)
+			endpoint := final.URL
+			if tc.redirect {
+				_, port, err := net.SplitHostPort(final.Listener.Addr().String())
+				require.NoError(t, err)
+				elsewhere := "http://localhost:" + port
+				origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, elsewhere+r.URL.Path, http.StatusTemporaryRedirect)
+				}))
+				t.Cleanup(origin.Close)
+				endpoint = origin.URL
+			}
+			service, build := memberClientFixture(t, endpoint)
+			withToken := func(ctx context.Context) (*proxy.Proxy, error) {
+				p, err := build(ctx)
+				if err != nil {
+					return nil, err
+				}
+				p.AuthorizationOverride = "member-token"
+				return p, nil
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			_, rt, err := service.connectMetaMember(ctx, testenv.NewLogger(t), withToken, time.Second)
+			require.Error(t, err)
+			if tc.redirect {
+				_, stripped := sawAuthorization.Load(false)
+				require.True(t, stripped, "the redirect must reach the server without the credential")
+			}
+			require.Equal(t, tc.tunneled, rt.forwarded())
+			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: withToken, anonymous: false, tunneled: tc.tunneled}, metaMember{slug: "fixture"}, err)
+			failure, ok := errors.AsType[memberConnectionError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.want, failure.code)
+		})
+	}
+}
+
+// A tunneled call that hits its deadline is the provider's only once the tunnel forwarded an answer.
+func TestMemberClientTunneledDeadlineNeedsAForward(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		forward bool
+		want    mcpconnectionattempts.Code
+	}{
+		"gateway holds the call":           {forward: false, want: mcpconnectionattempts.CodeInternalError},
+		"server behind the tunnel is slow": {forward: true, want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req struct {
+					ID     json.RawMessage `json:"id"`
+					Method string          `json:"method"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				switch req.Method {
+				case "server/discover":
+					_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"fixture","version":"1"}}}}`, req.ID)
+				case "tools/call":
+					if tc.forward {
+						w.Header().Set(wire.HeaderTunnelAgentSession, "agent-session")
+						w.Header().Set("Content-Type", "text/event-stream")
+						w.WriteHeader(http.StatusOK)
+						http.NewResponseController(w).Flush() //nolint:errcheck // a test server flush
+					}
+					<-r.Context().Done()
+				}
+			}))
+			t.Cleanup(upstream.Close)
+			service, build := memberClientFixture(t, upstream.URL)
+			session, _, err := service.connectMetaMember(t.Context(), testenv.NewLogger(t), build, time.Second)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = session.Close() })
+
+			attempt := newMemberAttempt(build)
+			ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), memberAttemptKey{}, attempt), 300*time.Millisecond)
+			defer cancel()
+			_, _, err = callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+			require.Error(t, err)
+			require.Equal(t, tc.forward, attempt.forwarded())
+
+			failure, ok := errors.AsType[memberConnectionError](memberClientFailure(ctx, testenv.NewLogger(t), attempt, memberDial{tunneled: true}, metaMember{slug: "fixture"}, err))
+			require.True(t, ok)
+			require.Equal(t, tc.want, failure.code)
 		})
 	}
 }

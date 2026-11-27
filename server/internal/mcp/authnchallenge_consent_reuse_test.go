@@ -14,9 +14,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -388,128 +387,60 @@ func TestSharedConsentPerEndpointApprovalSupersedesEvidence(t *testing.T) {
 // change that asks again.
 func TestSharedConsentReuseAcrossDerivedIssuerResync(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		enforced bool
-		reused   bool
-	}{
-		{name: "typed auth clients enforced", enforced: true, reused: true},
-		{name: "upstream client choice", enforced: false, reused: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-			issuer := seedSharedIssuer(t, ctx, ti)
-			authCtx := requireProjectAuthContext(t, ctx)
-			if tc.enforced {
-				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-				require.NoError(t, err)
-			}
-			slug := "issuer-resync-" + uuid.NewString()[:8]
-			server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, newCatalogUpstream(t, 1).url, slug, "public", issuer.issuer.ID)
-			first := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-			approved, err := url.Parse(first.submit(t, ctx, ti, "approve", first.inventory(t, ctx, ti), "off"))
-			require.NoError(t, err)
-			require.NotEmpty(t, approved.Query().Get("code"), "the approval must be granted for its reuse to mean anything")
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	issuer := seedSharedIssuer(t, ctx, ti)
+	authCtx := requireProjectAuthContext(t, ctx)
+	slug := "issuer-resync-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, newCatalogUpstream(t, 1).url, slug, "public", issuer.issuer.ID)
+	first := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
+	approved, err := url.Parse(first.submit(t, ctx, ti, "approve", first.inventory(t, ctx, ti), "off"))
+	require.NoError(t, err)
+	require.NotEmpty(t, approved.Query().Get("code"), "the approval must be granted for its reuse to mean anything")
 
-			derived, err := remotesessions_repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-				ProjectID: conv.ToNullUUID(*authCtx.ProjectID), Slug: "resync-" + uuid.NewString()[:8], Issuer: "https://resync-as.example.com",
-				ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
-				TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
-			})
-			require.NoError(t, err)
-			stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-				RemoteSessionIssuerID: conv.ToNullUUID(derived.ID), ID: server.ID, ProjectID: *authCtx.ProjectID,
-			})
-			require.NoError(t, err)
-			require.Equal(t, int64(1), stamped)
+	derived, err := remotesessions_repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID), Slug: "resync-" + uuid.NewString()[:8], Issuer: "https://resync-as.example.com",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(derived.ID), ID: server.ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
 
-			second := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-			redirect, err := url.Parse(second.submit(t, ctx, ti, "reuse", second.inventory(t, ctx, ti), "off"))
-			require.NoError(t, err)
-			if tc.reused {
-				require.NotEmpty(t, redirect.Query().Get("code"))
-				return
-			}
-			require.Empty(t, redirect.Query().Get("code"))
-			require.Equal(t, "required", redirect.Query().Get("consent"))
-		})
-	}
+	second := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
+	redirect, err := url.Parse(second.submit(t, ctx, ti, "reuse", second.inventory(t, ctx, ti), "off"))
+	require.NoError(t, err)
+	require.NotEmpty(t, redirect.Query().Get("code"))
 }
 
-// A saved approval survives upstream auth enforcement being switched on or
-// off. A derived authorization server that changed while no typed auth client
-// chose asks once when enforcement starts; one approved under enforcement keeps
-// ignoring it after enforcement ends.
-func TestSharedConsentReuseAcrossEnforcementTransitions(t *testing.T) {
+// A shared authorization server's consent URL an account switch spent says so, but only for that server.
+func TestSharedConsentSwitchedPageExplainsTheSwitch(t *testing.T) {
 	t.Parallel()
-
-	type step int
-	const (
-		approve step = iota
-		enforce
-		unenforce
-		resync
-		reused
-		asksAgain
-	)
-	for _, tc := range []struct {
-		name  string
-		steps []step
-	}{
-		{name: "enforcing keeps an approval whose derived issuer is unchanged", steps: []step{approve, enforce, reused}},
-		{name: "enforcing asks once after the derived issuer changed, then ignores it", steps: []step{approve, resync, enforce, asksAgain, approve, resync, reused}},
-		{name: "ending enforcement keeps an approval whose derived issuer is unchanged", steps: []step{enforce, approve, unenforce, reused}},
-		{name: "ending enforcement keeps ignoring a resync during it", steps: []step{enforce, approve, resync, unenforce, reused}},
-		{name: "an approval made after enforcement ended covers the derived issuer again", steps: []step{enforce, approve, unenforce, approve, resync, asksAgain}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-			issuer := seedSharedIssuer(t, ctx, ti)
-			authCtx := requireProjectAuthContext(t, ctx)
-			slug := "transition-" + uuid.NewString()[:8]
-			server, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, newCatalogUpstream(t, 1).url, slug, "public", issuer.issuer.ID)
-			features := productfeaturesrepo.New(ti.conn)
-			for _, current := range tc.steps {
-				switch current {
-				case enforce:
-					_, err := features.EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-					require.NoError(t, err)
-					ti.service.ReloadAuthEnforcement()
-				case unenforce:
-					_, err := features.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: authCtx.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-					require.NoError(t, err)
-					ti.service.ReloadAuthEnforcement()
-				case resync:
-					derived, err := remotesessions_repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessions_repo.CreateRemoteSessionIssuerParams{
-						ProjectID: conv.ToNullUUID(*authCtx.ProjectID), Slug: "transition-" + uuid.NewString()[:8], Issuer: "https://" + uuid.NewString()[:8] + ".example.com",
-						ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
-						TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
-					})
-					require.NoError(t, err)
-					stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-						RemoteSessionIssuerID: conv.ToNullUUID(derived.ID), ID: server.ID, ProjectID: *authCtx.ProjectID,
-					})
-					require.NoError(t, err)
-					require.Equal(t, int64(1), stamped)
-				case approve:
-					flow := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-					approved, err := url.Parse(flow.submit(t, ctx, ti, "approve", flow.inventory(t, ctx, ti), "off"))
-					require.NoError(t, err)
-					require.NotEmpty(t, approved.Query().Get("code"), "the approval must be granted for its reuse to mean anything")
-				case reused, asksAgain:
-					flow := sharedIdentifiedConsent(t, ctx, ti, issuer, slug)
-					redirect, err := url.Parse(flow.submit(t, ctx, ti, "reuse", flow.inventory(t, ctx, ti), "off"))
-					require.NoError(t, err)
-					if current == reused {
-						require.NotEmpty(t, redirect.Query().Get("code"))
-						continue
-					}
-					require.Empty(t, redirect.Query().Get("code"))
-					require.Equal(t, "required", redirect.Query().Get("consent"))
-				}
-			}
-		})
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	issuer := seedSharedIssuer(t, ctx, ti)
+	get := func(flow sharedConsentFlow) error {
+		req := sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+flow.state.UserSessionIssuerID.String()+"/connect?state="+flow.state.ID, flow.state.UserSessionIssuerID.String(), nil)
+		req.AddCookie(flow.cookie)
+		return ti.service.HandleSharedConsent(httptest.NewRecorder(), req)
 	}
+
+	spent := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	require.NoError(t, ti.service.MarkConsentSwitched(ctx, spent.state.ID, spent.state.UserSessionIssuerID, "Shared Client"))
+	_, err := ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+spent.state.ID)
+	require.NoError(t, err)
+	err = get(spent)
+	require.ErrorContains(t, err, "not found or expired", "off, the marker is not read")
+	require.NotContains(t, err.Error(), "started a new sign-in")
+	ti.features.SetFlag(feature.FlagMCPConsentAccountSwitch, issuer.issuer.OrganizationID.String, true)
+	require.ErrorContains(t, get(spent), "this consent page started a new sign-in")
+
+	foreign := sharedIdentifiedConsent(t, ctx, ti, issuer, issuer.slugA)
+	require.NoError(t, ti.service.MarkConsentSwitched(ctx, foreign.state.ID, uuid.New(), "Shared Client"))
+	_, err = ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+foreign.state.ID)
+	require.NoError(t, err)
+	err = get(foreign)
+	require.ErrorContains(t, err, "not found or expired", "a marker from another authorization server is ignored")
+	require.NotContains(t, err.Error(), "started a new sign-in")
 }

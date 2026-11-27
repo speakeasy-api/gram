@@ -2326,12 +2326,16 @@ type EnvironmentEntryInputRequestBody struct {
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The value of the environment variable. Cleartext when is_secret is false,
-	// redacted otherwise.
+	// The value of the environment variable. Cleartext when is_secret is false.
+	// For a secret, a fixed mask ("***") when it has a value or "<EMPTY>" when it
+	// does not; use has_value to tell whether a value is set.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 	// Whether the value is a secret. Secret values are redacted in reads;
 	// non-secret values are returned in cleartext.
 	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether the entry holds a non-empty value. Secret entries can be empty
+	// placeholders waiting for a value.
+	HasValue *bool `form:"has_value,omitempty" json:"has_value,omitempty" xml:"has_value,omitempty"`
 	// The creation date of the environment entry
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the environment entry was last updated
@@ -7250,6 +7254,9 @@ func ValidateEnvironmentEntryResponseBody(body *EnvironmentEntryResponseBody) (e
 	}
 	if body.IsSecret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_secret", "body"))
+	}
+	if body.HasValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_value", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

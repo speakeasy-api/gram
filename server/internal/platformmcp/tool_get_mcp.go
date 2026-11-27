@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -25,7 +25,7 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 			return nil, MCP{}, err
 		}
 		if input.ProjectID == "" || input.MCPID == "" {
-			return nil, MCP{}, fmt.Errorf("project_id and mcp_id are required")
+			return nil, MCP{}, fmt.Errorf("project_slug and mcp_id are required")
 		}
 		if reader == nil {
 			return nil, MCP{}, ErrUnavailable
@@ -40,6 +40,19 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 				if result, handled := toolExposureToolResult(err); handled {
 					if refusal, ok := refusalFromResult(result); ok {
 						refusal.Code = exposure.Code
+						return nil, MCP{}, refusal
+					}
+				}
+			}
+			// An mcp_id that is not a UUID at all, such as a gateway ID with a
+			// kind prefix, is the caller's to correct, so it gets a readable
+			// refusal. A bare UUID that names no visible MCP server is refused
+			// by the authorization check instead, without saying whether it
+			// exists.
+			if errors.Is(err, ErrMCPIDInvalid) {
+				if result, handled := operationBudgetToolResult(err); handled {
+					if refusal, ok := refusalFromResult(result); ok {
+						refusal.Code = "invalid_request"
 						return nil, MCP{}, refusal
 					}
 				}

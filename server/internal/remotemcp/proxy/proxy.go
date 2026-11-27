@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -394,6 +395,15 @@ type Proxy struct {
 	// response interceptor refused. See [ToolsCallRefusalInterceptor].
 	ToolsCallRefusalInterceptors []ToolsCallRefusalInterceptor
 
+	// RequestFailureInterceptors run once for a forwarded request other than
+	// "tools/call" that the remote MCP server answered with a non-2xx status.
+	// See [RequestFailureInterceptor].
+	RequestFailureInterceptors []RequestFailureInterceptor
+
+	// RequestServedInterceptors run once for a forwarded POST the remote MCP
+	// server answered without an error. See [RequestServedInterceptor].
+	RequestServedInterceptors []RequestServedInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -549,7 +559,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		defer stopAge()
 
 		streamStart := time.Now()
-		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: age}
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: "", served: false, age: age}
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
 		responseBytes = relay.bytes
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
@@ -612,6 +622,8 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 // is a POST to the MCP endpoint (see spec § Sending Messages to the Server).
 func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
+	// A row from earlier in the request is about something else, not this forward's failure.
+	r = r.WithContext(contextvalues.WithConnectionReferenceSlot(r.Context()))
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodPost)...))
 	defer span.End()
 	defer func() {
@@ -624,6 +636,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	var (
 		upstreamStatus int
 		upstreamHeader http.Header
+		upstreamSent   http.Header
 		responseBytes  int64
 	)
 	defer func() {
@@ -833,7 +846,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			if failure != nil {
 				cause = failure
 			}
-			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, Err: cause})
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, SentHeader: upstreamSent, Err: cause})
 		}
 	}()
 
@@ -844,7 +857,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
-	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: jsonrpcMethod, served: false, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
@@ -890,8 +903,16 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	upstreamStatus = upstreamResp.StatusCode
 	upstreamHeader = upstreamResp.Header
+	if upstreamResp.Request != nil {
+		upstreamSent = upstreamResp.Request.Header
+	}
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
+		if !toolsCallForwarded {
+			defer func() {
+				p.runRequestFailureInterceptors(ctx, &RequestFailure{Method: jsonrpcMethod, StatusCode: upstreamStatus, Header: upstreamHeader, SentHeader: upstreamSent, Err: err})
+			}()
+		}
 	}
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
@@ -1194,7 +1215,10 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return err
 	}
-	observeResponse(ctx, msg)
+	// An acknowledgement with no reply serves a notification only when it is empty, not an error page.
+	if observeReply(ctx, msg, userReqID, jsonrpcMethod, p.wantsServed(upstreamStatus) && (msg != nil || len(bodyBytes) == 0)) {
+		p.runRequestServedInterceptors(ctx)
+	}
 	return nil
 }
 
@@ -1638,10 +1662,15 @@ func (p *Proxy) relaySSEStream(
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
 		result.bytes += int64(len(emit))
-		if isResponseTo(msg, responseID) {
+		replied := isResponseTo(msg, responseID)
+		if replied {
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
-		observeResponse(ctx, msg)
+		// Recorded as the reply reaches the client, not when the stream ends.
+		if observeReply(ctx, msg, responseID, result.method, replied && p.wantsServed(upstreamResp.StatusCode)) && !result.served {
+			result.served = true
+			p.runRequestServedInterceptors(ctx)
+		}
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1719,6 +1748,12 @@ type sseRelay struct {
 
 	// resumable reports whether any upstream event carried an SSE id.
 	resumable bool
+
+	// method is the JSON-RPC method of the request that opened the stream.
+	method string
+
+	// served reports that the served interceptors ran for the response relayed to that request.
+	served bool
 
 	// age is the stream's maximum age.
 	age streamAge
@@ -1899,6 +1934,34 @@ func (p *Proxy) runToolsCallFailureInterceptors(ctx context.Context, failure *To
 	}
 }
 
+// runRequestFailureInterceptors invokes each configured
+// RequestFailureInterceptor in order. They observe only.
+func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *RequestFailure) {
+	for _, interceptor := range p.RequestFailureInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.RequestFailureInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptRequestFailure(iterCtx, failure)
+		span.End()
+	}
+}
+
+// wantsServed reports whether an upstream answer with status could be recorded as served.
+func (p *Proxy) wantsServed(status int) bool {
+	return len(p.RequestServedInterceptors) > 0 && status >= 200 && status < 300
+}
+
+// runRequestServedInterceptors invokes each configured
+// RequestServedInterceptor in order, unless the caller went away first. It runs
+// once per served request, so it opens no span.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	for _, interceptor := range p.RequestServedInterceptors {
+		interceptor.InterceptRequestServed(ctx)
+	}
+}
+
 // runToolsListRequestInterceptors invokes each configured
 // ToolsListRequestInterceptor in order, returning the first wrapped
 // rejection error or nil if all interceptors accept the request.
@@ -2055,7 +2118,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 	if toolResult, ok := errors.AsType[*ToolResultError](cause); ok && id.IsValid() {
 		return p.writeToolResultError(ctx, w, id, toolResult)
 	}
-	rejectErr := RejectErrorFromCause(cause)
+	rejectErr := withConnectionReference(ctx, RejectErrorFromCause(cause))
 	payload, err := marshalErrorResponse(id, rejectErr)
 	if err != nil {
 		p.Logger.WarnContext(ctx, "failed to marshal jsonrpc rejection envelope; client will see no body",
@@ -2089,7 +2152,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 // call did not fail at the protocol level, so the request span stays
 // unmarked. The interceptor's own span still records the error.
 func (p *Proxy) writeToolResultError(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, result *ToolResultError) int64 {
-	payload, err := marshalToolResultError(id, result.Message)
+	payload, err := marshalToolResultError(id, contextvalues.AppendConnectionReference(ctx, result.Message))
 	if err != nil {
 		p.Logger.WarnContext(ctx, "failed to marshal tool error result; client will see no body",
 			attr.SlogError(err),

@@ -36,8 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -48,9 +46,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -121,10 +120,9 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	audit         *audit.Logger
-	features      feature.Provider
 	provisioner   *Provisioner
 	oktaClients   okta.ClientFactory
-	enc           *encryption.Client
+	secrets       *clientsecrets.Secrets
 	discover      Discoverer
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
@@ -172,10 +170,9 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	features feature.Provider,
 	provisioner *Provisioner,
 	oktaClients okta.ClientFactory,
-	enc *encryption.Client,
+	secrets *clientsecrets.Secrets,
 	discover Discoverer,
 	limitStore ratelimit.Store,
 	syncTrigger ApplicationSyncTrigger,
@@ -188,10 +185,9 @@ func NewService(
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
 		audit:       auditLogger,
-		features:    features,
 		provisioner: provisioner,
 		oktaClients: oktaClients,
-		enc:         enc,
+		secrets:     secrets,
 		discover:    discover,
 		verifyLimiter: ratelimit.New(limitStore, "identity-provider-connection-verify",
 			ratelimit.PerMinute(verifyRatePerMinute),
@@ -226,13 +222,13 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // authorize runs RBAC; a mutation additionally refuses support sessions and non-principal API keys.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) authorize(ctx context.Context, permission func(authz.OrgRef) authz.Check, mutation bool) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -247,22 +243,6 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation boo
 		return nil, logger, oops.E(oops.CodeUnavailable, nil, "identity provider connections are not configured on this deployment").LogError(ctx, logger)
 	}
 	return authCtx, logger, nil
-}
-
-// requireEnabled checks the rollout flag; a lookup failure reads as unavailable, never forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
-	}
-	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
-	}
-	return nil
 }
 
 func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID string, id uuid.NullUUID) (*connectionRows, error) {
@@ -385,14 +365,10 @@ func (s *Service) allow(ctx context.Context, logger *slog.Logger, limiter *ratel
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
-		return nil, err
-	}
-
 	listingMode := conv.PtrValOr(payload.ListingMode, ListingModeCustomApp)
 	if listingMode != ListingModeCustomApp && listingMode != ListingModeOIN {
 		return nil, oops.E(oops.CodeBadRequest, nil, "listing_mode must be custom_app or oin")
@@ -544,9 +520,9 @@ func listingAuthMethod(listingMode string) remotesessions.TokenEndpointAuthMetho
 	return remotesessions.TokenEndpointAuthMethodPrivateKeyJWT
 }
 
-// encryptClientSecret validates and encrypts an admin-entered secret; messages
-// never echo the value. A nil secret encrypts to "".
-func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, secret *string) (string, error) {
+// validateClientSecret validates and trims an admin-entered secret; messages
+// never echo the value. A nil secret is "".
+func validateClientSecret(secret *string) (string, error) {
 	if secret == nil {
 		return "", nil
 	}
@@ -559,11 +535,7 @@ func (s *Service) encryptClientSecret(ctx context.Context, logger *slog.Logger, 
 	case strings.ContainsFunc(trimmed, unicode.IsSpace):
 		return "", oops.E(oops.CodeBadRequest, nil, "client_secret must not contain whitespace")
 	}
-	encrypted, err := s.enc.Encrypt([]byte(trimmed))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "encrypt client secret").LogError(ctx, logger)
-	}
-	return encrypted, nil
+	return trimmed, nil
 }
 
 func connectionIssuerSlug(connectionID uuid.UUID) string {
@@ -751,12 +723,16 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
 			return
 		}
-		if err := rq.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(cleanupCtx, managed.ClientRowID); err != nil {
-			logger.ErrorContext(ctx, "failed to unbind client of abandoned connection", attr.SlogError(err))
+		if err := rq.RetirePrincipalAttachmentsForDeletedRegistration(cleanupCtx, remotesessionsrepo.RetirePrincipalAttachmentsForDeletedRegistrationParams{ID: managed.ClientRowID, OrganizationID: conv.ToPGText(organizationID), ProjectID: conv.NilableToNullUUID(uuid.Nil)}); err != nil {
+			logger.ErrorContext(ctx, "failed to retire attachments of abandoned connection client", attr.SlogError(err))
 			return
 		}
 		if err := associations.PruneInLockedTransaction(cleanupCtx, dbtx); err != nil {
 			logger.ErrorContext(ctx, "failed to prune associations of abandoned connection client", attr.SlogError(err))
+			return
+		}
+		if err := rq.RetireOffersForDeletedRegistration(cleanupCtx, remotesessionsrepo.RetireOffersForDeletedRegistrationParams{ID: managed.ClientRowID, OrganizationID: conv.ToPGText(organizationID), ProjectID: conv.NilableToNullUUID(uuid.Nil)}); err != nil {
+			logger.ErrorContext(ctx, "failed to retire offers of abandoned connection client", attr.SlogError(err))
 			return
 		}
 		if err := bindingServers.Derive(cleanupCtx, dbtx); err != nil {
@@ -795,7 +771,7 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 }
 
 func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientIDPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -809,7 +785,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, payload.ClientSecret)
+	secret, err := validateClientSecret(payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -837,13 +813,13 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	}
 
 	managed, err := s.provisioner.SetClientID(ctx, dbtx, SetClientIDParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientID:              clientID,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientID:         clientID,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretRequired):
@@ -856,6 +832,8 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 		return nil, oops.E(oops.CodeConflict, err, "this client id is already registered against the Okta org")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to bind the client id to")
+	case orgencryption.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "record client id").LogError(ctx, logger)
 	}
@@ -899,7 +877,7 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 // ReplaceClientSecret keeps the previous secret and status when Okta rejects
 // the new one, so a mistyped secret never breaks a working connection.
 func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceClientSecretPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +887,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
 
-	secretEncrypted, err := s.encryptClientSecret(ctx, logger, &payload.ClientSecret)
+	secret, err := validateClientSecret(&payload.ClientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -937,18 +915,20 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 	}
 
 	managed, err := s.provisioner.ReplaceClientSecret(ctx, dbtx, ReplaceClientSecretParams{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ConnectionID:          id,
-		Provider:              ProviderOkta,
-		ClientSecretEncrypted: secretEncrypted,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		ClientSecret:     secret,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
 	})
 	switch {
 	case errors.Is(err, ErrClientSecretNotAccepted):
 		return nil, oops.E(oops.CodeBadRequest, err, "only connections installed from the Okta Integration Network use a client secret")
 	case errors.Is(err, ErrNotProvisioned):
 		return nil, oops.E(oops.CodeFailedPrecondition, err, "the connection has no credential to replace")
+	case orgencryption.IsKeyProblem(err):
+		return nil, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the client secret could not be stored; try again shortly").LogError(ctx, logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "replace client secret").LogError(ctx, logger)
 	}
@@ -983,7 +963,7 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 }
 
 func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMethodPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1056,7 +1036,7 @@ func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMetho
 }
 
 func (s *Service) Verify(ctx context.Context, payload *gen.VerifyPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1121,7 +1101,7 @@ func (s *Service) verificationCredentials(ctx context.Context, logger *slog.Logg
 		return nil, func() {}
 	}
 	observed := &atomic.Bool{}
-	provider := oktacredentials.Provider{DB: nil, Tx: tx, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
+	provider := oktacredentials.Provider{DB: nil, Tx: tx, Secrets: s.secrets, ConnectionID: rows.Connection.ID, ObservedDPoP: observed}
 	return provider, func() {
 		if !observed.Load() {
 			return
@@ -1140,17 +1120,17 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 	// A client-secret connection once seen DPoP-bound must stay bound.
 	dpopPinned := rows.Managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic && rows.Okta.DpopRequired
 	client, err := s.oktaClients.Client(okta.Config{
-		OrgURL:                rows.Okta.OrgUrl,
-		ClientID:              rows.Managed.ClientID,
-		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
-		RemoteSessionClientID: rows.Managed.ClientRowID,
-		OrganizationID:        rows.Connection.OrganizationID,
-		AuthMethod:            rows.Managed.AuthMethod,
-		JSONWebKeySetID:       rows.Managed.JSONWebKeySetID.UUID,
-		ClientSecretEncrypted: rows.Managed.ClientSecretEncrypted,
-		Credentials:           credentials,
-		RequireDPoP:           dpopPinned,
-		MaxPages:              verifyMaxPages,
+		OrgURL:                 rows.Okta.OrgUrl,
+		ClientID:               rows.Managed.ClientID,
+		AudienceFormat:         string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
+		RemoteSessionClientID:  rows.Managed.ClientRowID,
+		OrganizationID:         rows.Connection.OrganizationID,
+		AuthMethod:             rows.Managed.AuthMethod,
+		JSONWebKeySetID:        rows.Managed.JSONWebKeySetID.UUID,
+		ClientSecretGeneration: rows.Managed.ClientSecretGeneration,
+		Credentials:            credentials,
+		RequireDPoP:            dpopPinned,
+		MaxPages:               verifyMaxPages,
 	})
 	if err != nil {
 		s.oktaClients.Forget(rows.Managed.ClientRowID)
@@ -1173,6 +1153,13 @@ func (s *Service) runVerification(ctx context.Context, logger *slog.Logger, cred
 // the attempt locked: a concurrent run that committed in between wins. A
 // rejected credential degrades a verified connection.
 func (s *Service) recordFailure(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, rows *connectionRows, cause error, submittedClientID bool) {
+	// A key outage says nothing about Okta or the credential, and clears on
+	// its own: the connection's state and last error are left as they were.
+	if errors.Is(cause, okta.ErrClientSecretKeyUnavailable) {
+		s.metrics.recordVerify(ctx, ProviderOkta, verifyOutcomeKeyUnavailable)
+		return
+	}
+
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 
@@ -1232,6 +1219,9 @@ func (s *Service) mapVerificationError(ctx context.Context, logger *slog.Logger,
 	if errors.Is(err, okta.ErrClientSecretUndecryptable) {
 		return oops.E(oops.CodeUnexpected, err, "the stored client secret could not be read; replace it").LogError(ctx, logger)
 	}
+	if errors.Is(err, okta.ErrClientSecretKeyUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable, so the connection could not be verified; try again shortly").LogError(ctx, logger)
+	}
 	return oops.E(oops.CodeUnavailable, err, "Okta could not be reached to verify the connection").LogError(ctx, logger)
 }
 
@@ -1271,7 +1261,7 @@ func (s *Service) persistVerification(ctx context.Context, logger *slog.Logger, 
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIdentityProviderConnectionResult, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgRead, false)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Read, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1294,7 +1284,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetIde
 }
 
 func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1353,7 +1343,7 @@ func (s *Service) RecordAgent(ctx context.Context, payload *gen.RecordAgentPaylo
 }
 
 func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.OktaIdentityProviderConnection, error) {
-	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	authCtx, logger, err := s.authorize(ctx, authz.OrgRef.Admin, true)
 	if err != nil {
 		return nil, err
 	}

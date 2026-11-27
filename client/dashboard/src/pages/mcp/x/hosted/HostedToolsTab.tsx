@@ -1,4 +1,3 @@
-import { PageEyebrow } from "@/components/page-eyebrow";
 import { ToolList } from "@/components/tool-list";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -18,9 +17,7 @@ import {
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { AddToolsDialog } from "@/pages/toolsets/AddToolsDialog";
-import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { ToolsetEmptyState } from "@/pages/toolsets/ToolsetEmptyState";
-import { useRoutes } from "@/routes";
 import {
   invalidateListToolsetToolFilters,
   useListToolsetToolFilters,
@@ -32,20 +29,24 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 /** The toolset's tools: list, add, edit, remove. */
 export function HostedToolsTab({
   toolset,
+  inspectHref,
 }: {
   toolset: Toolset;
+  /** This server's Inspect tab, where its tools can be tried in chat. */
+  inspectHref: string;
 }): React.JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", toolset.id);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
-  const routes = useRoutes();
+  const navigate = useNavigate();
   const { data: fullToolset, refetch } = useToolset(toolset.slug);
 
   // Read-only tool filtering ("scopes") view. The resolved variation group, when
@@ -85,9 +86,6 @@ export function HostedToolsTab({
     const scope = toolFilters.scopes.find((s) => s.tag === effectiveActiveTag);
     return scope ? new Set(scope.tools.map((tool) => tool.toolUrn)) : null;
   }, [effectiveActiveTag, toolFilters]);
-
-  // Check if this is an external MCP proxy server
-  const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
 
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
@@ -146,9 +144,9 @@ export function HostedToolsTab({
     [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
   );
 
-  const handleTestInPlayground = useCallback(() => {
-    routes.playground.goTo(toolset.slug);
-  }, [toolset.slug, routes.playground]);
+  const handleTestInInspect = useCallback(() => {
+    void navigate(inspectHref);
+  }, [navigate, inspectHref]);
 
   // Group filtering
   const grouped = useGroupedTools(tools);
@@ -176,11 +174,6 @@ export function HostedToolsTab({
     },
   });
 
-  // For external MCP proxy servers, show the server info instead of tools list
-  if (isExternalMcpProxy && fullToolset) {
-    return <ServerTabContent toolset={fullToolset} />;
-  }
-
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
     value: group.key,
@@ -205,32 +198,25 @@ export function HostedToolsTab({
 
   return (
     <Stack className="mb-4">
-      {!isExternalMcpProxy && (
+      {/* No tab title: the detail page's header and tabs already name it. */}
+      {canWrite && (
         <Stack
           direction="horizontal"
-          justify="space-between"
+          justify="end"
           align="center"
           className="mb-4"
         >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <PageEyebrow />
-            <h1 className="text-display-sm font-thin">Tools</h1>
-          </div>
-          <Stack direction="horizontal" gap={2}>
-            {canWrite && (
-              <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Tools</Button.Text>
-              </Button>
-            )}
-          </Stack>
+          <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+            <Button.LeftIcon>
+              <Icon name="plus" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add tools</Button.Text>
+          </Button>
         </Stack>
       )}
 
       {/* Read-only tool filtering scopes panel (only when filtering enabled) */}
-      {!isExternalMcpProxy && filteringEnabled && toolFilters && (
+      {filteringEnabled && toolFilters && (
         <MCPToolFilterScopesPanel
           filters={toolFilters}
           activeTag={effectiveActiveTag}
@@ -239,7 +225,7 @@ export function HostedToolsTab({
       )}
 
       {/* Group filter */}
-      {!isExternalMcpProxy && groupFilterItems.length > 1 && (
+      {groupFilterItems.length > 1 && (
         <div className="relative mb-4 w-full">
           <MultiSelect
             options={groupFilterItems}
@@ -274,7 +260,7 @@ export function HostedToolsTab({
           onToolUpdate={canWrite ? updateTool : undefined}
           isToolUpdating={isUpdating}
           onToolsRemove={canWrite ? handleToolsRemove : undefined}
-          onTestInPlayground={handleTestInPlayground}
+          onTestInInspect={handleTestInInspect}
           readOnly={!canWrite}
         />
       ) : (
@@ -285,7 +271,7 @@ export function HostedToolsTab({
       )}
 
       {/* Add Tools Dialog */}
-      {fullToolset && !isExternalMcpProxy && (
+      {fullToolset && (
         <AddToolsDialog
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}

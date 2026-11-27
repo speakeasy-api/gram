@@ -2375,7 +2375,7 @@ func DecodeMoveIssuerResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // service "getIssuerMigratePreflight" endpoint
 func (c *Client) BuildGetIssuerMigratePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetIssuerMigratePreflightOrganizationUserSessionIssuersPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "getIssuerMigratePreflight", u.String(), err)
 	}
@@ -2398,10 +2398,10 @@ func EncodeGetIssuerMigratePreflightRequest(encoder func(*http.Request) goahttp.
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		values := req.URL.Query()
-		values.Add("source_id", p.SourceID)
-		values.Add("target_id", p.TargetID)
-		req.URL.RawQuery = values.Encode()
+		body := NewGetIssuerMigratePreflightRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "getIssuerMigratePreflight", err)
+		}
 		return nil
 	}
 }
@@ -3841,6 +3841,62 @@ func unmarshalUserSessionIssuerFieldMismatchResponseBodyToOrganizationusersessio
 		Field:       *v.Field,
 		SourceValue: *v.SourceValue,
 		TargetValue: *v.TargetValue,
+	}
+
+	return res
+}
+
+// unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact
+// builds a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact from
+// a value of type *UserSessionIssuerMigrationServerImpactResponseBody.
+func unmarshalUserSessionIssuerMigrationServerImpactResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationServerImpact(v *UserSessionIssuerMigrationServerImpactResponseBody) *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact {
+	res := &organizationusersessionissuers.UserSessionIssuerMigrationServerImpact{
+		McpServerID:    *v.McpServerID,
+		McpServerName:  *v.McpServerName,
+		McpServerSlug:  *v.McpServerSlug,
+		ProjectID:      *v.ProjectID,
+		ProjectName:    *v.ProjectName,
+		ImpactSeverity: organizationusersessionissuers.UserSessionIssuerMigrationImpactSeverity(*v.ImpactSeverity),
+		Hosted:         *v.Hosted,
+	}
+	res.Reasons = make([]organizationusersessionissuers.UserSessionIssuerMigrationImpactReason, len(v.Reasons))
+	for i, val := range v.Reasons {
+		res.Reasons[i] = organizationusersessionissuers.UserSessionIssuerMigrationImpactReason(val)
+	}
+	res.ClientsBefore = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(v.ClientsBefore))
+	for i, val := range v.ClientsBefore {
+		if val == nil {
+			res.ClientsBefore[i] = nil
+			continue
+		}
+		res.ClientsBefore[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
+	}
+	res.ClientsAfter = make([]*organizationusersessionissuers.UserSessionIssuerMigrationClient, len(v.ClientsAfter))
+	for i, val := range v.ClientsAfter {
+		if val == nil {
+			res.ClientsAfter[i] = nil
+			continue
+		}
+		res.ClientsAfter[i] = unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(val)
+	}
+	res.PinnedClientIds = make([]string, len(v.PinnedClientIds))
+	for i, val := range v.PinnedClientIds {
+		res.PinnedClientIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient
+// builds a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationClient from a
+// value of type *UserSessionIssuerMigrationClientResponseBody.
+func unmarshalUserSessionIssuerMigrationClientResponseBodyToOrganizationusersessionissuersUserSessionIssuerMigrationClient(v *UserSessionIssuerMigrationClientResponseBody) *organizationusersessionissuers.UserSessionIssuerMigrationClient {
+	res := &organizationusersessionissuers.UserSessionIssuerMigrationClient{
+		RemoteSessionClientID: *v.RemoteSessionClientID,
+		ClientID:              *v.ClientID,
+		ProviderIssuer:        *v.ProviderIssuer,
 	}
 
 	return res

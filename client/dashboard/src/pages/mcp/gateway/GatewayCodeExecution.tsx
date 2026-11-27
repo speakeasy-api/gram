@@ -1,13 +1,25 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
-import { TextArea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/utils";
+import type { InspectTool } from "../inspect/types";
+import {
+  extractFields,
+  jsonFieldError,
+  toArguments,
+} from "../inspect/toolSchemaFields";
+import { FieldInput } from "../inspect/ToolRunPanel";
+import {
+  codeModeCallSnippet,
+  DEFAULT_CODE_MODE_SOURCE,
+} from "./codeModeSnippet";
+import { PythonEditor } from "./PythonEditor";
 import { GatewayRPCError, gatewayRPC } from "./useGatewayInspection";
 
 const resultSchema = z.object({
@@ -63,14 +75,73 @@ function refusedBeforeExecution(error: unknown): error is GatewayRPCError {
 export function GatewayCodeExecution({
   connectUrl,
   headers,
+  tool,
   disabled = false,
 }: {
   disabled?: boolean;
   connectUrl: string;
   headers: Record<string, string> | undefined;
+  /**
+   * The member tool picked in the list. Its arguments get a form, and the
+   * editor holds a call to it built from that form.
+   */
+  tool?: InspectTool;
 }): JSX.Element {
-  const inputId = useId();
-  const [code, setCode] = useState('await tools.search("")');
+  const hintId = useId();
+  const [code, setCode] = useState(DEFAULT_CODE_MODE_SOURCE);
+  // The text this panel last wrote itself. While the editor still holds it,
+  // the user hasn't typed, so the form (or a newly picked tool) rewrites it.
+  const [generated, setGenerated] = useState(DEFAULT_CODE_MODE_SOURCE);
+  const following = code === generated;
+  // Form values per tool, so switching tools keeps what was typed.
+  const [valuesByTool, setValuesByTool] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const fields = useMemo(
+    () =>
+      // Required arguments first; the rest keep the schema's order.
+      extractFields(tool?.inputSchema).sort(
+        (a, b) => Number(b.required) - Number(a.required),
+      ),
+    [tool?.inputSchema],
+  );
+  const visibleFields = fields.filter((field) => field.kind !== "const");
+  // Null-prototype copy: schema field names such as `constructor` must read
+  // as unset, never as an inherited Object member.
+  const values: Record<string, string> = Object.assign(
+    Object.create(null) as Record<string, string>,
+    tool && Object.hasOwn(valuesByTool, tool.name)
+      ? valuesByTool[tool.name]
+      : undefined,
+  );
+  // Errors are per tool and field, so another tool's field never shows them.
+  const errorKey = (fieldName: string) =>
+    JSON.stringify([tool?.name ?? "", fieldName]);
+  const errorFor = (fieldName: string) =>
+    Object.hasOwn(fieldErrors, errorKey(fieldName))
+      ? fieldErrors[errorKey(fieldName)]
+      : undefined;
+  const snippet = tool
+    ? codeModeCallSnippet(tool.name, fields, values)
+    : undefined;
+  const [offered, setOffered] = useState<string>();
+  if (snippet !== undefined && snippet !== offered) {
+    setOffered(snippet);
+    if (following) {
+      setCode(snippet);
+      setGenerated(snippet);
+    }
+  }
+  const [ranFor, setRanFor] = useState<string>();
+  const regenerate = () => {
+    if (snippet === undefined) return;
+    setCode(snippet);
+    setGenerated(snippet);
+  };
+  // While the editor follows the form, the form must be complete to run.
+  const formCheck = tool && following ? toArguments(fields, values) : undefined;
+  const incomplete = formCheck && !formCheck.ok ? formCheck.error : undefined;
   const request = useRef<(() => void) | undefined>(undefined);
   const startedAt = useRef<number | undefined>(undefined);
   const [durationMs, setDurationMs] = useState<number>();
@@ -173,72 +244,159 @@ export function GatewayCodeExecution({
   });
   const sourceBytes = new TextEncoder().encode(code).length;
   const tooLarge = sourceBytes > MAX_SOURCE_BYTES;
-  const result = execution.data?.result;
+  // A run belongs to the tool picked when it started, like the Run tab's
+  // per-tool results: picking another tool hides it until that one runs.
+  // No member tool picked is its own owner (""), so a member tool's run never
+  // shows under a gateway-owned tool or under nothing.
+  const showRun = ranFor !== undefined && ranFor === (tool?.name ?? "");
+  const result = showRun ? execution.data?.result : undefined;
   const submitted = execution.variables;
   const canRun =
-    !disabled && !execution.isPending && !!code.trim() && !tooLarge;
+    !disabled &&
+    !execution.isPending &&
+    !!code.trim() &&
+    !tooLarge &&
+    !incomplete;
   const run = () => {
     if (canRun) {
       startedAt.current = performance.now();
+      setRanFor(tool?.name ?? "");
       execution.mutate(code);
     }
   };
 
   return (
-    <section aria-label="Run Python" className="flex flex-col gap-4">
+    <section aria-label="Run Python" className="flex flex-col gap-5">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           run();
         }}
-        className="border-border bg-card flex flex-col border"
+        className="flex flex-col gap-5"
       >
-        <div className="border-border flex min-h-[42px] items-center justify-between gap-4 border-b px-4 py-2">
-          <label htmlFor={inputId} className="text-eyebrow">
-            Python source
-          </label>
-          <Text muted small className="hidden sm:block">
-            Each run starts fresh and acts with this connection&apos;s access.
-          </Text>
-        </div>
-        <TextArea
-          id={inputId}
-          value={code}
-          onChange={setCode}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              run();
+        {tool ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="min-w-0 font-mono text-sm font-medium break-all">
+                {tool.name}
+              </span>
+              {tool.description ? (
+                <p className="text-muted-foreground line-clamp-4 text-[13px] leading-5 whitespace-pre-line">
+                  {tool.description}
+                </p>
+              ) : null}
+            </div>
+            <fieldset className="border-border flex flex-col gap-4 border-t pt-5">
+              <legend className="sr-only">Arguments</legend>
+              <span aria-hidden className="text-eyebrow">
+                Arguments
+              </span>
+              {visibleFields.length === 0 ? (
+                <p className="text-muted-foreground text-[13px]">
+                  This tool takes no arguments.
+                </p>
+              ) : (
+                visibleFields.map((field) => (
+                  <FieldInput
+                    key={`${tool.name}:${field.name}`}
+                    field={field}
+                    value={values[field.name] ?? ""}
+                    error={errorFor(field.name)}
+                    disabled={execution.isPending}
+                    onChange={(value) => {
+                      setValuesByTool((current) => ({
+                        ...current,
+                        [tool.name]: {
+                          ...(Object.hasOwn(current, tool.name)
+                            ? current[tool.name]
+                            : undefined),
+                          [field.name]: value,
+                        },
+                      }));
+                      if (errorFor(field.name))
+                        setFieldErrors(
+                          ({ [errorKey(field.name)]: _, ...rest }) => rest,
+                        );
+                    }}
+                    onBlur={(value) => {
+                      const error = jsonFieldError(field, value);
+                      setFieldErrors(({ [errorKey(field.name)]: _, ...rest }) =>
+                        error
+                          ? { ...rest, [errorKey(field.name)]: error }
+                          : rest,
+                      );
+                    }}
+                  />
+                ))
+              )}
+            </fieldset>
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-3">
+          <PythonEditor
+            label="Python source"
+            actions={
+              tool && !following ? (
+                <button
+                  type="button"
+                  onClick={regenerate}
+                  disabled={execution.isPending}
+                  className="text-muted-fixed-light hover:text-default-fixed-light min-w-0 truncate text-xs underline underline-offset-2"
+                >
+                  Regenerate from arguments
+                </button>
+              ) : undefined
             }
-          }}
-          rows={8}
-          className="min-h-48 resize-y border-0 px-4 py-3 font-mono text-sm leading-relaxed focus-visible:ring-0"
-          disabled={execution.isPending}
-        />
-        <div className="border-border flex flex-wrap items-center gap-3 border-t px-4 py-3">
-          <Button type="submit" disabled={!canRun}>
-            <Button.Text>
-              {execution.isPending ? "Running…" : "Run Python"}
-            </Button.Text>
-          </Button>
-          {execution.isPending && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => request.current?.()}
-            >
-              <Button.Text>Cancel</Button.Text>
-            </Button>
-          )}
-          <Text muted small className="ml-auto">
-            {tooLarge
-              ? `Source is ${formatBytes(sourceBytes)}; the limit is 64 KB.`
-              : "Ctrl/⌘ Enter to run · tool calls can change data"}
-          </Text>
+            value={code}
+            onChange={setCode}
+            onSubmit={run}
+            disabled={execution.isPending}
+            describedBy={tooLarge || incomplete ? hintId : undefined}
+          />
+          <div className="flex items-center justify-end gap-3">
+            {tooLarge ? (
+              <p
+                id={hintId}
+                role="alert"
+                className="text-destructive mr-auto text-xs"
+              >
+                {`Source is ${formatBytes(sourceBytes)}; the limit is 64 KB.`}
+              </p>
+            ) : incomplete ? (
+              <p id={hintId} className="text-muted-foreground mr-auto text-xs">
+                {incomplete}
+              </p>
+            ) : null}
+            <div className="flex shrink-0 items-center gap-2">
+              {execution.isPending && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="font-sans text-[13px] font-medium tracking-normal normal-case"
+                  onClick={() => request.current?.()}
+                >
+                  <Button.Text>Cancel</Button.Text>
+                </Button>
+              )}
+              <Button
+                type="submit"
+                size="sm"
+                className="font-sans text-[13px] font-medium tracking-normal normal-case"
+                disabled={!canRun}
+                title="Execute code (Ctrl/⌘ Enter)"
+                aria-keyshortcuts="Control+Enter Meta+Enter"
+              >
+                <Button.Text>
+                  {execution.isPending ? "Executing…" : "Execute code"}
+                </Button.Text>
+              </Button>
+            </div>
+          </div>
         </div>
       </form>
 
-      {execution.isError && (
+      {showRun && execution.isError && (
         <Alert variant="error" dismissible={false}>
           <AlertTitle>
             {execution.error instanceof ExecutionNotAdmittedError
@@ -298,36 +456,41 @@ function ExecutionResult({
   submitted: string | undefined;
 }): JSX.Element {
   const calls = result.tool_calls;
-  const summary = [
-    result.error ? "Failed" : "Returned",
+  const details = [
     `${calls.length} tool ${calls.length === 1 ? "call" : "calls"}`,
-    durationMs === undefined
-      ? undefined
-      : `${formatDuration(durationMs)} round trip`,
     serverTiming && `${formatDuration(serverTiming.server_ms)} on the server`,
+    serverTiming?.admission_ms !== undefined &&
+    serverTiming.run_ms !== undefined
+      ? `${formatDuration(serverTiming.admission_ms)} waiting for capacity, ${formatDuration(serverTiming.run_ms)} running`
+      : undefined,
   ]
     .filter(Boolean)
     .join(" · ");
   const unknownOutcomes = calls.some((call) => call.outcome === "unknown");
 
   return (
-    <div className="flex flex-col gap-4" aria-live="polite">
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            "size-2 rounded-full",
-            result.error ? "bg-destructive" : "bg-success",
-          )}
-        />
-        <Text small>{summary}</Text>
+    <section
+      aria-label="Response"
+      aria-live="polite"
+      className="border-border flex flex-col gap-3 border-t pt-5"
+    >
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-eyebrow">Response</span>
+          <span className="flex items-center gap-2 text-xs">
+            <StatusDot tone={result.error ? "destructive" : "success"} />
+            <span className={cn(result.error && "text-destructive")}>
+              {result.error ? "Failed" : "Returned"}
+            </span>
+            {durationMs !== undefined ? (
+              <span className="text-muted-foreground font-mono tabular-nums">
+                {formatDuration(durationMs)}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <p className="text-muted-foreground text-xs">{details}</p>
       </div>
-      {serverTiming?.admission_ms !== undefined &&
-        serverTiming.run_ms !== undefined && (
-          <Text muted small className="-mt-2">
-            {`Server time: ${formatDuration(serverTiming.admission_ms)} waiting for capacity, ${formatDuration(serverTiming.run_ms)} running.`}
-          </Text>
-        )}
       {result.error && (
         <Alert variant="error" dismissible={false}>
           <AlertTitle>{result.error.message}</AlertTitle>
@@ -352,7 +515,7 @@ function ExecutionResult({
           fontSize="small"
           copyable
           wordWrap
-          className="max-h-[28rem] overflow-auto"
+          className="max-h-[28rem] overflow-auto border-0"
         />
       </ResultBlock>
 
@@ -361,7 +524,7 @@ function ExecutionResult({
           title="Printed output"
           meta={result.output_truncated ? "Truncated" : undefined}
         >
-          <pre className="bg-muted/20 max-h-64 overflow-auto px-4 py-3 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+          <pre className="max-h-64 overflow-auto px-3 py-2.5 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
             {result.output}
           </pre>
         </ResultBlock>
@@ -369,7 +532,7 @@ function ExecutionResult({
 
       <ResultBlock title="Tool calls">
         {calls.length === 0 ? (
-          <Text muted small className="px-4 py-3">
+          <Text muted small className="px-3 py-2.5">
             This run called no tools.
           </Text>
         ) : (
@@ -382,7 +545,7 @@ function ExecutionResult({
               return (
                 <li
                   key={`${index}:${call.path}`}
-                  className="flex items-center justify-between gap-4 px-4 py-2"
+                  className="flex items-center justify-between gap-4 px-3 py-2"
                 >
                   <span
                     className="min-w-0 truncate font-mono text-xs"
@@ -407,11 +570,11 @@ function ExecutionResult({
             code={submitted}
             fontSize="small"
             wordWrap
-            className="max-h-48 overflow-auto"
+            className="max-h-48 overflow-auto border-0"
           />
         </ResultBlock>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -429,8 +592,8 @@ function ResultBlock({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border bg-card border">
-      <div className="border-border flex min-h-[38px] items-center justify-between gap-2 border-b px-4 py-2">
+    <div className="border-border border">
+      <div className="border-border flex min-h-9 items-center justify-between gap-2 border-b px-3 py-2">
         <span className="text-eyebrow">{title}</span>
         {meta && (
           <Text muted small>

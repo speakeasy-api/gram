@@ -251,11 +251,14 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionClientsCreateRemoteSessionClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"template_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		for _, e := range body.UserSessionIssuerIds {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_ids[*]", e, goa.FormatUUID))
+		}
+		if body.TemplateClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.template_client_id", *body.TemplateClientID, goa.FormatUUID))
 		}
 		if body.TokenEndpointAuthMethod != nil {
 			if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none" || *body.TokenEndpointAuthMethod == "private_key_jwt") {
@@ -319,6 +322,7 @@ func BuildCreateRemoteSessionClientPayload(remoteSessionClientsCreateRemoteSessi
 		RemoteSessionIssuerID:           body.RemoteSessionIssuerID,
 		ClientID:                        body.ClientID,
 		ClientSecret:                    body.ClientSecret,
+		TemplateClientID:                body.TemplateClientID,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
@@ -508,96 +512,6 @@ func BuildUpdateRemoteSessionClientPayload(remoteSessionClientsUpdateRemoteSessi
 		for i, val := range body.Scope {
 			v.Scope[i] = val
 		}
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildAttachUserSessionIssuerPayload builds the payload for the
-// remoteSessionClients attachUserSessionIssuer endpoint from CLI flags.
-func BuildAttachUserSessionIssuerPayload(remoteSessionClientsAttachUserSessionIssuerBody string, remoteSessionClientsAttachUserSessionIssuerSessionToken string, remoteSessionClientsAttachUserSessionIssuerApikeyToken string, remoteSessionClientsAttachUserSessionIssuerProjectSlugInput string) (*remotesessionclients.AttachUserSessionIssuerPayload, error) {
-	var err error
-	var body AttachUserSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(remoteSessionClientsAttachUserSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if remoteSessionClientsAttachUserSessionIssuerSessionToken != "" {
-			sessionToken = &remoteSessionClientsAttachUserSessionIssuerSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if remoteSessionClientsAttachUserSessionIssuerApikeyToken != "" {
-			apikeyToken = &remoteSessionClientsAttachUserSessionIssuerApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if remoteSessionClientsAttachUserSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &remoteSessionClientsAttachUserSessionIssuerProjectSlugInput
-		}
-	}
-	v := &remotesessionclients.AttachUserSessionIssuerPayload{
-		ID:                  body.ID,
-		UserSessionIssuerID: body.UserSessionIssuerID,
-	}
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildDetachUserSessionIssuerPayload builds the payload for the
-// remoteSessionClients detachUserSessionIssuer endpoint from CLI flags.
-func BuildDetachUserSessionIssuerPayload(remoteSessionClientsDetachUserSessionIssuerBody string, remoteSessionClientsDetachUserSessionIssuerSessionToken string, remoteSessionClientsDetachUserSessionIssuerApikeyToken string, remoteSessionClientsDetachUserSessionIssuerProjectSlugInput string) (*remotesessionclients.DetachUserSessionIssuerPayload, error) {
-	var err error
-	var body DetachUserSessionIssuerRequestBody
-	{
-		err = json.Unmarshal([]byte(remoteSessionClientsDetachUserSessionIssuerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if remoteSessionClientsDetachUserSessionIssuerSessionToken != "" {
-			sessionToken = &remoteSessionClientsDetachUserSessionIssuerSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if remoteSessionClientsDetachUserSessionIssuerApikeyToken != "" {
-			apikeyToken = &remoteSessionClientsDetachUserSessionIssuerApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if remoteSessionClientsDetachUserSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &remoteSessionClientsDetachUserSessionIssuerProjectSlugInput
-		}
-	}
-	v := &remotesessionclients.DetachUserSessionIssuerPayload{
-		ID:                  body.ID,
-		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

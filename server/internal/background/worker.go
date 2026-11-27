@@ -21,12 +21,15 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -44,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -56,6 +60,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
@@ -63,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -79,8 +86,15 @@ type WorkerOptions struct {
 	// FleetHealthCache refreshes the staff dashboard snapshot; nil disables its schedule.
 	FleetHealthCache FleetHealthCacheRefresher
 
+	// HookFleetMetrics emits the per-organization hooks fleet gauges; nil disables its schedule.
+	HookFleetMetrics HookFleetMetricsEmitter
+
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
+
+	// MemoryEvals executes staff-started team memory eval runs. Nil makes a
+	// scheduled run fail with a configuration error.
+	MemoryEvals MemoryEvalRunner
 
 	// CatalogPromotionDeliveryPaused suspends external guide writes without dropping jobs.
 	CatalogPromotionDeliveryPaused bool
@@ -93,9 +107,29 @@ type WorkerOptions struct {
 	TunnelHTTPClient *tunnelrouting.HTTPClient
 	DB               *pgxpool.Pool
 	EncryptionClient *encryption.Client
-	FeatureProvider  feature.Provider
-	AssetStorage     assets.BlobStore
-	SlackClient      *slack_client.SlackClient
+
+	// ClientSecrets opens remote session client secrets over the process's
+	// organization encryption. Nil opens them as a process without
+	// organization encryption.
+	ClientSecrets *clientsecrets.Secrets
+
+	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
+	// organization encryption. Nil handles them as a process without
+	// organization encryption.
+	UpstreamTokens *upstreamtokens.Tokens
+
+	// AIProviderKeys opens AI provider and model keys over the process's
+	// organization encryption. Nil opens them as a process without
+	// organization encryption.
+	AIProviderKeys *aiproviderkeys.Keys
+
+	// RunnerKeys stores and opens Speakeasy Functions runner keys over the
+	// process's organization encryption. Nil handles them as a process
+	// without organization encryption.
+	RunnerKeys      *runnerkeys.Keys
+	FeatureProvider feature.Provider
+	AssetStorage    assets.BlobStore
+	SlackClient     *slack_client.SlackClient
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
@@ -108,6 +142,10 @@ type WorkerOptions struct {
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
 
+	// CustomDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets (<token>.<suffix>); empty disables per-domain targets.
+	CustomDomainTargetSuffix string
+
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
@@ -116,7 +154,11 @@ type WorkerOptions struct {
 	// through the approvals service.
 	ServerURL *url.URL
 	// OrgHosts resolves the host of links sent to an organization by email.
-	OrgHosts          *orghost.Resolver
+	OrgHosts *orghost.Resolver
+	// StaffOrganization is the deployment's Speakeasy staff organization. Its
+	// connection attempts do not count toward the daily outcomes label
+	// threshold.
+	StaffOrganization staff.Organization
 	BillingTracker    billing.Tracker
 	BillingRepository billing.Repository
 	StripeClient      stripeclient.Client
@@ -154,6 +196,15 @@ type WorkerOptions struct {
 	Connections *mcpconnectionattempts.Recorder
 	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
 	IssuerKeySweeper InternalSessionIssuerKeySweeper
+
+	// OrganizationEncryptionSweeper probes organization encryption keys and
+	// disables unused managed ones; nil sweeps nothing.
+	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
+
+	// OrganizationEncryptionMigrator backfills, verifies and sweeps the use
+	// cases moving to organization keys; nil does nothing hourly and rejects
+	// on-demand runs.
+	OrganizationEncryptionMigrator OrganizationEncryptionMigrator
 
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
@@ -209,12 +260,18 @@ func ForDeploymentProcessing(
 	return &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
 		GuardianPolicy:                 guardianPolicy,
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
+		ClientSecrets:                  nil,
+		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -224,6 +281,8 @@ func ForDeploymentProcessing(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -234,10 +293,12 @@ func ForDeploymentProcessing(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
 		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		StaffOrganization:              staff.Organization{},
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		StripeClient:                   nil,
@@ -273,6 +334,7 @@ func ForDeploymentProcessing(
 			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
+			IntentPolicyAssessments: gcp.NewNoopPublisher[*intentpolicyv1.Assessment](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,
@@ -310,13 +372,19 @@ func NewTemporalWorker(
 	opts := &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
 		GuardianPolicy:                 nil,
 		TunnelHTTPClient:               nil,
 		DB:                             nil,
 		EncryptionClient:               nil,
+		ClientSecrets:                  nil,
+		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
+		RunnerKeys:                     nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -328,10 +396,12 @@ func NewTemporalWorker(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
 		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		StaffOrganization:              staff.Organization{},
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		StripeClient:                   nil,
@@ -349,6 +419,8 @@ func NewTemporalWorker(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
+		OrganizationEncryptionMigrator: nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -370,12 +442,18 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
+			HookFleetMetrics:               conv.Default(o.HookFleetMetrics, opts.HookFleetMetrics),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
+			MemoryEvals:                    conv.Default(o.MemoryEvals, opts.MemoryEvals),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
+			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
+			AIProviderKeys:                 conv.Default(o.AIProviderKeys, opts.AIProviderKeys),
+			RunnerKeys:                     conv.Default(o.RunnerKeys, opts.RunnerKeys),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -387,10 +465,12 @@ func NewTemporalWorker(
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			ExpectedARecords:               conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			CustomDomainTargetSuffix:       conv.Default(o.CustomDomainTargetSuffix, opts.CustomDomainTargetSuffix),
 			GitHubEvidenceToken:            conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			ServerURL:                      conv.Default(o.ServerURL, opts.ServerURL),
 			OrgHosts:                       conv.Default(o.OrgHosts, opts.OrgHosts),
+			StaffOrganization:              conv.Default(o.StaffOrganization, opts.StaffOrganization),
 			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                   conv.Default(o.StripeClient, opts.StripeClient),
@@ -409,6 +489,8 @@ func NewTemporalWorker(
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
+			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
+			OrganizationEncryptionMigrator: conv.Default(o.OrganizationEncryptionMigrator, opts.OrganizationEncryptionMigrator),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -483,6 +565,13 @@ func NewTemporalWorker(
 		}
 	}
 
+	// Workers wired without the process's seam (test workers) open AI
+	// provider keys as a process without organization encryption.
+	aiProviderKeys := opts.AIProviderKeys
+	if aiProviderKeys == nil {
+		aiProviderKeys = aiproviderkeys.WithoutOrganizationEncryption(logger, opts.DB, opts.EncryptionClient)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -491,6 +580,10 @@ func NewTemporalWorker(
 		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
+		opts.ClientSecrets,
+		opts.UpstreamTokens,
+		aiProviderKeys,
+		opts.RunnerKeys,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -500,6 +593,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.ExpectedARecords,
+		opts.CustomDomainTargetSuffix,
 		opts.SiteURL,
 		opts.OrgHosts,
 		opts.BillingTracker,
@@ -541,11 +635,19 @@ func NewTemporalWorker(
 		opts.Connections,
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
+		opts.ServerURL,
+		opts.StaffOrganization,
 	)
+	activities.memoryEvalRunner = opts.MemoryEvals
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
 		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
+	}
+
+	if opts.HookFleetMetrics != nil {
+		temporalWorker.RegisterActivityWithOptions(opts.HookFleetMetrics.Emit, activity.RegisterOptions{Name: hookFleetMetricsActivity})
+		temporalWorker.RegisterWorkflow(HookFleetMetricsWorkflow)
 	}
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -564,6 +666,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
+	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
+	organizationEncryptionBackfill := NewOrganizationEncryptionBackfillActivities(logger, opts.OrganizationEncryptionMigrator)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.Backfill, activity.RegisterOptions{Name: OrganizationEncryptionBackfillActivityName})
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionBackfill.BackfillOrganization, activity.RegisterOptions{Name: OrganizationEncryptionBackfillOrganizationActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -593,10 +700,14 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
 	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
+	temporalWorker.RegisterActivity(activities.BuildMemoryDigests)
+	temporalWorker.RegisterActivity(activities.InvalidateMemoryDigests)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
+	temporalWorker.RegisterActivity(activities.PlanMCPConnectionOutcomeDays)
+	temporalWorker.RegisterActivity(activities.BuildMCPConnectionOutcomesDay)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
 	temporalWorker.RegisterActivity(activities.DeleteChatResolutions)
 	temporalWorker.RegisterActivity(activities.AnalyzeSegment)
@@ -636,7 +747,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
+	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.ReapStalePluginAPIKeys)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
@@ -660,6 +773,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.RunMcpResearch)
 	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
+	temporalWorker.RegisterActivity(activities.RunMemoryEval)
+	temporalWorker.RegisterActivity(activities.MarkMemoryEvalInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -737,11 +852,19 @@ func NewTemporalWorker(
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}
+		requestNotifier := slackrequests.NewNotifier(logger, slackrequests.NewCards(opts.DB, opts.OrgHosts), slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+		accessRequestSlack := &accessRequestSlackActivities{logger: logger, notifier: requestNotifier}
+		temporalWorker.RegisterActivity(accessRequestSlack.NotifyAccessRequestAdmins)
+		temporalWorker.RegisterActivity(accessRequestSlack.FinishAccessRequestCards)
 	}
 	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
+	temporalWorker.RegisterWorkflow(AccessRequestSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionBackfillOrganizationWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -756,10 +879,13 @@ func NewTemporalWorker(
 		temporalWorker.RegisterActivityWithOptions(promotionActivities.dispatch, activity.RegisterOptions{Name: catalogPromotionDispatchActivity})
 	}
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryDigestsWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesSweepWorkflow)
+	temporalWorker.RegisterWorkflow(MCPConnectionOutcomesDayWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
 	temporalWorker.RegisterWorkflow(DelayedChatResolutionAnalysisWorkflow)
 	// Trigger workflows
@@ -795,7 +921,9 @@ func NewTemporalWorker(
 	// Killswitch expiry history and receipt retention
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(PluginAPIKeyReapWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
@@ -822,6 +950,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryEvalRunWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
@@ -874,6 +1003,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
 	}
 
+	if err := AddChannelsRetentionSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add channels retention schedule", attr.SlogError(err))
+	}
+
 	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
 	}
@@ -906,6 +1039,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	if opts.HookFleetMetrics != nil {
+		if err := addHookFleetMetricsSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register hook fleet metrics schedule", attr.SlogError(err))
+		}
+	}
+
 	if opts.CatalogPromotions != nil {
 		if err := addCatalogPromotionSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register catalogue promotion schedule", attr.SlogError(err))
@@ -916,6 +1055,20 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// so only the shared queue may run it.
 	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
+	}
+
+	// The sweep suspends organizations and disables managed KMS keys.
+	// Preview databases clone dev's keys, so only the shared queue may run it.
+	if err := AddOrganizationEncryptionSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
+	}
+
+	// The backfill seals values under organization keys and destroys
+	// platform-key copies. Preview databases clone dev's keys, so only the
+	// shared queue may run it hourly; previews can still start one
+	// organization's run on demand.
+	if err := AddOrganizationEncryptionBackfillSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption backfill schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
@@ -952,12 +1105,22 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
+	if err := AddMemoryDigestsSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add memory digests schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	// A deployment with the disabled runtime provider and no backend has no
+	// runtime to reap, so its namespace never gets these schedules. One
+	// switched to disabled keeps any it already has; the sweeps then return
+	// without work.
+	if opts.AssistantsCore == nil || opts.AssistantsCore.RuntimeHasBackends() {
+		if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
+		}
+
+		if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+		}
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build
@@ -978,6 +1141,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddPluginAPIKeyReapSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add plugin API key reaper schedule", attr.SlogError(err))
 	}
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {
@@ -1010,6 +1177,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddMCPConnectionOutcomesSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add MCP connection outcomes schedule", attr.SlogError(err))
 	}
 
 	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {

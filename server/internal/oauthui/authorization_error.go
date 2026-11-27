@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
@@ -110,6 +111,9 @@ type AuthorizationError struct {
 
 	// ProviderName names the sign-in provider on ReasonProviderUnavailable, when known.
 	ProviderName string
+
+	// AdminDetail says what is wrong for an administrator, shown only under Technical details and never sent to the client.
+	AdminDetail string
 }
 
 // Reason describes what the person can do about a browser failure.
@@ -150,6 +154,15 @@ const (
 	ReasonSignInUnavailable Reason = "sign-in-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
+	// ReasonSignInRestarted identifies a consent link the person left to sign in again.
+	ReasonSignInRestarted Reason = "sign-in-restarted"
+	// ReasonSignInNotStarted identifies a new sign-in that couldn't start; the
+	// description is a fixed, user-safe sentence saying what to do.
+	ReasonSignInNotStarted Reason = "sign-in-not-started"
+	// ReasonSignInAddress identifies a sign-in address that is private or internal; an administrator fixes it.
+	ReasonSignInAddress Reason = "sign-in-address"
+	// ReasonSignInAddressMissing identifies a sign-in address that doesn't exist; an administrator fixes it.
+	ReasonSignInAddressMissing Reason = "sign-in-address-missing"
 )
 
 // check reports a failed server connection check, rather than a failed connection.
@@ -157,7 +170,7 @@ func (r Reason) check() bool {
 	switch r {
 	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNotAllowed:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired, ReasonSignInUnavailable, ReasonSignInFailed, ReasonSignInRestarted, ReasonSignInNotStarted, ReasonSignInAddress, ReasonSignInAddressMissing:
 		return false
 	default:
 		return false
@@ -245,6 +258,9 @@ type authorizationErrorView struct {
 	// ProviderName mirrors AuthorizationError.
 	ProviderName string
 
+	// AdminDetail mirrors AuthorizationError.
+	AdminDetail string
+
 	// Code and Description are the OAuth error, shown under Technical details.
 	Code        string
 	Description string
@@ -255,9 +271,13 @@ type authorizationErrorView struct {
 	// Destination identifies the callback host or native application scheme.
 	Destination string
 
-	// Reference is the request's trace ID, which administrators and support
-	// can look up. Empty when the request is not traced.
-	Reference string
+	// ConnectionReference is the id of the stored connection row, which the person gives
+	// their administrator. Empty when no row will be stored.
+	ConnectionReference string
+
+	// TraceID is the request's trace ID, which support can look up. Empty when the
+	// request is not traced.
+	TraceID string
 
 	// Time is when the request was refused, in UTC.
 	Time string
@@ -278,11 +298,13 @@ func technicalDetailsText(view authorizationErrorView) string {
 	var text strings.Builder
 	text.WriteString("Speakeasy authorization error")
 	for _, field := range []struct{ label, value string }{
-		{"Reference", view.Reference},
+		{"Reference", view.ConnectionReference},
+		{"Trace ID", view.TraceID},
 		{"Error ID", view.ErrorID},
 		{"Time", view.Time},
 		{"Error", view.Code},
 		{"Error description", view.Description},
+		{"Problem", view.AdminDetail},
 		{"MCP client", view.ClientName},
 		{"MCP client ID", view.ClientID},
 		{"Client verified from", view.ClientIDOrigin},
@@ -351,9 +373,9 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 			}
 		}
 	}
-	reference := ""
+	traceIDText := ""
 	if traceID := trace.SpanContextFromContext(ctx).TraceID(); traceID.IsValid() {
-		reference = traceID.String()
+		traceIDText = traceID.String()
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -371,14 +393,16 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		ClientID:       page.ClientID,
 		ClientIDOrigin: page.ClientIDOrigin,
 		ProviderName:   page.ProviderName,
+		AdminDetail:    page.AdminDetail,
 		Code:           page.Code,
 		Description:    page.Description,
 		// Native application schemes require template.URL after scheme validation;
 		// html/template still escapes the attribute's contents.
-		CallbackURL: template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
-		Destination: destination,
-		Reference:   reference,
-		Time:        time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		CallbackURL:         template.URL(page.CallbackURL), //nolint:gosec // G203: registered callback validated above; native schemes must remain clickable.
+		Destination:         destination,
+		ConnectionReference: contextvalues.ConnectionReference(ctx),
+		TraceID:             traceIDText,
+		Time:                time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		// Built from the other fields below.
 		TechnicalDetails: "",
 		ScriptNonce:      base64.RawURLEncoding.EncodeToString(nonce),

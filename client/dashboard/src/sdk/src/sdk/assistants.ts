@@ -7,16 +7,17 @@ import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
 import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
+import { assistantsInferIntent } from "../funcs/assistantsInferIntent.js";
 import { assistantsInterruptTurn } from "../funcs/assistantsInterruptTurn.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsListExecutionProfiles } from "../funcs/assistantsListExecutionProfiles.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsSetExecutionProfileChoice } from "../funcs/assistantsSetExecutionProfileChoice.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
-import { assistantsUpgradeIdentity } from "../funcs/assistantsUpgradeIdentity.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Assistant } from "../models/components/assistant.js";
 import { AssistantExecutionProfile } from "../models/components/assistantexecutionprofile.js";
+import { AssistantIntent } from "../models/components/assistantintent.js";
 import { InterruptTurnResult } from "../models/components/interruptturnresult.js";
 import { ListAssistantsResult } from "../models/components/listassistantsresult.js";
 import { ListExecutionProfilesResult } from "../models/components/listexecutionprofilesresult.js";
@@ -42,6 +43,10 @@ import {
   GetManagedAssistantSecurity,
 } from "../models/operations/getmanagedassistant.js";
 import {
+  InferAssistantIntentRequest,
+  InferAssistantIntentSecurity,
+} from "../models/operations/inferassistantintent.js";
+import {
   InterruptAssistantTurnRequest,
   InterruptAssistantTurnSecurity,
 } from "../models/operations/interruptassistantturn.js";
@@ -65,10 +70,6 @@ import {
   UpdateAssistantRequest,
   UpdateAssistantSecurity,
 } from "../models/operations/updateassistant.js";
-import {
-  UpgradeAssistantIdentityRequest,
-  UpgradeAssistantIdentitySecurity,
-} from "../models/operations/upgradeassistantidentity.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Assistants extends ClientSDK {
@@ -160,6 +161,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsGetManaged(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * inferIntent assistants
+   *
+   * @remarks
+   * Infer what the calling user is trying to do from their recent dashboard activity, so the Project Assistant can open with a specific offer of help instead of an empty prompt. The activity journal is sent by the dashboard and is not stored. Returns no goal when the activity is too thin to infer a task.
+   */
+  async inferIntent(
+    request: InferAssistantIntentRequest,
+    security?: InferAssistantIntentSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AssistantIntent> {
+    return unwrapAsync(assistantsInferIntent(
       this,
       request,
       security,
@@ -274,25 +294,6 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Assistant> {
     return unwrapAsync(assistantsUpdate(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * upgradeAssistantIdentity assistants
-   *
-   * @remarks
-   * Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
-   */
-  async upgradeIdentity(
-    request: UpgradeAssistantIdentityRequest,
-    security?: UpgradeAssistantIdentitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Assistant> {
-    return unwrapAsync(assistantsUpgradeIdentity(
       this,
       request,
       security,

@@ -19,7 +19,6 @@ export const ToolTypes = {
   Prompt: "prompt",
   Function: "function",
   Platform: "platform",
-  Externalmcp: "externalmcp",
 } as const;
 /**
  * The type of tool

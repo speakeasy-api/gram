@@ -244,7 +244,8 @@ type RiskPolicyDetail struct {
 }
 
 type ListRiskPoliciesInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	Cursor      string `json:"cursor,omitempty"`
 	Limit       int    `json:"limit,omitempty"`
@@ -259,7 +260,8 @@ type ListRiskPoliciesOutput struct {
 }
 
 type GetRiskPolicyInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	PolicyID    string `json:"policy_id"`
 }
@@ -288,7 +290,8 @@ type RiskExclusionSummary struct {
 }
 
 type ListRiskExclusionsInput struct {
-	ProjectID   string `json:"project_id,omitempty"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID   string `json:"-"`
 	ProjectSlug string `json:"project_slug,omitempty"`
 	PolicyID    string `json:"policy_id,omitempty"`
 	Cursor      string `json:"cursor,omitempty"`

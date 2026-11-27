@@ -9,10 +9,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/secretmask"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -58,7 +60,7 @@ func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envI
 		return nil, fmt.Errorf("environment not found for slug or id: %s", envIDOrSlug)
 	}
 
-	entries, err := e.ListEnvironmentEntries(ctx, projectID, environmentID, false)
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, environmentID)
 	if err != nil {
 		return nil, fmt.Errorf("list environment entries: %w", err)
 	}
@@ -83,7 +85,7 @@ func (e *EnvironmentEntries) LoadSourceEnv(ctx context.Context, projectID uuid.U
 		return nil, fmt.Errorf("get environment for source: %w", err)
 	}
 
-	entries, err := e.ListEnvironmentEntries(ctx, projectID, sourceEnv.ID, false)
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, sourceEnv.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list environment entries: %w", err)
 	}
@@ -107,7 +109,7 @@ func (e *EnvironmentEntries) LoadToolsetEnv(ctx context.Context, projectID uuid.
 		return nil, fmt.Errorf("get environment for toolset: %w", err)
 	}
 
-	entries, err := e.ListEnvironmentEntries(ctx, projectID, toolsetEnv.ID, false)
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, toolsetEnv.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list environment entries: %w", err)
 	}
@@ -146,7 +148,7 @@ func (e *EnvironmentEntries) LoadMCPAttachedEnvironment(
 	}
 
 	// Load the actual environment variable values from the default environment
-	entries, err := e.ListEnvironmentEntries(ctx, projectID, mcpMetadata.DefaultEnvironmentID.UUID, false)
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, mcpMetadata.DefaultEnvironmentID.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("list environment entries: %w", err)
 	}
@@ -204,7 +206,60 @@ func (e *EnvironmentEntries) LoadSystemEnv(ctx context.Context, projectID uuid.U
 	return systemEnv, nil
 }
 
-func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {
+// RedactedEntry is an environment entry as management reads show it. A secret
+// entry keeps only a fixed mask and whether it has a value; there is no field
+// for its plaintext, so API responses and audit snapshots built from it cannot
+// carry one.
+type RedactedEntry struct {
+	// name is the environment variable name.
+	name string
+
+	// value is the cleartext of a non-secret entry, or a secretmask
+	// placeholder for a secret one.
+	value string
+
+	// isSecret reports whether the stored value is encrypted and masked in
+	// reads.
+	isSecret bool
+
+	// hasValue reports whether the stored value is non-empty.
+	hasValue bool
+
+	// createdAt is when the entry was created.
+	createdAt pgtype.Timestamptz
+
+	// updatedAt is when the entry was last written.
+	updatedAt pgtype.Timestamptz
+}
+
+// redactEntry builds the management-read form of a stored entry. A non-secret
+// entry keeps its stored cleartext; a secret entry keeps only a mask chosen by
+// hasValue. hasValue applies to both kinds and must say whether the entry's
+// plaintext is non-empty; for a stored secret the caller works it out without
+// decrypting the ciphertext.
+func redactEntry(entry repo.EnvironmentEntry, hasValue bool) RedactedEntry {
+	value := entry.Value
+	if entry.IsSecret {
+		value = secretmask.Empty
+		if hasValue {
+			value = secretmask.Value
+		}
+	}
+
+	return RedactedEntry{
+		name:      entry.Name,
+		value:     value,
+		isSecret:  entry.IsSecret,
+		hasValue:  hasValue,
+		createdAt: entry.CreatedAt,
+		updatedAt: entry.UpdatedAt,
+	}
+}
+
+// ListEnvironmentEntries lists an environment's entries with secret values
+// decrypted. Use it only where the values are needed, such as tool calls; use
+// ListRedactedEnvironmentEntries for anything shown to a caller.
+func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID) ([]repo.EnvironmentEntry, error) {
 	entries, err := e.repo.ListEnvironmentEntries(ctx, repo.ListEnvironmentEntriesParams{
 		ProjectID:     projectID,
 		EnvironmentID: environmentID,
@@ -213,7 +268,41 @@ func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, project
 		return nil, fmt.Errorf("query error: %w", err)
 	}
 
-	return e.decryptEntries(entries, redacted)
+	return e.decryptEntries(entries)
+}
+
+// ListRedactedEnvironmentEntries lists an environment's entries for management
+// reads, with every secret value replaced by a fixed mask. It never decrypts:
+// whether a secret has a value comes from its ciphertext length, so a secret
+// sealed under another key or tampered with still reads as masked here and
+// fails only where its value is used.
+func (e *EnvironmentEntries) ListRedactedEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID) ([]RedactedEntry, error) {
+	entries, err := e.repo.ListEnvironmentEntries(ctx, repo.ListEnvironmentEntriesParams{
+		ProjectID:     projectID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+
+	redacted := make([]RedactedEntry, len(entries))
+	for i, entry := range entries {
+		hasValue := entry.Value != ""
+		if entry.IsSecret {
+			// TODO(AIM-968): empty secrets are stored as an encrypted empty
+			// string, so emptiness comes from the ciphertext length. Storing
+			// empty secrets as NULL turns this into a NULL check.
+			empty, err := encryption.IsEmptyCiphertext(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("inspect entry %s: %w", entry.Name, err)
+			}
+			hasValue = !empty
+		}
+
+		redacted[i] = redactEntry(entry, hasValue)
+	}
+
+	return redacted, nil
 }
 
 // ListEnvironmentEntriesForUpdate is ListEnvironmentEntries with a row lock held
@@ -229,10 +318,10 @@ func (e *EnvironmentEntries) ListEnvironmentEntriesForUpdate(ctx context.Context
 		return nil, fmt.Errorf("query error: %w", err)
 	}
 
-	return e.decryptEntries(entries, false)
+	return e.decryptEntries(entries)
 }
 
-func (e *EnvironmentEntries) decryptEntries(entries []repo.EnvironmentEntry, redacted bool) ([]repo.EnvironmentEntry, error) {
+func (e *EnvironmentEntries) decryptEntries(entries []repo.EnvironmentEntry) ([]repo.EnvironmentEntry, error) {
 	decryptedEntries := make([]repo.EnvironmentEntry, len(entries))
 	for i, entry := range entries {
 		value := entry.Value
@@ -242,10 +331,6 @@ func (e *EnvironmentEntries) decryptEntries(entries []repo.EnvironmentEntry, red
 				return nil, fmt.Errorf("decrypt entry %s: %w", entry.Name, err)
 			}
 			value = decrypted
-
-			if redacted {
-				value = redactedEnvironment(value)
-			}
 		}
 
 		decryptedEntries[i] = repo.EnvironmentEntry{
@@ -261,7 +346,9 @@ func (e *EnvironmentEntries) decryptEntries(entries []repo.EnvironmentEntry, red
 	return decryptedEntries, nil
 }
 
-func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, params repo.CreateEnvironmentEntriesParams) ([]repo.EnvironmentEntry, error) {
+// CreateEnvironmentEntries stores new entries, encrypting secret values, and
+// returns them in their management-read form.
+func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, params repo.CreateEnvironmentEntriesParams) ([]RedactedEntry, error) {
 	storedValues := make([]string, len(params.Values))
 	originalValues := make(map[string]string, len(params.Values))
 
@@ -284,24 +371,12 @@ func (e *EnvironmentEntries) CreateEnvironmentEntries(ctx context.Context, param
 		return nil, fmt.Errorf("failed to create environment entries: %w", err)
 	}
 
-	decryptedEntries := make([]repo.EnvironmentEntry, len(createdEntries))
+	redacted := make([]RedactedEntry, len(createdEntries))
 	for i, entry := range createdEntries {
-		value := originalValues[entry.Name]
-		if entry.IsSecret {
-			value = redactedEnvironment(value)
-		}
-
-		decryptedEntries[i] = repo.EnvironmentEntry{
-			Name:          entry.Name,
-			Value:         value,
-			IsSecret:      entry.IsSecret,
-			EnvironmentID: entry.EnvironmentID,
-			CreatedAt:     entry.CreatedAt,
-			UpdatedAt:     entry.UpdatedAt,
-		}
+		redacted[i] = redactEntry(entry, originalValues[entry.Name] != "")
 	}
 
-	return decryptedEntries, nil
+	return redacted, nil
 }
 
 func (e *EnvironmentEntries) UpdateEnvironmentEntry(ctx context.Context, params repo.UpsertEnvironmentEntryParams) error {
@@ -328,14 +403,4 @@ func (e *EnvironmentEntries) DeleteEnvironmentEntry(ctx context.Context, params 
 	}
 
 	return nil
-}
-
-func redactedEnvironment(val string) string {
-	if val == "" {
-		return "<EMPTY>"
-	}
-	if len(val) <= 3 {
-		return strings.Repeat("*", 5)
-	}
-	return val[:3] + strings.Repeat("*", 5)
 }

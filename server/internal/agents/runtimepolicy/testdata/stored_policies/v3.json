@@ -1,0 +1,49 @@
+{
+  "assistant:read": {
+    "requested": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  },
+  "assistant:write": {
+    "requested": [
+      {
+        "scope": "assistant:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ],
+    "effective": [
+      {
+        "scope": "assistant:read",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      },
+      {
+        "scope": "assistant:write",
+        "selector": {
+          "resource_id": "*",
+          "resource_kind": "assistant"
+        }
+      }
+    ]
+  }
+}

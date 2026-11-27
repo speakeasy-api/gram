@@ -1,5 +1,262 @@
 # dashboard
 
+## 0.157.1
+
+### Patch Changes
+
+- 5eef061: Gateway edit controls now check write access in the gateway's own project, so a grant limited to another project no longer shows them as editable.
+
+## 0.157.0
+
+### Minor Changes
+
+- eb154bd: Intent-based policies now use six reusable primitive labels and ten composed rules, adding protections against broadcasting personal data and making unreviewed public releases.
+- f69af0d: Members can now ask for time-based access. Requesting access opens a dialog that shows what is being asked for, asks how long it is needed (1 hour, 2 hours, 4 hours or end of day on the member's own clock) and takes an optional note for the administrators. The Access Requests tab shows what each requester asked for in a new "Wants it" column, and the decide dialog suggests the matching window, or offers the requester's own deadline.
+- 1702f18: Behind the `terminal-home` flag, the project homepage puts the Project Assistant in a terminal-style panel beside five widgets: what needs attention, spend against last week, the servers whose usage changed most, live and recent agent sessions, and tool calls by hour. Clicking a row in a widget asks the assistant about it.
+
+### Patch Changes
+
+- 637f8cc: The Agent Feedback tab, the MCP feedback API description and the `mcp_feedback.submitted_v1` webhook payload now say that secrets and personal data in a report are masked on a best-effort basis, so some may remain.
+- b5a6e25: `telemetry.getObservabilityOverview` takes `tool_calls_only`. When set, chat, token, cost and session duration figures come back as 0, and overviews of two hours or more can be read from pre-summed tool call counts instead of raw logs, with periods aligned to 15-minute boundaries.
+- 3570e4d: The MCP server Overview tab, a gateway's activity section and a source's activity panel now ask only for tool-call figures, so the server can answer them faster.
+- 6261b60: An agent's tab and setup step for its MCP servers and how Speakeasy signs in to them is called MCP sign-in again, instead of Server sign-in.
+- 8a39bb4: The Shadow MCP page and server pages show progress and explain failures. Retry buttons spin while they work, gathering evidence and saving a server name show a spinner, and the decision button reads "Approving…" or "Blocking…". Failed loads show the reason under a plain title. Failed actions raise one toast with a plain title, the reason, and Retry where it helps, instead of a generic "Request failed" toast beside a second one with no reason. A successful rename is now confirmed.
+- 7e487f9: Beta and Preview pages in the sidebar now show a small blue or orange dot instead of a boxed section with an "In Beta" or "In Preview" caption. The dot grows into the Beta or Preview tag when that page is open, so the current page is the only row that stands out.
+- 05c984d: The suspected problem sheet says in a plain sentence where the failures came from, names the app only when every person in the problem shows it, and dates times that are not today, including in the chart's tooltips. When there are no suspected problems, the provider Overview and a server's Clients and Sessions tab no longer show an empty panel.
+
+## 0.156.0
+
+### Minor Changes
+
+- b598d9f: Add an Intent-based policies page, rolled out to selected people, that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.
+- 65d5577: Add agent feedback for MCP servers. Turning it on from a server's new Agent Feedback tab adds one tool to the server, `submit_feedback` by default, that agents call to report what blocked or confused them. Nothing else needs configuring, and the tool's name and instructions can be changed. Reports are stored with secrets and personal data masked, and the tab shows 30-day counts by severity, the tools named most often, and every report. Reports can also be sent on: a new "MCP feedback" data export delivers each one as an OTLP log, and a new `mcp_feedback.submitted_v1` webhook event carries it to subscribers. It is available on MCP servers built from an OpenAPI document or functions.
+- 640125d: The Suspected problems panel on an MCP sign-in's Overview and on an MCP server's page now shows real problems instead of sample data. Each problem counts only the MCP sign-in's own servers. A problem that is no longer listed says so. Connection Logs can filter by more than one server or person, so a problem's link shows its attempts.
+
+### Patch Changes
+
+- bd8bc93: The shared authorization server step of agent setup now says where the chosen server is managed (the MCP Sign-in page) and links to it. It also no longer claims the agent's servers already use the recommended server when none of them do.
+- 4e7b2a9: When the Shadow AI policy saves but an AI tool decision does not, one toast now says the tool keeps the decision it had before, instead of calling it unreviewed and showing a second raw error.
+- e9190f0: A click anywhere inside a filter chip, including its padding, now opens it. Before, only a click on its text or coloured square did.
+- 8859e99: The MCP access pages count each tool under the one disposition the server matches it by. A read-only tool that is also idempotent no longer shows as covered by an idempotent rule, and role suggestions now leave out a role whose broader block takes the requested access away.
+- 4f04cf7: The MCP access pages now count and match each tool under its one disposition everywhere, including the tool picker and the Team Access narrowing dialog. A rule for unannotated tools now covers tools that declare no annotation.
+- 47a777e: The refresh button on an MCP sign-in connection now spins while it checks, then says what it found: still expired (reauthenticate), working, not connected yet, or that the check failed.
+- bb2b7ea: An MCP connection whose upstream token never expires now reads as "Never expires" on the agent sign-in step. Before, the server sent a zero date for the missing expiry, so the dashboard marked the connection as expired and said it ended almost 2026 years ago.
+- a14fba5: The Platform MCP install-method cards are clearer: the marketplace option shows a "Recommended" badge beside its title, and the manual option no longer labels itself a recovery option.
+- 609b076: The private network setup sheet always shows the tailnet gateway's Tailscale steps. It no longer waits for a rollout flag or switches to the Kubernetes operator's policy and tags.
+- 3a22595: The MCP Sessions page and the organization's MCP Authentication page are now both called MCP Sign-in, and what they list, formerly an MCP Authentication Provider or user session issuer, is now an MCP sign-in; page addresses stay the same.
+  
+  An agent's step and tab for how Speakeasy signs in to its MCP servers is now called Server sign-in, so it is not confused with MCP sign-in.
+- 74c0a9f: In the role editor, ticking one more tool on an MCP server whose Connect is limited to tool kinds (for example read-only and unannotated tools) now adds that tool beside the kinds instead of turning them into a list of tool names, so tools of those kinds added later stay covered. When a save does remove a kind rule, the review dialog lists it.
+- 23d78ce: The Shadow AI scan targets page no longer shows a library version number, and saving a target now simply confirms the save.
+- 2f31319: Opening a Shadow MCP server shows the app's page loader until the server is loaded, instead of a placeholder title, the raw URL slug and a skeleton table.
+- 1ebbf66: Clicking "Make official" on a Shadow MCP server no longer shifts the buttons beside it. The button keeps its size and shows a spinner while the link saves, and the official server panel fades in when it replaces the options.
+- 14c6536: On a Shadow MCP server's access review, "Who asked, and why" and "Have we decided on this before?" now end at the same height. An empty list is drawn in the same frame as a full one, so the two columns read as a matching pair.
+- 9a86ffe: MCP server Identity settings and agent setup now show the upstream credentials offered by each proxied server. Catalog setup shows a warning when upstream sign-in cannot be verified.
+
+## 0.155.0
+
+### Minor Changes
+
+- 715566e: Adds MCP connection health to MCP Sessions behind the `mcp-connection-health` flag: an Overview tab with the sign-in summary, denied clients and recent sign-in activity, Connection Logs beside Active Sessions with filters, reference search and an attempt's details, the same view locked to one server on its Clients and Sessions tab, and an "Ask AI to investigate" button. Suspected problems show sample data until their API ships.
+
+### Patch Changes
+
+- 715566e: The MCP authentication provider's Overview now covers signing in to Speakeasy only. Its chart and sign-in activity count attempts that ended at Speakeasy's sign-in or sign-in renewal, and their links open Connection Logs filtered to the same steps, so the totals match. Problems connecting to a service show on that server's page. `getSignInSummary` takes optional `steps`, matching the Connection Logs step filter; without it the summary counts what it did before: all four sign-in and renewal step groups, the service ones included.
+- 16abfa7: Adds the `mcpConnectionHealth` API behind the `mcp-connection-health` flag: Connection Logs for one MCP authentication provider (a paged list with repeats folded into one row, totals and a count per filter value, one attempt's steps, and lookup by reference), the sign-in and renewal summary, active sessions per day with the average session length, and the apps refused at sign-in. Members without permission to read logs see only their own attempts, and the reads say when the organization has logging off.
+- 1d69491: MCP Sessions is no longer listed under In Beta.
+- bb368b3: The time range picker now shows the times of a custom range that doesn't start and end at midnight, so a range dragged across the Tool Logs timeline reads "Nov 16, 11:34 AM – Nov 17, 11:34 PM" instead of "Nov 16 – Nov 17", matching the rows below it. Picking days in the Tool Logs calendar now includes the last selected day; before, "Nov 16 – Nov 17" listed only Nov 16.
+
+## 0.154.2
+
+### Patch Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- bed51b1: Full-page Project Assistant conversations now fill the window, with the composer pinned to the bottom instead of scrolling with the transcript.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 05c5f3f: The tool narrowing dialog on an MCP server's Team Access tab now counts each tool once, under the one annotation access is checked against, so an OpenAPI GET that is also idempotent and open-world counts only as read-only. A selected annotation stays visible even when no tool carries it, so it can still be cleared.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- bed51b1: Keep the assistant's working indicator on screen for the whole turn. The chat no longer looks idle after the assistant finishes a paragraph and before its next step starts, or while it writes the heading for its first batch of tool calls.
+
+## 0.154.1
+
+### Patch Changes
+
+- 9a5d737: The MCP Authentication Provider's Connections tab button that registers a client by hand now reads "Register OAuth client" instead of "Register agent", and its sheet explains that it is for MCP clients that can't register themselves through dynamic client registration (DCR) or a client ID metadata document (CIMD). The old wording read as creating a new agent identity.
+
+## 0.154.0
+
+### Minor Changes
+
+- eacd2ef: Read deployment-specific dashboard settings (PostHog, Datadog RUM, tunnel host, custom domain target, Pylon app and first-party hosts) from runtime configuration supplied by the deployment instead of matching the browser host against a list of production hosts, so one dashboard image serves every partition. Removes the unused Elements Datadog RUM error tracking.
+
+## 0.153.0
+
+### Minor Changes
+
+- 2a23053: Roles & Permissions has an Access Requests tab listing members' pending requests. Reviewing one, or opening it from the email or Slack link, lets an administrator approve it for 1, 2 or 4 hours or until the end of the day, deny it, or assign a role. A member who has asked sees their request as pending on the page they were blocked on, and access that can't be given temporarily tells them to ask an administrator instead.
+
+### Patch Changes
+
+- a62cd80: A member waiting on an access request now sees the page open up as soon as an administrator decides it, wherever they asked: a banner, the popover on a disabled button such as Create MCP server, or a full page. Previously, closing the popover stopped the check until the page was reloaded.
+- b1c1e0c: An agent's MCP sign-in tab no longer marks every personal server "Could not check connection" for an admin previewing roles: reading an agent's attached connections now follows the same permission check as the rest of the agent's pages. A viewer who may not see the agent's attached connection is told so plainly, and that server is no longer counted on the tab.
+- a6fc982: `keys.list` can now return one page at a time. Send `limit` (1 to 100) to get a page, then pass the returned `next_cursor` as `cursor` to get the next one. Keys come newest first. Send `search` to only return keys whose name contains that text, ignoring case. Callers that send no `limit` still get every key in one response, as before. The dashboard's API Keys page now loads 50 keys at a time with a "Load more" button and searches on the server, so it stays fast for organizations with thousands of keys.
+- 427498d: Setting up Enterprise Managed Auth on an MCP Authentication Provider now asks for one thing: the identity provider's issuer URL. "Set up EMA" opens the field in place, with no choice between providers and no trip to the Okta page. An Okta org URL such as `https://acme.okta.com` works, and a pasted Okta admin console URL is read as the org URL.
+- 07717cf: On an MCP server's Team access page, giving someone connect access to a set of tool annotations, such as "Read-only", now works when they hold no connect access yet. The choice used to save as blocks on the other annotations only, which left the person with no access at all.
+- 95c9bbb: The MCP server Overview keeps its labels while usage loads, so only the figures shimmer, and coming back to the tab within a few minutes shows the last figures at once instead of reloading them.
+- e01f674: Changing the time range on the MCP server Overview shows the loading state in the top-tools lists until the new range arrives, instead of the previous range's tools.
+- a92b906: The dashboard no longer records screen sessions. PostHog session recording and Datadog session replay are switched off, and the Claire de Fermat tracking pixel is removed. Product analytics events and Datadog performance and error monitoring are unchanged.
+- cba49d7: Opening an MCP server's pages no longer creates a client session for the viewer. The readiness check only asks an issuer-gated server whether it answers after you connect your account in Inspect.
+- 8e5b454: Access requests can now be stored and decided. With the access requests rollout on, requesting access records a pending request that an organization administrator can approve as a temporary grant or deny, through the new listAccessRequests, decideAccessRequest and withdrawAccessRequest endpoints. Scopes that cannot be given temporarily can no longer be requested while the rollout is on. Administrators are still emailed.
+- b93dd41: A tool with no annotations is now classified as unannotated. A rule with no annotation limit still covers it, a rule limited to read-only tools no longer does, and a tool that says it is both read-only and destructive is treated as destructive. The access, agents and Platform MCP APIs accept `unannotated` as a rule's annotation, and the role editor classifies tools the same way the server does and keeps a rule's unannotated selectors when another annotation is edited.
+
+## 0.152.0
+
+### Minor Changes
+
+- 1f606ba: Catalog cards now show how much your team already uses each server, from Shadow MCP: "Used by 5 people · 51 calls". The table view has a matching "Your team" column, and a "Most used by your team" sort puts those servers first. Org admins see this. The usage loads after the catalog, so the cards never wait for it.
+- b0ce6aa: Remove the Playground page in favor of each MCP server's Inspect tab, which has the same test chat. Old Playground links open the MCP page, and a tool's "Test in Playground" action is now "Test in Inspect". The unlinked SDKs page is also removed. The "Playground" model key slot is now labelled "Dashboard chat" and keeps covering the same completions.
+- 4e0ba52: Adding a credential for people's own accounts now detects the authorization server the MCP server advertises. When the project already has it, it is preselected; when it does not, it is added when the credential is saved, so there is no trip to Authorization Servers first. New MCP servers, credentials and authorization servers also get a readable name when none is typed: the name the server reports for itself when it can be reached without signing in, or one read from its address, such as "Canva" for mcp.canva.com.
+- 6bd7deb: The Windows device agent setup now has a "Download Intune package" button. It builds the three Win32 apps Intune needs (the identity config, the agent msi and the tray startup shortcut) as ready-to-upload `.intunewin` files, with a fresh agent token and the org's settings already filled in. A README in the bundle lists each app's install commands and detection rules, so admins no longer need IntuneWinAppUtil.
+- cb66876: An MCP Authentication Provider's Connections tab, under Identity > MCP Sessions, has a Register agent button for agents that cannot register themselves. It asks for a name, redirect URIs and the token endpoint auth method, then shows the minted client ID and secret once. The tab now also lists the provider's registered agents before they have signed in. A registration's redirect URIs can be edited from its detail sheet, except for CIMD agents, whose metadata document sets them. Both are shown only to people who can manage the provider's agents.
+- c8f8efd: Roles and agents can now be limited to particular upstream credentials. The role editor and an agent's Permissions page show every credential by kind, with a tick on all credentials, one kind, or one credential, and a block that wins over any tick. A wide tick can be split into one per kind or per credential so one can be taken away while the rest stay, and unticking a credential that comes from a wider tick splits it for you. The role editor's MCP server grid shows how many of each server's credentials the role can use and flags servers it can connect to but not sign in to, and a server's Check access shows which credentials a member can sign in with and which rule decides each one.
+
+### Patch Changes
+
+- ee3d0aa: A sign-in made through a team gateway now counts for each member server whose own sign-in issuer binds the same OAuth client. The agent credentials wizard shows those servers as connected, and attaching the connection to an agent succeeds. A connection for a client the server does not bind still does not count.
+- 617fb1d: MCP server Inspect now signs in through the server's OAuth consent page. It lets you choose an upstream credential before listing or running tools, including when no credential is bound to the authorization server.
+- 945db76: MCP server detail pages give more room to the tab content on short screens. The header is shorter, with its controls in one row, and it scrolls away while the tabs stay at the top.
+- 9ca1606: The Shadow MCP server table loads every page with "Load more". The control now sits below the last row instead of floating over the rows as you scroll, and new rows append in the server's order. The list endpoint is declared as cursor-paginated, so SDK clients get page iterators.
+- b337155: The Shadow MCP default-mode dialog now closes as soon as the change is saved, instead of waiting for the server inventory to reload.
+- b5aaecd: Simplify the Shadow MCP page. The header is one short line and the Project Assistant no longer floats over these pages. The table's two date columns become one Last active column: the last call, with when an agent last listed the server under it, sorted by the later of the two. A server's page now leads with its status, then a pending access review, the official server, and who uses it, with the gathered evidence and web research behind one Evidence row.
+
+## 0.151.0
+
+### Minor Changes
+
+- 257dd57: Automatic MCP server adding for plugins is now opt-in. Each plugin has an Add MCP servers automatically switch on its Settings tab, and it is off by default, including for existing plugins and plugins that role setup creates. While it is off, assigning a role to the plugin, changing a role's access, and new servers becoming available never add or remove the plugin's MCP servers; only people who edit the plugin change its server list. Turning it on adds the servers the plugin's roles can use now, except ones an admin removed before, and keeps the list in step with later access changes. Turning it off keeps the current servers. The Platform MCP plugin list reports the setting. When creating a plugin in the dashboard, both Sync changes automatically and Add MCP servers automatically now sit under Advanced settings and start off.
+- e5fc8aa: A Shadow MCP server can be linked to an official version that Speakeasy serves, from its own page. The page recommends the quickest way and keeps every other way under Advanced: link the project server that already serves the same URL, add the server's Speakeasy catalog entry, make a new server when Speakeasy can register itself with the sign-in provider, or set one up by hand. Adding from the catalog and making a new server both happen in a sheet on the same page, with everything filled in and identity choices under Details. When the provider needs a hand-registered client, the sheet takes it with the server's own Identity settings, then turns the server on. The new server is linked as it is made, and opens in a new tab to inspect and try. When nothing can be set up automatically, the page takes a request for help.
+  
+  While a link is on, direct connections are blocked. The block message names the official server, or the gateway that serves it, and its address, so the agent can switch. The link can be switched off while the official server is tested, so direct connections follow the project's default and the server shows its ordinary access status, switched on again, or removed so another server can be linked. Under Advanced, any server in the project can be linked. Each change is recorded in the audit log.
+  
+  The URL check reports how Speakeasy can register with a server's sign-in provider: dynamic client registration, a client ID metadata document, or neither.
+  
+  The Shadow MCP page's header sets what happens to a server nobody has decided on. Allowed by default is built in and needs no policy: every server connects unless an administrator denies it, and a server linked to an official version sends agents there. Blocked by default creates a policy behind the scenes that blocks every server nobody approved, for everyone or, under Advanced, for chosen people or roles. Switching back removes it. Decisions in Decide Access can likewise be narrowed under Advanced: a denial blocks the server only for the people or roles it names, and an approval lets only them through while everyone else is blocked. The server then shows as restricted. That policy no longer shows in the Guardrails list, and Shadow MCP is no longer a built-in rule when creating a policy. Shadow AI policies stay in Guardrails.
+- e5fc8aa: Shadow MCP has its own page in the sidebar, next to Guardrails: the MCP server inventory and its approvals. The page header opens the project's Shadow AI policy, or sets one up when there is none. Guardrails no longer has the MCP approvals tab; links to it open the Shadow MCP page. Shadow AI targets stay in Guardrails. Command K finds the Shadow MCP page and each Shadow MCP server by name.
+- 4577b04: Mistral Vibe is now a supported agent for plugin distribution and observability. Feature plugins publish as portable Agent Plugins 1.0 packages at `<slug>-vibe/` in the marketplace repo, and every organization gets an `<org>-observability-vibe` hooks package — also downloadable as a ZIP via `plugins.downloadObservabilityPlugin?platform=vibe` — that Vibe runs automatically once copied into `~/.vibe/plugins/<org>-observability/`. The hooks relay speaks Vibe's `pre_tool`/`post_tool`/`post_agent` protocol and resolves MCP server URLs from Vibe's config and installed plugins, so Speakeasy-hosted servers are recognized instead of treated as shadow MCP. Install instructions for Vibe use `vibe mcp add <name> --url <url>` plus `/mcp login <name>` — the CLI writes the OAuth auth table that a hand-written config block lacks — in the plugins install dialog and the Platform MCP walkthrough, and publish status reports the real `vibe_observability_plugin` slug once the org's published hooks include the package. Hook coverage today is tool calls and turn end; prompt and session lifecycle hooks are a planned follow-up.
+
+### Patch Changes
+
+- bb3aa2b: Keep broad Command K searches responsive by rendering only the top 40 deterministically ranked results, including catalog entries and specialized local actions.
+- 4fb96c0: Deployments can turn assistants off with `GRAM_ASSISTANT_RUNTIME_PROVIDER=disabled`. The server and worker then start without a GKE cluster, Kit or snapshot settings, and build no Kit configuration. Assistant endpoints that would start or drive a runtime answer `501` with "assistants are not available on this deployment", assistant triggers cannot be created, updated or resumed, trigger dispatch to assistants is dropped, the Speakeasy Slack app replies that assistants are unavailable, and the runtime reaper and janitor schedules are not registered. The organization product features report the new `assistants_available` field, and the dashboard hides the Project Assistant, Assistants, Chat and their Command K entries when it is false. The `gke` and `local` providers behave as before.
+- 2da894c: Speakeasy can run with Functions turned off by setting `GRAM_FUNCTIONS_PROVIDER=disabled`. A disabled deployment needs no Fly.io or Tigris settings and never calls either. Function uploads and deployments that add function sources are refused with "functions are not available on this deployment", deployments that carry existing functions fail with that reason in their logs, and calling a function tool returns a failed tool result with the same message. Product features report the new `functions_available` field, and the dashboard hides the Functions entry points when it is false. The `local` and `flyio` providers are unchanged.
+- 375835c: Show the gateway's built-in instructions telling AI apps that a connection status marked as needing an administrator won't clear by retrying.
+- 7ca7e47: MCP server setup is its own page again instead of a modal over Overview. It keeps the server's header, with a link back to the server in place of the tabs.
+
+## 0.150.0
+
+### Minor Changes
+
+- 6b81913: MCP Sessions opens on one MCP Authentication Provider, chosen from the picker in the page header, with its session length and client access beside the name. Its tabs are Connections (the sessions signed in through that provider), MCP servers (the servers and gateways that use it), and Settings (session length, client access, Enterprise Managed Auth, advanced details, and actions such as Make organization-wide). The page remembers the last provider you opened. Links to the old Configuration tab and provider pages still work.
+
+### Patch Changes
+
+- c381bab: Organizations whose custom domain has an IP allowlist can reach the agent gateway on that domain. The custom-domain ingress now routes `/agent-mcp`, the agent setup wizard and the one-line installer give agents `https://<custom-domain>/agent-mcp/<agent-id>`, and the federated access setup lists the custom domain as the MCP host. Other organizations keep the platform host.
+- 13f5d9d: Search for a GitHub organization by handle or paste its URL during MCP server setup.
+- 78f303e: The row actions on the Guardrails policies, exclusion rules, and quarantines tables are no longer cut off at the table's right edge. The actions column now keeps a fixed width that fits its button.
+- 8e3cf52: A new private network connection now shows as pending, not as an error, while its gateway hosts are still coming up: while the first HTTPS certificate request is in flight, and for the first minute while the tailnet auto-approves the hosts. If a certificate request is refused, the Domains page now shows the reason the gateway reported, such as a Let's Encrypt rate limit and when the gateway retries, instead of always blaming the tailnet's weekly certificate allowance.
+- 00c0e22: Icons rendered through the shared `Icon` component now appear immediately instead of popping in a moment after the page loads.
+- 1f2f51a: The private network setup steps now show the Tailscale tag the environment's gateway actually uses, read from the API, in the tailnet policy snippet, the OAuth client step and the approval help. Gateway machines can carry an environment qualifier (`speakeasy-gw-<qualifier>-<slot>`) so two environments sharing a tailnet register devices that can be told apart; production names are unchanged.
+
+## 0.149.0
+
+### Minor Changes
+
+- 853aa66: Organization admins can give themselves temporary access where a page refuses it. Wherever the dashboard says a permission is missing, an admin now sees **Grant myself temporary access** for permissions that can be given for a limited time: they pick 30 minutes, 2 hours, 4 hours, end of day or 24 hours, give a reason, and the access applies at once and is recorded in the audit log as self-granted. Members still ask an admin. Risk Events, the transcript sheet, Agent Sessions, skill insights and Watchdog evidence offer this where `chat:read` is missing, for one session or for every session. While any temporary access is active, a **Temporary access** panel floats in the bottom-right corner of every page, listing each grant with what it covers, when it ends and the time left, and a Revoke button that asks once. The Authorization Challenges view shows denials answered by temporary access as **Temporary** until the access ends.
+- 8d58f27: Every saved data export now has a Send test event button in its settings, for org admins. It sends a test event to the destination and shows the answer right there, such as a refused API key or a wrong URL. For product telemetry it sends a test log, trace and metric, and shows the answer for each. After a test, the dashboard shows the test event ID with a copy button, so you can find the test in your destination.
+- 9489cb9: Turn on Enterprise Managed Auth from an MCP Authentication Provider's page. Choose Okta, which checks the Okta domain and brings you back, or any identity provider that publishes signing keys. A project-specific provider is offered the move to organization-wide first, and a provider whose browser sign-in already goes through Okta is changed from the Okta connection.
+- 9489cb9: An MCP Authentication Provider's page sets session length and client access in their own sections. Client access offers Known clients and Any client, each with when to pick it, and warns before narrowing to known clients that this can drop active connections. Known clients shows the clients Speakeasy allows, each opening the documents it allows, and the clients your organization added, which you can add after checking their document, or remove.
+- a4d94ce: MCP connection log exports set to "Warnings and errors" or "Info, warnings and errors" now also send failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts. They arrive as warnings with `speakeasy.mcp_connection.final=false`. Normal sign-in steps are not sent. Exports set to "Errors only" are unchanged.
+- 9489cb9: MCP Sessions gains Overview and Configuration tabs. Overview lists connections as before. Configuration lists every MCP Authentication Provider this project's servers can use in one list. The automatic session refresh policy moves from MCP Sessions to Authorization Servers. A provider's own page now holds its session settings, and an MCP server's Sessions section picks a provider and links to it instead of editing them.
+- 9489cb9: Open the Okta identity provider on an overview: enter the Okta domain and see what Okta can do here. Enterprise Managed Auth is ready from the domain alone, application sync asks for an Okta connection, and Cross App Access follows sync. Arriving from Enterprise Managed Auth setup shows where to return, and a deployment that cannot hold Okta connections says so instead of showing an error.
+- 9489cb9: Okta applications move to Add MCP server as a Sync from Okta option, behind the `okta-mcp-import` rollout flag. Suggested servers are added to the current project. Before Okta is connected the page explains what syncing does and links to Okta setup, and a deployment that cannot hold an Okta connection points to the catalog instead.
+- 33a5bf2: Each project's MCP Servers list now leads with its Project Gateway, the Organization Gateway limited to that project's servers, in place of the Organization Gateway. The Project Gateway page shows the project's endpoint, installation steps, connections, and activity to anyone with access to the project, and carries the switch that turns gateways on or off for organization members. The Organization Gateway page now points to Project Gateways and keeps only its endpoint and switch. `organizations.getProjectGateway` returns the selected project's gateway URL. `gatewaySessions.list` and `gatewaySessions.listFacets` accept `project_id` to list one project's gateway sessions, and `telemetry.getProjectGatewayOverview` and `telemetry.getProjectGatewayUsage` replace the organization-wide gateway activity endpoints. In the Platform MCP, `list_gateway_sessions` gains a `project` scope and `get_organization_gateway_activity` accepts `project_id`.
+- c6e9a3e: An MCP Authentication Provider's page warns when the remote session clients it binds don't match the ones its MCP servers use, and shows which clients differ on each side.
+  
+  The new `listRemoteSessionClientBindings` endpoint is marked deprecated from the start: the remote session clients bound to a provider are no longer authoritative, and readers are moving to each MCP server's own client associations. The endpoint exists only to surface drift during that migration.
+
+### Patch Changes
+
+- 106f30b: The agent setup wizard now says which sign-ins an MCP server still needs, so "Requires connection" after a successful sign-in comes with the services left to connect. Set up Claude Tag is offered only to people who can manage workload identities, and a direct link to it warns everyone else up front.
+- 3442a20: The data export test event ID attribute is now `speakeasy.test_event_id`, so destinations that nest dotted names, such as Datadog, keep `speakeasy.test_event=true` and filtering on it works.
+- 1150f4f: Adds the `legacy-alias-endpoints` operator backfill, which gives each hosted MCP server an explicit endpoint for every address its legacy toolset alias still serves, so stored client URLs keep working once the alias is removed. The backfill keeps those addresses' slugs even when they lack the organization slug prefix or exceed the 40-character hosted slug limit. Updating an MCP endpoint checks the prefix only when its address changes, so an existing unprefixed endpoint can still be saved. The dashboard's address editor shows such a slug as it is stored and adds the prefix only when the address is renamed.
+  
+  A hosted MCP server that has an endpoint on the organization's live custom domain now shows that custom-domain URL in its toolset view, its exported MCP metadata and assistant connections, the same URL plugins already use. Before, these showed the platform URL when the server also had one. The dashboard still lists a domain-root server's address in its `/mcp/<slug>` form, which also serves.
+- 38d220e: Search authorized project resources, active organization members, and registered agent identities through one bounded request so Command K avoids cold-open inventory fan-out while preserving identity actions, access controls, and privacy-safe deterministic ranking.
+- 8000318: Long role names on an identity's Access tab no longer run over the role's description. The role column now widens to fit the longest name.
+- a2d4e9d: Blocking a principal's view access to an MCP server now also takes away manage access, matching how blocks already work for projects, environments, skills and assistants. Blocking connect still leaves view and manage in place. The MCP access page shows the manage line as blocked when a view block covers it.
+- c10d4df: The Playground shows the chat credit limit message again when a model request is refused for lack of credits, instead of "An error occurred."
+- d077556: Remove the external MCP fields from the API. Deployments no longer list external MCP sources, evolving a deployment ignores `exclude_external_mcps`, toolsets no longer carry external MCP header definitions, and the `externalmcp` tool type is no longer a valid tool filter. The deployment external MCP counts stay, always 0, so older clients keep working. The dashboard drops its external MCP views, warnings and OAuth auto-setup.
+- afa354f: The Billing page no longer opens an unused Polar checkout session for legacy paid organizations, and Stripe Checkout no longer waits on a rollout flag. Organization admins on a free plan always see the option to add a payment method.
+- e36428b: Remove the deprecated `toolsets.setUserSessionIssuer` endpoint, which reached its sunset date. Link a sign-in provider with `mcpServers.update` and `user_session_issuer_id`, and detach it with `clear_user_session_issuer`.
+- 2cfabd7: The server address settings no longer show the older Speakeasy address that only a toolset held, since that address no longer serves.
+
+## 0.148.1
+
+### Patch Changes
+
+- ec8198a: Disable browser translation to prevent React DOM crashes and restore cross-origin font loading for embedded pages.
+
+## 0.148.0
+
+### Minor Changes
+
+- b1631cf: Add guided setup for Okta Managed MCP Server with organization configuration, Web and Native app credentials, instructions for granting access in Okta, sign-in, and connection testing.
+
+### Patch Changes
+
+- 9f04e25: Administrators can attach an upstream OAuth client to one MCP server with `remoteSessions.attachServerClientAssociation`, including a server on a shared user session issuer, and detach now has an undo. The client must already be bound to the server's own issuer. Attach also binds it to the issuers of gateways fronting the server, so their consent can offer it, and detach removes that binding when the client stays on the server's own issuer and nothing else on the gateway's issuer signs in through it. The audit log names the new `remote-session-client:attach-mcp-server` action.
+- e62fc27: Clearly mark required fields in credential setup and explain why incomplete credentials cannot be added.
+- 8e10356: Add a one-click Gateways quick filter to the MCP servers list, and give each source badge (Gateway, Hosted, Remote, Tunneled, Unproxied) its own color on MCP cards and table rows.
+- 997f8d0: OpenCode plugin install instructions now install the plugin's MCP servers and skills, and offer observability as a separate optional step. The OpenCode observability setup now leads with the ZIP download and keeps the CLI as an alternative.
+- 8aa24a1: Consolidating one authorization server into another now shows how each affected MCP server's OAuth clients would change before you confirm, and keeps each server's working OAuth client explicit through the move. The preview runs the consolidation and rolls it back, so it reports exactly what confirming would do: servers that would start or stop asking people to connect an account, switch providers, or keep their current client. It blocks the consolidation when a server would end up with two OAuth clients for one provider, or with a client its upstream does not accept. Consolidation now carries over only the OAuth clients something still signs in through, never a deleted one, and lists the rest. Previewing a consolidation now requires organization admin access, because it takes the same locks a consolidation does.
+- 305e284: Okta identity providers, identity chaining through Okta and MCP research no longer wait on a rollout flag.
+- 5853fc9: Shorten the no-authentication identity label to fit the server overview sidebar.
+
+## 0.147.0
+
+### Minor Changes
+
+- 47b1fe9: Assistants no longer offer a "Set up agent identity" button, and the `assistants.upgradeIdentity` endpoint and the Platform MCP `upgrade_assistant_workload_identity` tool are removed. Speakeasy now moves each organization's assistants to their own agent identity: every assistant without one gets a dedicated agent, owned by the person who created the assistant, and its turns then run as that agent. The new agent can use every MCP server and skill in the assistant's project, and project inference when its owner can. An assistant whose creator has left the organization keeps running as before until it has a new owner. The organization's audit log shows these changes as made by the Speakeasy team.
+- 61ec18f: The audit log page now opens on a **Team changes** view that hides Speakeasy's own background activity, such as publishing plugins and creating the API keys they use. That activity moved to a new **Automated changes** view, **All changes** shows everything, and the security view is now called **Access**. Older `?category=configuration` links open the Team changes view. The `auditlogs.list` and `auditlogs.listFacets` endpoints take a new optional `origin` filter (`user` or `system`). You can also filter the list by date range and by resource: pick one from the Resource filter or use the filter button that appears beside a resource when you hover a row.
+- 8d61d27: Channels no longer appears in the sidebar or the command palette while it is in preview.
+  
+  For organizations in the preview, opening the Channels page directly now shows a **Home** view instead of the newest conversation. On a new project, Home walks through connecting agents until two of them are talking in a thread. Afterwards, it shows how many agents are online, what is unread, and the latest unread messages from each conversation. Agents are listed and shown by the name they chose when connecting, with the person who connected them as secondary detail. The steps to connect an agent moved from Channels settings to Home. Messages from agents you connected now count as unread.
+- 2c4c684: Custom domain setup now shows the domain's designated CNAME target and ownership TXT record. DNS configuration and infrastructure diagnostics appear separately, with one recheck action and independent DNS freshness. Staff can inspect target adoption and diagnostics in the admin dashboard and Staff Admin MCP; organization administrators can read saved diagnostics through Platform MCP.
+- 2f6177b: Tool Logs now opens for every member: without the View tool logs permission you see your own sessions and your agents' activity, with a notice that says so and a way to request wider access, and session details show the Tool calls view for your own and your agents' sessions.
+- 5e45770: Add an "MCP connection logs" data export. When enabled, failed MCP connections and server problems an admin or service provider needs to fix are sent to the project's OTEL destination as `speakeasy.mcp_connection` events. By default, blocked or declined connections are not included. Connections through organization gateways are not included.
+- 0b95ea6: Organization admins can import Gemini web chats into Agent Sessions through Google Vault. Connecting takes two saves: paste the service account key and enter a delegated Workspace admin, then pick the organizational unit to export, or Entire organization. Speakeasy finds or creates its own Vault matter, and syncs completed UTC days every hour. When Google refuses access, the error names the delegation scope or Vault privilege to fix.
+- 8b1ec11: Setting up a personal sign-in for an MCP server now always creates a sign-in of the server's own. The dashboard offers **New from scratch** or **New from existing** in place of reusing a stored one: starting from an existing sign-in copies its settings for review into an independent sign-in, and the stored client secret is copied on the server without being shown. This stops a member's sign-in for one server from replacing the access another server obtained through a shared sign-in. Service accounts and stored or caller-supplied credentials can still be shared between servers, and existing shared sign-ins are left as they are.
+- a87c444: The export sheet now lets you choose the lowest level of MCP connection logs to send: errors only (recommended), warnings and errors, or info, warnings and errors. Errors are failed connections. Warnings are blocked connections, such as someone without access to a server. Info is declined connections, such as a canceled sign-in.
+- d733ce1: The request access page now shows which server and tool you are asking for: the server name, its URL or, without one, the identifier the agent used, and the tool. A new `risk.getPolicyBypassRequestTarget` endpoint reads a request link without filing the request.
+- 28c5487: The role editor now shows a role's permissions on one page instead of two tabs. **MCP access** is a grid of projects and servers by Connect, View and Manage, with an **All tools** checkbox per row; click a server to unfold its tools and tick them one by one. **Platform access** is a card per area with one level each. Blocking moved out of the grid: **Deny explicitly…** is the last item of a row's, tool's or card's menu, asks for a confirmation, and every deny a role holds is listed in one **Explicit denies** box and counted beside Save. A new role can start from a template, and an existing role has a **Reset** button that puts it back as saved.
+
+### Patch Changes
+
+- c82c8e6: Speakeasy now moves organizations' assistants from the default runtime to the Kit runtime. An assistant is moved only once it has its own agent identity and is idle, and its next turns then run on Kit. The organization's audit log records each move as an assistant runtime change made by the Speakeasy team.
+- 43f4687: The role permissions table, a server's Access tab and its access summary no longer show View or Manage as including Connect. A role that can view or manage a server now shows Connect as off until it is granted, and the Connect cell can be ticked to grant it.
+- af6974e: Channels no longer shows up under **Recently visited** in the command palette. On the Channels Home view, the setup checklist no longer counts an agent that reconnects as a second agent, catch-up messages show how long ago they were sent, and the counts say when they only cover the conversations loaded so far. Messages from people show their name again.
+- c2e2fbe: The dashboard now respects workload access blocks. A member whose workload access is blocked no longer sees workload identity controls the server would refuse.
+- 973381b: Allow gateways to use and select live sign-in issuers shared by their organization, so settings remain editable after issuer consolidation. Keep automatic refresh working for project-owned OAuth registrations used through organization-shared sign-ins. Issuers from other organizations or other projects remain unavailable.
+- 412b47e: The Inspect grid on a guardrail's Scope step is easier to read. Columns now say "What people type", "Tool calls", "Tool results" and "Agent replies". Each detector shows its recommended traffic, locked, until you turn on Customize for that row. Turning Customize off restores the recommendation. In Specific MCP servers mode the grid says which kinds of traffic aren't part of an MCP call.
+- 7550c88: Remove intent decisions from the command palette and retire the launcher judging endpoint. Command palette results now use local fuzzy ranking only.
+- 03679f1: The role editor lists the first 10 projects under MCP Access and folds the rest behind a "Show more projects" control, so a long project list no longer pushes Platform Access far down the page. Every project, Default included, now starts collapsed. Searching servers still covers every project.
+- ef22e3b: A Shadow MCP server review that nobody requested now says "No one has asked for it" (and that an admin decided, when one did) instead of claiming an ask arrived from an unidentifiable user, and no longer shows a "raised" date for it.
+- 6f51748: The breadcrumb on a Shadow MCP server page now reads Guardrails > MCP approvals > server and links back to that tab, matching the sidebar and where the page is opened from.
+- 18de7bb: Add the `memory:read` and `memory:write` permissions for upcoming team memory in the Platform MCP. `memory:read` lets someone search and recall a project's team memory, and `memory:write` lets them save memos to it. The built-in Admin role holds both by default. Grant them to members per project through a custom role, on the Access page or, for organization admins, with the new Platform MCP `configure_memory_access_role` tool.
+- e442638: The tool logs timeline tooltip is no longer cut off, and a new maximise button stretches the timeline across the panel with the summary stats in a row above it.
+- c8d902f: Admitting a workload now refuses a malformed `wimse://` or `spiffe://` subject: it needs a trust domain and no user information, port, query or fragment, so a rule that could never match is caught when it is saved. Withdrawing an admitted subject now returns `withdrawn_tier`, which says whether the organization or project admission was removed.
+
 ## 0.146.0
 
 ### Minor Changes

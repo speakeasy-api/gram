@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -71,7 +72,7 @@ var errCIMDFetchFailed = errors.New("cimd document fetch failed")
 //     (resolveClientCIMD only)
 //   - pgx.ErrNoRows: unknown client
 //   - anything else: infrastructure failure
-func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string, mode clientIDResolveMode) (*usersessions_repo.UserSessionClient, error) {
+func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, clientID string, mode clientIDResolveMode) (*usersessions_repo.UserSessionClient, error) {
 	queries := usersessions_repo.New(s.db)
 
 	if mode == resolveClientCIMD && cimd.IsClientIDURL(clientID) {
@@ -79,7 +80,7 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 		// map lookup — no outbound request, no fetch timeout. It also runs
 		// before the length cap inside the resolver, which is why admission
 		// applies its own bound before a catalog miss can reach the database.
-		if err := s.admitCIMDClient(ctx, logger, endpoint, clientID); err != nil {
+		if err := s.admitCIMDClient(ctx, logger, endpoint, clientCatalog, clientID); err != nil {
 			return nil, err
 		}
 
@@ -219,7 +220,7 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 // The catalog is consulted first and in memory, so the common case — a
 // preset client on a presets-mode issuer — never touches the database. Only
 // a catalog miss pays for a lookup.
-func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) error {
+func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, clientID string) error {
 	mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
 	if !recognized {
 		// A value outside the enum is a data error, never an implicit
@@ -263,11 +264,11 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		// to decide here. The shadow takes its place: the client is let
 		// through regardless, and what presets would have said about it is
 		// what lands on the counter.
-		s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, s.shadowCIMDAdmitReason(ctx, logger, endpoint, clientID))
+		s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, s.shadowCIMDAdmitReason(ctx, logger, endpoint, clientCatalog, clientID))
 		return nil
 	}
 
-	decision := admission.Evaluate(mode, clientID)
+	decision := admission.Evaluate(clientCatalog, mode, clientID)
 	if decision.Outcome == admission.OutcomeCheckCustom {
 		// The only branch admission cannot decide alone: whether this issuer
 		// carries the URL as one of its own entries.
@@ -326,8 +327,8 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 // rather than the weaker "not in the catalog". It is not a new cost: every
 // catalog miss on an unconfigured issuer already paid for that query before
 // open became the resting state.
-func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) admission.AdmitReason {
-	shadow := admission.EvaluateShadow(clientID)
+func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientCatalog *aivendors.Snapshot, clientID string) admission.AdmitReason {
+	shadow := admission.EvaluateShadow(clientCatalog, clientID)
 
 	switch shadow.Outcome {
 	case admission.OutcomeAdmit:

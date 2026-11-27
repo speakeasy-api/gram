@@ -53,7 +53,6 @@ type Repository interface {
 	GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
 	// this enforces that we can only get usage results from a stored value, specifically for hotpath usage with no outbound API call
 	GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
-	CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (string, error)
 	CreateTopUpCheckout(ctx context.Context, orgID, serverURL, successURL string) (string, error)
 	IsTopUpProductID(productID string) bool
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)

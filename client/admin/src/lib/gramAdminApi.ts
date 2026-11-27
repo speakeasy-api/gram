@@ -140,6 +140,16 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
+// Downloads use the same first-party admin session and error handling as reads.
+export async function gramAdminDownload(path: string): Promise<Blob> {
+  const res = await gramAdminRequest(
+    path,
+    { headers: { Accept: "application/octet-stream" } },
+    true,
+  );
+  return res.blob();
+}
+
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
 export async function gramAdminMutation<T>(
@@ -601,7 +611,6 @@ export type AdminProjectRedeployPreview = {
   openapi_assets: number;
   function_assets: number;
   packages: number;
-  external_mcps: number;
 };
 
 export function getProjectRedeployPreview(
@@ -644,6 +653,158 @@ export function redeployProject(
   );
 }
 
+export type AdminAssistantIdentityState =
+  | "NEVER_CONFIGURED"
+  | "ACTIVE"
+  | "UNAVAILABLE";
+
+export type AdminOrganizationAssistant = {
+  id: string;
+  name: string;
+  project_id: string;
+  project_slug: string;
+  project_name: string;
+  status: string;
+  identity_state: AdminAssistantIdentityState;
+  agent_id?: string;
+  agent_name?: string;
+  agent_name_repair_state?: "not_needed" | "pending" | "conflict";
+  // 2 is the default runtime, 3 is Kit.
+  runtime_version: number;
+  created_by_user_id?: string;
+  created_by_user_email?: string;
+  // The migration makes the creator the new agent's owner, so an assistant
+  // whose creator left the organization is skipped.
+  creator_active: boolean;
+  created_at: string;
+};
+
+export type AdminOrganizationAssistants = {
+  organization_id: string;
+  assistants: AdminOrganizationAssistant[];
+};
+
+export function listOrganizationAssistants(
+  organizationID: string,
+): Promise<AdminOrganizationAssistants> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationAssistants>(
+    `/admin/organization.assistants?${qs}`,
+  );
+}
+
+export type AdminAssistantMigrationOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  assistants: number;
+};
+
+export function listAssistantMigrationOrganizations(): Promise<{
+  organizations: AdminAssistantMigrationOrganization[];
+}> {
+  return gramAdminFetch("/admin/assistants.organizations");
+}
+
+export type AdminAssistantNameRepairRun = {
+  organization_id: string;
+  repaired: number;
+  conflicts: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: "repaired" | "conflict" | "failed";
+  }[];
+};
+
+export function repairAssistantAgentNames(
+  organizationID: string,
+): Promise<AdminAssistantNameRepairRun> {
+  return gramAdminMutation("/admin/organization.repairAssistantAgentNames", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organization_id: organizationID }),
+  });
+}
+
+export type AdminAssistantIdentityMigrationOutcome =
+  | "migrated"
+  | "already_migrated"
+  | "needs_owner"
+  | "failed";
+
+export type AdminAssistantIdentityMigrationRun = {
+  organization_id: string;
+  migrated: number;
+  already_migrated: number;
+  needs_owner: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantIdentityMigrationOutcome;
+  }[];
+};
+
+export function migrateOrganizationAssistantIdentities(
+  organizationID: string,
+): Promise<AdminAssistantIdentityMigrationRun> {
+  return gramAdminMutation<AdminAssistantIdentityMigrationRun>(
+    "/admin/organization.migrateAssistantIdentities",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export type AdminAssistantKitMigrationOutcome =
+  | "switched"
+  | "already_kit"
+  | "needs_identity"
+  | "ineligible"
+  | "busy"
+  | "failed";
+
+export type AdminAssistantKitMigrationRun = {
+  organization_id: string;
+  switched: number;
+  already_kit: number;
+  needs_identity: number;
+  ineligible: number;
+  busy: number;
+  failed: number;
+  results: {
+    assistant_id: string;
+    project_id: string;
+    name: string;
+    outcome: AdminAssistantKitMigrationOutcome;
+  }[];
+};
+
+// Moves the given assistants, or every live assistant of the organization when
+// none are given, to the Kit runtime.
+export function migrateOrganizationAssistantsToKit(
+  organizationID: string,
+  assistantIDs?: string[],
+): Promise<AdminAssistantKitMigrationRun> {
+  return gramAdminMutation<AdminAssistantKitMigrationRun>(
+    "/admin/organization.migrateAssistantsToKit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: organizationID,
+        assistant_ids: assistantIDs,
+      }),
+    },
+  );
+}
+
 export type AdminMcpServerSource =
   | "toolset"
   | "remote"
@@ -659,6 +820,8 @@ export type AdminMcpServer = {
   // row with no endpoint.
   url?: string;
   visibility: "disabled" | "private" | "public";
+  // Remote MCP server upstream address; omitted for other server types.
+  upstream_url?: string;
   source: AdminMcpServerSource;
   created_at: string;
 };
@@ -761,6 +924,144 @@ export function setOrganizationChatAnalysisSetting(input: {
 }
 
 export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
+
+export type AdminHooksRolloutPin = {
+  version: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRolloutOverride = {
+  organization_id: string;
+  organization_name: string;
+  organization_slug: string;
+  pin: AdminHooksRolloutPin;
+};
+
+export type AdminHooksRolloutChange = {
+  organization_id?: string;
+  organization_slug?: string;
+  version?: number;
+  set_by: string;
+  set_at: string;
+};
+
+export type AdminHooksRollout = {
+  current_version: number;
+  default_pin?: AdminHooksRolloutPin;
+  canary_organization_slugs: string[];
+  overrides: AdminHooksRolloutOverride[];
+  recent_changes: AdminHooksRolloutChange[];
+};
+
+export type AdminHooksRolloutSource =
+  | "canary"
+  | "organization"
+  | "default"
+  | "legacy_flag";
+
+export type AdminOrganizationHooksRollout = {
+  organization_id: string;
+  current_version: number;
+  override?: AdminHooksRolloutPin;
+  default_pin?: AdminHooksRolloutPin;
+  source: AdminHooksRolloutSource;
+  effective_version?: number;
+  eligible?: boolean;
+};
+
+export type AdminHooksReleaseRepoVersion = {
+  version: string;
+  repos: number;
+};
+
+export type AdminHooksReleaseInstallVersion = {
+  version: string;
+  status: "current" | "behind" | "unsupported" | "unknown";
+  installs: number;
+};
+
+export type AdminHooksReleaseFleet = {
+  window_days: number;
+  installs: number;
+  installs_on_current: number;
+  versions: AdminHooksReleaseInstallVersion[];
+};
+
+export type AdminHooksReleaseProgress = {
+  current_version: number;
+  current_binary_version?: string;
+  organizations: number;
+  organizations_cleared: number;
+  organizations_held: number;
+  organizations_on_legacy_flag: number;
+  repos: number;
+  repos_on_current: number;
+  repo_versions: AdminHooksReleaseRepoVersion[];
+  fleet?: AdminHooksReleaseFleet;
+};
+
+export function getHooksReleaseProgress(): Promise<AdminHooksReleaseProgress> {
+  return gramAdminFetch<AdminHooksReleaseProgress>(
+    "/admin/hooksRollout.progress",
+  );
+}
+
+export function getHooksRollout(): Promise<AdminHooksRollout> {
+  return gramAdminFetch<AdminHooksRollout>("/admin/hooksRollout.get");
+}
+
+export function setHooksRolloutDefault(
+  version: number,
+): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(
+    "/admin/hooksRollout.setDefault",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version }),
+    },
+  );
+}
+
+export function getOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationHooksRollout>(
+    `/admin/organization.hooksRollout?${qs}`,
+  );
+}
+
+export function setOrganizationHooksRollout(input: {
+  organizationID: string;
+  version: number;
+}): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.setHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        version: input.version,
+      }),
+    },
+  );
+}
+
+export function clearOrganizationHooksRollout(
+  organizationID: string,
+): Promise<AdminOrganizationHooksRollout> {
+  return gramAdminMutation<AdminOrganizationHooksRollout>(
+    "/admin/organization.clearHooksRollout",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
 
 export type AdminInferenceKeyLimit = {
   key_type: string;

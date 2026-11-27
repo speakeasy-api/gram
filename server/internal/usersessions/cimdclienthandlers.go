@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -40,9 +39,8 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Speakeasy's curated CIMD preset catalog. The catalog is a compile-time
-// constant with no tenant data, but the endpoint still carries the standard
-// project auth: it is only meaningful next to the issuer configuration it
+// Lists Speakeasy's curated CIMD preset catalog. The AI client catalog has no
+// tenant data, but the endpoint still carries the standard project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
 // to the public attack area.
 func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPayload) (*gen.ListCimdClientPresetsResult, error) {
@@ -51,11 +49,11 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
-	presets := admission.Catalog()
+	presets := s.aiCatalog.SnapshotFor(ctx).Catalog()
 	items := make([]*types.CimdClientPreset, 0, len(presets))
 	for _, preset := range presets {
 		items = append(items, &types.CimdClientPreset{
@@ -88,7 +86,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -150,7 +148,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -268,7 +266,7 @@ func (s *Service) ListUserSessionIssuerCimdClients(ctx context.Context, payload 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -318,7 +316,7 @@ func (s *Service) GetUserSessionIssuerCimdClient(ctx context.Context, payload *g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -349,7 +347,7 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 

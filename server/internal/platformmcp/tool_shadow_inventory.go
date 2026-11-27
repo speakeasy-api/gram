@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests intentionally rely on documented optional zero values.
+//nolint:exhaustruct_v5 // MCP manifests intentionally rely on documented optional zero values.
 package platformmcp
 
 import (

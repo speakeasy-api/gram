@@ -53,6 +53,10 @@ type Client struct {
 	// to the listServerClientAssociations endpoint.
 	ListServerClientAssociationsDoer goahttp.Doer
 
+	// AttachServerClientAssociation Doer is the HTTP client used to make requests
+	// to the attachServerClientAssociation endpoint.
+	AttachServerClientAssociationDoer goahttp.Doer
+
 	// DetachServerClientAssociation Doer is the HTTP client used to make requests
 	// to the detachServerClientAssociation endpoint.
 	DetachServerClientAssociationDoer goahttp.Doer
@@ -99,6 +103,7 @@ func NewClient(
 		CommitServerIdentityConfigurationDoer: doer,
 		GetServerIdentityImpactDoer:           doer,
 		ListServerClientAssociationsDoer:      doer,
+		AttachServerClientAssociationDoer:     doer,
 		DetachServerClientAssociationDoer:     doer,
 		ListRemoteSessionsDoer:                doer,
 		CountRemoteSessionsDoer:               doer,
@@ -323,6 +328,30 @@ func (c *Client) ListServerClientAssociations() goa.Endpoint {
 		resp, err := c.ListServerClientAssociationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "listServerClientAssociations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachServerClientAssociation returns an endpoint that makes HTTP requests
+// to the remoteSessions service attachServerClientAssociation server.
+func (c *Client) AttachServerClientAssociation() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachServerClientAssociationRequest(c.encoder)
+		decodeResponse = DecodeAttachServerClientAssociationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachServerClientAssociationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AttachServerClientAssociationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "attachServerClientAssociation", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -2,11 +2,21 @@ import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
 import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import { DASHBOARD_CONFIG_META_NAME } from "@/lib/dashboard-config-html";
 import {
   getAgentPlatforms,
   getCoworkTeamSteps,
   platformSteps,
 } from "./setup-data";
+
+// The first-party hosts the gram-infra chart supplies to the US production
+// deployment. Set before AGENT_PLATFORMS below is built from them.
+const dashboardConfig = document.createElement("meta");
+dashboardConfig.name = DASHBOARD_CONFIG_META_NAME;
+dashboardConfig.content = JSON.stringify({
+  firstPartyHosts: ["app.getgram.ai", "ai.speakeasy.com"],
+});
+document.head.appendChild(dashboardConfig);
 
 const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
 
@@ -29,6 +39,41 @@ describe("getAgentPlatforms", () => {
     expect(copilot?.setupSteps[1]?.code).toContain(
       "copilot --plugin-dir speakeasy-hooks",
     );
+  });
+
+  it("offers the OpenCode observability ZIP first and keeps the CLI as an alternative", () => {
+    const opencode = AGENT_PLATFORMS.find(({ id }) => id === "opencode");
+    expect(opencode?.setupSteps[0]?.download?.platform).toBe("opencode");
+    expect(opencode?.setupSteps[1]?.code).toBe(
+      "unzip observability-opencode.zip -d ~/.config/opencode",
+    );
+    expect(opencode?.setupSteps[2]?.code).toContain(
+      "speakeasy-hooks install --provider=opencode --dir=.",
+    );
+  });
+
+  it("leaves speakeasy-hooks on its default host on a US host", () => {
+    const codes = ["pi", "opencode"].flatMap((id) =>
+      AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps.map(
+        ({ code }) => code ?? "",
+      ),
+    );
+    expect(codes.join("\n")).toContain("speakeasy-hooks install");
+    expect(codes.join("\n")).not.toContain("--server-url");
+  });
+
+  it("points speakeasy-hooks at a host its default does not reach", () => {
+    const platforms = getAgentPlatforms("https://ai.eu.example.com");
+    for (const id of ["pi", "opencode"]) {
+      const install = platforms
+        .find((platform) => platform.id === id)!
+        .setupSteps.find(({ code }) =>
+          code?.includes("speakeasy-hooks install"),
+        )!.code!;
+      expect(install).toContain(
+        `--provider=${id} --dir=. --project={{GRAM_PROJECT_SLUG}} --server-url=https://ai.eu.example.com`,
+      );
+    }
   });
 
   it("follows the shared setup provider order", () => {

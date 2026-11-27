@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -49,10 +51,8 @@ const (
 // Fixed uuids for the local-only rows, derived from LocalSpec's prefix so they
 // live in the same identifier family as everything else the seed writes and
 // can be published as static environment defaults.
-func localEnvironmentID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007004") }
-func localAPIKeyID() string         { return LocalSpec().FixedUUID("0000-4000-a000-000000007005") }
-func localMCPAppAssetID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007006") }
-func localMCPAppFunctionID() string { return LocalSpec().FixedUUID("0000-4000-a000-000000007007") }
+func localEnvironmentID() string { return LocalSpec().FixedUUID("0000-4000-a000-000000007004") }
+func localAPIKeyID() string      { return LocalSpec().FixedUUID("0000-4000-a000-000000007005") }
 
 // LocalFixturesOptions configures RunLocalFixtures.
 type LocalFixturesOptions struct {
@@ -69,6 +69,14 @@ type LocalFixturesOptions struct {
 	ObservedEnv map[string]string
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
+	// Upstreams wires the servers that need the developer's machine: the
+	// Enterprise Sign-In (ID-JAG) Server and the Linear and Notion clients.
+	Upstreams LocalUpstreamOptions
+	// ClickHouse receives the local-only servers' telemetry; nil skips it.
+	ClickHouse driver.Conn
+	// MockMCPURL is the local mock MCP server (server/cmd/mock-mcp) to
+	// register as a working remote MCP server; empty leaves it out.
+	MockMCPURL string
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -85,7 +93,11 @@ type LocalFixturesOptions struct {
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper;
-//   - a global catalog logo entry and public platform asset when SiteURL is set.
+//   - a global catalog logo entry and public platform asset when SiteURL is set;
+//   - the upstreams that need the developer's machine (fixture_servers.go):
+//     the Enterprise Sign-In (ID-JAG) Server through the dev-idp, and the
+//     Linear and Notion clients registered with those vendors;
+//   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
 // registry entries, platform assets, and system roles are global.
@@ -121,13 +133,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return fmt.Errorf("hash local api key: %w", err)
 	}
-	// Upload the MCP App bundle before the transaction: the assets row has to
-	// point at a blob that already exists, and the write is idempotent by
-	// object name.
-	app, err := uploadMCPAppArchive(ctx, blob)
-	if err != nil {
-		return err
-	}
+	// The dev-idp calls happen before the transaction opens, so a slow
+	// dev-idp never holds the transaction's locks.
+	emaProvisioned := provisionLocalEMA(ctx, logger, opts.Upstreams, dev)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -153,8 +161,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
 
 	projectID := uuid.MustParse(spec.ProjectID())
-	deploymentID := uuid.MustParse(spec.DeploymentID())
-	assetID := uuid.MustParse(localMCPAppAssetID())
 	for _, step := range []struct {
 		name string
 		run  func() error
@@ -165,8 +171,19 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"adopt developer", func() error {
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
 		}},
+		{"provision developer in the directory", func() error {
+			// A directory stores given and family names apart.
+			first, last := splitDemoName(dev.Name)
+			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, FirstName: first, LastName: last})
+		}},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
+		}},
+		{"grant local Channels administration", func() error {
+			if _, err := tx.Exec(ctx, localChannelsAccessSQL, spec.OrgID, dev.ID, spec.ProjectID()); err != nil {
+				return fmt.Errorf("grant local Channels access: %w", err)
+			}
+			return nil
 		}},
 		{"grant tool log visibility", func() error {
 			return q.LocalGrantToolLogVisibility(ctx, repo.LocalGrantToolLogVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
@@ -200,34 +217,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"code mode gateway", func() error {
 			return q.LocalSetCodeModeGateway(ctx, repo.LocalSetCodeModeGatewayParams{OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
-		{"mcp app asset", func() error {
-			return q.LocalUpsertMCPAppAsset(ctx, repo.LocalUpsertMCPAppAssetParams{
-				ID:             assetID,
-				ProjectID:      projectID,
-				OrganizationID: spec.OrgID,
-				Url:            app.url,
-				ContentLength:  int64(app.size),
-				Sha256:         app.sha256,
-			})
-		}},
-		{"mcp app function", func() error {
-			return q.LocalUpsertMCPApp(ctx, repo.LocalUpsertMCPAppParams{
-				ProjectID:       projectID,
-				DeploymentID:    deploymentID,
-				FunctionID:      uuid.MustParse(localMCPAppFunctionID()),
-				AssetID:         assetID,
-				FunctionSlug:    MCPAppFunctionSlug,
-				Runtime:         MCPAppRuntime,
-				ToolUrn:         mcpAppToolURN(),
-				ToolName:        MCPAppToolName,
-				ToolDescription: mcpAppToolDescription,
-				InputSchema:     []byte(mcpAppInputSchema),
-				ResourceUri:     MCPAppResourceURI,
-				ResourceUrn:     mcpAppResourceURN(),
-			})
-		}},
-		{"mcp app toolset entry", func() error {
-			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
+		{"local upstreams", func() error {
+			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams, emaProvisioned)
 		}},
 	} {
 		if err := step.run(); err != nil {
@@ -235,8 +226,28 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}
 	}
 
+	inspect, err := runLocalInspectFixtures(ctx, logger, q, time.Now(), opts.MockMCPURL)
+	if err != nil {
+		return fmt.Errorf("local fixture %q: %w", "inspect tab servers", err)
+	}
+
+	if emaProvisioned {
+		if err := seedUpstreamAuthGrants(ctx, tx, spec.OrgID); err != nil {
+			return fmt.Errorf("grant local enterprise sign-in access: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixtures: %w", err)
+	}
+
+	if opts.ClickHouse != nil && opts.MockMCPURL != "" {
+		// Under the seed lock, so a concurrent seed cannot purge or insert the
+		// same rows between the existence check and the insert.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return insertLocalInspectTelemetry(ctx, inspect, opts.ClickHouse)
+		}); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "inspect tab telemetry", err)
+		}
 	}
 
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
@@ -355,6 +366,21 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
 }
+
+// Existing system-role grant sets are intentionally not backfilled. Give the
+// local developer explicit Channels scopes without changing other tenants.
+const localChannelsAccessSQL = `
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT $1, 'user:' || $2::text, requested.scope,
+       jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+FROM unnest(ARRAY['channels:connect', 'channels:admin', 'channels:read_all']) AS requested(scope)
+WHERE NOT EXISTS (
+  SELECT 1 FROM principal_grants g
+  WHERE g.organization_id = $1 AND g.principal_urn = 'user:' || $2::text
+    AND g.scope = requested.scope
+    AND g.selectors = jsonb_build_object('resource_kind', 'project', 'resource_id', $3::text)
+)
+`
 
 func emailDomain(email string) string {
 	at := strings.LastIndexByte(email, '@')

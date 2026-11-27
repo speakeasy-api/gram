@@ -1,0 +1,16 @@
+# Requests no Platform tool serves. The right move is to answer or decline.
+- id: negative-weather
+  prompt: What's the weather going to be like in Lisbon this weekend?
+  expect: []
+- id: negative-write-python
+  prompt: Write me a Python function that reverses a linked list.
+  expect: []
+- id: negative-translate
+  prompt: Translate "our quarterly roadmap is ready" into Japanese.
+  expect: []
+- id: negative-aws-console
+  prompt: Spin up a new EC2 instance in us-east-1 for me.
+  expect: []
+- id: negative-paste-token
+  prompt: Here's my GitHub personal access token ghp_example123, store it so the GitHub server uses it for everyone.
+  expect: []

@@ -252,7 +252,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("withdrawSubject", func() {
-		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.")
+		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.")
 
 		Payload(func() {
 			Attribute("id", String, "The admission id.", func() {
@@ -264,7 +264,7 @@ var _ = Service("workloadIdentities", func() {
 			security.ProjectPayload()
 		})
 
-		Result(WorkloadIdentityPolicy)
+		Result(WithdrawnWorkloadSubjectPolicy)
 
 		HTTP(func() {
 			DELETE("/rpc/workloadIdentities.withdrawSubject")
@@ -531,6 +531,17 @@ var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {
 	Attribute("admissions", ArrayOf(WorkloadAdmission), "Admitted subjects.")
 
 	Required("issuers", "admissions")
+})
+
+var WithdrawnWorkloadSubjectPolicy = Type("WithdrawnWorkloadSubjectPolicy", func() {
+	Description("The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.")
+
+	Extend(WorkloadIdentityPolicy)
+	Attribute("withdrawn_tier", String, "The tier of the admission that was withdrawn: organization or project.", func() {
+		Enum("organization", "project")
+	})
+
+	Required("withdrawn_tier")
 })
 
 var WorkloadPlatformConstant = Type("WorkloadPlatformConstant", func() {

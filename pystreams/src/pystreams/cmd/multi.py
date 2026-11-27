@@ -29,6 +29,8 @@ from gram_infra.pubsub import (
     pubsub_publisher_for_message_async,
 )
 from redis import asyncio as redis_asyncio
+from redis.asyncio.retry import Retry as RedisRetry
+from redis.backoff import NoBackoff
 
 from pystreams import attr
 from pystreams.deps import logging, otel
@@ -41,6 +43,7 @@ from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
+from pystreams.risk.redisswitch import RedisSwitch
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (
@@ -84,6 +87,7 @@ async def multi(
     # Service options
     service_version: str | None,
     environment: str | None,
+    partition: str,
     git_sha: str | None,
     log_level: str,
     pretty_log: bool,
@@ -107,6 +111,8 @@ async def multi(
     # Enforcement lane options
     redis_addr: str | None,
     redis_password: str | None,
+    redis_next_addr: str | None,
+    redis_next_password: str | None,
     risk_fingerprint_pepper_keyring: str | None,
 ):
     logging.configure_logging(
@@ -116,9 +122,15 @@ async def multi(
             attr.SERVICE_NAME: "gram-pystreams",
             attr.SERVICE_VERSION: service_version,
             attr.SERVICE_ENVIRONMENT: environment,
+            attr.PARTITION: partition,
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+    # A next instance equal to the current one means the move is over: the
+    # client is an ordinary one.
+    if redis_next_addr and redis_next_addr == redis_addr:
+        redis_next_addr = None
 
     if role == "enforcement" and (
         not redis_addr or not risk_fingerprint_pepper_keyring
@@ -133,6 +145,7 @@ async def multi(
         service_version=service_version,
         git_sha=git_sha,
         environment=environment,
+        partition=partition,
         enable_tracing=enable_tracing,
         enable_metrics=enable_metrics,
     )
@@ -186,29 +199,27 @@ async def multi(
             # pepper keyring are configured; validated before the scan pool
             # exists so a startup failure cannot leak pool workers.
             enforce_redis = None
+            enforce_switch = None
             enforce_fingerprinter = None
             if role in ("all", "enforcement") and (
                 redis_addr and risk_fingerprint_pepper_keyring
             ):
-                host, sep, port = redis_addr.rpartition(":")
-                if not sep or "]" in port or (":" in host and "[" not in host):
-                    # Bare hostname, or an IPv6 literal without a port.
-                    host, port = redis_addr, ""
-                # Accept bracketed IPv6 endpoints such as [::1]:6379.
-                host = host.strip("[]")
-                # Bounded timeouts: a Redis stall surfaces as an ACKed write
-                # failure instead of hanging past the ack deadline.
-                enforce_redis = redis_asyncio.Redis(
-                    host=host or redis_addr,
-                    port=int(port) if port else 6379,
-                    password=redis_password or None,
-                    socket_connect_timeout=1.0,
-                    socket_timeout=2.0,
+                armed = bool(redis_next_addr)
+                enforce_redis = _enforce_redis_client(
+                    redis_addr, redis_password, armed=armed
                 )
                 stack.push_async_callback(enforce_redis.aclose)
                 # Fail startup, not per-message: consuming without a reachable
                 # reply store would ACK requests while losing their replies.
                 await enforce_redis.ping()
+                if redis_next_addr:
+                    next_redis = _enforce_redis_client(
+                        redis_next_addr, redis_next_password, armed=True
+                    )
+                    stack.push_async_callback(next_redis.aclose)
+                    await next_redis.ping()
+                    enforce_switch = RedisSwitch(enforce_redis, next_redis, logger)
+                    await enforce_switch.start()
                 enforce_fingerprinter = parse_pepper_keyring(
                     risk_fingerprint_pepper_keyring
                 )
@@ -251,7 +262,7 @@ async def multi(
             if enforce_redis is not None and enforce_fingerprinter is not None:
                 enforce_handler = PresidioEnforceHandler(
                     logger,
-                    ReplyWriter(enforce_redis),
+                    ReplyWriter(enforce_redis, enforce_switch),
                     meter_publisher,
                     presidio_scanner,
                     enforce_fingerprinter,
@@ -294,6 +305,42 @@ async def multi(
                 )
 
                 health_state.set_ready()
+
+
+def _enforce_redis_client(
+    addr: str, password: str | None, *, armed: bool
+) -> redis_asyncio.Redis:
+    """Build the reply-inbox client for a host:port address.
+
+    An armed client follows the Redis instance switch: it never retries, so a
+    write interrupted by the move is not replayed on the other instance. It
+    does not name its connections: an instance may reject the CLIENT command,
+    and a named client then cannot connect to it.
+    """
+    host, sep, port = addr.rpartition(":")
+    if not sep or "]" in port or (":" in host and "[" not in host):
+        # Bare hostname, or an IPv6 literal without a port.
+        host, port = addr, ""
+    # Accept bracketed IPv6 endpoints such as [::1]:6379.
+    host = host.strip("[]")
+    # Bounded timeouts: a Redis stall surfaces as an ACKed write failure
+    # instead of hanging past the ack deadline.
+    if not armed:
+        return redis_asyncio.Redis(
+            host=host or addr,
+            port=int(port) if port else 6379,
+            password=password or None,
+            socket_connect_timeout=1.0,
+            socket_timeout=2.0,
+        )
+    return redis_asyncio.Redis(
+        host=host or addr,
+        port=int(port) if port else 6379,
+        password=password or None,
+        socket_connect_timeout=1.0,
+        socket_timeout=2.0,
+        retry=RedisRetry(NoBackoff(), 0),
+    )
 
 
 async def _register_receivers(

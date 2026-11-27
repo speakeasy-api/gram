@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -94,8 +95,7 @@ func (s *Service) resolveMetaMemberResource(
 // project owns is claimed only by that project's members, the ones whose
 // dispatch routes through it.
 //
-// Where typed auth client resolution is enforced, a member claims the
-// registrations it offers through typed auth clients and no others.
+// Each proxied member claims only registrations it offers through typed clients.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -104,11 +104,11 @@ func (s *Service) claimingMetaMembers(
 	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
-	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, false, err
-	}
 
+	return s.claimingMetaMembersForValidation(ctx, endpoint, client, usesTypedConsentInventory(ctx))
+}
+
+func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, typedOffers bool) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	// A member claims the clients associated with it rather than every
 	// client of its authorization server.
 	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
@@ -167,6 +167,28 @@ func (s *Service) authorizedMetaMembers(
 		return nil, nil
 	}
 
+	if usesTypedConsentInventory(ctx) {
+		admission, err := s.admitMandatoryShadow(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load login member permissions: %w", err)
+		}
+		allowed := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
+		for _, candidate := range rows {
+			if candidate.McpServerVisibility != mcpservers.VisibilityPublic && candidate.McpServerVisibility != mcpservers.VisibilityPrivate {
+				continue
+			}
+			connect := authz.MCPServer(authz.MCPServerIDOf(candidate.McpServerID), authz.ProjectIDOf(candidate.ProjectID)).Connect()
+			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
+			if err != nil {
+				return nil, fmt.Errorf("authorize login member: %w", err)
+			}
+			if decision.Allowed {
+				allowed = append(allowed, candidate)
+			}
+		}
+		return allowed, nil
+	}
+
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load access grants: %w", err)
@@ -183,7 +205,7 @@ func (s *Service) authorizedMetaMembers(
 		// redundant with the query's one-named-value visibility filter. Only
 		// a refusal drops a member; dropping on a fault narrows the candidate
 		// set and turns ambiguous into a confident wrong answer.
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())
+		connect := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(row.ProjectID)).Connect()
 		refusal, err := s.memberConnectDecision(filterCtx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
 		if err != nil {
 			return nil, fmt.Errorf("authorize meta MCP member access: %w", err)

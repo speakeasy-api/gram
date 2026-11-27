@@ -53,6 +53,20 @@ FOR SHARE;
 SELECT * FROM users
 WHERE email = $1;
 
+-- Whether a live platform administrator (users.admin) holds this email. The
+-- standalone admin transport identifies staff by their verified identity
+-- provider email, not by user id, so platform-tier handlers that require the
+-- entitlement resolve it here. Matched case-insensitively, as identity
+-- provider emails are; users_email_lower_idx serves it.
+-- name: IsPlatformAdminEmail :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE lower(email) = lower(@email::text)
+    AND admin IS TRUE
+    AND deleted_at IS NULL
+)::boolean AS is_admin;
+
 -- name: GetUserIDByWorkosID :one
 SELECT id FROM users
 WHERE workos_id = $1

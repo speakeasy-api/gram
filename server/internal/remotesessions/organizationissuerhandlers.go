@@ -49,7 +49,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -220,7 +220,7 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orgissuersgen.ListIs
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -280,7 +280,7 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -323,17 +323,15 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
 	r := repo.New(s.db)
 
 	// Platform issuers are deliberately excluded. A tenant cannot delete one, so
-	// the preflight is unreachable for them by design — and both queries below
-	// are unscoped by organization, so resolving a platform issuer here would
-	// report other tenants' client counts and MCP server names to this caller.
-	// Keep IncludeGlobal false unless those queries are org-scoped first.
+	// the preflight is unreachable for them by design. The registration count
+	// below must agree with the delete blocker and is not organization-scoped.
 	if _, err := r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -350,14 +348,19 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
 	}
 
-	nameRows, err := r.ListOrganizationMcpServerNamesForIssuer(ctx, issuerID)
+	nameRows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		IssuerID:            conv.ToNullUUID(issuerID),
+		ClientID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		IncludeDeleteImpact: true,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp server names for issuer").LogError(ctx, logger)
 	}
 
 	names := make([]string, 0, len(nameRows))
 	for _, row := range nameRows {
-		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
+		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), conv.Default(row.Url, row.Slug.String)))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams{
 		RemoteSessionIssuerID: issuerID,
@@ -406,7 +409,7 @@ func (s *Service) GetIssuerDuplicatePreflight(ctx context.Context, payload *orgi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -491,7 +494,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -677,7 +680,7 @@ func (s *Service) FetchIssuerMetadata(ctx context.Context, payload *orgissuersge
 	// method on this service requires org:admin, and the surface it feeds — the
 	// org-admin create sheet — is behind that scope already. Gating costs
 	// nothing here and keeps the service's authorization uniform.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -718,7 +721,7 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -841,7 +844,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -971,7 +974,7 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1185,7 +1188,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -1237,7 +1240,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 

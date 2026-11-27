@@ -26,8 +26,10 @@ export interface InsightsContextValue {
   setOverride: (override: InsightsConfigOptions | null) => void;
   /** Queue a prompt to be auto-appended to the Insights chat thread.
    *  Fires once per call — intended for "Explore with AI" CTAs that should
-   *  drop the user straight into a running conversation. */
-  sendPrompt: (prompt: string) => void;
+   *  drop the user straight into a running conversation. Starts a fresh
+   *  conversation unless `newConversation: false`, which continues the
+   *  current one (e.g. the homepage terminal's widgets). */
+  sendPrompt: (prompt: string, options?: { newConversation?: boolean }) => void;
   /** True once the shared Project Assistant runtime is mounted. Surfaces
    *  (e.g. the full-page chat) gate on this before rendering chat UI that
    *  needs the runtime. */
@@ -36,6 +38,10 @@ export interface InsightsContextValue {
    *  `project:write`. Surfaces should render an "ask an admin" notice instead
    *  of waiting on `assistantReady`. */
   assistantNeedsAdmin: boolean;
+  /** Why the Project Assistant failed to connect, or null. */
+  assistantError: string | null;
+  /** Retry the failed connection behind `assistantError`. */
+  retryAssistant: () => void;
   /** Switch the shared runtime to a fresh empty conversation. */
   newConversation: () => void;
   /** Hide the floating dock while a caller is mounted (ref-counted). Returns
@@ -53,6 +59,8 @@ export const InsightsContext = createContext<InsightsContextValue>({
   sendPrompt: () => {},
   assistantReady: false,
   assistantNeedsAdmin: false,
+  assistantError: null,
+  retryAssistant: () => {},
   newConversation: () => {},
   registerDockHide: () => () => {},
 });

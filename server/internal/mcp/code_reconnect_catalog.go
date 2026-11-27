@@ -92,7 +92,7 @@ func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions
 	if err != nil {
 		return err
 	}
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(s.aiCatalog.SnapshotFor(r.Context()), endpoint)
 	if err := endpoint.ValidateGlobalChallenge(r.Context(), s.db, state.Endpoint, state.UserSessionIssuerID); err != nil {
 		code, detail := remotesessions.AuthorityHappened(err)
 		s.connections.Step(r.Context(), attempt, mcpconnectionattempts.StepProviderSignIn, code, detail, mcpconnectionattempts.FromRequest(r))
@@ -116,7 +116,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		t.Continue()
 		return fmt.Errorf("reload the gateway tool review before approving")
 	}
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(s.aiCatalog.SnapshotFor(r.Context()), endpoint)
 	fail := func(err error) error {
 		s.refuseReconnect(r, s.logger, t, attempt, err)
 		return err
@@ -140,15 +140,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		}
 		return s.finishCodeReconnectApproval(w, r, t, endpoint, state, jtis)
 	}
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return fail(err)
-	}
-	picks, err := s.consentUpstreamClientPicks(ctx, endpoint, state, cards, inventoryUpstreamPicks(inventory))
-	if err != nil {
-		return fail(err)
-	}
-	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt)
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, previous.ExpiresAt)
 	if err != nil {
 		return fail(err)
 	}
@@ -207,7 +199,7 @@ func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Req
 		return err
 	}
 	s.evictConsentToolInventory(ctx, state.ID)
-	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(state.Subject))
+	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(s.aiCatalog.SnapshotFor(ctx), endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(state.Subject))
 	t.Continue()
 	http.Redirect(w, r, endpoint.consentPath()+"?state="+state.ID, http.StatusSeeOther)
 	return nil
@@ -228,14 +220,17 @@ func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
 
 // replaceReconnectUpstreamChoices runs inside the approval transaction, after
 // locking the connection. Removed members are retired; only the new catalogue's
-// members can receive choices. Other servers on the issuer are untouched.
+// members can receive choices. An unchanged reviewed binding is written
+// back only if the typed offer and registration still agree; previous
+// catalog entries are never inputs to the writer. Other servers on the
+// issuer are untouched.
 func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog) error {
 	if err := q.SoftDeleteReconnectUpstreamChoices(ctx, usersessionsrepo.SoftDeleteReconnectUpstreamChoicesParams{
 		CredentialID: credentialID, OrganizationID: next.OrganizationID, McpServerIds: reconnectMemberIDs(previous, next),
 	}); err != nil {
 		return fmt.Errorf("retire reviewed upstream choices: %w", err)
 	}
-	if _, err := q.RecordUpstreamClientSelections(ctx, next.upstreamChoices(credentialID)); err != nil {
+	if _, err := q.RecordIssuedAuthClientChoices(ctx, next.upstreamChoices(credentialID)); err != nil {
 		return fmt.Errorf("record reviewed upstream choices: %w", err)
 	}
 	return nil

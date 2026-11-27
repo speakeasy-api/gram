@@ -15,6 +15,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -60,9 +61,9 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 	require.NoError(t, err)
 	// Token refresh updates tokens without changing the attached authorization.
-	refreshed, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
+	refreshed, err := q.UpdateRemoteSessionTokensIfUnchangedFixture(ctx, repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
 		SubjectUrn: source.SubjectUrn, RemoteSessionClientID: source.RemoteSessionClientID,
-		ExpectedUpdatedAt: source.UpdatedAt, AccessTokenEncrypted: source.AccessTokenEncrypted,
+		ExpectedUpdatedAt: source.UpdatedAt, AccessTokenEncrypted: source.AccessTokenEncrypted.String,
 		AccessExpiresAt: source.AccessExpiresAt, RefreshTokenEncrypted: source.RefreshTokenEncrypted,
 		Scopes: source.Scopes,
 	})
@@ -71,7 +72,7 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 	require.NoError(t, err)
 	// The OAuth callback upsert replaces the grant on the SAME active row.
-	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: config, RemoteSessionClientID: source.RemoteSessionClientID, AccessTokenEncrypted: source.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)), Scopes: []string{"tools:read", "tools:write"}, UpstreamDisplayName: conv.ToPGText("New upstream account"), UpstreamEmail: conv.ToPGText("new@example.test")})
+	replacement, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: subject, UserSessionIssuerID: config, RemoteSessionClientID: source.RemoteSessionClientID, AccessTokenEncrypted: source.AccessTokenEncrypted.String, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)), Scopes: []string{"tools:read", "tools:write"}, UpstreamDisplayName: conv.ToPGText("New upstream account"), UpstreamEmail: conv.ToPGText("new@example.test")})
 	require.NoError(t, err)
 	require.Equal(t, source.ID, replacement.ID)
 	require.Equal(t, source.GrantGeneration+1, replacement.GrantGeneration)
@@ -102,6 +103,45 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	auditCount, err = testrepo.New(ti.conn).CountAttachmentAuditEventsFixture(ctx, testrepo.CountAttachmentAuditEventsFixtureParams{ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, OrganizationID: auth.ActiveOrganizationID, SubjectID: source.ID.String(), ActorID: auth.UserID, PrincipalID: agent.ID.String(), BindingID: binding.ID, ReplacementBindingID: rebound.ID})
 	require.NoError(t, err)
 	require.EqualValues(t, 4, auditCount, "initial attach, idempotent attach, detach, and explicit reattach are audited")
+}
+
+func TestBindingsAttachWaitsOnConcurrentRevocation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(ti)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Concurrent revoke agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-revoke-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-revoke-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-revoke-client")
+	source := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: only establishes the test transaction.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	_, err = repo.New(tx).RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: source.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: source.ID.String()})
+		done <- err
+	}()
+	q := repo.New(ti.conn)
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%AttachPrincipalRemoteSessionBinding :one%")
+	require.NoError(t, tx.Commit(ctx))
+	select {
+	case err := <-done:
+		requireOopsCode(t, err, oops.CodeConflict)
+	case <-time.After(10 * time.Second):
+		t.Fatal("attachment did not finish after revoke committed")
+	}
+	rows, err := q.ListPrincipalRemoteSessionBindings(ctx, repo.ListPrincipalRemoteSessionBindingsParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config})
+	require.NoError(t, err)
+	require.Empty(t, rows)
 }
 
 func TestResolveAuthorization_AttachmentReconnectDuringRefresh(t *testing.T) {
@@ -166,7 +206,7 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	// Simulate the callback's fresh grant while the old grant's token request is blocked.
 	currentAccess, err := testenv.NewEncryptionClient(t).Encrypt([]byte("new-account-access"))
 	require.NoError(t, err)
-	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: env.session.Scopes, Resource: env.session.Resource})
+	reconnected, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: env.session.Scopes, Resource: env.session.Resource})
 	require.NoError(t, err)
 	require.Equal(t, env.session.ID, reconnected.ID)
 	require.Equal(t, env.session.GrantGeneration+1, reconnected.GrantGeneration)
@@ -191,7 +231,7 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	if reattach {
 		_, err = env.q.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: env.session.ID, ProjectID: env.projectID, OrganizationID: env.organizationID})
 		require.NoError(t, err)
-		newSource, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+		newSource, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 		require.NoError(t, err)
 		require.NotEqual(t, env.session.ID, newSource.ID)
 		_, err = resolve()

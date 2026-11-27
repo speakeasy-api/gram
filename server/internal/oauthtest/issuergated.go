@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -45,7 +46,7 @@ type IssuerGatedToolsetOpts struct {
 // IssuerGatedToolsetResult holds the rows created by CreateIssuerGatedToolset.
 type IssuerGatedToolsetResult struct {
 	Toolset toolsets_repo.Toolset
-	// McpSlug is the toolset's legacy /mcp/<slug> alias, which serves it.
+	// McpSlug is the slug of the platform endpoint that serves the toolset.
 	McpSlug             string
 	UserSessionIssuer   usersessions_repo.UserSessionIssuer
 	RemoteSessionIssuer remotesessions_repo.RemoteSessionIssuer
@@ -55,7 +56,8 @@ type IssuerGatedToolsetResult struct {
 // CreateIssuerGatedToolset provisions a user_session_issuer + one
 // remote_session_issuer + one DCR-registered remote_session_client wired to
 // the provided upstream AS metadata, then creates a toolset bound to the
-// user_session_issuer. Used by integration tests that exercise the
+// user_session_issuer, and places the client explicitly on that hosted server.
+// Used by integration tests that exercise the
 // /mcp/{slug}/connect + /mcp/remote_login_callback handlers against a live
 // dev-idp instance.
 func CreateIssuerGatedToolset(
@@ -135,7 +137,7 @@ func CreateIssuerGatedToolset(
 	encSecret, err := enc.Encrypt([]byte(clientSecret))
 	require.NoError(t, err)
 
-	rsc, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+	rsc, err := remoteRepo.CreateRemoteSessionClientFixture(ctx, remotesessions_repo.CreateRemoteSessionClientFixtureParams{
 		ForwardClientName:     false,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
@@ -147,16 +149,19 @@ func CreateIssuerGatedToolset(
 	})
 	require.NoError(t, err)
 
-	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: rsc.ID,
-		UserSessionIssuerID:   usi.ID,
-	})
-	require.NoError(t, err)
-
-	toolset := createLegacyHostedToolset(t, ctx, conn, authCtx, legacyHostedToolset{
+	toolset := createHostedToolset(t, ctx, conn, authCtx, hostedToolset{
 		name: "Issuer-Gated MCP " + suffix, slug: slug, description: "Test toolset bound to user_session_issuer",
 		public: opts.IsPublic, issuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
 	})
+
+	placed, err := upstreamclientsrepo.New(conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             toolset.ProjectID,
+		McpServerID:           toolset.ID,
+		RemoteSessionClientID: rsc.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, placed)
 
 	return IssuerGatedToolsetResult{
 		Toolset:             toolset,

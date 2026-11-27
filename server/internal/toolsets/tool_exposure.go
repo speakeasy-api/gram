@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Audit and repository literals omit optional fields intentionally.
+//nolint:exhaustruct_v5 // Audit and repository literals omit optional fields intentionally.
 package toolsets
 
 import (

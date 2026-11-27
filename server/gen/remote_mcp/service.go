@@ -282,6 +282,16 @@ type ProbeURLResult struct {
 	// unreachable; currently timeout, rate_limited, server_error, dns_error,
 	// tls_error, guardian_rejected, or transport_error.
 	Reason *string
+	// The name the server reports for itself in the MCP handshake: its title, or
+	// its name when it has no title. Present only when outcome is mcp_available
+	// and the server reports one.
+	ServerName *string
+	// How Speakeasy can register as a client with the server's sign-in provider.
+	// Present only when authentication is required and the challenge advertised
+	// protected resource metadata: dcr (dynamic client registration), cimd (client
+	// ID metadata document), manual (a client must be registered by hand), or
+	// unknown (the provider's metadata could not be read).
+	SignInSetup *string
 }
 
 // RFC 9728 OAuth Protected Resource Metadata advertised by a remote MCP

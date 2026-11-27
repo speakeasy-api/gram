@@ -19,7 +19,18 @@ import (
 
 const maxRequestBytes = 10 * 1024 * 1024
 
-// Frame is the transcript Anthropic sends before inference.
+// Hook events carried in Frame.Type.
+const (
+	// frameTypePrompt is sent once per governed request, before inference.
+	frameTypePrompt = "prompt"
+
+	// frameTypeToolCall is sent before any tool call in a model response runs,
+	// when the organization has Validate tool calls on. One verdict covers
+	// every call in the frame.
+	frameTypeToolCall = "tool_call"
+)
+
+// Frame is the transcript Anthropic sends before inference or before tool calls run.
 type Frame struct {
 	// Type identifies the hook event; unknown events are forward compatible.
 	Type string `json:"type"`
@@ -36,7 +47,9 @@ type Frame struct {
 	// Source is advisory application metadata.
 	Source Source `json:"source"`
 
-	// Messages is the complete user-visible transcript before inference.
+	// Messages is the complete user-visible transcript before inference. A
+	// tool call frame ends with the assistant message holding the calls and
+	// omits the earlier conversation its prompt frame carried.
 	Messages []Message `json:"messages"`
 
 	// SessionID is opaque and may be absent.

@@ -1,6 +1,10 @@
 package authz
 
 import (
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -40,9 +44,9 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		require.Contains(t, ScopeCategories, entry.Category, "%s: category", entry.Scope)
 		require.NotEmpty(t, entry.ResourceType, "%s: resource type", entry.Scope)
 
-		surface, ok := GrantSurfaceForScope(entry.Scope)
-		require.True(t, ok, "%s: grant surface", entry.Scope)
-		require.NotEmpty(t, surface)
+		owner, ok := ScopeGrantSource(entry.Scope)
+		require.True(t, ok, "%s: grant source", entry.Scope)
+		require.NotEmpty(t, owner)
 
 		visibility, ok := ScopeVisibilityFor(entry.Scope)
 		require.True(t, ok)
@@ -61,13 +65,14 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 func TestScopeCatalog_SensitiveSet(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []Scope{ScopeOrgAdmin, ScopeChatRead, ScopeChatWrite, ScopeLogRead}, SensitiveScopes())
+	require.Equal(t, []Scope{ScopeOrgAdmin, ScopeChannelsReadAll, ScopeChatRead, ScopeChatWrite, ScopeLogRead}, SensitiveScopes())
 
 	reasons := []struct {
 		scope Scope
 		want  Sensitivity
 	}{
 		{scope: ScopeOrgAdmin, want: SensitivityDestructiveAdmin},
+		{scope: ScopeChannelsReadAll, want: SensitivityConversations},
 		{scope: ScopeChatRead, want: SensitivityConversations},
 		{scope: ScopeChatWrite, want: SensitivityConversations},
 		{scope: ScopeLogRead, want: SensitivityToolLogs},
@@ -104,7 +109,7 @@ func TestScopeCatalog_SubScopesMatchExpansions(t *testing.T) {
 
 	write, ok := ScopeEntryFor(ScopeMCPWrite)
 	require.True(t, ok)
-	require.Equal(t, []string{"mcp:connect", "mcp:read"}, write.SubScopes())
+	require.Equal(t, []string{"mcp:read"}, write.SubScopes(), "mcp:write does not imply mcp:connect")
 
 	chatWrite, ok := ScopeEntryFor(ScopeChatWrite)
 	require.True(t, ok)
@@ -170,4 +175,166 @@ func TestScopeCategories_AreDistinct(t *testing.T) {
 	sorted := slices.Clone(ScopeCategories)
 	slices.Sort(sorted)
 	require.Len(t, slices.Compact(sorted), len(ScopeCategories))
+}
+
+// The scope table in docs/rbac.md is a rendering of the catalogue. This test
+// fails when the two drift; `go test ./internal/authz -run DocTable -update-docs`
+// rewrites the table from the catalogue.
+func TestScopeCatalog_DocTableIsCurrent(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "..", "docs", "rbac.md")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	doc := string(content)
+
+	begin := strings.Index(doc, scopeTableBegin)
+	end := strings.Index(doc, scopeTableEnd)
+	require.True(t, begin >= 0 && end > begin, "docs/rbac.md lacks the %s / %s markers", scopeTableBegin, scopeTableEnd)
+	begin += len(scopeTableBegin)
+
+	// Blank lines on both sides are what the Markdown formatter keeps.
+	want := "\n\n" + renderScopeTable(t, ScopeCatalog()) + "\n\n"
+	if *updateDocs {
+		require.NoError(t, os.WriteFile(path, []byte(doc[:begin]+want+doc[end:]), 0o600))
+		return
+	}
+	require.Equal(t, want, doc[begin:end], "the scope table in docs/rbac.md is stale; run `go test ./internal/authz -run DocTable -update-docs` from server/")
+}
+
+// Every task scope is one a person can be granted: catalogued, visible
+// and not implied by another scope in the same task.
+func TestTasks_StayInsideTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	seen := map[string]bool{}
+	for _, task := range Tasks() {
+		require.NotEmpty(t, task.Slug)
+		require.False(t, seen[task.Slug], "task %q listed twice", task.Slug)
+		seen[task.Slug] = true
+		require.NotEmpty(t, task.Label, task.Slug)
+		require.False(t, strings.HasSuffix(task.Label, "."), "%s: a label is not a sentence", task.Slug)
+		require.GreaterOrEqual(t, len(task.Scopes), 2, "%s: a task with one scope is just that scope", task.Slug)
+
+		for _, scope := range task.Scopes {
+			entry, ok := ScopeEntryFor(scope)
+			require.True(t, ok, "%s: %s is not catalogued", task.Slug, scope)
+			visibility, ok := ScopeVisibilityFor(scope)
+			require.True(t, ok)
+			require.Equal(t, ScopeVisibilityUserVisible, visibility, "%s: %s is not grantable by a person", task.Slug, entry.Scope)
+
+			for _, other := range task.Scopes {
+				if other == scope {
+					continue
+				}
+				require.NotContains(t, ScopeImplicationClosure(other), scope,
+					"%s: %s already includes %s", task.Slug, other, scope)
+			}
+		}
+	}
+}
+
+func TestTasks_IsACopy(t *testing.T) {
+	t.Parallel()
+
+	first := Tasks()
+	first[0].Scopes[0] = ScopeRoot
+	first[0].Label = "changed"
+	second := Tasks()
+	require.NotEqual(t, ScopeRoot, second[0].Scopes[0])
+	require.NotEqual(t, "changed", second[0].Label)
+}
+
+func TestTasksNeeding(t *testing.T) {
+	t.Parallel()
+
+	slugs := func(tasks []ScopeTask) []string {
+		out := make([]string, 0, len(tasks))
+		for _, task := range tasks {
+			out = append(out, task.Slug)
+		}
+		slices.Sort(out)
+		return out
+	}
+
+	require.Equal(t, []string{"agent_setup", "mcp_maintenance"}, slugs(TasksNeeding(ScopeEnvironmentRead)))
+	require.Equal(t, []string{"session_review"}, slugs(TasksNeeding(ScopeLogRead)))
+	require.Empty(t, TasksNeeding(ScopeOrgAdmin))
+}
+
+var updateDocs = flag.Bool("update-docs", false, "rewrite the generated scope table in docs/rbac.md")
+
+const (
+	scopeTableBegin = "<!-- scope-table:begin -->"
+	scopeTableEnd   = "<!-- scope-table:end -->"
+)
+
+// renderScopeTable writes the catalogue as a Markdown table in the layout the
+// repository's formatter produces, so the committed docs pass its check. A
+// catalogue entry without a visibility fails the test rather than being
+// documented under a default.
+func renderScopeTable(t *testing.T, entries []ScopeEntry) string {
+	t.Helper()
+
+	header := []string{"Scope", "Label", "Category", "Visibility", "Sensitive", "Includes", "Description"}
+	rows := make([][]string, 0, len(entries))
+	for _, entry := range entries {
+		visibility, ok := ScopeVisibilityFor(entry.Scope)
+		require.True(t, ok, "%s: no visibility in the catalogue", entry.Scope)
+		sensitive := "no"
+		if entry.Sensitive() {
+			sensitive = string(entry.Sensitivity)
+		}
+		includes := "—"
+		if subs := entry.SubScopes(); len(subs) > 0 {
+			quoted := make([]string, 0, len(subs))
+			for _, sub := range subs {
+				quoted = append(quoted, "`"+sub+"`")
+			}
+			includes = strings.Join(quoted, ", ")
+		}
+		rows = append(rows, []string{
+			"`" + string(entry.Scope) + "`",
+			entry.Label,
+			string(entry.Category),
+			visibility,
+			sensitive,
+			includes,
+			strings.ReplaceAll(entry.Description, "|", "\\|"),
+		})
+	}
+
+	widths := make([]int, len(header))
+	for i, cell := range header {
+		widths[i] = max(widths[i], displayWidth(cell))
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			widths[i] = max(widths[i], displayWidth(cell))
+		}
+	}
+
+	var out strings.Builder
+	writeRow := func(cells []string) {
+		out.WriteString("|")
+		for i, cell := range cells {
+			fmt.Fprintf(&out, " %s%s |", cell, strings.Repeat(" ", widths[i]-displayWidth(cell)))
+		}
+		out.WriteString("\n")
+	}
+	writeRow(header)
+	out.WriteString("|")
+	for _, width := range widths {
+		fmt.Fprintf(&out, " %s |", strings.Repeat("-", width))
+	}
+	out.WriteString("\n")
+	for _, row := range rows {
+		writeRow(row)
+	}
+	return strings.TrimRight(out.String(), "\n")
+}
+
+// displayWidth counts characters, not bytes, so an em dash pads like a letter.
+func displayWidth(s string) int {
+	return len([]rune(s))
 }

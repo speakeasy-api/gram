@@ -174,7 +174,7 @@ func (s *Service) canConnect(ctx context.Context, serverVisibility string, serve
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String()))
+	err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(projectID)).Connect())
 	if err == nil {
 		return true, nil
 	}

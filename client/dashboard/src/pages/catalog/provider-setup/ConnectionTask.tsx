@@ -49,12 +49,40 @@ function LiveConnectionError() {
           </details>
         </>
       )}
+      {s.provider === "okta" && (
+        <>
+          <Correction step="organization">Review organization</Correction>
+          {" · "}
+          <Correction step="app">Review app settings</Correction>
+          {" · "}
+          <Correction step="permissions">
+            Review scopes and assignments
+          </Correction>
+          {" · "}
+          <Correction step="credentials">Review credentials</Correction>
+        </>
+      )}
+      {s.provider === "salesforce" && (
+        <>
+          <Correction step="choices">Review connection</Correction>
+          {" · "}
+          <Correction step="credentials">Review credentials</Correction>
+          {s.values.integration === "native" && (
+            <>
+              {" · "}
+              <Correction step="activation">
+                Review server activation
+              </Correction>
+            </>
+          )}
+        </>
+      )}
       {live.recovery === "signin" && (
         <Button variant="secondary" size="sm" onClick={live.signIn}>
           <Button.Text>Sign in again ↗</Button.Text>
         </Button>
       )}
-      {s.provider !== "github" && live.recovery === "credentials" && (
+      {s.provider === "slack" && live.recovery === "credentials" && (
         <Correction step="credentials">Review credentials</Correction>
       )}
       {live.recovery === "permissions" && (

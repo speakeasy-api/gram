@@ -3,19 +3,29 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/alicebob/miniredis/v2"
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -26,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 func TestCanceledConnectionChecksDoNotBlameProvider(t *testing.T) {
@@ -33,13 +44,13 @@ func TestCanceledConnectionChecksDoNotBlameProvider(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	rec := mcpconnectionattemptstest.New(t)
-	s := &Service{connections: rec.Recorder}
-	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeUnknown, remotesessionmetrics.ValidationTriggerVerify)
+	s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
+	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeUnknown, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
 	s.recordListingFailures(ctx, gate, []unavailableMember{{member: metaMember{serverID: uuid.New()}, err: context.Canceled}})
 	rec.RequireNothing()
 	// A concrete refusal remains true even if the caller subsequently leaves.
-	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerVerify)
+	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 	rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeRejectedByMember)
 	s.recordListingFailures(ctx, gate, []unavailableMember{{member: metaMember{serverID: uuid.New()}, err: oops.E(oops.CodeForbidden, nil, "denied")}})
 	rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNoServerAccess)
@@ -51,12 +62,12 @@ func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
-			s := &Service{connections: rec.Recorder}
+			s := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 			clientID := "https://claude.ai"
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
-			require.Equal(t, mcpconnectionattempts.AppOf(clientID).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
 		})
 	}
@@ -83,7 +94,7 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	connected, stale, unset := uuid.New(), uuid.New(), uuid.New()
 	gap := authClientResolution{outcome: authClientGap, reason: authClientReasonNoAuthStale}
 	view := &gatewayConsentView{
@@ -112,7 +123,7 @@ func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Rec
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
 	return service, rec, mr
 }
 
@@ -215,7 +226,7 @@ func TestRecordConsentPage_ProblemIsAStepOnTheAttempt(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	service.recordConsentPage(t.Context(), nil, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), nil, []remoteSessionCard{{}}, mcpconnectionattempts.CodeNoServerAccess)
 
 	rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeNoServerAccess)
@@ -249,19 +260,26 @@ func TestFirstPartyConnected(t *testing.T) {
 func TestVerdictHappened(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.ResultAllowed), verdictHappened(remotesessions.ValidationOutcomeValid, false))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeRejectedByMember), verdictHappened(remotesessions.ValidationOutcomeRejectedByMember, false))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderRejected), verdictHappened(remotesessions.ValidationOutcomeInactive, false))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, false))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeTunnelUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, true))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.ResultAllowed), verdictHappened(remotesessions.ValidationOutcomeValid, false, probeFailure{}))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeRejectedByMember), verdictHappened(remotesessions.ValidationOutcomeRejectedByMember, false, probeFailure{}))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderRejected), verdictHappened(remotesessions.ValidationOutcomeInactive, false, probeFailure{}))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, false, probeFailure{}))
+	unknownThroughTunnel := func(failure probeFailure) mcpconnectionattempts.Happened {
+		return verdictHappened(remotesessions.ValidationOutcomeUnknown, true, failure)
+	}
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeTunnelUnavailable), unknownThroughTunnel(probeFailure{status: http.StatusBadGateway, tunnelError: wire.TunnelErrorNoLiveSession}))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderServerError), unknownThroughTunnel(probeFailure{status: http.StatusInternalServerError}))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderServerError), unknownThroughTunnel(probeFailure{status: http.StatusBadGateway}), "a 502 without the gateway's status is the server's")
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderServerError), unknownThroughTunnel(probeFailure{status: http.StatusOK, err: errors.New("decode")}), "a malformed answer")
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderUnreachable), unknownThroughTunnel(probeFailure{err: context.DeadlineExceeded}))
 }
 
 func TestRecordRemoteSessionVerdict_KeepaliveBelongsToNoAttempt(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
-	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerKeepalive)
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
+	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, probeFailure{}, remotesessionmetrics.ValidationTriggerKeepalive)
 	rec.RequireNothing()
 }
 
@@ -282,13 +300,13 @@ func TestTokenClientRefusal(t *testing.T) {
 		"client_method_unreadable":            mcpconnectionattempts.CodeInternalError,
 	} {
 		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
+		service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), oauthwire.GrantTypeAuthorizationCode, "client", reason)
 		require.Equal(t, reason, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, what).SubReason)
 	}
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	code := oauthwire.GrantTypeAuthorizationCode
 	for _, reason := range []string{"missing_client_id", "unknown_client_id", clientIDNamesEndpointReason} {
 		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), code, "client", reason)
@@ -304,6 +322,47 @@ func TestTokenClientRefusal(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
 }
 
+// Anyone can present a catalog client_id, so a row for a client that was never checked names no family.
+func TestTokenClientRows_UncheckedClientNamesNoFamily(t *testing.T) {
+	t.Parallel()
+
+	const claudeCode = "https://claude.ai/oauth/claude-code-client-metadata"
+	for _, tc := range []struct {
+		name   string
+		record func(*Service, *http.Request)
+		what   mcpconnectionattempts.Code
+		family string
+	}{
+		{"metadata fetch failed", func(s *Service, r *http.Request) {
+			s.recordTokenClientFailure(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+		}, mcpconnectionattempts.CodeCIMDFetchFailed, mcpconnectionattempts.FamilyOther},
+		{"metadata invalid", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "cimd_metadata_invalid")
+		}, mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.FamilyOther},
+		{"admission denied", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "cimd_admission_denied")
+		}, mcpconnectionattempts.CodeCIMDAdmissionDenied, mcpconnectionattempts.FamilyOther},
+		{"blocked after client authentication", func(s *Service, r *http.Request) {
+			s.recordTokenClientRefusal(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, "ai_tool_blocked")
+		}, mcpconnectionattempts.CodeAIToolBlocked, mcpconnectionattempts.FamilyClaudeCode},
+		{"block check failed after client authentication", func(s *Service, r *http.Request) {
+			s.recordTokenClientFailure(r, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, claudeCode, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+		}, mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.FamilyClaudeCode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := mcpconnectionattemptstest.New(t)
+			req := tokenRequest(t)
+			req.Header.Set("User-Agent", "Bun/1.4.4")
+			tc.record(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}, req)
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.what)
+			require.Equal(t, "claude.ai", row.AppKey)
+			require.Equal(t, tc.family, row.ClientFamily)
+		})
+	}
+}
+
 func TestRecordListingFailures(t *testing.T) {
 	t.Parallel()
 
@@ -316,7 +375,7 @@ func TestRecordListingFailures(t *testing.T) {
 	}
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	service.recordListingFailures(t.Context(), gate, unavailable)
 	require.Len(t, rec.Rows(), 2, "waiting on sign-in is not a failure")
 	require.Equal(t, broken.String(), rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
@@ -325,7 +384,7 @@ func TestRecordListingFailures(t *testing.T) {
 	orgGate := *gate
 	orgGate.projectID = uuid.Nil
 	orgRec := mcpconnectionattemptstest.New(t)
-	orgService := &Service{connections: orgRec.Recorder}
+	orgService := &Service{aiCatalog: aivendorstest.NewStore(), connections: orgRec.Recorder}
 	orgService.recordListingFailures(t.Context(), &orgGate, unavailable[1:2])
 	require.Equal(t, uuid.Nil, orgRec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).ProjectID)
 }
@@ -424,7 +483,7 @@ func TestRecordConsentPage_PendingReviewDoesNotComplete(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	state := openState()
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true}
@@ -456,15 +515,22 @@ func (c *addOnlyCache) Add(_ context.Context, key string, _ time.Duration) (bool
 	return true, nil
 }
 
+func (c *addOnlyCache) Delete(_ context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.seen, key)
+	return nil
+}
+
 // A stalled Redis can't hold up a sign-in: the claim runs off the request path.
 func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
 	t.Parallel()
 
 	stalled := &addOnlyCache{release: make(chan struct{})}
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
 	state := openState()
-	attempt := state.connectionAttempt(directEndpoint())
+	attempt := state.connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
 	logger := testenv.NewLogger(t)
 
 	returned := make(chan struct{})
@@ -491,11 +557,11 @@ func TestEndAttemptOnce_FullQueueLeavesTheAttemptOpen(t *testing.T) {
 	stalled := &addOnlyCache{release: make(chan struct{})}
 	rec := mcpconnectionattemptstest.New(t)
 	endings := newAttemptEndings()
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: endings}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: endings}
 	logger := testenv.NewLogger(t)
 	for range maxPendingAttemptEndings + 5 {
 		state := openState()
-		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 	}
 	close(stalled.release)
 	require.NoError(t, endings.drain(t.Context()))
@@ -507,7 +573,7 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
 	state := openState()
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true, CatalogComplete: true, CatalogCanceled: true}
@@ -523,6 +589,94 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 }
 
+// A refused provider callback is Speakeasy's check, so its export never names the provider.
+func TestRecordRemoteLoginRefusal_ExportOmitsProviderHost(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		severity otellog.Severity
+	}{
+		{name: "connection changed", err: errRecoveryUnavailable, severity: otellog.SeverityWarn},
+		{name: "expired", err: errRecoveryLoginExpired, severity: otellog.SeverityError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+			logsOn := func(context.Context, string) (bool, error) { return true, nil }
+			recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+			service := &Service{aiCatalog: aivendorstest.NewStore(), connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings(), logger: testenv.NewLogger(t)}
+			remote := remotesessions.RemoteLoginState{
+				Attempt:      mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppDCR)),
+				ProviderHost: "login.example.com:8443",
+			}
+
+			service.recordRemoteLoginRefusal(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/callback", nil), remote, tc.err)
+			require.NoError(t, service.attemptEndings.drain(t.Context()))
+			require.NoError(t, recorder.Shutdown(t.Context()))
+
+			require.Len(t, sink.records, 1)
+			require.Equal(t, tc.severity, sink.records[0].Severity())
+			sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+				require.NotEqual(t, string(attr.ServerAddressKey), kv.Key)
+				require.NotEqual(t, string(attr.ServerPortKey), kv.Key)
+				return true
+			})
+		})
+	}
+}
+
+func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
+	t.Parallel()
+
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	for range 4 {
+		service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	}
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, openState(), nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 2, "one per attempt, however often its page reloads")
+	for _, record := range sink.records {
+		require.Equal(t, otellog.SeverityWarn, record.Severity())
+	}
+}
+
+func TestRecordConsentPage_ExpiredCatalogRejectedRowIsOfferedAgain(t *testing.T) {
+	t.Parallel()
+
+	stopped := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, func(context.Context, string) (bool, error) { return true, nil })
+	require.NoError(t, stopped.Shutdown(t.Context()))
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+
+	rec := mcpconnectionattemptstest.New(t)
+	service.connections = rec.Recorder
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
+	require.Len(t, rec.Rows(), 1, "the reload records the rejected row, then folds")
+}
+
+func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	endpoint, state := directEndpoint(), openState()
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)
+	require.Len(t, rec.Rows(), 2)
+}
+
 func tokenRequest(t *testing.T) *http.Request {
 	t.Helper()
 	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
@@ -532,7 +686,7 @@ func TestRecordIDPAuthorityRefusal(t *testing.T) {
 	t.Parallel()
 	for _, unavailable := range []bool{true, false} {
 		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+		service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
 		endpoint, state := directEndpoint(), openState()
 		err := errors.New("authority changed")
 		if unavailable {
@@ -554,9 +708,9 @@ func TestRecordIDPAuthorityRefusal(t *testing.T) {
 func TestRecordRemoteSessionVerdict_SetupFailure(t *testing.T) {
 	t.Parallel()
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder}
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}
 	member := uuid.New()
-	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), remotesessions.Client{}, validationTarget{setupFailed: true, memberID: member}, uuid.New(), remotesessions.ValidationOutcomeUnknown, remotesessionmetrics.ValidationTriggerVerify)
+	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), remotesessions.Client{}, validationTarget{setupFailed: true, memberID: member}, uuid.New(), remotesessions.ValidationOutcomeUnknown, probeFailure{}, remotesessionmetrics.ValidationTriggerVerify)
 	require.Equal(t, member.String(), rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
 }
 
@@ -587,7 +741,7 @@ func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
 
 	service, _, _ := memberStatusService(t)
 	endpoint, state := gatewayEndpoint(), openState()
-	attempt := state.connectionAttempt(endpoint)
+	attempt := state.connectionAttempt(aivendors.CompiledSnapshot(), endpoint)
 	kept := memberStatus{id: uuid.NewString(), status: "allowed|connected", what: mcpconnectionattempts.ResultAllowed, opts: nil}
 	dropped := memberStatus{id: uuid.NewString(), status: "needs_sign_in|needs_sign_in", what: mcpconnectionattempts.CodeNeedsSignIn, opts: nil}
 	logger := testenv.NewLogger(t)
@@ -640,4 +794,115 @@ func TestRecordConsentPage_RejectedMemberRowIsRecordedNextRender(t *testing.T) {
 	service.connections = rec.Recorder
 	service.recordConsentPage(t.Context(), logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, view, nil, nil)
 	require.Len(t, rec.Rows(), 2, "rows the recorder rejected are offered again")
+}
+
+type verdictExportSink struct {
+	mu      sync.Mutex
+	records []otellog.Record
+}
+
+func (s *verdictExportSink) Publish(_ context.Context, _, _, _ string, record otellog.Record) gcp.PublishResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.records = append(s.records, record)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (*verdictExportSink) Close() {}
+
+// storingConn accepts every insert, so the recorder goes on to export.
+type storingConn struct{ driver.Conn }
+
+func (storingConn) PrepareBatch(context.Context, string, ...driver.PrepareBatchOption) (driver.Batch, error) {
+	return storedBatch{}, nil
+}
+
+type storedBatch struct{ driver.Batch }
+
+func (storedBatch) Append(...any) error { return nil }
+func (storedBatch) Send() error         { return nil }
+func (storedBatch) Abort() error        { return nil }
+
+// exportVerdict runs a verdict through a real recorder and returns the one event it exported.
+func exportVerdict(t *testing.T, tunneled bool, verdict remotesessions.ValidationOutcome, failure probeFailure) (otellog.Record, map[string]otellog.Value) {
+	t.Helper()
+
+	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
+	logsOn := func(context.Context, string) (bool, error) { return true, nil }
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: recorder}
+	client := remotesessions.Client{IssuerURL: "https://login.example.com"}
+	target := validationTarget{memberID: uuid.New(), tunnelID: uuid.NullUUID{UUID: uuid.New(), Valid: tunneled}}
+
+	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), client, target, uuid.New(), verdict, failure, remotesessionmetrics.ValidationTriggerVerify)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.records, 1)
+	got := make(map[string]otellog.Value)
+	sink.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		got[kv.Key] = kv.Value
+		return true
+	})
+	return sink.records[0], got
+}
+
+func TestVerdictExport_HealthyTunnelForwarding500IsNotATunnelFailure(t *testing.T) {
+	t.Parallel()
+
+	record, got := exportVerdict(t, true, remotesessions.ValidationOutcomeUnknown, probeFailure{status: http.StatusInternalServerError})
+
+	require.Equal(t, mcpconnectionattempts.CodeProviderServerError.String(), got[string(attr.ErrorTypeKey)].AsString())
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), got[string(attr.ExtMcpConnectionWhoFixesKey)].AsString())
+	require.Equal(t, otellog.SeverityError, record.Severity())
+}
+
+func TestVerdictExport_DemonstratedTunnelFailureSaysSo(t *testing.T) {
+	t.Parallel()
+
+	_, got := exportVerdict(t, true, remotesessions.ValidationOutcomeUnknown, probeFailure{status: http.StatusBadGateway, tunnelError: wire.TunnelErrorNoLiveSession})
+
+	require.Equal(t, mcpconnectionattempts.CodeTunnelUnavailable.String(), got[string(attr.ErrorTypeKey)].AsString())
+}
+
+// The issuer signed the person in; the MCP server is what failed.
+func TestVerdictExport_MCPServerFailureDoesNotNameTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	for _, verdict := range []remotesessions.ValidationOutcome{remotesessions.ValidationOutcomeUnknown, remotesessions.ValidationOutcomeRejectedByMember} {
+		_, got := exportVerdict(t, false, verdict, probeFailure{status: http.StatusForbidden})
+		require.NotContains(t, got, string(attr.ServerAddressKey), verdict)
+		require.NotContains(t, got, string(attr.ServerPortKey), verdict)
+	}
+}
+
+// A listing lost to an address Speakeasy did not dial names the address; a transport loss reads as a call does.
+func TestListingFailureNamesAnAddressOnly(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "member", serverID: uuid.New()}
+	lost := func(dialErr error) error {
+		attempt := newMemberAttempt(nil)
+		attempt.recordFailure(true, false, false, dialErr)
+		return memberClientFailure(t.Context(), testenv.NewLogger(t), attempt, memberDial{}, member, dialErr)
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want mcpconnectionattempts.Code
+	}{
+		{name: "own address refused", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: fmt.Errorf("192.0.2.10: %w", guardian.ErrBlockedIP)}), want: mcpconnectionattempts.CodeAddressNotAllowed},
+		{name: "own name missing", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "member.example.invalid", IsNotFound: true}}), want: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "sign-in provider address", err: memberAddressOutage("stopped", nil, guardian.AddressNotFound), want: mcpconnectionattempts.CodeAddressNotFound},
+		{name: "lookup failing for now", err: lost(&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "timeout", Name: "member.example.com", IsTimeout: true}}), want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "connection reset", err: lost(&net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}), want: mcpconnectionattempts.CodeProviderUnreachable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			s := &Service{connections: rec.Recorder}
+			gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+			s.recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: tc.err}})
+			rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, tc.want)
+		})
+	}
 }

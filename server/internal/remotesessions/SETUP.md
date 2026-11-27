@@ -1,32 +1,14 @@
 # Provider setup backend contract
 
-## Staff-controlled rollout
+## Availability
 
-`provider_setup` is a temporary per-organization rollout switch, disabled by
-default. Staff can set it through the staff-only `adminSetOrganizationProviderSetup` API
-(`POST /admin/organization.providerSetup`, `organization_id` and `enabled`). Organization
-admins cannot enable or disable it themselves. It is excluded from signup,
-trial, enterprise, and demo defaults. Feature reads expose
-`provider_setup_enabled` (SDK: `providerSetupEnabled`); treat an absent value
-as false. The optional field keeps older feature responses compatible.
+Provider setup is available to every organization. The former `provider_setup`
+rollout switch is retired: the product features API no longer reports it, and
+attempts to set it are rejected as an unknown feature. Stored rows for it are
+ignored.
 
-`remoteSessions.testServerConnection` checks durable organization state on each
-call and returns HTTP 404 when the rollout is off. Feature lookup failures fail
-closed without contacting the upstream. Existing exact-server permissions and
-validated-session requirements still apply when enabled. Disabling the switch
-stops subsequent tests without revoking saved credentials or user grants.
-
-Credential saving, saved-client reads, first-party OAuth, token refresh, and
-normal MCP serving retain their existing behavior regardless of this switch.
-Frontend entry-point/route gating and the admin toggle UI are separate work;
-this backend change alone does not hide the setup screens.
-
-Staff Admin MCP assessment: `get_organization_features` now reports the rollout
-state for its exact organization target. Its existing feature-change tool
-deliberately supports only a limited feature allowlist; provider rollout writes
-remain in the dedicated staff admin API, so no new MCP write operation is added. Customer
-Platform MCP cannot manage this staff-only rollout; existing tools remain
-unchanged.
+`remoteSessions.testServerConnection` still requires a validated dashboard
+session and exact-server `mcp:connect` access.
 
 ## Setup actions
 
@@ -52,8 +34,12 @@ uses the saved client, verifies OAuth state and persists encrypted user tokens.
 Returning from or closing the provider tab is not success. Reload the current
 user's remote sessions (including the exact client and user-session issuer), or
 run the live test below. Keep credentials and tokens out of browser progress
-storage. A disabled server needs its existing private-serving settings enabled
-before opening its first-party sign-in route.
+storage. After credential commit, a disabled server needs its existing
+private-serving settings enabled before opening its first-party sign-in route.
+Credential commit and serving changes are separate operations; a later serving
+or handoff failure does not mean credential commit failed. See the
+[frontend recovery boundaries](../../../client/dashboard/src/pages/catalog/provider-setup/README.md#recovery-boundaries)
+for source compensation and gateway handoff behavior.
 
 Call `POST /rpc/remoteSessions.testServerConnection` with `mcp_server_id` and the
 project selector. It requires a validated dashboard session and `mcp:connect` on

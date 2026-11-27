@@ -78,6 +78,40 @@ func TestToolUsageTraceRowsCTE_PushesNonStatusFilterToRows(t *testing.T) {
 	require.Contains(t, args, "alice@example.com")
 }
 
+func TestToolUsageTraceRowsCTE_IdentityChipsStayOnSummaryPath(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{"user.email", "user.id", "gram.external_user.id"} {
+		sql, args, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{
+			GramProjectID: "p",
+			Filters:       []AttributeFilter{{Path: path, Op: "in", Values: []string{"v"}}},
+		})
+		require.NoError(t, err)
+		require.NotContains(t, sql, "FROM telemetry_logs", path)
+		require.Contains(t, sql, toolUsageIdentityChipColumns[path]+" IN", path)
+		require.Contains(t, args, "v", path)
+	}
+
+	// An identity chip with an op the summary path can't apply still scans raw rows.
+	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{
+		GramProjectID: "p",
+		Filters:       []AttributeFilter{{Path: "user.email", Op: "contains", Values: []string{"v"}}},
+	})
+	require.NoError(t, err)
+	require.Contains(t, sql, "FROM telemetry_logs")
+}
+
+func TestToolUsageTraceRowsCTE_RawPathKeepsPerRowWorkCheap(t *testing.T) {
+	t.Parallel()
+
+	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{GramProjectID: "p", Query: ":"})
+	require.NoError(t, err)
+	require.Contains(t, sql, "FROM telemetry_logs")
+	require.NotContains(t, sql, "toString(attributes)")
+	require.Equal(t, 1, strings.Count(sql, "WINDOW log_group AS"))
+	require.NotContains(t, sql, "OVER (PARTITION BY")
+}
+
 func TestToolUsageStatusPredicate(t *testing.T) {
 	t.Parallel()
 

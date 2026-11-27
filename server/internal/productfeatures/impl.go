@@ -39,6 +39,24 @@ type Service struct {
 	authz         *authz.Engine
 	featureClient *Client
 	mutator       *Mutator
+
+	// capabilities are the deployment-wide features this process can serve.
+	// They come from its configuration, so they are the same for every
+	// organization.
+	capabilities DeploymentCapabilities
+}
+
+// DeploymentCapabilities reports which deployment-wide features this process
+// can serve. Unlike organization features, they come from the deployment's
+// configuration and cannot be toggled per organization.
+type DeploymentCapabilities struct {
+	// AssistantsAvailable is false when the deployment runs with the disabled
+	// assistant runtime provider.
+	AssistantsAvailable bool
+
+	// FunctionsAvailable is false when the deployment runs with the disabled
+	// Functions provider.
+	FunctionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -51,6 +69,7 @@ func NewService(
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	capabilities DeploymentCapabilities,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
 
@@ -64,6 +83,8 @@ func NewService(
 		authz:         authzEngine,
 		featureClient: featureClient,
 		mutator:       NewMutator(featureClient, auditLogger),
+
+		capabilities: capabilities,
 	}
 }
 
@@ -80,7 +101,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 // authorizeOrganization returns the organization metadata row when it had to
 // read one to verify a cross-organization request, and nil for the active-org
 // path, so callers that need the row can skip a second lookup.
-func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, *orgrepo.OrganizationMetadatum, error) {
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, string, *orgrepo.OrganizationMetadatum, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, "", nil, oops.C(oops.CodeUnauthorized)
@@ -90,8 +111,9 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 		return nil, "", nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	check := permission(authz.Org(authz.OrgIDFrom(organizationID)))
+	scope := check.Scope
 	if organizationID == authCtx.ActiveOrganizationID {
-		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
 		if err := s.authz.Require(ctx, check); err != nil {
 			return nil, "", nil, fmt.Errorf("require %s: %w", scope, err)
 		}
@@ -114,7 +136,7 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 }
 
 func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
-	authCtx, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	authCtx, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -130,14 +152,11 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// organization admins; org-settable operational toggles need org:admin only.
 	// Retired rollout flags and upstream auth enforcement, which has readiness
 	// checks of its own, cannot be changed here, including by staff.
-	if feature == FeatureProviderSetup {
-		return oops.E(oops.CodeForbidden, nil, "Provider setup rollout is managed through the staff admin API.")
-	}
-	if feature == Feature("automatic-role-distribution") {
+	if feature == Feature("automatic-role-distribution") || feature == Feature("provider_setup") {
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureUpstreamAuthEnforced {
-		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement is changed through the admin enforcement endpoint")
+		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement can only be enabled through the admin enforcement endpoint")
 	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
@@ -153,7 +172,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
-	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -234,7 +253,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 }
 
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.ProductFeatures, error) {
-	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +268,6 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		upstreamAuthEnforced = &enforced
 	}
 	return &gen.ProductFeatures{
-		ProviderSetupEnabled:                    new(snapshot.ProviderSetupEnabled),
 		LogsEnabled:                             snapshot.LogsEnabled,
 		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   snapshot.SessionCaptureEnabled,
@@ -272,6 +290,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		AssistantsAvailable:                     new(s.capabilities.AssistantsAvailable),
+		FunctionsAvailable:                      new(s.capabilities.FunctionsAvailable),
 		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }

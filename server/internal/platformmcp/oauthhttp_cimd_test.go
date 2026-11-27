@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
@@ -127,6 +128,7 @@ func newTestCIMDOAuthHTTP(t *testing.T) (*OAuthHTTP, *cimdDocServer) {
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
+		AICatalog:      aivendorstest.NewStore(),
 		BaseURL:        base,
 		Cache:          &memoryCache{values: map[string]any{}},
 		Store:          platformoauth.NewInMemoryStore(),

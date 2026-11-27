@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -60,9 +61,9 @@ func TestClaudeTranscriptRows(t *testing.T) {
 	require.Equal(t, []got{
 		{"claude-transcript:u-1", "user", "list the files", ""},
 		{"claude-transcript:a-2", "assistant", "Listing them now.", ""},
-		{"claude-transcript:a-3", "assistant", "", ""},
-		{"claude-transcript:u-2", "tool", "a.txt\nb.txt", "toolu_1"},
-		{"claude-transcript:u-3", "tool", "line one", "toolu_2"},
+		{"claude-tool-call:toolu_1", "assistant", "", ""},
+		{"claude-tool-result:toolu_1", "tool", "a.txt\nb.txt", "toolu_1"},
+		{"claude-tool-result:toolu_2", "tool", "line one", "toolu_2"},
 		{"claude-transcript:a-4", "assistant", "Two files.", ""},
 	}, summary)
 
@@ -83,7 +84,7 @@ func TestClaudeTranscriptRowsSplitsMixedEntry(t *testing.T) {
 	require.Len(t, rows, 2)
 	require.Equal(t, "claude-transcript:mixed/block:0", rows[0].externalID)
 	require.Equal(t, "Reading.", rows[0].content, "text precedes the tool call it introduces")
-	require.Equal(t, "claude-transcript:mixed/block:1", rows[1].externalID)
+	require.Equal(t, "claude-tool-call:toolu_a", rows[1].externalID, "tool calls share the key the tool hooks use")
 	require.NotNil(t, rows[1].toolCalls)
 	require.True(t, rows[1].createdAt.After(rows[0].createdAt))
 }
@@ -222,6 +223,49 @@ func TestClaudeTranscriptEndpointSkipsWhenCaptureDisabled(t *testing.T) {
 	messages, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Empty(t, messages)
+}
+
+// TestClaudeTranscriptEndpointAcceptsClientSkip: a skip report from the
+// binary is acknowledged and logged, and stores nothing.
+func TestClaudeTranscriptEndpointAcceptsClientSkip(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	sessionID := uuid.NewString()
+	body := claudeTranscriptUploadBody(sessionID, nil)
+	body["diagnostic"] = map[string]string{"reason": "transcript_path_invalid", "detail": strings.Repeat("x", 2*claudeTranscriptMaxDiagnosticBytes)}
+	require.Equal(t, int64(0), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, body, ahpAuthHeaders)))
+
+	_, err := chatrepo.New(ti.conn).GetChat(ctx, chatrepo.GetChatParams{ID: sessionIDToUUID(sessionID), ProjectID: *authCtx.ProjectID})
+	require.Error(t, err, "a skip report creates no chat")
+}
+
+// TestClaudeTranscriptEndpointStoresEntriesBesideDiagnostic: an upload that
+// carries both a diagnostic and entries still stores the entries.
+func TestClaudeTranscriptEndpointStoresEntriesBesideDiagnostic(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
+
+	body := claudeTranscriptUploadBody(uuid.NewString(), claudeTranscriptFixture())
+	body["diagnostic"] = map[string]string{"reason": "transcript_read_failed"}
+	require.Equal(t, int64(6), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, body, ahpAuthHeaders)))
+}
+
+func TestTruncateDiagnostic(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "short", truncateDiagnostic("short"))
+	long := strings.Repeat("é", claudeTranscriptMaxDiagnosticBytes)
+	got := truncateDiagnostic(long)
+	require.LessOrEqual(t, len(got), claudeTranscriptMaxDiagnosticBytes)
+	require.True(t, utf8.ValidString(got))
 }
 
 func TestClaudeTranscriptEndpointRejectsInvalidRequests(t *testing.T) {

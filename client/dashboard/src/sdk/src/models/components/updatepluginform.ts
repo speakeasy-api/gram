@@ -7,6 +7,10 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdatePluginForm = {
   /**
+   * Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.
+   */
+  autoAddServersEnabled?: boolean | undefined;
+  /**
    * Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
    */
   autoSyncEnabled?: boolean | undefined;
@@ -27,6 +31,7 @@ export type UpdatePluginForm = {
 
 /** @internal */
 export type UpdatePluginForm$Outbound = {
+  auto_add_servers_enabled?: boolean | undefined;
   auto_sync_enabled?: boolean | undefined;
   description?: string | undefined;
   id: string;
@@ -40,6 +45,7 @@ export const UpdatePluginForm$outboundSchema: z.ZodMiniType<
   UpdatePluginForm
 > = z.pipe(
   z.object({
+    autoAddServersEnabled: z.optional(z.boolean()),
     autoSyncEnabled: z.optional(z.boolean()),
     description: z.optional(z.string()),
     id: z.string(),
@@ -48,6 +54,7 @@ export const UpdatePluginForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      autoAddServersEnabled: "auto_add_servers_enabled",
       autoSyncEnabled: "auto_sync_enabled",
     });
   }),

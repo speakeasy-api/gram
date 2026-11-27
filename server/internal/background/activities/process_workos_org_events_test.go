@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -279,7 +280,7 @@ func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn 
 	t.Helper()
 
 	q := featurerepo.New(conn)
-	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+	for _, feature := range slices.Concat(productfeatures.OrganizationDefaultFeatures, productfeatures.NewOrganizationFeatures) {
 		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),

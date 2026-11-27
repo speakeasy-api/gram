@@ -244,8 +244,9 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	controls := map[string]bool{}
 	prompts := 0
 	selectedModel := "speakeasy:gpt-5.4"
+	selectedEffort := "medium"
 	catalog := func() string {
-		return fmt.Sprintf(`{"configOptions":[{"configId":"model","type":"select","currentValue":%q,"options":[{"groupId":"speakeasy","name":"Speakeasy","options":[{"value":"speakeasy:openai/gpt-4.1-mini","name":"openai/gpt-4.1-mini"},{"value":"speakeasy:openai/gpt-4.1","name":"openai/gpt-4.1"}]}]}]}`, selectedModel)
+		return fmt.Sprintf(`{"configOptions":[{"configId":"model","type":"select","currentValue":%q,"options":[{"groupId":"speakeasy","name":"Speakeasy","options":[{"value":"speakeasy:openai/gpt-4.1-mini","name":"openai/gpt-4.1-mini"},{"value":"speakeasy:openai/gpt-4.1","name":"openai/gpt-4.1"}]}]},{"configId":"reasoning_effort","type":"select","currentValue":%q,"options":[{"value":"low"},{"value":"medium"},{"value":"high"}]}]}`, selectedModel, selectedEffort)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer fixture-token" {
@@ -347,6 +348,18 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				if prompts > 0 {
 					expected = "speakeasy:openai/gpt-4.1"
 				}
+				if configID == "reasoning_effort" {
+					expectedEffort := "low"
+					if prompts > 0 {
+						expectedEffort = "high"
+					}
+					if kind != "id" || value != expectedEffort {
+						t.Error("incorrect persisted reasoning effort selection RPC")
+					}
+					selectedEffort = value
+					result = catalog()
+					break
+				}
 				if configID != "model" || kind != "id" || value != expected {
 					t.Error("incorrect persisted model selection RPC")
 					w.WriteHeader(400)
@@ -361,6 +374,13 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				expected := "speakeasy:openai/gpt-4.1-mini"
 				if prompts > 0 {
 					expected = "speakeasy:openai/gpt-4.1"
+				}
+				expectedEffort := "low"
+				if prompts > 0 {
+					expectedEffort = "high"
+				}
+				if selectedEffort != expectedEffort {
+					t.Error("prompt before persisted reasoning effort applied")
 				}
 				if selectedModel != expected {
 					t.Error("prompt before persisted model applied")
@@ -433,11 +453,11 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	mu.Lock()
 	require.Zero(t, connections, "missing session must not dial")
 	mu.Unlock()
-	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ReasoningEffort: "low", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	// A new adapter reconstructs the durable correlation before replay.
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
-	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
 	require.NoError(t, err)
 	users, finals := 0, 0
@@ -454,14 +474,14 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	// Desired-set removal cannot be expressed by an additive MCP upsert.
 	// Reject before opening another transport or submitting another prompt.
 	for _, desired := range [][]runtimeMCPServer{{}, {{ID: "client", URL: "https://mcp.example/mcp"}}} {
-		err := p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "must not send", MCPServers: desired})
+		err := p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "must not send", MCPServers: desired})
 		require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported)
 	}
 	interrupted, err = p.InterruptTurn(ctx, r, key.ThreadID)
 	require.NoError(t, err)
 	require.False(t, interrupted)
 	mu.Lock()
-	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)
+	require.Equal(t, []string{"session/new", "session/set_config_option", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)
 	require.Equal(t, 2, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }

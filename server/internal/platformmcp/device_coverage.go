@@ -66,7 +66,7 @@ func (s *DeviceCoverageService) admit(ctx context.Context, principal Principal) 
 	if !s.valid() || principal.OrganizationID == "" {
 		return ErrDeviceCoverageUnavailable
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authorizer.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return fmt.Errorf("require org read for device coverage: %w", err)
 	}
 	return s.budget.Allow(ctx, principal)

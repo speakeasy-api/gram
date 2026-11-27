@@ -124,7 +124,16 @@ var frozenCodes = []string{
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
+	"stored_sign_in_unreadable",
 	"approval_needs_admin",
+	"upstream_credential_denied",
+	"upstream_credential_not_chosen",
+	"sign_in_method_not_accepted",
+	"credential_choice_invalid",
+	"address_not_allowed",
+	"address_not_found",
+	"unmanaged_account",
+	"gateway_machine_access_disabled",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -281,6 +290,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeProviderOAuthInvalidScope, WhoAdmin, []string{"access"}, []string{"permissions"}},
 		{CodeConsentNotApproved, WhoPerson, []string{"needs your approval"}, []string{"have not approved"}},
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
+		{CodeInvalidRemoteSession, WhoPerson, []string{"usable connection", "connect to the service", "choose another connection"}, []string{"reconnect to the service.", "missing or has expired"}},
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
 		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
@@ -288,6 +298,11 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
 		{CodeStoredSessionInvalid, WhoPerson, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
 		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
+		{CodeStoredSignInUnreadable, WhoPerson, []string{"saved sign-in", "reconnect"}, []string{"try again", "few minutes"}},
+		{CodeUpstreamCredentialDenied, WhoAdmin, []string{"not allowed", "ask for access"}, []string{"this server.", "account"}},
+		{CodeUpstreamCredentialNotChosen, WhoAdmin, []string{"more than one", "choose"}, []string{"the app", "not set up"}},
+		{CodeCredentialChoiceInvalid, WhoApp, []string{"sign-in choice", "does not fit"}, []string{"does not accept", "picked"}},
+		{CodeSignInMethodNotAccepted, WhoApp, []string{"does not accept"}, []string{"ask for it to be allowed", "not allowed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {
@@ -364,4 +379,19 @@ func TestDefine_RefusesADuplicateName(t *testing.T) {
 	meaning, ok := MeaningOf(CodeCanceled.String())
 	require.True(t, ok)
 	require.Equal(t, OutcomeDeclined, meaning.Outcome)
+}
+
+func TestCatalog_EveryCodeHasAnAdministratorSentenceInTheThirdPerson(t *testing.T) {
+	t.Parallel()
+	require.Len(t, adminMeanings, len(catalog))
+	for _, code := range Codes() {
+		meaning, ok := MeaningOf(code)
+		require.True(t, ok, code)
+		require.NotEmpty(t, meaning.WhatHappenedForAdmin, code)
+		for _, text := range []string{meaning.WhatHappenedForAdmin, meaning.Technical} {
+			for _, word := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r < 'a' || r > 'z' }) {
+				require.NotContains(t, []string{"i", "me", "my", "mine", "myself", "we", "us", "our", "ours", "ourselves", "you", "your", "yours", "yourself", "yourselves"}, word, code)
+			}
+		}
+	}
 }

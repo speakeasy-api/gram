@@ -275,9 +275,9 @@ describe("the access list", () => {
     renderList([entry({ level: "manage" })]);
     expandFirstRow();
 
-    // Manage satisfies the connect and read checks, so all three lines read
-    // as open — without explaining which rule did it.
-    expect(screen.getAllByText("All tools").length).toBeGreaterThan(0);
+    // Manage satisfies the read check, so view and manage read as open —
+    // without explaining which rule did it. It does not satisfy connect.
+    expect(screen.queryByText("All tools")).toBeNull();
     expect(screen.getAllByText("Allowed")).toHaveLength(2);
     expect(screen.queryByText("via Manage")).toBeNull();
   });
@@ -573,11 +573,16 @@ describe("what a row change writes", () => {
     ]);
     expandFirstRow();
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
+    // A view block also takes manage, so both lines read Blocked; the view
+    // line is the first.
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Blocked/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
     expect(
       screen.getByText("Clear Engineering's view setting on Acme Ops?"),
@@ -767,11 +772,16 @@ describe("a blocking role", () => {
     ]);
     expandFirstRow();
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: /^Blocked/ }), {
-      button: 0,
-      ctrlKey: false,
-      pointerType: "mouse",
-    });
+    // A view block also takes manage, so both lines read Blocked; the view
+    // line is the first.
+    fireEvent.pointerDown(
+      screen.getAllByRole("button", { name: /^Blocked/ })[0]!,
+      {
+        button: 0,
+        ctrlKey: false,
+        pointerType: "mouse",
+      },
+    );
 
     expect(screen.queryByRole("menuitem", { name: "Allowed" })).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear" }));
