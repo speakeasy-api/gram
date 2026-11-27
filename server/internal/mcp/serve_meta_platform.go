@@ -93,6 +93,9 @@ func (s *Service) describePlatformMember(
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
+	if !gate.authenticated {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "platform toolset requires authenticated caller")
+	}
 	origCtx := withMemberProjectAuthContext(ctx, member.projectID)
 	origAuthCtx, ok := contextvalues.GetAuthContext(origCtx)
 	if !ok || origAuthCtx == nil || origAuthCtx.ProjectID == nil {
@@ -135,15 +138,12 @@ func (s *Service) describePlatformMember(
 		}
 	}
 
-	if gate.authenticated {
-		var err error
-		entries, err = filterToolsByMCPConnect(origCtx, logger, s.authz, member.serverID.String(), member.projectID.String(), entries)
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}, status: 0, retryable: false, retryAfter: 0}
-		}
-		if err != nil {
-			return nil, err
-		}
+	entries, err := filterToolsByMCPConnect(origCtx, logger, s.authz, member.serverID.String(), member.projectID.String(), entries)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q did not answer in time", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	catalog := &memberCatalog{
@@ -177,6 +177,9 @@ func (s *Service) executePlatformMemberTool(
 		message := fmt.Sprintf("server %q failed to execute %q: platform toolset not found", member.slug, toolName)
 		attempt.fail(http.StatusNotFound, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
+	}
+	if !gate.authenticated {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "platform toolset requires authenticated caller")
 	}
 	origCtx := withMemberProjectAuthContext(ctx, member.projectID)
 	origAuthCtx, ok := contextvalues.GetAuthContext(origCtx)
@@ -222,15 +225,13 @@ func (s *Service) executePlatformMemberTool(
 		attempt.fail(http.StatusForbidden, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
 	}
-	if gate.authenticated {
-		if err := s.authz.Require(origCtx, authz.MCPServer(authz.MCPServerIDOf(member.serverID), authz.ProjectIDOf(member.projectID)).ToolCall(toolName, disposition)); err != nil {
-			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
-				message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, oops.Innermost(shareable).Error())
-				attempt.fail(http.StatusForbidden, message)
-				return marshalMetaToolError(ctx, logger, req.ID, message)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "check platform member tool authz").LogError(ctx, logger)
+	if err := s.authz.Require(origCtx, authz.MCPServer(authz.MCPServerIDOf(member.serverID), authz.ProjectIDOf(member.projectID)).ToolCall(toolName, disposition)); err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, oops.Innermost(shareable).Error())
+			attempt.fail(http.StatusForbidden, message)
+			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
+		return nil, oops.E(oops.CodeUnexpected, err, "check platform member tool authz").LogError(ctx, logger)
 	}
 
 	actingCtx := origCtx
@@ -281,6 +282,8 @@ func (s *Service) executePlatformMemberTool(
 		}
 		return nil, err
 	}
-	s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	if attempt.succeeded {
+		s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	}
 	return body, nil
 }

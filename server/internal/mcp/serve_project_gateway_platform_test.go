@@ -275,8 +275,6 @@ func TestServeProjectGateway_BuiltinAssistantsToolset_WorkloadTurn(t *testing.T)
 
 	fixture := seedOrganizationGateway(t, f.ctx, f.ti)
 	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
-	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, assistantsID.String())
-	seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), assistantsID)
 	binding := seedAssistantThreadBinding(t, f.ctx, f.ti, authCtx)
 
 	token, err := f.ti.assistantTokens.MintTurnCredential(f.ctx, principalcredential.Credential{
@@ -289,12 +287,33 @@ func TestServeProjectGateway_BuiltinAssistantsToolset_WorkloadTurn(t *testing.T)
 	require.NoError(t, err)
 	f.ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
 
+	qualifiedSkillLoad := platformtools.AssistantsPlatformToolsetSlug + "--" + platformtools.ToolNameSkillsLoad
+
+	// Without mcp:connect on the built-in, the workload turn cannot list or call it.
+	deniedListed, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, token, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, deniedListed.Code, deniedListed.Body.String())
+	require.NotContains(t, deniedListed.Body.String(), `"slug":"assistants"`)
+
+	deniedExec, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": metamcp.ToolExecuteTool,
+		"arguments": map[string]any{
+			"name":      qualifiedSkillLoad,
+			"arguments": map[string]any{"name": "nonexistent-skill"},
+		},
+	}))
+	require.NoError(t, err)
+	require.Contains(t, deniedExec.Body.String(), "unknown server")
+
+	// After granting mcp:connect, the workload turn lists and executes the built-in tool.
+	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, assistantsID.String())
+	seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), assistantsID)
+
 	listed, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, token, listServersBody(t))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
 	require.Contains(t, listed.Body.String(), `"slug":"assistants"`)
 
-	qualifiedSkillLoad := platformtools.AssistantsPlatformToolsetSlug + "--" + platformtools.ToolNameSkillsLoad
 	executed, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, token, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name": metamcp.ToolExecuteTool,
 		"arguments": map[string]any{

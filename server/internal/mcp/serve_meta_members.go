@@ -673,9 +673,10 @@ func (s *Service) admitMetaMembers(
 		}
 		switch {
 		case refusal == nil:
-
 			members = append(members, member)
-			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
+			if member.backend != metaMemberBackendPlatform {
+				s.recordMemberIssuerParity(ctx, logger, organizationID, member)
+			}
 		case candidate.visibility == mcpservers.VisibilityPrivate:
 			// Kept aside so a call that names it records its denied check.
 			// Any other visibility (malformed or future) is simply dropped.
