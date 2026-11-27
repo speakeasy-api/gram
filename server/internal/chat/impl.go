@@ -2940,12 +2940,9 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 	}
 
 	// The summary is part of the protected fields, so it goes through UpdateChatMessage,
-	// which writes it to every copy of the protected fields in one transaction. The key
-	// loads before the transaction begins.
-	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare tool call summary transcript").LogError(ctx, s.logger)
-	}
-	tx, err := conn.Begin(ctx)
+	// which writes it to every copy of the protected fields in one transaction. Begin
+	// loads the key before the transaction begins.
+	tx, err := s.transcripts.Begin(ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
 	}

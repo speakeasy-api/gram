@@ -10,7 +10,6 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -104,80 +104,82 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	score := min(max(result.Score, 0), 100)
 	// Outcome notes are part of the protected fields, which may be encrypted,
-	// so the writes run in InTx, which loads the key before the transaction
-	// begins.
-	err = a.transcripts.InTx(ctx, a.db, args.OrgID, args.ProjectID, func(tx pgx.Tx) error {
-		txRepo := a.repo.WithTx(tx)
+	// so Begin loads the key before the transaction begins.
+	tx, err := a.transcripts.Begin(ctx, a.db, args.OrgID, args.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	txRepo := a.repo.WithTx(tx)
 
-		// Collect each message's judged outcome; the last one for a message wins.
-		var updated []uuid.UUID
-		judged := make(map[uuid.UUID]toolCallAnalysis)
-		for _, tc := range result.ToolCalls {
-			absoluteIndex := args.StartIndex + tc.MessageIndex
-			if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
-				continue
-			}
-			msgID := allMessages[absoluteIndex].ID
-			if _, seen := judged[msgID]; !seen {
-				updated = append(updated, msgID)
-			}
-			judged[msgID] = tc
+	// Collect each message's judged outcome; the last one for a message wins.
+	var updated []uuid.UUID
+	judged := make(map[uuid.UUID]toolCallAnalysis)
+	for _, tc := range result.ToolCalls {
+		absoluteIndex := args.StartIndex + tc.MessageIndex
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
 		}
-		// Write each message's outcome and notes as one change to its row.
-		// UpdateChatMessage locks the row and keeps every copy of the protected fields, which holds
-		// the notes, in step.
-		for _, msgID := range updated {
-			tc := judged[msgID]
-			_, err := a.transcripts.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
-				m.ToolOutcome = conv.ToPGText(tc.Outcome)
-				m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
-				return nil
-			})
-			if err != nil {
-				return fmt.Errorf("update tool call outcome: %w", err)
-			}
+		msgID := allMessages[absoluteIndex].ID
+		if _, seen := judged[msgID]; !seen {
+			updated = append(updated, msgID)
 		}
-
-		// Insert resolution
-
-		resolutionID, err := txRepo.InsertChatResolution(ctx, repo.InsertChatResolutionParams{
-			ProjectID:       args.ProjectID,
-			ChatID:          args.ChatID,
-			UserGoal:        result.UserGoal,
-			Resolution:      result.Resolution,
-			ResolutionNotes: result.ResolutionNotes,
-			Score:           int32(score), // #nosec G115 - score is clamped to 0-100
+		judged[msgID] = tc
+	}
+	// Write each message's outcome and notes as one change to its row.
+	// UpdateChatMessage locks the row and keeps every copy of the protected fields, which holds
+	// the notes, in step.
+	for _, msgID := range updated {
+		tc := judged[msgID]
+		_, err := a.transcripts.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+			m.ToolOutcome = conv.ToPGText(tc.Outcome)
+			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
+			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("failed to insert chat resolution: %w", err)
+			return fmt.Errorf("update tool call outcome: %w", err)
 		}
+	}
 
-		// Link all messages in this segment to the resolution
-		for i := args.StartIndex; i <= args.EndIndex && i < len(allMessages); i++ {
-			if err := txRepo.InsertChatResolutionMessage(ctx, repo.InsertChatResolutionMessageParams{
-				ChatResolutionID: resolutionID,
-				ProjectID:        args.ProjectID,
-				MessageID:        allMessages[i].ID,
-			}); err != nil {
-				return fmt.Errorf("failed to insert resolution message association: %w", err)
-			}
-		}
+	// Insert resolution
 
-		// Attach the resolution to the user feedback
-		for _, fb := range applicableUserFeedback {
-			err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
-				ID:               fb.ID,
-				ProjectID:        args.ProjectID,
-				ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to add user feedback to chat resolution: %w", err)
-			}
-		}
-		return nil
+	resolutionID, err := txRepo.InsertChatResolution(ctx, repo.InsertChatResolutionParams{
+		ProjectID:       args.ProjectID,
+		ChatID:          args.ChatID,
+		UserGoal:        result.UserGoal,
+		Resolution:      result.Resolution,
+		ResolutionNotes: result.ResolutionNotes,
+		Score:           int32(score), // #nosec G115 - score is clamped to 0-100
 	})
 	if err != nil {
-		return fmt.Errorf("failed to store segment analysis: %w", err)
+		return fmt.Errorf("failed to insert chat resolution: %w", err)
+	}
+
+	// Link all messages in this segment to the resolution
+	for i := args.StartIndex; i <= args.EndIndex && i < len(allMessages); i++ {
+		if err := txRepo.InsertChatResolutionMessage(ctx, repo.InsertChatResolutionMessageParams{
+			ChatResolutionID: resolutionID,
+			ProjectID:        args.ProjectID,
+			MessageID:        allMessages[i].ID,
+		}); err != nil {
+			return fmt.Errorf("failed to insert resolution message association: %w", err)
+		}
+	}
+
+	// Attach the resolution to the user feedback
+	for _, fb := range applicableUserFeedback {
+		err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
+			ID:               fb.ID,
+			ProjectID:        args.ProjectID,
+			ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add user feedback to chat resolution: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	a.logger.InfoContext(ctx, "successfully analyzed segment",

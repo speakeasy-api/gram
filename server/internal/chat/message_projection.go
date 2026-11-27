@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // ProjectMessage applies one canonical message patch under the producer's
@@ -26,15 +27,17 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if guard == nil || build == nil || messageID == uuid.Nil {
 		return false, fmt.Errorf("projection requires admission guard and message ID")
 	}
-	var changed int64
-	var write MessageWrite
-	err := w.InTx(ctx, projectID, func(tx pgx.Tx) error {
-		var err error
-		changed, write, err = w.projectMessage(ctx, tx, projectID, messageID, guard, build)
-		return err
-	})
+	tx, err := w.Begin(ctx, projectID)
 	if err != nil {
 		return false, err
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	changed, write, err := w.projectMessage(ctx, tx, projectID, messageID, guard, build)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit message projection: %w", err)
 	}
 	if changed > 0 {
 		w.publishTurnFrames(ctx, nil, []repo.CreateChatMessageParams{write.Params})

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -630,42 +631,43 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		AccountType:       metadata.AccountType,
 		BillingMode:       metadata.BillingMode,
 	}}
-	var n int64
-	err = s.writer.InTx(ctx, projectID, func(tx pgx.Tx) error {
-		queries := chatRepo.New(tx)
-		lockParams := chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: msgParams.ChatID}
-		if err := queries.AcquireChatPromptCorrelationLock(ctx, lockParams); err != nil {
-			return fmt.Errorf("lock prompt correlation: %w", err)
-		}
-
-		if !native {
-			latestSource, latestErr := queries.GetLatestChatUserPromptSource(ctx, chatRepo.GetLatestChatUserPromptSourceParams{
-				ChatID:    msgParams.ChatID,
-				ProjectID: projectID,
-			})
-			if latestErr != nil && !errors.Is(latestErr, pgx.ErrNoRows) {
-				return fmt.Errorf("get latest chat user prompt source: %w", latestErr)
-			}
-			if latestErr == nil && latestSource.Valid && usesNativeTranscriptFallback(latestSource.String) {
-				s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, latestSource.String)
-				return nil
-			}
-		}
-		// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
-		// lock, keep both rows rather than guessing from prompt text and losing or
-		// misattributing a legitimate repeated native turn.
-
-		if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
-			return err
-		}
-		n, err = s.writer.WriteInTx(ctx, tx, writes)
-		if err != nil {
-			return fmt.Errorf("insert uncorrelated agent prompt: %w", err)
-		}
-		return nil
-	})
+	tx, err := s.writer.Begin(ctx, projectID)
 	if err != nil {
-		return false, fmt.Errorf("write uncorrelated agent prompt: %w", err)
+		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := chatRepo.New(tx)
+	lockParams := chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: msgParams.ChatID}
+	if err := queries.AcquireChatPromptCorrelationLock(ctx, lockParams); err != nil {
+		return false, fmt.Errorf("lock prompt correlation: %w", err)
+	}
+
+	if !native {
+		latestSource, latestErr := queries.GetLatestChatUserPromptSource(ctx, chatRepo.GetLatestChatUserPromptSourceParams{
+			ChatID:    msgParams.ChatID,
+			ProjectID: projectID,
+		})
+		if latestErr != nil && !errors.Is(latestErr, pgx.ErrNoRows) {
+			return false, fmt.Errorf("get latest chat user prompt source: %w", latestErr)
+		}
+		if latestErr == nil && latestSource.Valid && usesNativeTranscriptFallback(latestSource.String) {
+			s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, latestSource.String)
+			return false, nil
+		}
+	}
+	// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
+	// lock, keep both rows rather than guessing from prompt text and losing or
+	// misattributing a legitimate repeated native turn.
+
+	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
+		return false, err
+	}
+	n, err := s.writer.WriteInTx(ctx, tx, writes)
+	if err != nil {
+		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit uncorrelated agent prompt: %w", err)
 	}
 	if n > 0 {
 		s.writer.NotifyStoredRows(ctx, projectID, writes)
