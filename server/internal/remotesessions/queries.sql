@@ -1637,6 +1637,7 @@ INSERT INTO remote_sessions (
     user_session_issuer_id,
     remote_session_client_id,
     organization_id,
+    authorized_at,
     access_expires_at,
     authorization_expires_at,
     refresh_expires_at,
@@ -1660,6 +1661,7 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = @remote_session_client_id
     ),
+    clock_timestamp(),
     @access_expires_at,
     @authorization_expires_at,
     @refresh_expires_at,
@@ -1678,6 +1680,8 @@ DO UPDATE SET
     -- Same client, so the same organization; this fills rows written before
     -- the column existed.
     organization_id = EXCLUDED.organization_id,
+    authorized_at = EXCLUDED.authorized_at,
+    last_used_at = NULL,
     access_expires_at = EXCLUDED.access_expires_at,
     authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
@@ -1716,6 +1720,7 @@ INSERT INTO remote_sessions (
     user_session_issuer_id,
     remote_session_client_id,
     organization_id,
+    authorized_at,
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
@@ -1741,6 +1746,7 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = @remote_session_client_id
     ),
+    clock_timestamp(),
     @access_token_encrypted::text,
     @access_expires_at,
     @refresh_token_encrypted,
@@ -1761,6 +1767,8 @@ DO UPDATE SET
     -- Same client, so the same organization; this fills rows written before
     -- the column existed.
     organization_id = EXCLUDED.organization_id,
+    authorized_at = EXCLUDED.authorized_at,
+    last_used_at = NULL,
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
@@ -1945,14 +1953,18 @@ WHERE id = @id
 RETURNING *;
 
 -- name: GetActiveRemoteSession :one
--- Look up the active remote_session for a (subject, client) binding.
--- Single-row exact lookup; uniqueness enforced by the partial unique
--- index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
-SELECT *
-FROM remote_sessions
-WHERE subject_urn = @subject_urn
-  AND remote_session_client_id = @remote_session_client_id
-  AND deleted IS FALSE;
+-- Look up a remote_session that remains inside the client's independent
+-- inactivity and maximum-duration windows. Legacy NULL settings do not expire
+-- a session. Single-row exact lookup; uniqueness is enforced by the partial
+-- unique index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
+SELECT s.*
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.deleted IS FALSE
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp());
 
 -- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
 -- A definitive upstream invalid_grant invalidates the refresh grant, not
@@ -2068,9 +2080,13 @@ SELECT
   s.refresh_token_org_encrypted,
   ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
-    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now()))::boolean AS can_refresh,
   (CASE
     WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+      AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now())
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
@@ -2130,6 +2146,21 @@ WHERE s.subject_urn = @subject_urn
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
+
+-- name: SetRemoteSessionClientLifetimeFixture :exec
+UPDATE remote_session_clients
+SET session_inactivity_timeout = @session_inactivity_timeout,
+    session_maximum_duration = @session_maximum_duration
+WHERE id = @id AND project_id = @project_id;
+
+-- name: SetRemoteSessionLifetimeFixture :exec
+UPDATE remote_sessions AS s
+SET authorized_at = @authorized_at,
+    last_used_at = @last_used_at
+FROM remote_session_clients AS c
+WHERE s.id = @id
+  AND c.id = s.remote_session_client_id
+  AND c.project_id = @project_id;
 
 -- name: SetRemoteSessionUpdatedAt :exec
 -- Sets updated_at on a remote session. Scoped through the owning
@@ -2952,6 +2983,8 @@ WITH due AS (
     AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > @now_ts::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > @now_ts::timestamptz)
     AND s.updated_at <= @keepalive_cutoff::timestamptz
     AND (
       s.last_refresh_attempt_at IS NULL
@@ -3133,6 +3166,8 @@ WHERE s.id = @id
   AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > @now_ts::timestamptz)
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > @now_ts::timestamptz)
   AND s.updated_at <= @keepalive_cutoff::timestamptz;
 
 -- Idle re-check (AIM-261): grants with no refresh token or expiry are presented to their upstream on a slow cadence, since the refresh sweep never touches them.
@@ -3255,6 +3290,8 @@ WITH due AS (
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > @now_ts::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > @now_ts::timestamptz)
     AND COALESCE(s.last_validated_at, s.created_at) <= @recheck_cutoff::timestamptz
     AND (s.last_refresh_attempt_at IS NULL OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz)
     AND lower(split_part(i.issuer, '/', 3)) <> ALL(COALESCE(@excluded_hosts::text[], '{}'::text[]))
@@ -3397,6 +3434,8 @@ WHERE s.id = @id
   AND s.refresh_expires_at IS NULL
   AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > @now_ts::timestamptz)
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > @now_ts::timestamptz)
   AND COALESCE(s.last_validated_at, s.created_at) <= @recheck_cutoff::timestamptz
   AND EXISTS (
     SELECT 1
@@ -3604,6 +3643,8 @@ WITH bound AS (
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > @now_ts::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > @now_ts::timestamptz)
     AND c.deleted IS FALSE
     AND (usi.project_id IS NULL OR p.id IS NOT NULL)
     AND COALESCE(p.organization_id, usi.organization_id) = ANY(@organization_ids::text[])
@@ -6896,7 +6937,9 @@ JOIN organization_user_relationships membership ON membership.organization_id = 
 WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp());
 
 -- name: GetActiveRemoteSessionInTenant :one
 -- GetActiveRemoteSession for the auth client resolver, which takes no user
@@ -6914,7 +6957,9 @@ JOIN projects p ON p.id = @project_id AND p.organization_id = @organization_id A
 WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_session_client_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp());
 
 -- name: ListRemoteSessionStatusesInTenant :many
 -- ListRemoteSessionStatusesForSubject for the auth client resolver, over the
@@ -6947,9 +6992,13 @@ SELECT
   s.refresh_token_org_encrypted,
   ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
-    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now()))::boolean AS can_refresh,
   (CASE
     WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+      AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now())
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
@@ -7054,7 +7103,9 @@ WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_sess
  AND s.user_session_issuer_id = @user_session_issuer_id AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
- AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+ AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp());
 
 -- name: ListOrganizationMCPServersForUserSessionIssuer :many
 -- Live MCP servers on one user session issuer in every project of the

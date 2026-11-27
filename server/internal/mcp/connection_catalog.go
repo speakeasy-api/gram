@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -192,6 +193,26 @@ func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint 
 	}
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
+	}
+	remoteSessions := remotesessionsrepo.New(s.db)
+	for _, member := range inventory.MemberBindings {
+		if member.Auth == nil || !member.Auth.RegistrationID.Valid {
+			continue
+		}
+		client, loadErr := remoteSessions.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{
+			ID:             member.Auth.RegistrationID.UUID,
+			ProjectID:      member.ProjectID,
+			OrganizationID: endpoint.OrganizationID,
+		})
+		if loadErr != nil {
+			return nil, fmt.Errorf("load gateway member session lifetime: %w", loadErr)
+		}
+		if maximumDuration, valid := conv.PGIntervalToDuration(client.RemoteSessionClient.SessionMaximumDuration); valid && maximumDuration > lifetime {
+			if maximumDuration > math.MaxInt64-userSessionGrantTTL {
+				return nil, fmt.Errorf("invalid gateway member session lifetime")
+			}
+			lifetime = maximumDuration
+		}
 	}
 	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, now.Add(lifetime+userSessionGrantTTL))
 	if err != nil {
