@@ -104,6 +104,9 @@ describe("Home", () => {
   it("renders the terminal homepage when terminal-home is on", () => {
     state.terminalHome = "enabled";
     renderHome();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Project Overview" }),
+    ).toBeTruthy();
     expect(screen.getByTestId("home-terminal")).toBeTruthy();
     // One set in the scrolling lane, one in the slot under the chat.
     expect(screen.getAllByTestId("home-widgets")).toHaveLength(2);
