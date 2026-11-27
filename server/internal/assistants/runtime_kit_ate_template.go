@@ -40,9 +40,16 @@ const (
 var (
 	ateImageDigestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	ateDigestSuffixPattern     = regexp.MustCompile(`^[0-9a-f]{12}$`)
-	ateWorkerLabelKeyPattern   = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/)?[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$`)
-	ateWorkerLabelValuePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$`)
+	ateWorkerLabelKeyPattern   = regexp.MustCompile(`^(?:(?:[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)\.)*[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?$|^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?$`)
+	ateWorkerLabelValuePattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,61}[A-Za-z0-9])?$`)
 )
+
+func validKitATEWorkerLabel(key, val string) bool {
+	if prefix, _, hasPrefix := strings.Cut(key, "/"); hasPrefix && len(prefix) > 253 {
+		return false
+	}
+	return len(val) <= maxATEDNSLabelLen && ateWorkerLabelKeyPattern.MatchString(key) && ateWorkerLabelValuePattern.MatchString(val)
+}
 
 // ParseKitATEWorkerSelector parses a comma-separated list of key=value worker
 // selector labels (for example "workload-type=ate-assistants,tier=prod").
@@ -58,7 +65,7 @@ func ParseKitATEWorkerSelector(raw string) (map[string]string, error) {
 		if !ok || key == "" || val == "" || strings.Contains(val, "=") {
 			return nil, errors.New("ATE worker selector must be comma-separated key=value pairs")
 		}
-		if len(key) > 253 || len(val) > maxATEDNSLabelLen || !ateWorkerLabelKeyPattern.MatchString(key) || !ateWorkerLabelValuePattern.MatchString(val) {
+		if !validKitATEWorkerLabel(key, val) {
 			return nil, fmt.Errorf("invalid ATE worker selector label %q=%q", key, val)
 		}
 		if _, dup := labels[key]; dup {
@@ -77,7 +84,7 @@ func validateKitATEWorkerSelector(labels map[string]string) error {
 		return errors.New("ATE worker selector must contain at least one label")
 	}
 	for key, val := range labels {
-		if len(key) > 253 || len(val) > maxATEDNSLabelLen || !ateWorkerLabelKeyPattern.MatchString(key) || !ateWorkerLabelValuePattern.MatchString(val) {
+		if !validKitATEWorkerLabel(key, val) {
 			return fmt.Errorf("invalid ATE worker selector label %q=%q", key, val)
 		}
 	}

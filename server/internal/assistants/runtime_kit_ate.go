@@ -230,7 +230,13 @@ func (k *KitATERuntimeBackend) getActor(ctx context.Context, t kitATEThreadActor
 	}
 	meta := actor.GetMetadata()
 	tmpl := actor.GetActorTemplate()
-	if meta.GetAtespace() != k.config.Atespace || meta.GetName() != t.ActorName || meta.GetUid() == "" || (t.ActorUID != "" && meta.GetUid() != t.ActorUID) || tmpl.GetAtespace() != k.config.Atespace || !kitATETemplateVersionMatches(k.config.Template, tmpl.GetName()) {
+	templateOK := kitATETemplateVersionMatches(k.config.Template, tmpl.GetName())
+	if t.ActorUID == "" {
+		// Adopting an unrecorded actor during initial creation must match the
+		// active digest-versioned template verified by ensureTemplate.
+		templateOK = tmpl.GetName() == k.templateVersionName()
+	}
+	if meta.GetAtespace() != k.config.Atespace || meta.GetName() != t.ActorName || meta.GetUid() == "" || (t.ActorUID != "" && meta.GetUid() != t.ActorUID) || tmpl.GetAtespace() != k.config.Atespace || !templateOK {
 		return nil, ErrKitRuntimeBinding
 	}
 	return actor, nil
