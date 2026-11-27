@@ -2,8 +2,6 @@ package orgencryption_test
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -145,26 +143,21 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			f := newTranscriptWriterFixture(t, true, true)
 			before := f.counts(t)
 			m := f.message("EXAMPLE transactional content")
-			errRollback := errors.New("roll back")
-			err := f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
-				n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
-				require.NoError(t, err)
-				require.EqualValues(t, 1, n)
-				require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
-				if commit {
-					return nil
-				}
-				return errRollback
-			})
+			tx, err := f.writer.Begin(t.Context(), f.projectID)
+			require.NoError(t, err)
+			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, n)
+			require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
 			if commit {
-				require.NoError(t, err)
+				require.NoError(t, tx.Commit(t.Context()))
 				f.assertTranscript(t, m.Params.ID)
 				after := f.counts(t)
 				require.Equal(t, before[0]+1, after[0])
 				require.Equal(t, before[1]+1, after[1])
 				require.Greater(t, after[2]+after[3], before[2]+before[3])
 			} else {
-				require.ErrorIs(t, err, errRollback)
+				require.NoError(t, tx.Rollback(t.Context()))
 				require.Equal(t, before, f.counts(t))
 			}
 		})
@@ -278,7 +271,7 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
-// InTx loads the key before every write transaction, so a key that will not
+// Begin loads the key before every write transaction, so a key that will not
 // load fails each write before anything is stored, even one that would have
 // changed nothing.
 func TestTranscriptWriterFailsClosedWithoutKey(t *testing.T) {
@@ -358,17 +351,14 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	err = f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
-		_, err := f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
-			row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("mark risk analyzed: %w", err)
-		}
+	tx, err := f.writer.Begin(t.Context(), f.projectID)
+	require.NoError(t, err)
+	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
+		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
 		return nil
 	})
 	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
 
 	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 	require.NoError(t, err)
@@ -386,9 +376,9 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
-	content := row.Content
-	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: m.Params.ID, Set: func(f transcriptcrypto.ProtectedFields) { content = f.Content }}}))
-	require.Equal(t, "EXAMPLE changed projection", content)
+	opened := []chatrepo.ChatMessage{row}
+	require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+	require.Equal(t, "EXAMPLE changed projection", opened[0].Content)
 }
 
 // In encrypted mode every insert path keeps the protected fields out of
@@ -426,8 +416,9 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)
-		content, toolCalls := row.Content, row.ToolCalls
-		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: id, Set: func(f transcriptcrypto.ProtectedFields) { content, toolCalls = f.Content, f.ToolCalls }}}))
+		opened := []chatrepo.ChatMessage{row}
+		require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+		content, toolCalls := opened[0].Content, opened[0].ToolCalls
 		require.Equal(t, want.content, content, "the transcript holds what was written")
 		if want.toolCalls == "" {
 			require.Empty(t, toolCalls)
@@ -435,4 +426,11 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		}
 		require.JSONEq(t, want.toolCalls, string(toolCalls), "the transcript holds the tool calls")
 	}
+}
+
+// chatMessageTarget opens a full chat_messages row in place.
+func chatMessageTarget(m *chatrepo.ChatMessage) transcriptstore.OpenTarget {
+	return transcriptstore.OpenTarget{MessageID: m.ID, Set: func(f transcriptcrypto.ProtectedFields) {
+		*m = transcriptstore.WithProtectedFields(*m, f)
+	}}
 }

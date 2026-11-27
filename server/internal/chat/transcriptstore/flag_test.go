@@ -152,7 +152,7 @@ func TestFlagOnProvisionsBeforeTheWriteTransaction(t *testing.T) {
 	require.Equal(t, int32(1), f.provisioner.calls.Load(), "an organization is provisioned once per process")
 
 	rows := []openRow{plaintextRow(id)}
-	require.NoError(t, OpenRows(t.Context(), f.transcripts, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), f.transcripts, f.org, f.project, rows, openRowBody))
 	require.Equal(t, "sensitive example", rows[0].content, "reads open the transcript")
 }
 
@@ -201,7 +201,7 @@ func TestFlagOffThenOnServesPlaintextForEditsMadeWhileOff(t *testing.T) {
 
 	f.setFlag(true)
 	rows := []openRow{plaintextRow(id)}
-	require.NoError(t, OpenRows(t.Context(), f.transcripts, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), f.transcripts, f.org, f.project, rows, openRowBody))
 	require.Equal(t, "edited while off", rows[0].notes.String, "a disagreeing transcript serves the plaintext")
 
 	f.update(t, id, "edited while on")
@@ -260,7 +260,7 @@ func TestFlagReadsNeverProvision(t *testing.T) {
 
 	reader := NewTranscripts(f.store).WithFeatureFlag(f.flags, f.provisioner)
 	rows := []openRow{plaintextRow(id)}
-	require.NoError(t, OpenRows(t.Context(), reader, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), reader, f.org, f.project, rows, openRowBody))
 	require.False(t, f.sealed(t, id))
 	require.Equal(t, "sensitive example", rows[0].content, "an organization without a key is served from plaintext")
 	require.Zero(t, f.provisioner.calls.Load(), "a read does not provision the key")
@@ -270,7 +270,7 @@ func TestFlagReadsNeverProvision(t *testing.T) {
 	require.Equal(t, int32(1), f.provisioner.calls.Load(), "the writer provisions the key")
 
 	rows = []openRow{plaintextRow(sealed)}
-	require.NoError(t, OpenRows(t.Context(), reader, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), reader, f.org, f.project, rows, openRowBody))
 	require.Equal(t, "sensitive example", rows[0].content, "a reader opens transcripts a writer sealed")
 	require.Equal(t, int32(1), f.provisioner.calls.Load(), "the reader still provisioned nothing")
 	require.Equal(t, ModePlaintext, reader.Mode(t.Context(), f.project), "the reader's process never writes for the organization")

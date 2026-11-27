@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -160,7 +159,7 @@ func plaintextRow(id uuid.UUID) openRow {
 	}
 }
 
-func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
+func TestOpenChatMessagesServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	sealed, unsealed := uuid.New(), uuid.New()
@@ -172,7 +171,7 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	transcripts := NewTranscripts(f.store, f.project)
 
 	rows := []openRow{plaintextRow(sealed), plaintextRow(unsealed)}
-	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), transcripts, f.org, f.project, rows, openRowBody))
 	opened := rows[0]
 	require.Equal(t, "sensitive example", opened.content, "a sealed message is served from its transcript")
 	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), opened.contentRaw), "numbers survive exactly: %s", opened.contentRaw)
@@ -184,14 +183,14 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	require.False(t, rows[1].storageError.Valid, "every field comes from the stored row")
 
 	off := []openRow{plaintextRow(sealed)}
-	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
 	require.Equal(t, plaintextRow(sealed), off[0], "a project off the list reads plaintext")
 
 	_, err = fixturerepo.New(f.db).ChangeContent(t.Context(), sealed, project(f.project))
 	require.NoError(t, err)
 	stale := []openRow{plaintextRow(sealed)}
 	stale[0].content = "changed"
-	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
+	require.NoError(t, OpenChatMessages(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
 	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the stored plaintext is served")
 }
 
@@ -376,7 +375,7 @@ func TestEncryptedMode(t *testing.T) {
 	open := func(id uuid.UUID) (openRow, error) {
 		t.Helper()
 		rows := []openRow{plaintextRow(id)}
-		err := OpenRows(ctx, encrypted, f.org, f.project, rows, openRowBody)
+		err := OpenChatMessages(ctx, encrypted, f.org, f.project, rows, openRowBody)
 		return rows[0], err
 	}
 	emptied := func(id uuid.UUID) {
@@ -473,12 +472,12 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) r
 		StorageError: pgtype.Text{String: "example storage error", Valid: true},
 		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 	}}
-	err := transcripts.InTx(ctx, f.db, f.org, f.project, func(tx pgx.Tx) error {
-		n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
-		require.EqualValues(t, 1, n)
-		return err
-	})
+	tx, err := transcripts.Begin(ctx, f.db, f.org, f.project)
 	require.NoError(t, err)
+	n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are never changed")
 	row, err := repo.New(f.db).LockChatMessage(ctx, repo.LockChatMessageParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
 	require.NoError(t, err)

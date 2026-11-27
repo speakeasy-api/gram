@@ -25,16 +25,16 @@ func TestCaptureRecordsOutcomeMetrics(t *testing.T) {
 	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
+	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls ResealChatMessages; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{stored}))
+	require.NoError(t, store.ResealChatMessages(t.Context(), tx, f.org, f.project, []uuid.UUID{stored}))
 	require.NoError(t, tx.Commit(t.Context()))
 
-	missing, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
+	missing, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls ResealChatMessages; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = missing.Rollback(t.Context()) }()
-	require.ErrorIs(t, store.Capture(t.Context(), missing, f.org, f.project, []uuid.UUID{uuid.New(), uuid.New()}), ErrNotFound)
+	require.ErrorIs(t, store.ResealChatMessages(t.Context(), missing, f.org, f.project, []uuid.UUID{uuid.New(), uuid.New()}), ErrNotFound)
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &collected))
@@ -200,7 +200,7 @@ func TestCaptureRejectsInvalidArgumentsBeforeTelemetry(t *testing.T) {
 	t.Parallel()
 	// A zero-value store has no tracer or metrics; invalid input must not reach them.
 	ids := []uuid.UUID{uuid.New()}
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.New(), ids), ErrInvalid)
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "", uuid.New(), ids), ErrInvalid)
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.Nil, ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "org", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "org", uuid.Nil, ids), ErrInvalid)
 }

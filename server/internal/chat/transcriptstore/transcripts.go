@@ -102,7 +102,7 @@ func (t *Transcripts) MaySeal(ctx context.Context, projectID uuid.UUID) bool {
 // will use, so neither makes a KMS call while the transaction is open. For a
 // project the feature flag puts in shadow mode it first provisions the
 // organization's key, once per process. An error means they would fail too.
-// InTx calls it for you.
+// Begin calls it for you.
 func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
 	if t.activate(ctx, projectID) == ModePlaintext {
 		return nil
@@ -233,14 +233,14 @@ type OpenTarget struct {
 	Set       func(transcriptcrypto.ProtectedFields)
 }
 
-// Open writes each message's protected fields into its target, in one query
+// open writes each message's protected fields into its target, in one query
 // per page; in plaintext mode it reads no transcript. In shadow mode a message
 // with no transcript yet gets its plaintext and counts as plaintext_fallback,
 // and a transcript that disagrees with its plaintext row is logged, counted as
 // stale, and the plaintext is served, the same rule UpdateChatMessage follows.
 // In encrypted mode the transcript is served without comparison, and a message
 // without one fails the read with ErrMissingTranscript. A transcript that
-// cannot be decrypted fails the read in either mode. Open never provisions a
+// cannot be decrypted fails the read in either mode. open never provisions a
 // key.
 //
 // A message edited while the flag was off for its organization keeps the
@@ -250,7 +250,7 @@ type OpenTarget struct {
 // purpose: from the rows alone they cannot be told apart from a write that
 // skipped sealing, which is a bug. Run a backfill for the organization's
 // projects after turning the flag back on to clear them.
-func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, targets []OpenTarget) error {
+func (t *Transcripts) open(ctx context.Context, organizationID string, projectID uuid.UUID, targets []OpenTarget) error {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -276,10 +276,11 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 	return nil
 }
 
-// OpenRows is Open for a page of rows of any sqlc row type. targetOf maps a
+// OpenChatMessages opens a page of loaded messages of any sqlc row type; see open for
+// the fallback and failure rules. targetOf maps a
 // row to its target.
-func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
-	// Plaintext reads build no targets. This is Open's read mode, so a reader
+func OpenChatMessages[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
+	// Plaintext reads build no targets. This is open's read mode, so a reader
 	// opens transcripts another process sealed for a flag-enabled organization.
 	if len(rows) == 0 || t.readMode(ctx, projectID) == ModePlaintext {
 		return nil
@@ -288,7 +289,7 @@ func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string,
 	for i := range rows {
 		targets[i] = targetOf(&rows[i])
 	}
-	return t.Open(ctx, organizationID, projectID, targets)
+	return t.open(ctx, organizationID, projectID, targets)
 }
 
 // WithProtectedFields returns the row with its six protected fields set from

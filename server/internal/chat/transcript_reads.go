@@ -34,5 +34,5 @@ func openTranscriptRows[T any](ctx context.Context, s *Service, authCtx *context
 		return nil
 	}
 	//nolint:wrapcheck // Open already wraps with the transcript read context.
-	return transcriptstore.OpenRows(ctx, s.transcripts, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rows, targetOf)
+	return transcriptstore.OpenChatMessages(ctx, s.transcripts, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rows, targetOf)
 }
