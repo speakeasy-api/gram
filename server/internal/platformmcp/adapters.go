@@ -787,10 +787,11 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 		for _, row := range rows {
 			checks = append(checks, authz.Project(authz.ProjectIDOf(row.ID)).Read())
 		}
-		decisions, err := r.authz.DecideAndRecord(ctx, checks...)
+		decisions, err := r.authz.Decide(ctx, checks...)
 		if err != nil {
 			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
 		}
+		r.authz.Record(ctx, decisions)
 		for i, row := range rows {
 			if !decisions.Each[i].Allowed {
 				filtered = true
@@ -1070,10 +1071,11 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	for _, server := range servers {
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Read())
 	}
-	decisions, err := r.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := r.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
 	}
+	r.authz.Record(ctx, decisions)
 	ids := make([]uuid.UUID, 0, len(servers))
 	for i, server := range servers {
 		if decisions.Each[i].Allowed {

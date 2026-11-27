@@ -1455,10 +1455,11 @@ func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.U
 	if unresolved {
 		checks = append(checks, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize assistant environments: %w", err)
 	}
+	s.authz.Record(ctx, decisions)
 	canRead := allowedResources(checks, decisions)
 	if unresolved && !canRead(projectID) {
 		return nil, errEnvironmentBindingForbidden

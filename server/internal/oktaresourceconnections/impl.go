@@ -158,10 +158,11 @@ func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServe
 	for i, sv := range servers {
 		checks[i] = authz.MCPServer(authz.MCPServerIDOf(sv.ID), authz.ProjectIDOf(sv.ProjectID)).Read()
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter readable servers: %w", err)
 	}
+	s.authz.Record(ctx, decisions)
 	out := make([]repo.ListEligibleServersRow, 0, len(servers))
 	for i, sv := range servers {
 		if decisions.Each[i].Allowed {

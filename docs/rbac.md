@@ -750,7 +750,7 @@ skill:read
 
 `assistant:read` lets a caller list, open, and talk to assistants (including the Project Assistant and stopping a turn it started). `assistant:write` lets a caller create, update, delete, and provision them, and implies `assistant:read`. `project:*` does not imply either; assistant triggers stay on `project:read`/`project:write`. `assistant:blocked_read` and `assistant:blocked_write` store exceptions.
 
-Assistant checks follow the MCP pattern: the check names the assistant and carries the project as a `project_id` dimension (`authz.Assistant(authz.AssistantIDOf(assistant.ID), authz.ProjectIDOf(projectID)).Read()` or `.Write()`). Project-level operations (creating an assistant, provisioning the Project Assistant) name the project itself as the resource. List results are filtered per assistant with `authz.Engine.DecideAndRecord`. Grant selectors therefore take one of three shapes:
+Assistant checks follow the MCP pattern: the check names the assistant and carries the project as a `project_id` dimension (`authz.Assistant(authz.AssistantIDOf(assistant.ID), authz.ProjectIDOf(projectID)).Read()` or `.Write()`). Project-level operations (creating an assistant, provisioning the Project Assistant) name the project itself as the resource. List results are filtered per assistant with `authz.Engine.Decide`, and the list is recorded with `authz.Engine.Record`. Grant selectors therefore take one of three shapes:
 
 ```json
 { "resource_kind": "assistant", "resource_id": "*" }
@@ -1096,9 +1096,9 @@ With org admin granted and a block on project write, this is refused.
 
 Do not use `Either` to avoid deciding what permission an operation needs. Use it only when the alternatives are intentionally equivalent authorization paths.
 
-### `Decide` and `DecideAndRecord`
+### `Decide` and `Record`
 
-Use `Decide` where a "no" is a branch rather than a refusal, such as whether to show a button. Use `DecideAndRecord` for a list endpoint where the caller may have access to some resources but not all of them. Both return one decision per check, in the order the checks were passed. `AllAllowed` is true when at least one check was passed and every check is allowed, so an empty list of checks gives `AllAllowed: false`.
+Use `Decide` where a "no" is a branch rather than a refusal, such as whether to show a button, and for a list endpoint where the caller may have access to some resources but not all of them. It returns one decision per check, in the order the checks were passed. `AllAllowed` is true when at least one check was passed and every check is allowed, so an empty list of checks gives `AllAllowed: false`.
 
 Example shape:
 
@@ -1108,10 +1108,11 @@ for i, project := range projects {
 	checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 }
 
-decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+decisions, err := s.authz.Decide(ctx, checks...)
 if err != nil {
 	return nil, err
 }
+s.authz.Record(ctx, decisions)
 for i, project := range projects {
 	if decisions.Each[i].Allowed {
 		entries = append(entries, project)
@@ -1119,15 +1120,15 @@ for i, project := range projects {
 }
 ```
 
-`DecideAndRecord` records one challenge row for each call with at least one check. `Decide` records nothing, so a branch whose "no" is the expected case, such as showing a member only their own sessions, adds no row. `Require` records both allows and refusals, so the access log can say why someone was allowed to do something.
+Deciding and recording are separate steps. `Decide` records nothing; `Record(ctx, decisions)` writes what it decided as one challenge row. A decision about one check is recorded the way `Require` records it, naming that check's scope and resource; a decision about several is recorded as the list, with how many were candidates and how many were allowed. Whoever writes the call decides whether it is recorded: a list page usually records, and a branch whose "no" is the expected case, such as showing a member only their own sessions, does not. `Require` is `Decide`, then `Record`, then the refusal, so a gate always records both allows and refusals and the access log can say why someone was allowed to do something. A check the engine cannot evaluate is recorded while deciding, since it reports a broken call rather than a decision.
 
-Use `DecideAndRecord` when the correct result is "return the subset this caller can see." Use `Require` when the correct result is "deny the whole operation unless the caller can access this resource."
+Use `Decide` and `Record` when the correct result is "return the subset this caller can see." Use `Require` when the correct result is "deny the whole operation unless the caller can access this resource."
 
 ## Choosing the Right Scope in Handlers
 
 Use the narrowest scope that describes the operation. GET and list handlers usually need a `*:read` scope. Mutations usually need `*:write`. Runtime MCP usage needs `mcp:connect`, while role and RBAC management usually need `org:admin`.
 
-A few operations deserve extra thought. Creating a project-owned child resource usually requires `project:write`, even if the child resource has its own read scope. Cloning a toolset needs destination write access and source read access. Calling a private MCP tool should use `mcp:connect`, narrowed by tool and disposition when available. Listing resources should usually use `DecideAndRecord`, because the correct behavior is often to return the visible subset instead of failing the whole list because one resource is inaccessible. The MCP gateway is the one exception: it lists members through helpers that also gate a single member with `Require`, so those listing paths wrap their context in `authz.ForListing(ctx)`, which records nothing even from `Require`.
+A few operations deserve extra thought. Creating a project-owned child resource usually requires `project:write`, even if the child resource has its own read scope. Cloning a toolset needs destination write access and source read access. Calling a private MCP tool should use `mcp:connect`, narrowed by tool and disposition when available. Listing resources should usually use `Decide`, because the correct behavior is often to return the visible subset instead of failing the whole list because one resource is inaccessible. The MCP gateway decides each member at admission without recording, keeps that decision on the member, and records it only when a call names the server.
 
 ## Examples
 
@@ -1310,7 +1311,7 @@ project_b
 project_c
 ```
 
-Checks passed to `DecideAndRecord`:
+Checks passed to `Decide`:
 
 ```go
 []authz.Check{
@@ -1327,13 +1328,13 @@ project_a
 project_c
 ```
 
-`DecideAndRecord` marks the checks for `project_a` and `project_c` allowed and `project_b` not allowed. The handler then rebuilds the response from the allowed rows.
+`Decide` marks the checks for `project_a` and `project_c` allowed and `project_b` not allowed. The handler then rebuilds the response from the allowed rows.
 
 ## Practical Rules
 
 When adding RBAC to a handler:
 
-1. Decide whether the handler should be all-or-nothing (`Require`) or subset-returning (`DecideAndRecord`).
+1. Decide whether the handler should be all-or-nothing (`Require`) or subset-returning (`Decide`, then `Record`).
 2. Choose the narrowest existing scope.
 3. Use the concrete resource ID being protected.
 4. Add dimensions only when the grant model already supports them or you are deliberately extending it.
@@ -1362,7 +1363,7 @@ When adding a new selector dimension:
 
 RBAC in Speakeasy is a small set of moving pieces. Scopes define what can be done. Selectors define where a grant applies. Principals receive grants. Handlers create checks. The engine compares the request's grants to the handler's checks.
 
-Keep scopes coarse and customer-meaningful. Use selectors and dimensions for resource-specific narrowing. Put authorization checks close to the handler boundary. Use `DecideAndRecord` for partial visibility. Treat every new scope as a product contract, not just a code constant.
+Keep scopes coarse and customer-meaningful. Use selectors and dimensions for resource-specific narrowing. Put authorization checks close to the handler boundary. Use `Decide` for partial visibility. Treat every new scope as a product contract, not just a code constant.
 
 ## Resources
 

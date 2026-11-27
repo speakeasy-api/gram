@@ -3937,10 +3937,11 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 	for i, project := range projects {
 		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
+	s.authz.Record(ctx, decisions)
 	allowed := make([]uuid.UUID, 0, len(projects))
 	for i, project := range projects {
 		if decisions.Each[i].Allowed {
@@ -4644,10 +4645,11 @@ func filterReadable(ctx context.Context, engine *authz.Engine, checks []authz.Ch
 	if len(checks) == 0 || engine == nil {
 		return readable, nil
 	}
-	decisions, err := engine.DecideAndRecord(ctx, checks...)
+	decisions, err := engine.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter: %w", err)
 	}
+	engine.Record(ctx, decisions)
 	for i, decision := range decisions.Each {
 		if decision.Allowed {
 			readable[checks[i].ResourceID] = true

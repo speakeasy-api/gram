@@ -44,7 +44,8 @@ type OrganizationGatewayActivityReader interface {
 // a top server's project only to callers who can read that project.
 type organizationGatewayActivityAuthorizer interface {
 	Require(ctx context.Context, checks ...authz.Check) error
-	DecideAndRecord(ctx context.Context, checks ...authz.Check) (authz.Decisions, error)
+	Decide(ctx context.Context, checks ...authz.Check) (authz.Decisions, error)
+	Record(ctx context.Context, d authz.Decisions)
 }
 
 // OrganizationGatewayActivityService reports calls dispatched through the
@@ -275,10 +276,11 @@ func (s *OrganizationGatewayActivityService) nameReadableProjects(ctx context.Co
 	for _, server := range top {
 		checks = append(checks, authz.Project(authz.ProjectIDFrom(server.ProjectID)).Read())
 	}
-	decisions, err := s.authorizer.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authorizer.Decide(ctx, checks...)
 	if err != nil {
 		return fmt.Errorf("filter organization gateway server projects: %w", err)
 	}
+	s.authorizer.Record(ctx, decisions)
 	for i := range top {
 		if i >= len(decisions.Each) || !decisions.Each[i].Allowed {
 			continue

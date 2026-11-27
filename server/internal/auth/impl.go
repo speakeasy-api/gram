@@ -1275,10 +1275,11 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 			for i, project := range projectRows {
 				checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 			}
-			decisions, err = s.authz.DecideAndRecord(ctx, checks...)
+			decisions, err = s.authz.Decide(ctx, checks...)
 			if err != nil {
 				return nil, err
 			}
+			s.authz.Record(ctx, decisions)
 		}
 
 		orgProjects := make([]*gen.ProjectEntry, 0, len(projectRows))

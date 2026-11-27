@@ -85,8 +85,8 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
 // It builds one [authz.MCPServerRef.ToolCall] check per tool, hands the batch to
-// [authz.Engine.DecideAndRecord] for per-tool decisions (one challenge-log
-// entry for the batch, not N), and rebuilds the tool slice in input order
+// [authz.Engine.Decide] for per-tool decisions, records the batch as one
+// challenge-log entry, not N, and rebuilds the tool slice in input order
 // keeping only authorized entries, or marking the rest in an inspected listing.
 //
 // A response carrying a JSON-RPC error rather than a result is left alone: it
@@ -125,10 +125,11 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		checks[idx] = authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(t.Name), dispositions[strings.TrimSpace(t.Name)])
 	}
 
-	decisions, err := i.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := i.authz.Decide(ctx, checks...)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}
+	i.authz.Record(ctx, decisions)
 
 	inspection := toolsListInspection{authz: i.authz, mcpServerID: i.mcpServerID, projectID: i.projectID}
 	inspecting := false

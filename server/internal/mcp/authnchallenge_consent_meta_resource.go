@@ -195,9 +195,6 @@ func (s *Service) authorizedMetaMembers(
 	}
 
 	shadow := s.newMandatoryShadow(ctx, endpoint.OrganizationID)
-	// Filtering the candidates names none of them, so it records no
-	// authorization check for any.
-	filterCtx := authz.ForListing(ctx)
 	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
@@ -206,7 +203,8 @@ func (s *Service) authorizedMetaMembers(
 		// a refusal drops a member; dropping on a fault narrows the candidate
 		// set and turns ambiguous into a confident wrong answer.
 		connect := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(row.ProjectID)).Connect()
-		refusal, err := s.memberConnectDecision(filterCtx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
+		// Filtering the candidates names none of them, so none is recorded.
+		refusal, _, err := s.memberConnectDecision(ctx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
 		if err != nil {
 			return nil, fmt.Errorf("authorize meta MCP member access: %w", err)
 		}

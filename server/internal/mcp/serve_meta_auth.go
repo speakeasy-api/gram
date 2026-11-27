@@ -9,7 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -70,9 +69,9 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	// Admission runs this for every member, so it records no authorization
-	// check; a call that names the member records it (findNamedMember).
-	allowed, err := s.memberToolsetConnectAllowed(authz.ForListing(ctx), shadow, shadowSurface, true, &toolset, hosting.Public)
+	// Admission runs this for every member, so it records nothing; a call
+	// that names the member records it (findNamedMember).
+	allowed, _, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
 	if err != nil {
 		return false, false, err
 	}

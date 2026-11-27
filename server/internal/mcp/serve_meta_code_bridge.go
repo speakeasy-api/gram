@@ -289,9 +289,7 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)
 		defer cancel()
-		// The program lists every server here without naming one, so no
-		// authorization check is recorded for any of them.
-		return b.catalog(authz.ForListing(bound), gate, members, slug)
+		return b.catalog(bound, gate, members, slug)
 	}
 	return servers, list, nil
 }

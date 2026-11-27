@@ -274,10 +274,11 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 	for i, project := range projects {
 		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
+	s.authz.Record(ctx, decisions)
 
 	entries := make([]*gen.ProjectEntry, 0, len(projects))
 	for i, project := range projects {

@@ -1178,12 +1178,13 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 	for _, id := range agentIDs {
 		checks = append(checks, agentWriteCheck(id))
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		// Visibility is never a hard gate: fall back to owned agents.
 		s.logger.WarnContext(ctx, "filter editable agents failed for agent session visibility; showing owned agents only", attr.SlogError(err))
 		return nil, nil
 	}
+	s.authz.Record(ctx, decisions)
 
 	editable := make([]uuid.UUID, 0, len(agentIDs))
 	for i, id := range agentIDs {

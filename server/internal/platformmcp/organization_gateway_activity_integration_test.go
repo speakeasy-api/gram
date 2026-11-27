@@ -50,7 +50,9 @@ type stubGatewayActivityAuthorizer struct {
 	readableProjects map[string]bool
 }
 
-func (s *stubGatewayActivityAuthorizer) DecideAndRecord(_ context.Context, checks ...authz.Check) (authz.Decisions, error) {
+func (s *stubGatewayActivityAuthorizer) Record(context.Context, authz.Decisions) {}
+
+func (s *stubGatewayActivityAuthorizer) Decide(_ context.Context, checks ...authz.Check) (authz.Decisions, error) {
 	decisions := authz.Decisions{AllAllowed: len(checks) > 0, Each: make([]authz.Decision, len(checks))}
 	for i, check := range checks {
 		allowed := check.Scope == authz.ScopeProjectRead && s.readableProjects[check.ResourceID]

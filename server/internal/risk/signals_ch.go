@@ -527,10 +527,11 @@ func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *cont
 		grantIDByServer[server.ID.String()] = grantID
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDFrom(grantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
+	s.authz.Record(ctx, decisions)
 	allowed := make(map[string]struct{}, len(checks))
 	for i, decision := range decisions.Each {
 		if decision.Allowed {

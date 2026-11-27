@@ -71,7 +71,7 @@ type featureChecker interface {
 
 type authorizer interface {
 	Decide(context.Context, ...authz.Check) (authz.Decisions, error)
-	DecideAndRecord(context.Context, ...authz.Check) (authz.Decisions, error)
+	Record(context.Context, authz.Decisions)
 	RequirePluginWrite(context.Context, string, string) error
 }
 
@@ -525,10 +525,11 @@ func (s *Service) filterRows(ctx context.Context, rows []*gen.Commandresourceind
 	for i, row := range rows {
 		checks[i] = check(row.ID)
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize command search rows: %w", err)
 	}
+	s.authz.Record(ctx, decisions)
 	kept := make([]*gen.Commandresourceindexitem, 0, len(rows))
 	for i, row := range rows {
 		if decisions.Each[i].Allowed {

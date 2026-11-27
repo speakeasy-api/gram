@@ -39,30 +39,23 @@ type Decisions struct {
 	// no check was passed: absence is never permission.
 	AllAllowed bool
 	Each       []Decision
+	// row is the authorization check Record writes, built while deciding. It
+	// is nil when RBAC does not apply to the caller, who has nothing to show
+	// in the access log.
+	row *challengeLogger
 }
 
 // Decide answers each check without refusing or recording anything: a "no" is
-// a branch for the handler, not a denial. Use Require to gate an action, and
-// DecideAndRecord to filter a list. Example: a dashboard asks whether to show
-// the delete button for a server.
+// a branch for the handler, not a denial. Use Require to gate an action. Pass
+// the answer to Record when the access log should show it. Example: a
+// dashboard asks whether to show the delete button for a server, and records
+// nothing; a list page decides one check per server and records the list.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
-	return e.decide(ctx, checks, false)
-}
-
-// DecideAndRecord answers each check like Decide and records the whole call
-// as one authorization check, so the access log can show what a list was
-// filtered by. Example: a list page passes one check per server and shows
-// those whose decision is allowed.
-func (e *Engine) DecideAndRecord(ctx context.Context, checks ...Check) (Decisions, error) {
-	return e.decide(ctx, checks, true)
-}
-
-func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
-		return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
+		return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 	}
-	result := Decisions{AllAllowed: len(checks) > 0, Each: make([]Decision, 0, len(checks))}
+	result := Decisions{AllAllowed: len(checks) > 0, Each: make([]Decision, 0, len(checks)), row: nil}
 	verdicts := make([]verdict, 0, len(checks))
 	e.logOtherOrganizations(ctx, q.aboutOtherOrganization, checks)
 	for _, check := range checks {
@@ -70,9 +63,9 @@ func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decis
 		if err != nil {
 			if q.enforced {
 				focus := invalidPart(check)
-				e.reportBatch(ctx, q, verdicts, &focus, record)
+				e.writeInvalidCheck(ctx, listRow(q, verdicts, &focus))
 			}
-			return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
+			return Decisions{AllAllowed: false, Each: nil, row: nil}, e.mapError(ctx, err)
 		}
 		result.AllAllowed = result.AllAllowed && v.Allowed
 		result.Each = append(result.Each, v.Decision)
@@ -88,16 +81,39 @@ func (e *Engine) decide(ctx context.Context, checks []Check, record bool) (Decis
 			reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
 		}
 	}
-	if len(checks) > 0 {
-		e.reportBatch(ctx, q, verdicts, nil, record)
+	switch len(verdicts) {
+	case 0:
+	case 1:
+		var refused *verdict
+		if !verdicts[0].Allowed {
+			refused = &verdicts[0]
+		}
+		result.row = rowOf(gateRow(q, checks, verdicts, refused))
+	default:
+		result.row = rowOf(listRow(q, verdicts, nil))
+	}
+	if result.row != nil {
+		RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
 	}
 	return result, nil
+}
+
+// Record writes what d decided to the access log. A decision about one check
+// is recorded as that check, the way Require records it; a decision about
+// several is recorded as the list they filtered, with how many were allowed.
+// Recording d twice writes two rows.
+func (e *Engine) Record(ctx context.Context, d Decisions) {
+	if d.row == nil {
+		return
+	}
+	d.row.write(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 }
 
 // Require refuses the request unless the caller satisfies every check. A
 // single group check is enough when one of its alternatives is allowed and no
 // block refuses any of them. A probe is refused: gating
-// an action needs the concrete resource.
+// an action needs the concrete resource. It records the decision, allowed or
+// refused, so the access log shows why the action was allowed.
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
@@ -120,68 +136,115 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	return e.requireAll(ctx, q, checks, true)
 }
 
-// requireAll stops at the first refusal. explain is false when the grants are
-// not the caller's own, since their refusal says nothing about what the
+// requireAll decides, records and refuses. explain is false when the grants
+// are not the caller's own, since their refusal says nothing about what the
 // caller lacks.
 func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, explain bool) error {
+	d, refused, err := e.decideGate(ctx, q, checks)
+	if err != nil {
+		return err
+	}
+	e.Record(ctx, d)
+	if refused == nil {
+		return nil
+	}
+	if !q.enforced {
+		return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
+	}
+	refusal := refusalOf(*refused)
+	e.logMissingKeys(ctx, q.grants, refusal.missing...)
+	if explain && refusal.explained != nil {
+		recordDenial(ctx, refusal.explained)
+	}
+	return e.mapError(ctx, refusal.err)
+}
+
+// decideGate decides checks in order and stops at the first refusal, which it
+// returns. A later check is not evaluated, so its being invalid does not hide
+// the refusal.
+func (e *Engine) decideGate(ctx context.Context, q question, checks []Check) (Decisions, *verdict, error) {
+	result := Decisions{AllAllowed: true, Each: make([]Decision, 0, len(checks)), row: nil}
+	verdicts := make([]verdict, 0, len(checks))
+	for _, check := range checks {
+		v, err := q.decide(check)
+		if err != nil {
+			if q.enforced {
+				focus := invalidPart(check)
+				row := gateRow(q, checks, verdicts, nil)
+				row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
+				e.writeInvalidCheck(ctx, row)
+			}
+			return Decisions{AllAllowed: false, Each: nil, row: nil}, nil, e.mapError(ctx, err)
+		}
+		result.Each = append(result.Each, v.Decision)
+		verdicts = append(verdicts, v)
+		if !v.Allowed {
+			result.AllAllowed = false
+			if q.enforced {
+				result.row = rowOf(gateRow(q, checks, verdicts, &v))
+				RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
+			}
+			return result, &v, nil
+		}
+	}
+	if !q.enforced {
+		return result, nil, nil
+	}
+	if checks[0].group != nil {
+		refused, err := q.grants.authorizerRefusesGroup(verdicts[0].check.group)
+		reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
+	} else {
+		e.reportAuthorizerRefusals(ctx, q.grants, checks)
+	}
+	result.row = rowOf(gateRow(q, checks, verdicts, nil))
+	RecordAuthorizationDecision(ctx, result.row.Operation, result.row.Outcome, result.row.Reason)
+	return result, nil, nil
+}
+
+// writeInvalidCheck records a check the engine could not evaluate. It is
+// written while deciding, not left to Record: it reports a broken call, not a
+// decision a caller may choose to leave out.
+func (e *Engine) writeInvalidCheck(ctx context.Context, row challengeLogger) {
+	RecordAuthorizationDecision(ctx, row.Operation, row.Outcome, row.Reason)
+	row.write(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+}
+
+func rowOf(row challengeLogger) *challengeLogger { return &row }
+
+// gateRow is the row for checks that must all pass: it names the refused
+// check, or on an allow the first check (for a group, the alternative that
+// allowed it), with every grant that matched.
+func gateRow(q question, checks []Check, decided []verdict, refused *verdict) challengeLogger {
 	operation := authzrepo.OperationRequire
+	recorded := checks
 	if checks[0].group != nil {
 		operation = authzrepo.OperationRequireAny
+		recorded = checks[0].group
 	}
 	row := challengeLogger{
 		Operation:            operation,
 		Outcome:              authzrepo.OutcomeAllow,
 		Reason:               authzrepo.ReasonGrantMatched,
-		Checks:               checks,
+		Checks:               recorded,
 		Focus:                &checks[0],
-		Matches:              make([]grantMatch, 0, len(checks)),
+		Matches:              make([]grantMatch, 0, len(decided)),
 		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}
-	if operation == authzrepo.OperationRequireAny {
-		row.Checks = checks[0].group
+	if refused != nil {
+		row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeDeny, challengeReason(q, *refused), refusalOf(*refused).focus, nil
+		return row
 	}
-	var allowed []verdict
-	for _, check := range checks {
-		d, err := q.decide(check)
-		if err != nil {
-			if q.enforced {
-				focus := invalidPart(check)
-				row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
-				row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			}
-			return e.mapError(ctx, err)
-		}
-		if !d.Allowed {
-			if !q.enforced {
-				return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
-			}
-			refusal := e.refusal(ctx, q, d)
-			row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeDeny, challengeReason(q, d), refusal.focus, nil
-			row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			if explain && refusal.explained != nil {
-				recordDenial(ctx, refusal.explained)
-			}
-			return e.mapError(ctx, refusal.err)
-		}
-		allowed = append(allowed, d)
+	for _, d := range decided {
 		if d.match != nil {
 			row.Matches = append(row.Matches, *d.match)
 		}
 	}
-	if !q.enforced {
-		return nil
+	if operation == authzrepo.OperationRequireAny && len(decided) > 0 && decided[0].Allowed {
+		row.Focus = &decided[0].check.group[decided[0].alternative]
 	}
-	if operation == authzrepo.OperationRequireAny {
-		refused, err := q.grants.authorizerRefusesGroup(allowed[0].check.group)
-		reportAuthorizerRefusal(ctx, e.logger, q.grants, refused, err)
-		row.Focus = &allowed[0].check.group[allowed[0].alternative]
-	} else {
-		e.reportAuthorizerRefusals(ctx, q.grants, checks)
-	}
-	row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-	return nil
+	return row
 }
 
 type refusal struct {
@@ -189,28 +252,30 @@ type refusal struct {
 	// explained is what the client is told it lacks; nil tells it nothing.
 	explained error
 	focus     *Check
+	// missing are the checks whose missing selector keys are worth a log
+	// line when the refusal is returned.
+	missing []Check
 }
 
-func (e *Engine) refusal(ctx context.Context, q question, d verdict) refusal {
+func refusalOf(d verdict) refusal {
 	check := d.check
 	if check.group == nil {
 		if d.Reason == ReasonBlocked {
 			err := deniedByBlock(check.Scope, check.selector())
-			return refusal{err: err, explained: err, focus: &check}
+			return refusal{err: err, explained: err, focus: &check, missing: nil}
 		}
-		e.logMissingKeys(ctx, q.grants, check)
 		err := Denied(check.Scope, check.selector())
-		return refusal{err: err, explained: err, focus: &check}
+		return refusal{err: err, explained: err, focus: &check, missing: []Check{check}}
 	}
 
 	alternatives := check.group
 	first := alternatives[0]
 	if d.blockedBy != nil {
 		blocked := d.blockedBy
-		return refusal{err: Denied(blocked.Scope, blocked.selector()), explained: nil, focus: blocked}
+		return refusal{err: Denied(blocked.Scope, blocked.selector()), explained: nil, focus: blocked, missing: nil}
 	}
 	if d.blocked == nil {
-		return refusal{err: Denied(first.Scope, first.selector()), explained: nil, focus: &first}
+		return refusal{err: Denied(first.Scope, first.selector()), explained: nil, focus: &first, missing: nil}
 	}
 	var unblocked []Check
 	for i, alternative := range alternatives {
@@ -218,14 +283,13 @@ func (e *Engine) refusal(ctx context.Context, q question, d verdict) refusal {
 			unblocked = append(unblocked, alternative)
 		}
 	}
-	e.logMissingKeys(ctx, q.grants, unblocked...)
 	// The alternatives are equivalent to the handler but not to the person
 	// asking for access: explain the one that grants the least.
 	var explained error
 	if suggested, ok := leastPrivilegedAlternative(alternatives, d.blocked); ok {
 		explained = Denied(suggested.Scope, suggested.selector())
 	}
-	return refusal{err: Denied(first.Scope, first.selector()), explained: explained, focus: &first}
+	return refusal{err: Denied(first.Scope, first.selector()), explained: explained, focus: &first, missing: unblocked}
 }
 
 func challengeReason(q question, d verdict) authzrepo.Reason {
@@ -541,10 +605,10 @@ func (a grantAuthorization) allowsWithDisposition(check Check, disposition strin
 	return evaluation.Grant != nil, err
 }
 
-// reportBatch emits the decision telemetry for a Decide call, and writes its
-// challenge row only when record is set: a Decide that records no row still
-// counts in the authorization traces.
-func (e *Engine) reportBatch(ctx context.Context, q question, decided []verdict, focus *Check, record bool) {
+// listRow is the row for checks decided as a list: every check, how many
+// were candidates and how many were allowed. focus names a check that could
+// not be evaluated.
+func listRow(q question, decided []verdict, focus *Check) challengeLogger {
 	checks := make([]Check, 0, len(decided))
 	matches := make([]grantMatch, 0, len(decided))
 	allowedCount := 0
@@ -588,11 +652,7 @@ func (e *Engine) reportBatch(ctx context.Context, q question, decided []verdict,
 	case q.grants.grantCount() == 0:
 		row.Reason = authzrepo.ReasonNoGrants
 	}
-	if !record {
-		RecordAuthorizationDecision(ctx, row.Operation, row.Outcome, row.Reason)
-		return
-	}
-	row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	return row
 }
 
 func allowedPlainChecks(decided []verdict) []Check {

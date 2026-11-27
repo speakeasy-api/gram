@@ -122,7 +122,8 @@ func decisionAttributeMap(attrs []attribute.KeyValue) map[string]string {
 }
 
 // Decide writes no challenge row, but its decision still shows in the
-// request's trace like a recorded one.
+// request's trace like a recorded one: one check as a require, several as a
+// filter.
 func TestDecide_emitsDecisionTelemetryWithoutRecording(t *testing.T) {
 	t.Parallel()
 
@@ -135,12 +136,17 @@ func TestDecide_emitsDecisionTelemetryWithoutRecording(t *testing.T) {
 	ctx, span := provider.Tracer("test").Start(ctx, "request")
 	_, err := engine.Decide(ctx, projectRead("proj_b"))
 	require.NoError(t, err)
+	_, err = engine.Decide(ctx, projectRead("proj_b"), projectRead("proj_c"))
+	require.NoError(t, err)
 	span.End()
 
 	spans := exporter.GetSpans()
 	require.Len(t, spans, 1)
-	require.Len(t, spans[0].Events, 1)
-	attrs := decisionAttributeMap(spans[0].Events[0].Attributes)
-	require.Equal(t, "filter", attrs["gram.authorization.operation"])
-	require.Equal(t, "deny", attrs["gram.authorization.result"])
+	require.Len(t, spans[0].Events, 2)
+	single := decisionAttributeMap(spans[0].Events[0].Attributes)
+	require.Equal(t, "require", single["gram.authorization.operation"])
+	require.Equal(t, "deny", single["gram.authorization.result"])
+	list := decisionAttributeMap(spans[0].Events[1].Attributes)
+	require.Equal(t, "filter", list["gram.authorization.operation"])
+	require.Equal(t, "deny", list["gram.authorization.result"])
 }

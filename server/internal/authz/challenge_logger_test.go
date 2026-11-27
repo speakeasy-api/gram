@@ -30,7 +30,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(t.Context(), conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(t.Context(), conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
@@ -56,7 +56,7 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
@@ -90,7 +90,7 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 		Focus:               &check,
 		Matches:             []grantMatch{{Grant: Grant{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)}, ViaCheck: check}},
 		EvaluatedGrantCount: 1,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -137,7 +137,7 @@ func TestChallengeLogger_publishesAfterRequestCanceled(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testenv.NewLogger(t), func(ctx context.Context, _ string) (bool, error) {
+	}.write(ctx, conn, testenv.NewLogger(t), func(ctx context.Context, _ string) (bool, error) {
 		if err := ctx.Err(); err != nil {
 			return false, fmt.Errorf("flag check: %w", err)
 		}
@@ -169,7 +169,7 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -218,7 +218,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -249,7 +249,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 		Reason:    authzrepo.ReasonNoGrants,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -289,7 +289,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 		Focus:               &focus,
 		Matches:             matches,
 		EvaluatedGrantCount: 7,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -331,7 +331,7 @@ func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 		Focus:                &focus,
 		FilterCandidateCount: 4,
 		FilterAllowedCount:   1,
-	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.write(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
 	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
@@ -432,35 +432,22 @@ func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
 	}
 }
 
-func TestForListing_recordsNothing(t *testing.T) {
-	t.Parallel()
-
-	ctx, engine, conn, granted := challengeScopeFixture(t)
-	silent := ForListing(WithOneChallengePerResource(ctx))
-
-	require.NoError(t, engine.Require(silent, MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()))
-	require.Error(t, engine.Require(silent, mcpCheck(ScopeMCPConnect, uuid.NewString(), "")))
-	matched, err := allowedEach(silent, engine, []Check{MCPServer(MCPServerIDFrom(granted), ProjectIDFrom(testProjectID)).Connect()})
-	require.NoError(t, err)
-	require.Equal(t, []bool{true}, matched)
-
-	require.Empty(t, listChallengeOutboxRows(t, conn))
-}
-
 func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T) {
 	t.Parallel()
 
 	ctx, engine, conn, _ := challengeScopeFixture(t)
 	ctx = WithOneChallengePerResource(ctx)
 	ungranted := uuid.NewString()
+	server := MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID))
+	tools := []Check{server.ToolCall("search", ""), server.ToolCall("fetch", "")}
 
 	// A batch filtering the server's tools records, but leaves the server's
 	// own denial to be recorded when a call names it. Once that is recorded,
 	// a later batch about the server records nothing.
-	_, err := allowedEach(ctx, engine, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
+	_, err := allowedEach(ctx, engine, tools)
 	require.NoError(t, err)
 	require.Error(t, engine.Require(ctx, MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).Connect()))
-	_, err = allowedEach(ctx, engine, []Check{MCPServer(MCPServerIDFrom(ungranted), ProjectIDFrom(testProjectID)).ToolCall("search", "")})
+	_, err = allowedEach(ctx, engine, tools)
 	require.NoError(t, err)
 
 	// A batch row names no single resource.

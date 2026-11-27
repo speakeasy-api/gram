@@ -116,10 +116,11 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 	for i, item := range items {
 		checks[i] = authz.Assistant(authz.AssistantIDOf(item.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Read()
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, checks...)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
+	s.authz.Record(ctx, decisions)
 
 	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(items))}
 	for i, item := range items {
@@ -523,10 +524,11 @@ func (s *Service) requireAttachmentAccess(ctx context.Context, projectID uuid.UU
 	if err := s.authz.Require(ctx, connectChecks...); err != nil {
 		return nil, err
 	}
-	decisions, err := s.authz.DecideAndRecord(ctx, writeChecks...)
+	decisions, err := s.authz.Decide(ctx, writeChecks...)
 	if err != nil {
 		return nil, err
 	}
+	s.authz.Record(ctx, decisions)
 	return allowedResources(writeChecks, decisions), nil
 }
 

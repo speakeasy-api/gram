@@ -146,10 +146,9 @@ func TestRequireAndDecideAgree(t *testing.T) {
 	}
 }
 
-// A challenge row from DecideAndRecord names the alternative that allowed a
-// group. Example: Either(proj_c, proj_b) is recorded as proj_b; refused, it
-// lists both.
-func TestDecideAndRecord_recordsWinningAlternative(t *testing.T) {
+// A recorded list names the alternative that allowed a group. Example:
+// Either(proj_c, proj_b) is recorded as proj_b; refused, it lists both.
+func TestRecord_listNamesWinningAlternative(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -157,15 +156,16 @@ func TestDecideAndRecord_recordsWinningAlternative(t *testing.T) {
 		check    Check
 		recorded []string
 	}{
-		{name: "allowed", check: Either(projectRead("proj_c"), projectRead("proj_b")), recorded: []string{"proj_b"}},
-		{name: "refused", check: Either(projectRead("proj_c"), projectRead("proj_d")), recorded: []string{"proj_c", "proj_d"}},
+		{name: "allowed", check: Either(projectRead("proj_c"), projectRead("proj_b")), recorded: []string{"proj_b", "proj_x"}},
+		{name: "refused", check: Either(projectRead("proj_c"), projectRead("proj_d")), recorded: []string{"proj_c", "proj_d", "proj_x"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, engine, conn := entryPointEngine(t, true)
-			_, err := engine.DecideAndRecord(ctx, tc.check)
+			d, err := engine.Decide(ctx, tc.check, projectRead("proj_x"))
 			require.NoError(t, err)
+			engine.Record(ctx, d)
 
 			rows := listChallengeOutboxRows(t, conn)
 			require.Len(t, rows, 1)
@@ -255,10 +255,11 @@ func allAllowed(ctx context.Context, engine *Engine, checks ...Check) (bool, err
 
 // allowedEach answers each check the way a list page does.
 func allowedEach(ctx context.Context, engine *Engine, checks []Check) ([]bool, error) {
-	decisions, err := engine.DecideAndRecord(ctx, checks...)
+	decisions, err := engine.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
+	engine.Record(ctx, decisions)
 	allowed := make([]bool, len(decisions.Each))
 	for i, decision := range decisions.Each {
 		allowed[i] = decision.Allowed

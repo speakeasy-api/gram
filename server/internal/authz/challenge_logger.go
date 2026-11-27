@@ -27,9 +27,8 @@ type grantMatch struct {
 	ViaCheck Check
 }
 
-// challengeLogger captures the data describing a single authz decision. The
-// engine constructs one of these inline at each Require/Decide
-// call site, then invokes Log to persist it.
+// challengeLogger is the row describing one authorization decision. The
+// engine builds it while deciding; Record and Require write it.
 type challengeLogger struct {
 	Operation authzrepo.Operation
 	Outcome   authzrepo.Outcome
@@ -47,14 +46,12 @@ type challengeLogger struct {
 
 const challengeLogStepTimeout = 10 * time.Second
 
-// Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
+// write enqueues the challenge for asynchronous ingestion into ClickHouse. The
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
 // It reports whether the challenge was enqueued.
-func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
-	RecordAuthorizationDecision(ctx, l.Operation, l.Outcome, l.Reason)
-
+func (l challengeLogger) write(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return false
@@ -69,11 +66,6 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 	// Likewise for sessions exploring the shared demo org: challenges there
 	// belong to the visitor, and the daily seed rerun would wipe them anyway.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		return false
-	}
-
-	// A gateway listing records nothing (see ForListing).
-	if challengesSilenced(ctx) {
 		return false
 	}
 
@@ -280,11 +272,7 @@ type challengeScopeKey struct{}
 // authorization checks. Decisions still count in the decision metrics either
 // way; only the recorded check, an outbox row each, is skipped.
 type challengeScope struct {
-	// silent records nothing: a gateway path is listing, not asking for
-	// one resource (see ForListing).
-	silent bool
-	// recorded is shared by every scope derived from one request. Nil for a
-	// silent scope.
+	// recorded is shared by every scope derived from one request.
 	recorded *recordedChallenges
 }
 
@@ -325,25 +313,8 @@ func WithOneChallengePerResource(ctx context.Context) context.Context {
 		return ctx
 	}
 	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{
-		silent:   false,
 		recorded: &recordedChallenges{mu: sync.Mutex{}, decided: map[challengeResource]struct{}{}, denied: map[challengeDenial]struct{}{}},
 	})
-}
-
-// ForListing returns a context under which the engine records no checks, not
-// even from Require. Use it only where a whole code path lists resources
-// through helpers that also gate a single resource, such as the MCP gateway
-// admitting each member it could show. A single Decide or a list's
-// DecideAndRecord does not need it.
-func ForListing(ctx context.Context) context.Context {
-	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
-}
-
-// challengesSilenced reports a context that records no checks. It is read
-// before anything else a recorded check costs, such as the feature flag.
-func challengesSilenced(ctx context.Context) bool {
-	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
-	return ok && scope.silent
 }
 
 // claimChallenge reports whether a decision is recorded under ctx's scope, and
@@ -352,9 +323,6 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
 	if !ok {
 		return true
-	}
-	if scope.recorded == nil {
-		return false
 	}
 
 	// A batch Decide names no one resource. It never takes a
