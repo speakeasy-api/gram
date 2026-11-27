@@ -14,6 +14,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -132,11 +133,15 @@ func (p *ProcessWorkOSGlobalRoleEvents) handleEvent(ctx context.Context, logger 
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindRoleCreated, workos.EventKindRoleUpdated:
-		if err := upsertGlobalRole(ctx, dbtx, event, payload); err != nil {
+		if authz.IsLocalBuiltInRole(payload.Slug) {
+			logger.InfoContext(ctx, "ignoring WorkOS global role event for Speakeasy-local built-in role", attr.SlogAccessRoleSlug(payload.Slug))
+		} else if err := upsertGlobalRole(ctx, dbtx, event, payload); err != nil {
 			return "", err
 		}
 	case workos.EventKindRoleDeleted:
-		if err := deleteGlobalRole(ctx, dbtx, event, payload); err != nil {
+		if authz.IsLocalBuiltInRole(payload.Slug) {
+			logger.InfoContext(ctx, "ignoring WorkOS global role deletion for Speakeasy-local built-in role", attr.SlogAccessRoleSlug(payload.Slug))
+		} else if err := deleteGlobalRole(ctx, dbtx, event, payload); err != nil {
 			return "", err
 		}
 	default:

@@ -1154,9 +1154,15 @@ func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs 
 			urns = append(urns, p.String())
 		}
 
+		standardRoleScopes, err := authz.StandardRoleScopesFor(ctx, s.db, principals)
+		if err != nil {
+			return nil, fmt.Errorf("resolve standard role scopes: %w", err)
+		}
+
 		rows, err := queries.ListAccessibleSkillsForUser(ctx, accessrepo.ListAccessibleSkillsForUserParams{
-			OrganizationID: orgID,
-			PrincipalUrns:  urns,
+			OrganizationID:     orgID,
+			PrincipalUrns:      urns,
+			StandardRoleScopes: standardRoleScopes,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list accessible skills: %w", err)

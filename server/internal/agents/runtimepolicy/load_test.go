@@ -188,3 +188,41 @@ func TestLoadAgentPolicyPreservesServerRestrictions(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadAgentPolicyIncludesStandardRoleGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newAgentRoleFixture(t, ctx)
+	require.NoError(t, authz.EnsureLocalBuiltInGlobalRoles(ctx, fixture.db))
+
+	q := accessrepo.New(fixture.db)
+	stdAdminRole, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleStandardAdmin)
+	require.NoError(t, err)
+	superAdminRole, err := q.GetGlobalRoleBySlug(ctx, authz.SystemRoleSuperAdmin)
+	require.NoError(t, err)
+
+	// Assign Standard Admin and Super Admin with zero stored principal_grants rows.
+	for _, roleURN := range []string{"role:global:" + stdAdminRole.ID.String(), "role:global:" + superAdminRole.ID.String()} {
+		assigned, err := q.UpsertAgentRoleAssignment(ctx, accessrepo.UpsertAgentRoleAssignmentParams{
+			OrganizationID: fixture.organizationID,
+			RoleUrn:        roleURN,
+			AgentID:        fixture.agentID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), assigned)
+	}
+
+	grants, err := LoadAgentPolicy(ctx, fixture.db, fixture.organizationID, fixture.agentPrincipal)
+	require.NoError(t, err)
+
+	scopes := scopeSet(grants)
+	require.Contains(t, scopes, authz.ScopeMCPConnect, "runtime-safe code-defined scopes widen agent policy")
+	require.Contains(t, scopes, authz.ScopeSkillRead)
+	require.NotContains(t, scopes, authz.ScopeOrgAdmin, "agent-unsafe code-defined scopes are filtered out")
+	require.NotContains(t, scopes, authz.ScopeOrgRead, "non-managed agents do not keep org:read from code-defined roles")
+
+	batched, err := LoadKnownAgentPolicies(ctx, fixture.db, fixture.organizationID, []uuid.UUID{fixture.agentID})
+	require.NoError(t, err)
+	require.ElementsMatch(t, grants, batched[fixture.agentID])
+}

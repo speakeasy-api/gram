@@ -951,6 +951,59 @@ func TestProcessWorkOSGlobalRoleEvents_UpsertAndDelete(t *testing.T) {
 	require.Equal(t, "event_01HZG2", role.WorkosLastEventID.String)
 }
 
+func TestProcessWorkOSGlobalRoleEvents_IgnoresLocalBuiltInRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_global_role_events_ignores_local_builtin")
+	logger := testenv.NewLogger(t)
+
+	require.NoError(t, authz.EnsureLocalBuiltInGlobalRoles(ctx, conn))
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZB1",
+				Event:     "role.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"role_sa","object":"role","slug":"super_admin","name":"Hijacked Super Admin",` +
+					`"description":"overwritten","type":"EnvironmentRole",` +
+					`"created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T10:00:00Z"}`),
+			},
+			{
+				ID:        "event_01HZB2",
+				Event:     "role.deleted",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"role_adm","object":"role","slug":"standard_admin","name":"Standard Admin",` +
+					`"type":"EnvironmentRole","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T11:00:00Z",` +
+					`"deleted_at":"2026-05-06T11:00:00Z"}`),
+			},
+			{
+				ID:        "event_01HZB3",
+				Event:     "role.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"role_mem","object":"role","slug":"standard_member","name":"Hijacked Member",` +
+					`"type":"EnvironmentRole","created_at":"2026-05-06T10:00:00Z","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSGlobalRoleEvents(logger, conn, stub)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSGlobalRoleEventsParams{})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZB3", res.LastEventID)
+
+	q := accessrepo.New(conn)
+	for _, spec := range authz.LocalBuiltInRoles() {
+		role, err := q.GetGlobalRoleBySlug(ctx, spec.Slug)
+		require.NoError(t, err)
+		require.Equal(t, spec.Name, role.WorkosName)
+		require.False(t, role.Deleted)
+		require.False(t, role.WorkosDeleted)
+		require.False(t, role.WorkosLastEventID.Valid)
+	}
+}
+
 func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *testing.T) {
 	t.Parallel()
 

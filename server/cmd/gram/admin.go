@@ -533,6 +533,9 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), chReadDB, staffOrg)
+			if err := authz.EnsureLocalBuiltInGlobalRoles(ctx, db); err != nil {
+				return fmt.Errorf("ensure local built-in global roles: %w", err)
+			}
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}

@@ -1741,6 +1741,9 @@ func newStartCommand() *cli.Command {
 			)
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			auth.Attach(mux, authService)
+			if err := authz.EnsureLocalBuiltInGlobalRoles(ctx, db); err != nil {
+				return fmt.Errorf("ensure local built-in global roles: %w", err)
+			}
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may
 			// start first.

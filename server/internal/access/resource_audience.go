@@ -577,6 +577,11 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 		rules[key] = next
 	}
 
+	activeRoles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, organizationID)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeUnexpected, err, "list roles for resource audience").LogError(ctx, s.logger)
+	}
+
 	for level, scope := range audienceLevelScopes {
 		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
 			OrganizationID: organizationID,
@@ -617,6 +622,7 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 			record(grant.PrincipalUrn, level, audienceAppliesToAllResources, grant.Selector[authz.SelectorKeyTool], grant.Selector[authz.SelectorKeyDisposition])
 		}
 	}
+	recordStandardRoleAudience(activeRoles, record)
 
 	names, err := s.audienceNames(ctx, organizationID)
 	if err != nil {
@@ -674,6 +680,24 @@ func (s *Service) resourceAudienceEntries(ctx context.Context, organizationID, r
 	})
 
 	return entries, audienceVersion(fingerprint), nil
+}
+
+// recordStandardRoleAudience records inherited organization-wide server rules
+// for active standard roles whose permissions come from registry.Definitions.
+func recordStandardRoleAudience(
+	roles []accessrepo.ListActiveOrganizationRolesRow,
+	record func(principalURN, level, appliesTo, tool, disposition string),
+) {
+	for _, role := range roles {
+		if !authz.IsStandardRole(role.WorkosSlug) {
+			continue
+		}
+		for level, scope := range audienceLevelScopes {
+			if authz.StandardRoleHasScope(role.WorkosSlug, scope) {
+				record(role.RoleUrn, level, audienceAppliesToAllResources, "", "")
+			}
+		}
+	}
 }
 
 // audienceSelectors turns a narrowing into the selectors it stores: one per

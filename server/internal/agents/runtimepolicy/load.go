@@ -46,10 +46,19 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 	if err != nil {
 		return nil, fmt.Errorf("query agent policy grants: %w", err)
 	}
+	standardGrants, err := authz.LoadStandardRoleGrants(ctx, db, principalURNs)
+	if err != nil {
+		return nil, fmt.Errorf("load agent standard role grants: %w", err)
+	}
 
-	grants := make([]authz.Grant, 0, len(rows))
+	grants := make([]authz.Grant, 0, len(rows)+len(standardGrants))
 	for _, row := range rows {
 		if grant, ok := normalizeAgentPolicyGrant(row); ok {
+			grants = append(grants, grant)
+		}
+	}
+	for _, standardGrant := range standardGrants {
+		if grant, ok := normalizeAgentPolicyGrantValue(standardGrant); ok {
 			grants = append(grants, grant)
 		}
 	}
@@ -119,6 +128,10 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 	if err != nil {
 		return nil, fmt.Errorf("query agent policy grants: %w", err)
 	}
+	standardGrants, err := authz.LoadStandardRoleGrants(ctx, db, principalURNs)
+	if err != nil {
+		return nil, fmt.Errorf("load agent standard role grants: %w", err)
+	}
 
 	for _, row := range rows {
 		grant, valid := normalizeAgentPolicyGrant(row)
@@ -130,6 +143,15 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 			continue
 		}
 		for _, agentID := range agentIDsByRolePrincipal[row.PrincipalUrn.String()] {
+			policies[agentID] = append(policies[agentID], grant)
+		}
+	}
+	for _, standardGrant := range standardGrants {
+		grant, valid := normalizeAgentPolicyGrantValue(standardGrant)
+		if !valid {
+			continue
+		}
+		for _, agentID := range agentIDsByRolePrincipal[grant.PrincipalUrn] {
 			policies[agentID] = append(policies[agentID], grant)
 		}
 	}
@@ -205,7 +227,21 @@ func withoutOrganizationRead(grants []authz.Grant) []authz.Grant {
 
 func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Grant, bool) {
 	var invalid authz.Grant
-	scope := authz.Scope(row.Scope)
+	selector, err := authz.SelectorFromRow(row.Selectors)
+	if err != nil {
+		return invalid, false
+	}
+	return normalizeAgentPolicyGrantValue(authz.Grant{
+		PrincipalUrn: row.PrincipalUrn.String(),
+		Scope:        authz.Scope(row.Scope),
+		Selector:     selector,
+		Inferred:     row.Inferred,
+	})
+}
+
+func normalizeAgentPolicyGrantValue(grant authz.Grant) (authz.Grant, bool) {
+	var invalid authz.Grant
+	scope := grant.Scope
 	// MCP exclusions restrict live parent policy; they never become delegated
 	// allow grants. Keep them so broad direct or role allows can be revoked
 	// on one server, or for one auth client on every server using it, without
@@ -214,14 +250,8 @@ func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Gran
 	if !isMCPRestriction && ValidateRuntimeScope(CurrentRuntimeScopeRegistryVersion, scope) != nil {
 		return invalid, false
 	}
-	selector, err := authz.SelectorFromRow(row.Selectors)
-	if err != nil || authz.ValidateSelector(scope, selector) != nil {
+	if authz.ValidateSelector(scope, grant.Selector) != nil {
 		return invalid, false
 	}
-	return authz.Grant{
-		PrincipalUrn: row.PrincipalUrn.String(),
-		Scope:        scope,
-		Selector:     selector,
-		Inferred:     row.Inferred,
-	}, true
+	return grant, true
 }

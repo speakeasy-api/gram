@@ -362,6 +362,56 @@ func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeleteP
 	return result.RowsAffected(), nil
 }
 
+const ensureLocalGlobalRole = `-- name: EnsureLocalGlobalRole :exec
+INSERT INTO global_roles (
+    workos_slug,
+    workos_name,
+    workos_description,
+    workos_created_at,
+    workos_updated_at,
+    workos_last_event_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    NULL
+)
+ON CONFLICT (workos_slug) DO UPDATE SET
+    workos_name = EXCLUDED.workos_name,
+    workos_description = EXCLUDED.workos_description,
+    workos_updated_at = EXCLUDED.workos_updated_at,
+    deleted_at = NULL,
+    workos_deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE global_roles.workos_name IS DISTINCT FROM EXCLUDED.workos_name
+   OR global_roles.workos_description IS DISTINCT FROM EXCLUDED.workos_description
+   OR global_roles.deleted_at IS NOT NULL
+   OR global_roles.workos_deleted_at IS NOT NULL
+`
+
+type EnsureLocalGlobalRoleParams struct {
+	WorkosSlug        string
+	WorkosName        string
+	WorkosDescription pgtype.Text
+	WorkosCreatedAt   pgtype.Timestamptz
+	WorkosUpdatedAt   pgtype.Timestamptz
+}
+
+// Upserts a Speakeasy-local built-in role into global_roles without emitting
+// role distribution fanout requests.
+func (q *Queries) EnsureLocalGlobalRole(ctx context.Context, arg EnsureLocalGlobalRoleParams) error {
+	_, err := q.db.Exec(ctx, ensureLocalGlobalRole,
+		arg.WorkosSlug,
+		arg.WorkosName,
+		arg.WorkosDescription,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	return err
+}
+
 const expireLapsedAccessRequest = `-- name: ExpireLapsedAccessRequest :exec
 UPDATE access_requests
 SET status = 'expired', updated_at = clock_timestamp()
@@ -2272,6 +2322,13 @@ WITH user_grants AS (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
     )
+  UNION ALL
+  SELECT
+    standard_scope AS scope,
+    jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*') AS selectors,
+    FALSE AS direct
+  FROM unnest($3::text[]) AS standard_scope
+  WHERE standard_scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
 ), servers AS (
   SELECT ms.id, ms.name, ms.slug, ms.project_id, p.slug AS project_slug
   FROM mcp_servers ms
@@ -2335,8 +2392,9 @@ ORDER BY s.name
 `
 
 type ListAccessibleMCPServersForUserParams struct {
-	OrganizationID string
-	PrincipalUrns  []string
+	OrganizationID     string
+	PrincipalUrns      []string
+	StandardRoleScopes []string
 }
 
 type ListAccessibleMCPServersForUserRow struct {
@@ -2365,7 +2423,7 @@ type ListAccessibleMCPServersForUserRow struct {
 // user that names this server outranks a block inherited from a role or
 // user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
-	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns)
+	rows, err := q.db.Query(ctx, listAccessibleMCPServersForUser, arg.OrganizationID, arg.PrincipalUrns, arg.StandardRoleScopes)
 	if err != nil {
 		return nil, err
 	}
@@ -2404,6 +2462,13 @@ WITH user_grants AS (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'
     )
+  UNION ALL
+  SELECT
+    standard_scope AS scope,
+    jsonb_build_object('resource_kind', 'skill', 'resource_id', '*') AS selectors,
+    FALSE AS direct
+  FROM unnest($3::text[]) AS standard_scope
+  WHERE standard_scope IN ('skill:read', 'skill:write')
 ), candidate_skills AS (
   SELECT s.id, s.name, s.display_name, s.project_id, p.slug AS project_slug
   FROM skills s
@@ -2449,8 +2514,9 @@ ORDER BY cs.display_name, cs.name
 `
 
 type ListAccessibleSkillsForUserParams struct {
-	OrganizationID string
-	PrincipalUrns  []string
+	OrganizationID     string
+	PrincipalUrns      []string
+	StandardRoleScopes []string
 }
 
 type ListAccessibleSkillsForUserRow struct {
@@ -2481,7 +2547,7 @@ type ListAccessibleSkillsForUserRow struct {
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
-	rows, err := q.db.Query(ctx, listAccessibleSkillsForUser, arg.OrganizationID, arg.PrincipalUrns)
+	rows, err := q.db.Query(ctx, listAccessibleSkillsForUser, arg.OrganizationID, arg.PrincipalUrns, arg.StandardRoleScopes)
 	if err != nil {
 		return nil, err
 	}
@@ -2573,6 +2639,9 @@ WITH active_roles AS (
   FROM global_roles
   WHERE deleted IS FALSE
     AND workos_deleted IS FALSE
+    -- Keep Speakeasy-local built-in roles hidden from org listings until
+    -- per-org rollout gating and locking are in place.
+    AND workos_slug NOT IN ('super_admin', 'standard_admin', 'standard_member')
   UNION ALL
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'organization'::text AS role_kind
   FROM organization_roles
@@ -3249,6 +3318,39 @@ func (q *Queries) ListDirectoryRoleMappings(ctx context.Context, organizationID 
 	return items, nil
 }
 
+const listGlobalRoleSlugsByIDs = `-- name: ListGlobalRoleSlugsByIDs :many
+SELECT id, workos_slug
+FROM global_roles
+WHERE id = ANY($1::uuid[])
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE
+`
+
+type ListGlobalRoleSlugsByIDsRow struct {
+	ID         uuid.UUID
+	WorkosSlug string
+}
+
+func (q *Queries) ListGlobalRoleSlugsByIDs(ctx context.Context, ids []uuid.UUID) ([]ListGlobalRoleSlugsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listGlobalRoleSlugsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGlobalRoleSlugsByIDsRow
+	for rows.Next() {
+		var i ListGlobalRoleSlugsByIDsRow
+		if err := rows.Scan(&i.ID, &i.WorkosSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGlobalRoles = `-- name: ListGlobalRoles :many
 SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id, created_at, updated_at, deleted_at, deleted
 FROM global_roles
@@ -3473,10 +3575,13 @@ profiles AS (
     AND (d.user_id = active_users.user_id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(active_users.email)))
   ORDER BY active_users.user_id, (d.user_id = active_users.user_id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
 )
-SELECT user_id, ('user:' || user_id)::text AS principal_urn
+SELECT user_id, ('user:' || user_id)::text AS principal_urn, ''::text AS global_role_slug
 FROM active_users
 UNION
-SELECT active_users.user_id, ora.role_urn::text AS principal_urn
+SELECT
+  active_users.user_id,
+  ora.role_urn::text AS principal_urn,
+  COALESCE(global_roles.workos_slug, '')::text AS global_role_slug
 FROM active_users
 JOIN organization_role_assignments AS ora ON ora.user_id = active_users.user_id
 LEFT JOIN organization_roles
@@ -3492,11 +3597,23 @@ WHERE ora.organization_id = $1
   AND ora.deleted_at IS NULL
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 UNION
-SELECT profiles.user_id, drm.role_urn::text AS principal_urn
+SELECT
+  profiles.user_id,
+  drm.role_urn::text AS principal_urn,
+  COALESCE(global_roles.workos_slug, '')::text AS global_role_slug
 FROM profiles
 JOIN directory_role_mappings AS drm
   ON drm.organization_id = $1
   AND drm.deleted IS FALSE
+LEFT JOIN organization_roles
+  ON drm.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = drm.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON drm.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
 WHERE (
     (
       drm.source_kind = 'group'
@@ -3518,23 +3635,7 @@ WHERE (
       AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
     )
   )
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM organization_roles AS r
-      WHERE drm.role_urn = 'role:organization:' || r.id::text
-        AND r.organization_id = drm.organization_id
-        AND r.deleted IS FALSE
-        AND r.workos_deleted IS FALSE
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM global_roles AS g
-      WHERE drm.role_urn = 'role:global:' || g.id::text
-        AND g.deleted IS FALSE
-        AND g.workos_deleted IS FALSE
-    )
-  )
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
 `
 
 type ListMemberPrincipalsByUsersParams struct {
@@ -3543,8 +3644,9 @@ type ListMemberPrincipalsByUsersParams struct {
 }
 
 type ListMemberPrincipalsByUsersRow struct {
-	UserID       string
-	PrincipalUrn string
+	UserID         string
+	PrincipalUrn   string
+	GlobalRoleSlug string
 }
 
 // Resolve active user and role principals together for a requested set of
@@ -3562,7 +3664,7 @@ func (q *Queries) ListMemberPrincipalsByUsers(ctx context.Context, arg ListMembe
 	var items []ListMemberPrincipalsByUsersRow
 	for rows.Next() {
 		var i ListMemberPrincipalsByUsersRow
-		if err := rows.Scan(&i.UserID, &i.PrincipalUrn); err != nil {
+		if err := rows.Scan(&i.UserID, &i.PrincipalUrn, &i.GlobalRoleSlug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
