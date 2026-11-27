@@ -291,6 +291,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationSetOrganizationFeature:               &featureWriter{runner: runner, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes},
 		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationSetOrganizationWhitelist:             &organizationWhitelistWriter{runner: runner, audit: auditLogger, writes: writes},
+		OperationSetOrganizationFunctionTimeout:       &functionTimeoutWriter{runner: runner, writes: writes},
 		OperationExtendOrganizationTrial:              &trialWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationSetChatAnalysisSettings:              &chatAnalysisWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationEnableOrganization:                   &organizationAccessWriter{runner: runner, audit: auditLogger, writes: writes, operation: OperationEnableOrganization},

@@ -25,6 +25,7 @@ const (
 	OperationPromoteRegistryCandidate             WriteOperation = "promote_registry_candidate"
 	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
 	OperationSetOrganizationWhitelist             WriteOperation = "set_organization_whitelist"
+	OperationSetOrganizationFunctionTimeout       WriteOperation = "set_organization_function_timeout"
 	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
 	OperationSetChatAnalysisSettings              WriteOperation = "set_organization_chat_analysis_settings"
 	OperationExtendOrganizationTrial              WriteOperation = "extend_organization_trial"
@@ -47,6 +48,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationPromoteRegistryCandidate,
 	OperationSetOrganizationFeature,
 	OperationSetOrganizationWhitelist,
+	OperationSetOrganizationFunctionTimeout,
 	OperationAssignOrganizationOnboardingPlaybook,
 	OperationSetChatAnalysisSettings,
 	OperationExtendOrganizationTrial,

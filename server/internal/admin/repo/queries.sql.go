@@ -3420,6 +3420,35 @@ func (q *Queries) LockOrganizationAccess(ctx context.Context, id string) (LockOr
 	return i, err
 }
 
+const lockOrganizationFunctionTimeout = `-- name: LockOrganizationFunctionTimeout :one
+SELECT id, name, slug, function_timeout_seconds, updated_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockOrganizationFunctionTimeoutRow struct {
+	ID                     string
+	Name                   string
+	Slug                   string
+	FunctionTimeoutSeconds pgtype.Int4
+	UpdatedAt              pgtype.Timestamptz
+}
+
+// Pin the exact target and its current function timeout before a change.
+func (q *Queries) LockOrganizationFunctionTimeout(ctx context.Context, id string) (LockOrganizationFunctionTimeoutRow, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationFunctionTimeout, id)
+	var i LockOrganizationFunctionTimeoutRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.FunctionTimeoutSeconds,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
