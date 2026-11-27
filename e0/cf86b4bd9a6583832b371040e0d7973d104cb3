@@ -1,0 +1,60 @@
+server/cmd/gram/admin.go
+  h_2620cc60cfd1e9 536-538
+server/cmd/gram/start.go
+  h_2620cc60cfd1e9 1744-1746
+server/cmd/gram/worker.go
+  h_2620cc60cfd1e9 744-746
+server/internal/access/builtin_roles_test.go
+  h_2620cc60cfd1e9 1-133
+server/internal/access/impl.go
+  h_2620cc60cfd1e9 1936-1940,1944-1946,1953-1955
+server/internal/access/queries.sql
+  h_2620cc60cfd1e9 347-383,563-565,1118,1121-1124,1140-1143,1148-1156,1178,1500-1506,1599-1605
+server/internal/access/repo/queries.sql.go
+  h_2620cc60cfd1e9 365-414,2325-2331,2395-2397,2426,2465-2471,2517-2519,2550,2642-2644,3321-3353,3578,3581-3584,3600-3603,3608-3616,3638,3647-3649,3667
+server/internal/access/resource_audience.go
+  h_2620cc60cfd1e9 580-584,625,685-702
+server/internal/access/role_manager.go
+  h_2620cc60cfd1e9 152,535-538
+server/internal/agents/runtimepolicy/load.go
+  h_2620cc60cfd1e9 49-52,54,60-64,131-134,149-157,230-244,253,256
+server/internal/agents/runtimepolicy/load_test.go
+  h_2620cc60cfd1e9 191-228
+server/internal/authz/builtin_roles.go
+  h_2620cc60cfd1e9 1-228
+server/internal/authz/builtin_roles_test.go
+  h_2620cc60cfd1e9 1-174
+server/internal/authz/grants.go
+  h_2620cc60cfd1e9 18,308-310,313,316,318,321-325,327,344-348,360-363,368,370,385-394
+server/internal/authz/internal/registry/definitions.go
+  h_2620cc60cfd1e9 695-698,703-749
+server/internal/authz/internal/registry/roles.go
+  h_2620cc60cfd1e9 9-14
+server/internal/authz/load.go
+  h_2620cc60cfd1e9 12-16,27-41,100-101,110-113,117-121,125-127
+server/internal/authz/roles_gen.go
+  h_2620cc60cfd1e9 9-14
+server/internal/authz/tables_gen.go
+  h_2620cc60cfd1e9 330-333
+server/internal/background/activities/process_workos_global_role_events.go
+  h_2620cc60cfd1e9 17,136-138,142-144
+server/internal/background/activities/process_workos_org_events_test.go
+  h_2620cc60cfd1e9 954-1006
+server/internal/roledistribution/queries.sql
+  h_2620cc60cfd1e9 30-34
+server/internal/roledistribution/repo/queries.sql.go
+  h_2620cc60cfd1e9 92-96
+server/internal/skills/impl.go
+  h_2620cc60cfd1e9 1157-1161,1163-1165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0cf86b4bd9a6583832b371040e0d7973d104cb3",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
