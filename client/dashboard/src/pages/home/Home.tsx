@@ -285,7 +285,8 @@ function ScrollHint(): JSX.Element {
   const sentinel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = sentinel.current;
-    if (!el) return;
+    // Without the API the hint just stays visible.
+    if (!el || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(([entry]) =>
       setAtEnd(entry?.isIntersecting ?? false),
     );

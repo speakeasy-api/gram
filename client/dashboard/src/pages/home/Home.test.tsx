@@ -105,7 +105,9 @@ describe("Home", () => {
     state.terminalHome = "enabled";
     renderHome();
     expect(screen.getByTestId("home-terminal")).toBeTruthy();
-    expect(screen.getAllByTestId("home-widgets").length).toBeGreaterThan(0);
+    // One set in the scrolling lane, one in the slot under the chat.
+    expect(screen.getAllByTestId("home-widgets")).toHaveLength(2);
+    expect(screen.getByTestId("home-sections")).toBeTruthy();
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
   });
 
