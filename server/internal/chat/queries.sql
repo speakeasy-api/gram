@@ -1810,13 +1810,6 @@ INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_
 VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
 RETURNING id;
 
--- name: UpdateToolCallOutcome :exec
--- tool_outcome only. The notes are part of the message body, so they go
--- through transcriptstore.Transcripts.UpdateBody in the same transaction.
-UPDATE chat_messages
-SET tool_outcome = @tool_outcome
-WHERE id = @id AND project_id = @project_id::uuid;
-
 -- name: InsertChatResolution :one
 -- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
 -- pairing is verified here: a mis-plumbed caller would otherwise write a row
@@ -2361,17 +2354,6 @@ SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDA
 
 -- name: GetKitProjectionMessage :one
 SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
-
--- name: PatchKitProjectionFields :execrows
--- The non-body fields of a kit projection patch. The body (content,
--- content_raw, tool_calls) goes through transcriptstore.Transcripts.UpdateBody
--- in the same transaction first, which reports whether it changed; a body
--- change also clears the risk mark so the new body is analyzed again.
-UPDATE chat_messages AS m
-SET content_hash = @content_hash, finish_reason = @finish_reason,
-    risk_analyzed_at = CASE WHEN @body_changed::boolean THEN NULL ELSE m.risk_analyzed_at END
-WHERE m.project_id = @project_id AND m.chat_id = @chat_id AND m.id = @id AND m.source = 'kit'
-  AND (@body_changed::boolean OR m.content_hash IS DISTINCT FROM @content_hash OR m.finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t

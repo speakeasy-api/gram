@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 )
 
@@ -85,7 +85,7 @@ func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID str
 	if t.Mode(projectID) != ModeEncrypted {
 		return nil
 	}
-	if err := emptyPlaintext(ctx, repo.New(db), projectID, messageIDs); err != nil {
+	if err := emptyPlaintext(ctx, repo.New(db), organizationID, projectID, messageIDs); err != nil {
 		return fmt.Errorf("empty sealed plaintext: %w", err)
 	}
 	return nil
@@ -119,26 +119,27 @@ func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 	return ModePlaintext
 }
 
-// UpdateBody is the one way to change the body of an existing message: content,
+// UpdateMessage is the one way to change an existing message's body: content,
 // content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and
-// storage_error. Inside the caller's transaction it locks the message row,
-// reads the body (from the decrypted transcript in shadow mode), lets apply
-// change it in Go and writes the result to every copy the project keeps. It
-// reports whether the body changed. Call Prepare before beginning the
-// transaction, and roll back on error. Non-body columns stay in the caller's
-// own statements in the same transaction.
-func (t *Transcripts) UpdateBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+// storage_error. Inside the caller's transaction it locks the row and its
+// transcript, hands apply the whole row with its body filled in (from the
+// decrypted transcript outside plaintext mode), and writes what apply changed
+// to every copy the project keeps. Besides the body, apply may change only
+// tool_outcome, finish_reason, content_hash and risk_analyzed_at; any other
+// change fails. It reports whether anything changed. Call Prepare before
+// beginning the transaction, and roll back on error.
+func (t *Transcripts) UpdateMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
 	mode := t.Mode(projectID)
 	if mode == ModePlaintext {
-		changed, err := updateBody(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
+		changed, err := updateMessage(ctx, db, nil, false, organizationID, projectID, chatID, messageID, apply)
 		if err != nil {
-			return false, fmt.Errorf("update chat message body: %w", err)
+			return false, fmt.Errorf("update chat message: %w", err)
 		}
 		return changed, nil
 	}
-	changed, err := t.store.updateBodyIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
+	changed, err := t.store.updateMessageIn(ctx, db, mode == ModeEncrypted, organizationID, projectID, chatID, messageID, apply)
 	if err != nil {
-		return false, fmt.Errorf("update chat message body: %w", err)
+		return false, fmt.Errorf("update chat message: %w", err)
 	}
 	return changed, nil
 }
@@ -156,12 +157,14 @@ type Body struct {
 	StorageError      *pgtype.Text
 }
 
-// Open replaces each body with its decrypted transcript when the project has
-// encrypted transcripts, in one LoadMany call; in plaintext mode it reads no
-// transcript. A message with no transcript yet keeps its plaintext and counts as
-// plaintext_fallback. A transcript that disagrees with its plaintext row is
-// logged as an error, counted as stale, and the plaintext is kept, the same rule
-// UpdateBody follows. A transcript that cannot be decrypted fails the read.
+// Open replaces each body with its decrypted transcript, in one query per
+// page; in plaintext mode it reads no transcript. In shadow mode a message with
+// no transcript yet keeps its plaintext and counts as plaintext_fallback, and a
+// transcript that disagrees with its plaintext row is logged, counted as stale,
+// and the plaintext is kept, the same rule UpdateMessage follows. In encrypted
+// mode the transcript is served without comparison, and a message without one
+// fails the read with ErrMissingTranscript. A transcript that cannot be
+// decrypted fails the read in either mode.
 func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID uuid.UUID, bodies []Body) error {
 	if len(bodies) == 0 || !t.Enabled(projectID) {
 		return nil

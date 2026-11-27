@@ -10,13 +10,11 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -28,7 +26,7 @@ import (
 // transaction begins.
 type MessageBodyUpdater interface {
 	PrepareTranscripts(ctx context.Context, projectID uuid.UUID) error
-	UpdateMessageBody(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error)
+	UpdateMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error)
 }
 
 type AnalyzeSegment struct {
@@ -132,47 +130,35 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	txRepo := a.repo.WithTx(tx)
 
-	// Update tool call outcomes. The notes are part of the body, so they are
-	// written below through UpdateMessageBody; the last notes for a message win.
+	// Collect each message's judged outcome; the last one for a message wins.
 	var updated []uuid.UUID
-	notes := make(map[uuid.UUID]pgtype.Text)
+	judged := make(map[uuid.UUID]toolCallAnalysis)
 	for _, tc := range result.ToolCalls {
-		// Convert relative index to absolute
 		absoluteIndex := args.StartIndex + tc.MessageIndex
-		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
-			msgID := allMessages[absoluteIndex].ID
-			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
-				ID:          msgID,
-				ProjectID:   args.ProjectID,
-				ToolOutcome: conv.ToPGText(tc.Outcome),
-			}); err != nil {
-				a.logger.WarnContext(ctx, "failed to update tool call outcome",
-					attr.SlogError(err),
-					attr.SlogMessageID(msgID.String()),
-				)
-				// Continue with other updates
-				continue
-			}
-			if _, seen := notes[msgID]; !seen {
-				updated = append(updated, msgID)
-			}
-			notes[msgID] = conv.ToPGText(tc.Notes)
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
 		}
+		msgID := allMessages[absoluteIndex].ID
+		if _, seen := judged[msgID]; !seen {
+			updated = append(updated, msgID)
+		}
+		judged[msgID] = tc
 	}
 	if len(updated) > 0 && prepared != nil {
 		return fmt.Errorf("prepare tool call outcome notes: %w", prepared)
 	}
+	// Write each message's outcome and notes as one change to its row.
+	// UpdateMessage locks the row and keeps every copy of the body, which holds
+	// the notes, in step.
 	for _, msgID := range updated {
-		latest := notes[msgID]
-		_, err := a.bodies.UpdateMessageBody(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *transcriptcrypto.Message) error {
-			m.ToolOutcomeNotes = nil
-			if latest.Valid {
-				m.ToolOutcomeNotes = &latest.String
-			}
+		tc := judged[msgID]
+		_, err := a.bodies.UpdateMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+			m.ToolOutcome = conv.ToPGText(tc.Outcome)
+			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("update tool call outcome notes: %w", err)
+			return fmt.Errorf("update tool call outcome: %w", err)
 		}
 	}
 

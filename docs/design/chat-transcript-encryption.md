@@ -5,12 +5,12 @@ A message body is six `chat_messages` columns: `content`, `content_raw`, `tool_c
 ## Modes
 
 - **Plaintext:** no transcript.
-- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): both copies. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins.
+- **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): both copies. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins, as when there is no transcript. Backfill before re-adding a removed project.
 - **Encrypted:** transcript only, plaintext columns empty; a missing transcript is an error. Not configurable yet.
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `Seal` encrypts a new message. `UpdateBody` locks the row, applies the change in Go, writes every copy and sanity-checks the stored transcript. Any failure rolls back.
+Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `Seal` encrypts a new message. `UpdateMessage` locks the row and transcript, applies the change in Go and writes every copy. A failure rolls back; a sanity-check mismatch is logged.
 
 Transcripts with the legacy unkeyed `source_hash` are plaintext-equivalent and read as missing until `Backfill` reseals them.
 
@@ -20,8 +20,8 @@ Transcripts with the legacy unkeyed `source_hash` are plaintext-equivalent and r
 
 1. Deploy with an empty allowlist.
 2. Add one internal project to the allowlist and run a full backfill.
-3. Watch the mismatch, `stale`, `sanity_mismatch` and `error` outcomes for a week; each must stay at zero.
+3. Watch `stale`, `hydrate_mismatch`, `sanity_mismatch` and `error` for a week; each must stay at zero.
 4. Widen the allowlist project by project, backfilling each.
 5. Move the remaining plaintext SQL (search, counts, lookups) behind `Transcripts`.
-6. Make encrypted mode configurable, extend backfill to empty existing plaintext, then switch one project, then the rest.
+6. Make encrypted mode configurable and teach backfill to empty plaintext; switch one project, then the rest.
 7. Drop `source_hash` once no row carries it.

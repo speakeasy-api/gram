@@ -49,7 +49,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -2958,7 +2957,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	// The summary is part of the message body, so it goes through UpdateBody,
+	// The summary is part of the message body, so it goes through UpdateMessage,
 	// which writes it to every copy of the body in one transaction. The key
 	// loads before the transaction begins.
 	if err := s.transcripts.Prepare(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID); err != nil {
@@ -2969,7 +2968,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	_, err = s.transcripts.UpdateBody(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *transcriptcrypto.Message) error {
+	_, err = s.transcripts.UpdateMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
 		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
 		if err != nil {
 			return err

@@ -8,13 +8,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -217,12 +217,13 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 	organizationID, err := chatrepo.New(db).GetProjectOrganizationID(t.Context(), project)
 	require.NoError(t, err)
 	for _, field := range []string{"raw content", "tool calls"} {
-		// A kit patch changes the body through UpdateBody, then the other
-		// fields, in one transaction; a body change clears the risk mark.
-		tx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: one transaction around the body and non-body writes, as ProjectMessage runs them.
+		// A kit patch changes the row through UpdateMessage in one transaction;
+		// a body change clears the risk mark.
+		tx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: one transaction around the update, as ProjectMessage runs it.
 		require.NoError(t, err)
 		var transcripts *transcriptstore.Transcripts
-		changed, err := transcripts.UpdateBody(t.Context(), tx, organizationID, project, chatID, row.ID, func(m *transcriptcrypto.Message) error {
+		_, err = transcripts.UpdateMessage(t.Context(), tx, organizationID, project, chatID, row.ID, func(m *chatrepo.ChatMessage) error {
+			m.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 			if field == "raw content" {
 				m.ContentRaw = []byte(`[{"type":"text","text":"updated raw"}]`)
 				return nil
@@ -230,8 +231,6 @@ func TestKitTranscriptReplayPatchAndRuntimeFence(t *testing.T) {
 			m.ToolCalls = []byte(`[{"id":"new-call"}]`)
 			return nil
 		})
-		require.NoError(t, err)
-		_, err = chatrepo.New(tx).PatchKitProjectionFields(t.Context(), chatrepo.PatchKitProjectionFieldsParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ChatID: chatID, ID: row.ID, ContentHash: row.ContentHash, FinishReason: row.FinishReason, BodyChanged: changed})
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(t.Context()))
 		row, err = chatrepo.New(db).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: project, Valid: true}, ID: row.ID})

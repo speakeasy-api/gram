@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -195,13 +195,13 @@ func TestToolCallIDsStayWithTheirProject(t *testing.T) {
 	require.Equal(t, []string{"example"}, ids)
 }
 
-// updateBody runs one UpdateBody in its own committed transaction.
-func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*transcriptcrypto.Message) error) (bool, error) {
+// updateBody runs one UpdateMessage in its own committed transaction.
+func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id uuid.UUID, apply func(*chatrepo.ChatMessage) error) (bool, error) {
 	t.Helper()
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	changed, err := transcripts.UpdateBody(t.Context(), tx, f.org, f.project, chatID, id, apply)
+	changed, err := transcripts.UpdateMessage(t.Context(), tx, f.org, f.project, chatID, id, apply)
 	if err != nil {
 		return false, err
 	}
@@ -209,13 +209,16 @@ func (f *fixture) updateBody(t *testing.T, transcripts *Transcripts, chatID, id 
 	return changed, nil
 }
 
-func setNotes(v string) func(*transcriptcrypto.Message) error {
-	return func(m *transcriptcrypto.Message) error { m.ToolOutcomeNotes = &v; return nil }
+func setNotes(v string) func(*chatrepo.ChatMessage) error {
+	return func(m *chatrepo.ChatMessage) error {
+		m.ToolOutcomeNotes = pgtype.Text{String: v, Valid: true}
+		return nil
+	}
 }
 
 // In shadow mode one change, made once in Go, lands in the plaintext row, the
 // transcript, the metadata and the tool-call IDs.
-func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
+func TestUpdateMessageKeepsEveryCopyCurrent(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -231,7 +234,7 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	require.NoError(t, err, "plaintext and transcript agree")
 	require.Equal(t, "changed note", *opened.ToolOutcomeNotes)
 
-	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *transcriptcrypto.Message) error {
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *chatrepo.ChatMessage) error {
 		m.ToolCallSummaries = []byte(`{"example":"summary","other":"done"}`)
 		return nil
 	})
@@ -245,7 +248,7 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, changed, "the same value is not written again")
 
-	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *transcriptcrypto.Message) error {
+	changed, err = f.updateBody(t, transcripts, f.chat, id, func(m *chatrepo.ChatMessage) error {
 		m.Content, m.ToolCalls = "patched", []byte(`[{"id":"call_new"}]`)
 		return nil
 	})
@@ -265,9 +268,9 @@ func TestUpdateBodyKeepsEveryCopyCurrent(t *testing.T) {
 	require.Equal(t, Progress{Current: 1}, progress)
 }
 
-// In plaintext mode UpdateBody writes the plaintext row and the metadata, and
+// In plaintext mode UpdateMessage writes the plaintext row and the metadata, and
 // no transcript.
-func TestUpdateBodyInPlaintextMode(t *testing.T) {
+func TestUpdateMessageInPlaintextMode(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	ctx := t.Context()
@@ -275,7 +278,7 @@ func TestUpdateBodyInPlaintextMode(t *testing.T) {
 	f.add(t, id)
 	var none *Transcripts
 
-	changed, err := f.updateBody(t, none, f.chat, id, func(m *transcriptcrypto.Message) error {
+	changed, err := f.updateBody(t, none, f.chat, id, func(m *chatrepo.ChatMessage) error {
 		m.Content = "plain update"
 		return nil
 	})
@@ -295,7 +298,7 @@ func TestUpdateBodyInPlaintextMode(t *testing.T) {
 // is none, only a legacy one, or one that disagrees with the plaintext row,
 // it starts from the plaintext row, which stays the source of truth, and the
 // write seals a current transcript.
-func TestUpdateBodyStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
+func TestUpdateMessageStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	for _, tc := range []struct {
@@ -313,7 +316,7 @@ func TestUpdateBodyStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 		}, content: "changed"},
 		{name: "transcript disagrees with the plaintext", prepare: func(f *fixture, id uuid.UUID) {
 			f.capture(t, id)
-			// A write that bypassed UpdateBody left the transcript behind.
+			// A write that bypassed UpdateMessage left the transcript behind.
 			_, err := fixturerepo.New(f.db).ChangeContent(ctx, id, project(f.project))
 			require.NoError(t, err)
 		}, content: "changed"},
@@ -381,7 +384,26 @@ func TestEncryptedMode(t *testing.T) {
 	row, err := open(updated)
 	require.NoError(t, err)
 	require.Equal(t, "sensitive example", row.content, "the body comes from the transcript")
+	require.True(t, sameJSON([]byte(`{"large":9007199254740993,"n":1e2}`), row.contentRaw), "content_raw: %s", row.contentRaw)
+	require.JSONEq(t, `[{"id":"example"}]`, string(row.toolCalls))
 	require.Equal(t, pgtype.Text{String: "encrypted note", Valid: true}, row.notes)
+	require.JSONEq(t, `{"example":"summary"}`, string(row.summaries))
+	require.Equal(t, pgtype.Text{}, row.storageError, "no storage error, served as NULL rather than the placeholder")
+
+	// A backfill must not reseal it from the empty plaintext row.
+	_, err = f.store.Backfill(ctx, f.org, f.project, uuid.Nil, 10)
+	require.NoError(t, err)
+	row, err = open(updated)
+	require.NoError(t, err)
+	require.Equal(t, "sensitive example", row.content, "the transcript survives a backfill")
+
+	// A row sealed in shadow mode is emptied by an update that changes nothing.
+	populated := uuid.New()
+	f.add(t, populated)
+	f.capture(t, populated)
+	_, err = f.updateBody(t, encrypted, f.chat, populated, func(*chatrepo.ChatMessage) error { return nil })
+	require.NoError(t, err)
+	emptied(populated)
 	meta, err := fixtures.ShadowMetadata(ctx, updated)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Int4{Int32: int32(len("sensitive example")), Valid: true}, meta.ContentBytes, "metadata describes the body, not the empty columns")
