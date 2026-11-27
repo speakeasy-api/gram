@@ -259,7 +259,7 @@ func (p *protector) updateRow(ctx context.Context, chatID, messageID uuid.UUID, 
 	}
 	// In encrypted mode a row still holding plaintext (sealed in shadow mode)
 	// is emptied even when apply changes nothing.
-	populated := p.encrypted && !sameProtectedFields(protectedFieldsOf(row.ChatMessage), emptyProtectedFields)
+	populated := !p.rules.writesPlaintextColumns && !sameProtectedFields(protectedFieldsOf(row.ChatMessage), emptyProtectedFields)
 	if sameRow(before, after) && !populated {
 		if consistent {
 			p.check(ctx, outcomeSuccess)
@@ -315,12 +315,35 @@ func changedReadOnlyField(before, after chatrepo.ChatMessage) string {
 	return ""
 }
 
-// sameRow reports whether apply left every writable field as it was, comparing
-// JSON by value.
+// jsonColumns are the updatable columns compared by JSON value, ignoring
+// formatting and key order.
+var jsonColumns = map[string]bool{"ContentRaw": true, "ToolCalls": true, "ToolCallSummaries": true}
+
+// sameRow reports whether apply left every updatable column as it was. It
+// walks updatableColumns, so a column added there is compared here too.
 func sameRow(before, after chatrepo.ChatMessage) bool {
-	return sameProtectedFields(protectedFieldsOf(repo.ChatMessage(before)), protectedFieldsOf(repo.ChatMessage(after))) &&
-		before.ToolOutcome == after.ToolOutcome && before.FinishReason == after.FinishReason &&
-		bytes.Equal(before.ContentHash, after.ContentHash) && before.RiskAnalyzedAt == after.RiskAnalyzedAt
+	b, a := reflect.ValueOf(before), reflect.ValueOf(after)
+	for name := range updatableColumns {
+		x, y := b.FieldByName(name).Interface(), a.FieldByName(name).Interface()
+		xb, xIsBytes := x.([]byte)
+		yb, yIsBytes := y.([]byte)
+		if xIsBytes && yIsBytes && jsonColumns[name] {
+			if !sameJSON(xb, yb) {
+				return false
+			}
+			continue
+		}
+		if xIsBytes && yIsBytes {
+			if !bytes.Equal(xb, yb) {
+				return false
+			}
+			continue
+		}
+		if !reflect.DeepEqual(x, y) {
+			return false
+		}
+	}
+	return true
 }
 
 func writeParams(projectID uuid.UUID, m chatrepo.ChatMessage, meta metadata) repo.WriteChatMessageParams {
@@ -350,7 +373,7 @@ func writeParams(projectID uuid.UUID, m chatrepo.ChatMessage, meta metadata) rep
 // with each field's size and nullness, never its contents, and counted; it
 // does not fail the update.
 func (p *protector) sanityCheck(ctx context.Context, row repo.ChatMessage, w write, consistent bool) error {
-	if p.store == nil {
+	if !p.rules.sealsTranscript {
 		return nil
 	}
 	s := p.store
@@ -378,7 +401,8 @@ func (p *protector) sanityCheck(ctx context.Context, row repo.ChatMessage, w wri
 	return nil
 }
 
-// check counts one consistency check result. Plaintext mode counts none.
+// check counts one consistency check result. Without a store (plaintext mode)
+// there are no metrics to count in.
 func (p *protector) check(ctx context.Context, result outcome) {
 	if p.store == nil {
 		return
@@ -397,13 +421,13 @@ func (p *protector) check(ctx context.Context, result outcome) {
 // are logged as errors and counted; consistent is false for them.
 func (p *protector) hydrate(ctx context.Context, row repo.LockChatMessageRow) (fields transcriptcrypto.ProtectedFields, consistent bool, err error) {
 	plain := protectedFieldsOf(row.ChatMessage)
-	if p.store == nil {
+	if !p.rules.sealsTranscript {
 		return plain, true, nil
 	}
 	// LockChatMessage read and locked the current transcript with the row.
 	id := transcriptcrypto.Identity{ProjectID: p.projectID, ChatID: row.ChatMessage.ChatID, MessageID: row.ChatMessage.ID}
-	o, err := p.store.resolve(ctx, p.codec, p.encrypted, "update", id, plain, row.CurrentCiphertext)
-	if errors.Is(err, ErrMissingTranscript) {
+	o, err := p.store.resolve(ctx, p.codec, p.rules, "update", id, plain, row.CurrentCiphertext)
+	if p.rules.missingTranscriptError != nil && errors.Is(err, p.rules.missingTranscriptError) {
 		p.check(ctx, outcomeMissingTranscript)
 		return plain, false, err
 	}
@@ -590,7 +614,7 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 // the caller serves plaintext for the rest. A transcript that cannot be
 // decrypted fails the whole page. Duplicate IDs are opened once.
 func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.ProtectedFields, error) {
-	opened, err := s.open(ctx, organizationID, projectID, messageIDs, false)
+	opened, err := s.open(ctx, organizationID, projectID, messageIDs, shadowRules)
 	if err != nil {
 		return nil, err
 	}
@@ -615,7 +639,7 @@ type opening struct {
 // message in the project. In encrypted mode the plaintext row is empty, so a
 // transcript is served without comparison, and a message without a current
 // transcript fails the page with ErrMissingTranscript.
-func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]opening, error) {
+func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, rules modeRules) (map[uuid.UUID]opening, error) {
 	if len(messageIDs) == 0 {
 		return map[uuid.UUID]opening{}, nil
 	}
@@ -628,7 +652,7 @@ func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.
 	defer span.End()
 
 	start := time.Now()
-	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs, encrypted)
+	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs, rules)
 	result := classify(err)
 	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
 
@@ -658,7 +682,7 @@ func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.
 	return opened, nil
 }
 
-func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]opening, error) {
+func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, rules modeRules) (map[uuid.UUID]opening, error) {
 	if organizationID == "" || projectID == uuid.Nil {
 		return nil, ErrInvalid
 	}
@@ -678,10 +702,10 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	if err != nil {
 		return nil, safe(err)
 	}
-	// In encrypted mode every message must have a current transcript, so a
-	// message outside the project fails the page as well.
-	if encrypted && len(rows) != len(ids) {
-		return nil, ErrMissingTranscript
+	// When a missing transcript fails the read, a message outside the
+	// project fails the page as well.
+	if rules.missingTranscriptError != nil && len(rows) != len(ids) {
+		return nil, rules.missingTranscriptError
 	}
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
@@ -690,7 +714,7 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 	opened := make(map[uuid.UUID]opening, len(rows))
 	for _, row := range rows {
 		plain := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
-		o, err := s.resolve(ctx, codec, encrypted, "read", transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, plain, row.Ciphertext)
+		o, err := s.resolve(ctx, codec, rules, "read", transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, plain, row.Ciphertext)
 		if err != nil {
 			return nil, err
 		}
@@ -706,9 +730,9 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 // exist. In encrypted mode the plaintext row is empty, so the transcript is
 // served without comparison, and a missing one is ErrMissingTranscript. path
 // names the caller in the mismatch log.
-func (s *Store) resolve(ctx context.Context, codec *transcriptcrypto.Codec, encrypted bool, path string, id transcriptcrypto.Identity, plain transcriptcrypto.ProtectedFields, ciphertext string) (opening, error) {
-	if ciphertext == "" && encrypted {
-		return opening{}, ErrMissingTranscript
+func (s *Store) resolve(ctx context.Context, codec *transcriptcrypto.Codec, rules modeRules, path string, id transcriptcrypto.Identity, plain transcriptcrypto.ProtectedFields, ciphertext string) (opening, error) {
+	if ciphertext == "" && rules.missingTranscriptError != nil {
+		return opening{}, rules.missingTranscriptError
 	}
 	if ciphertext == "" {
 		return opening{fields: plain, outcome: outcomePlaintextFallback}, nil
@@ -717,7 +741,7 @@ func (s *Store) resolve(ctx context.Context, codec *transcriptcrypto.Codec, encr
 	if err != nil {
 		return opening{}, safe(err)
 	}
-	if !encrypted && !s.agrees(ctx, path, id.ProjectID, id.MessageID, msg, plain) {
+	if rules.comparesTranscriptToPlaintext && !s.agrees(ctx, path, id.ProjectID, id.MessageID, msg, plain) {
 		return opening{fields: plain, outcome: outcomeStale}, nil
 	}
 	return opening{fields: msg, outcome: outcomeSuccess}, nil

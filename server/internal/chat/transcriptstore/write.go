@@ -34,7 +34,7 @@ import (
 type protector struct {
 	// store is nil in plaintext mode: nothing is sealed, opened or counted.
 	store          *Store
-	encrypted      bool
+	rules          modeRules
 	q              *repo.Queries
 	codec          *transcriptcrypto.Codec
 	organizationID string
@@ -65,15 +65,15 @@ func (s *Store) protector(db repo.DBTX, organizationID string, projectID uuid.UU
 	if db == nil || organizationID == "" || projectID == uuid.Nil {
 		return nil, ErrInvalid
 	}
-	p := &protector{store: nil, encrypted: false, q: repo.New(db), codec: nil, organizationID: organizationID, projectID: projectID}
-	if mode == ModePlaintext {
+	p := &protector{store: nil, rules: mode.rules(), q: repo.New(db), codec: nil, organizationID: organizationID, projectID: projectID}
+	if !p.rules.sealsTranscript {
 		return p, nil
 	}
 	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
 	if err != nil {
 		return nil, safe(err)
 	}
-	p.store, p.encrypted, p.codec = s, mode == ModeEncrypted, codec
+	p.store, p.codec = s, codec
 	return p, nil
 }
 
@@ -87,7 +87,7 @@ func (p *protector) prepare(ctx context.Context, fields []transcriptcrypto.Prote
 	writes := make([]write, len(canonical))
 	for i, f := range canonical {
 		stored := f
-		if p.encrypted {
+		if !p.rules.writesPlaintextColumns {
 			stored = emptyProtectedFields
 		}
 		writes[i] = write{stored: stored, sealed: f, meta: metadataOf(f.Content, f.ContentRaw, f.ToolCalls)}
@@ -99,7 +99,7 @@ func (p *protector) prepare(ctx context.Context, fields []transcriptcrypto.Prote
 // its row holds w.stored and w.meta. The row is locked by that write until the
 // transaction ends.
 func (p *protector) finish(ctx context.Context, chatID, messageID uuid.UUID, w write) error {
-	if p.store != nil {
+	if p.rules.sealsTranscript {
 		if err := sealTranscript(ctx, p.q, p.codec, p.organizationID, p.projectID, chatID, messageID, w.sealed); err != nil {
 			return err
 		}
