@@ -172,3 +172,71 @@ func TestStandardRoleScopesFor(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, empty)
 }
+
+func TestLockedBuiltInRoles_RejectGrantWrites(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_locked_builtin_writes"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, EnsureLocalBuiltInGlobalRoles(ctx, conn))
+
+	q := repo.New(conn)
+	require.NoError(t, q.UpsertGlobalRole(ctx, repo.UpsertGlobalRoleParams{
+		WorkosSlug:        SystemRoleAdmin,
+		WorkosName:        "Admin",
+		WorkosDescription: conv.ToPGTextEmpty("Legacy admin"),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID: conv.ToPGText("evt_legacy_admin"),
+	}))
+	legacyAdmin, err := q.GetGlobalRoleBySlug(ctx, SystemRoleAdmin)
+	require.NoError(t, err)
+	legacyAdminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+legacyAdmin.ID.String())
+
+	// Legacy admin is not locked.
+	slug, locked, err := IsLockedRolePrincipal(ctx, conn, legacyAdminPrincipal)
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Empty(t, slug)
+
+	// Non-global principals are never locked.
+	slug, locked, err = IsLockedRolePrincipal(ctx, conn, urn.NewPrincipal(urn.PrincipalTypeUser, "user_1"))
+	require.NoError(t, err)
+	require.False(t, locked)
+	require.Empty(t, slug)
+
+	// Seed an existing resource grant so we verify ReplaceResourceAudience does
+	// not delete it when rejecting a locked role entry.
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_existing")
+	resource := Resource{OrganizationID: organizationID, Scope: ScopeMCPConnect, ResourceID: "srv_locked_test"}
+	require.NoError(t, ReplaceResourceAudience(ctx, conn, resource, []PrincipalSelectors{{Principal: userPrincipal, Selectors: nil}}))
+
+	for _, spec := range LocalBuiltInRoles() {
+		roleRow, err := q.GetGlobalRoleBySlug(ctx, spec.Slug)
+		require.NoError(t, err)
+		rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+roleRow.ID.String())
+
+		gotSlug, isLocked, err := IsLockedRolePrincipal(ctx, conn, rolePrincipal)
+		require.NoError(t, err)
+		require.True(t, isLocked, "%s must be locked", spec.Slug)
+		require.Equal(t, spec.Slug, gotSlug)
+
+		// PatchRoleGrantsTx rejects both by slug and by global role URN alone.
+		_, err = PatchRoleGrantsTx(ctx, conn, organizationID, spec.Slug, rolePrincipal.String(), []*RoleGrant{{Scope: string(ScopeMCPConnect), Selectors: nil}}, nil)
+		require.ErrorIs(t, err, ErrLockedRoleGrants)
+
+		_, err = PatchRoleGrantsTx(ctx, conn, organizationID, "", rolePrincipal.String(), []*RoleGrant{{Scope: string(ScopeMCPConnect), Selectors: nil}}, nil)
+		require.ErrorIs(t, err, ErrLockedRoleGrants)
+
+		// ReplaceResourceAudience rejects locked roles before mutating existing rows.
+		err = ReplaceResourceAudience(ctx, conn, resource, []PrincipalSelectors{{Principal: rolePrincipal, Selectors: nil}})
+		require.ErrorIs(t, err, ErrLockedRoleGrants)
+	}
+
+	remaining, err := ListGrantsForResource(ctx, conn, resource)
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	require.Equal(t, userPrincipal.String(), remaining[0].PrincipalUrn)
+}

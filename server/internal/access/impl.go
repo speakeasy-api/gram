@@ -643,7 +643,7 @@ func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContex
 }
 
 func isSystemRole(roleSlug string) bool {
-	return roleSlug == authz.SystemRoleAdmin || roleSlug == authz.SystemRoleMember
+	return roleSlug == authz.SystemRoleAdmin || roleSlug == authz.SystemRoleMember || authz.IsLocalBuiltInRole(roleSlug)
 }
 
 func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {

@@ -157,6 +157,12 @@ func TestAccessRoleReceiptNamesSensitiveScopesTheWriteAdded(t *testing.T) {
 	payload, err := encodeAccessRoleMutationReceipt(operationCreateMCPAccessRole, created)
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), "sensitive_scopes_added")
+
+	// System and locked built-in roles must never produce a mutation receipt.
+	_, err = service.receiptResult(nil, &accessgen.Role{ID: roleID, Name: "Standard Admin", IsSystem: true, LockedGrants: true}, "standard_admin", "updated", "complete")
+	require.Error(t, err)
+	_, err = service.receiptResult(nil, &accessgen.Role{ID: roleID, Name: "Standard Member", LockedGrants: true}, "standard_member", "updated", "complete")
+	require.Error(t, err)
 }
 
 func TestAccessRoleRemovalDoesNotRequireCurrentCatalog(t *testing.T) {

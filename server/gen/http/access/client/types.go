@@ -318,6 +318,9 @@ type GetRoleResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem *bool `form:"is_system,omitempty" json:"is_system,omitempty" xml:"is_system,omitempty"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants *bool `form:"locked_grants,omitempty" json:"locked_grants,omitempty" xml:"locked_grants,omitempty"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
@@ -343,6 +346,9 @@ type CreateRoleResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem *bool `form:"is_system,omitempty" json:"is_system,omitempty" xml:"is_system,omitempty"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants *bool `form:"locked_grants,omitempty" json:"locked_grants,omitempty" xml:"locked_grants,omitempty"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
@@ -368,6 +374,9 @@ type UpdateRoleResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem *bool `form:"is_system,omitempty" json:"is_system,omitempty" xml:"is_system,omitempty"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants *bool `form:"locked_grants,omitempty" json:"locked_grants,omitempty" xml:"locked_grants,omitempty"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
@@ -10325,6 +10334,9 @@ type RoleResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem *bool `form:"is_system,omitempty" json:"is_system,omitempty" xml:"is_system,omitempty"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants *bool `form:"locked_grants,omitempty" json:"locked_grants,omitempty" xml:"locked_grants,omitempty"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants,omitempty" json:"grants,omitempty" xml:"grants,omitempty"`
 	// Number of members assigned to this role.
@@ -11998,6 +12010,7 @@ func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 		Slug:         *body.Slug,
 		Description:  *body.Description,
 		IsSystem:     *body.IsSystem,
+		LockedGrants: *body.LockedGrants,
 		MemberCount:  *body.MemberCount,
 		CreatedAt:    *body.CreatedAt,
 		UpdatedAt:    *body.UpdatedAt,
@@ -12176,6 +12189,7 @@ func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 		Slug:         *body.Slug,
 		Description:  *body.Description,
 		IsSystem:     *body.IsSystem,
+		LockedGrants: *body.LockedGrants,
 		MemberCount:  *body.MemberCount,
 		CreatedAt:    *body.CreatedAt,
 		UpdatedAt:    *body.UpdatedAt,
@@ -12358,6 +12372,7 @@ func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 		Slug:         *body.Slug,
 		Description:  *body.Description,
 		IsSystem:     *body.IsSystem,
+		LockedGrants: *body.LockedGrants,
 		MemberCount:  *body.MemberCount,
 		CreatedAt:    *body.CreatedAt,
 		UpdatedAt:    *body.UpdatedAt,
@@ -20376,6 +20391,9 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 	if body.IsSystem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_system", "body"))
 	}
+	if body.LockedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("locked_grants", "body"))
+	}
 	if body.Grants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
 	}
@@ -20425,6 +20443,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 	if body.IsSystem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_system", "body"))
 	}
+	if body.LockedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("locked_grants", "body"))
+	}
 	if body.Grants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
 	}
@@ -20473,6 +20494,9 @@ func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
 	}
 	if body.IsSystem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_system", "body"))
+	}
+	if body.LockedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("locked_grants", "body"))
 	}
 	if body.Grants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))
@@ -33755,6 +33779,9 @@ func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	}
 	if body.IsSystem == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_system", "body"))
+	}
+	if body.LockedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("locked_grants", "body"))
 	}
 	if body.Grants == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("grants", "body"))

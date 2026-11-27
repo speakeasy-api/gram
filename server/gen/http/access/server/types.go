@@ -318,6 +318,9 @@ type GetRoleResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem bool `form:"is_system" json:"is_system" xml:"is_system"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants bool `form:"locked_grants" json:"locked_grants" xml:"locked_grants"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
@@ -343,6 +346,9 @@ type CreateRoleResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem bool `form:"is_system" json:"is_system" xml:"is_system"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants bool `form:"locked_grants" json:"locked_grants" xml:"locked_grants"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
@@ -368,6 +374,9 @@ type UpdateRoleResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem bool `form:"is_system" json:"is_system" xml:"is_system"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants bool `form:"locked_grants" json:"locked_grants" xml:"locked_grants"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
@@ -10329,6 +10338,9 @@ type RoleResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// Whether this is a built-in system role that cannot be deleted.
 	IsSystem bool `form:"is_system" json:"is_system" xml:"is_system"`
+	// Whether this role's permissions are managed by Speakeasy and cannot be
+	// edited.
+	LockedGrants bool `form:"locked_grants" json:"locked_grants" xml:"locked_grants"`
 	// Scope grants assigned to this role.
 	Grants []*RoleGrantResponseBody `form:"grants" json:"grants" xml:"grants"`
 	// Number of members assigned to this role.
@@ -11478,6 +11490,7 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 		Slug:         res.Slug,
 		Description:  res.Description,
 		IsSystem:     res.IsSystem,
+		LockedGrants: res.LockedGrants,
 		MemberCount:  res.MemberCount,
 		CreatedAt:    res.CreatedAt,
 		UpdatedAt:    res.UpdatedAt,
@@ -11513,6 +11526,7 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 		Slug:         res.Slug,
 		Description:  res.Description,
 		IsSystem:     res.IsSystem,
+		LockedGrants: res.LockedGrants,
 		MemberCount:  res.MemberCount,
 		CreatedAt:    res.CreatedAt,
 		UpdatedAt:    res.UpdatedAt,
@@ -11548,6 +11562,7 @@ func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 		Slug:         res.Slug,
 		Description:  res.Description,
 		IsSystem:     res.IsSystem,
+		LockedGrants: res.LockedGrants,
 		MemberCount:  res.MemberCount,
 		CreatedAt:    res.CreatedAt,
 		UpdatedAt:    res.UpdatedAt,
