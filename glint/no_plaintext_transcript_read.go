@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -105,7 +107,7 @@ func newNoPlaintextTranscriptReadAnalyzerWith(_ noPlaintextTranscriptReadSetting
 				if !ok || !isSqlcQueriesMethod(called) {
 					return true
 				}
-				use := sqlcQueryPlaintextTranscriptUse(pass.Fset, called, queries)
+				use := sqlcQueryPlaintextTranscriptUse(pass, called, queries)
 				if use == plaintextTranscriptUnused {
 					return true
 				}
@@ -252,8 +254,8 @@ const (
 	plaintextTranscriptInsert
 )
 
-func sqlcQueryPlaintextTranscriptUse(fset *token.FileSet, fn *types.Func, cache map[string]map[string]plaintextTranscriptUse) plaintextTranscriptUse {
-	filename := fset.Position(fn.Pos()).Filename
+func sqlcQueryPlaintextTranscriptUse(pass *analysis.Pass, fn *types.Func, cache map[string]map[string]plaintextTranscriptUse) plaintextTranscriptUse {
+	filename := sourceFileOf(pass, fn)
 	if filename == "" {
 		return plaintextTranscriptUnused
 	}
@@ -263,6 +265,43 @@ func sqlcQueryPlaintextTranscriptUse(fset *token.FileSet, fn *types.Func, cache 
 		cache[filename] = byName
 	}
 	return byName[fn.Name()]
+}
+
+// sourceFileOf returns the path on disk of the file that declares fn. A
+// dependency built from source reports an absolute path. One read from export
+// data built with -trimpath (GOFLAGS sets it) reports its import path and file
+// name instead, for example
+// "github.com/speakeasy-api/gram/server/internal/demoseed/repo/07_activity.sql.go".
+// golangci-lint reads a dependency from export data when its own results are
+// cached, so without this mapping the verdict would depend on the cache.
+func sourceFileOf(pass *analysis.Pass, fn *types.Func) string {
+	filename := pass.Fset.Position(fn.Pos()).Filename
+	if filename == "" || filepath.IsAbs(filename) {
+		return filename
+	}
+	for _, file := range pass.Files {
+		dir := filepath.Dir(pass.Fset.Position(file.Pos()).Filename)
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		return trimmedPathOnDisk(filename, pass.Pkg.Path(), dir)
+	}
+	return ""
+}
+
+// trimmedPathOnDisk maps a -trimpath file name (an import path and a file
+// name) to disk, through a package whose import path pkgPath lives in pkgDir.
+// It walks up pkgPath and pkgDir together until pkgPath is a prefix of the
+// trimmed name, which holds for any file in the same module. It returns ""
+// when no prefix matches.
+func trimmedPathOnDisk(trimmed, pkgPath, pkgDir string) string {
+	trimmed = filepath.ToSlash(trimmed)
+	for prefix, dir := pkgPath, pkgDir; strings.Contains(prefix, "/"); prefix, dir = path.Dir(prefix), filepath.Dir(dir) {
+		if rest, ok := strings.CutPrefix(trimmed, prefix+"/"); ok {
+			return filepath.Join(dir, filepath.FromSlash(rest))
+		}
+	}
+	return ""
 }
 
 var sqlcQueryHeader = regexp.MustCompile(`^-- name: (\w+) :`)
