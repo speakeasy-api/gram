@@ -604,14 +604,16 @@ INSERT INTO skill_edit_suggestion_changes (
   suggestion_id,
   proposed_diff,
   rationale,
-  position
+  position,
+  path
 )
 SELECT
   suggestion.project_id,
   suggestion.id,
   @proposed_diff,
   @rationale,
-  @position
+  @position,
+  sqlc.narg(path)
 FROM skill_edit_suggestions suggestion
 WHERE suggestion.project_id = @project_id
   AND suggestion.id = @suggestion_id
@@ -1192,6 +1194,15 @@ WHERE project_id = @project_id
   AND skill_id = @skill_id
   AND skill_version_id = @skill_version_id
 ORDER BY path;
+
+-- name: ListSkillVersionFilesForVersions :many
+-- Lists the supporting files of several versions with their content, so a
+-- page of suggestions loads its base files in one query.
+SELECT skill_version_id, path, content, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
 
 -- name: GetSkillVersionFile :one
 SELECT path, content, sha256, size_bytes, content_type

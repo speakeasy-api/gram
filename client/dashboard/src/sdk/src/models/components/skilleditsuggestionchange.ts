@@ -33,6 +33,10 @@ export type SkillEditSuggestionChange = {
    */
   id: string;
   /**
+   * The file the change edits, relative to the skill root: SKILL.md or a supporting file such as references/REFERENCE.md.
+   */
+  path: string;
+  /**
    * The change as a unified diff against the content the changes before it produce.
    */
   proposedDiff: string;
@@ -60,6 +64,7 @@ export const SkillEditSuggestionChange$inboundSchema: z.ZodMiniType<
     feedback_count: z.int(),
     feedback_session_count: z.int(),
     id: z.string(),
+    path: z.string(),
     proposed_diff: z.string(),
     rationale: z.string(),
     suggestion_id: z.string(),

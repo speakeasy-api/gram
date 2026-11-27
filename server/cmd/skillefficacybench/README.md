@@ -84,7 +84,10 @@ changes must increment `recommendation_schema_version`.
 
 The `v11` corpus replaces v10 note aliases with reviewed structured taxonomy and
 grounding labels while preserving score anchors, metadata, suppression pairs,
-privacy, strict quorum, and gates. A three-run comparison produced:
+privacy, strict quorum, and gates. A three-run comparison at `v11` produced
+the table below. `v12` only adds optional supporting-file fields to the prompt;
+no bench case carries supporting files, so the corpus was relabelled without
+label changes and the `v11` results have not been re-run.
 
 | Model                            | Score | Positive | Suppression | Pairs | Recommendation cost | Recommendation p95 |
 | -------------------------------- | ----: | -------: | ----------: | ----: | ------------------: | -----------------: |

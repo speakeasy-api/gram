@@ -74,7 +74,7 @@ func writeBenchSet(t *testing.T, set benchSet) string {
 	return path
 }
 
-func TestCommittedBenchSetV11InvariantsAndLabels(t *testing.T) {
+func TestCommittedBenchSetInvariantsAndLabels(t *testing.T) {
 	t.Parallel()
 
 	b, err := os.ReadFile("cases.json")
@@ -83,7 +83,7 @@ func TestCommittedBenchSetV11InvariantsAndLabels(t *testing.T) {
 
 	var raw benchSet
 	require.NoError(t, json.Unmarshal(b, &raw))
-	require.Equal(t, "v11", raw.JudgePromptVersion)
+	require.Equal(t, efficacy.JudgePromptVersion, raw.JudgePromptVersion, "the corpus must be labelled for the production prompt or loadBenchSet rejects it")
 	require.Equal(t, 3, raw.RecommendationSchemaVersion)
 	require.Len(t, raw.Cases, 10)
 	require.Len(t, raw.RecommendationPairs, 5)
@@ -129,9 +129,6 @@ func TestCommittedBenchSetV11InvariantsAndLabels(t *testing.T) {
 		}
 	}
 
-	if efficacy.JudgePromptVersion != "v11" {
-		t.Skip("production v11 prompt change has not landed in this worktree")
-	}
 	loaded, err := loadBenchSet("cases.json")
 	require.NoError(t, err)
 	positive, zero, pairs, scores := 0, 0, map[string]bool{}, 0

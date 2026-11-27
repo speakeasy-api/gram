@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 func TestParseSkillManifestMinimal(t *testing.T) {
@@ -830,7 +833,7 @@ func TestValidateSkillSuggestionCanonicalizesChangedContent(t *testing.T) {
 	require.NoError(t, err)
 
 	validated, err := ValidateSkillSuggestion(
-		"---\ndescription: Changed.\nname: suggested-skill\n---\n\nchanged\n",
+		skilldiff.Tree{Manifest: "---\ndescription: Changed.\nname: suggested-skill\n---\n\nchanged\n", Files: nil},
 		"suggested-skill",
 		base.CanonicalSHA256,
 	)
@@ -865,7 +868,7 @@ func TestValidateSkillSuggestionRejectsInvalidManifest(t *testing.T) {
 	base, err := parseSkillManifest(baseContent)
 	require.NoError(t, err)
 
-	_, err = ValidateSkillSuggestion("---\nname: suggested-skill\n---\n", "suggested-skill", base.CanonicalSHA256)
+	_, err = ValidateSkillSuggestion(skilldiff.Tree{Manifest: "---\nname: suggested-skill\n---\n", Files: nil}, "suggested-skill", base.CanonicalSHA256)
 	require.ErrorContains(t, err, "not spec-valid")
 	require.ErrorContains(t, err, `field="description" code="required" message="description is required"`)
 }
@@ -878,7 +881,7 @@ func TestValidateSkillSuggestionRejectsWrongName(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ValidateSkillSuggestion(
-		"---\nname: other-skill\ndescription: Changed.\n---\n",
+		skilldiff.Tree{Manifest: "---\nname: other-skill\ndescription: Changed.\n---\n", Files: nil},
 		"suggested-skill",
 		base.CanonicalSHA256,
 	)
@@ -893,8 +896,45 @@ func TestValidateSkillSuggestionRejectsCanonicalNoOp(t *testing.T) {
 	require.NoError(t, err)
 	equivalent := "---\nmetadata: {owner: team}\ndescription: 'Base.'\nname: suggested-skill\n---\n\nbody\n"
 
-	_, err = ValidateSkillSuggestion(equivalent, "suggested-skill", base.CanonicalSHA256)
+	_, err = ValidateSkillSuggestion(skilldiff.Tree{Manifest: equivalent, Files: nil}, "suggested-skill", base.CanonicalSHA256)
 	require.ErrorContains(t, err, "content is unchanged from base")
+}
+
+func TestValidateSkillSuggestionTreatsASupportingFileEditAsAChange(t *testing.T) {
+	t.Parallel()
+
+	manifest := "---\nname: suggested-skill\ndescription: Base.\n---\n\nRead references/api.md.\n"
+	baseFiles := []skilltree.File{
+		{Path: "references/api.md", Content: []byte("Use v1.\n"), ContentType: ""},
+		{Path: "assets/logo.png", Content: []byte{0x89, 'P', 'N', 'G', 0}, ContentType: "image/png"},
+	}
+	base, err := ValidateSkillSuggestion(skilldiff.Tree{Manifest: manifest, Files: baseFiles}, "suggested-skill", "")
+	require.NoError(t, err)
+
+	_, err = ValidateSkillSuggestion(skilldiff.Tree{Manifest: manifest, Files: baseFiles}, "suggested-skill", base.CanonicalSHA256)
+	require.ErrorIs(t, err, ErrSkillSuggestionNoOp)
+
+	edited, err := skilldiff.Tree{Manifest: manifest, Files: baseFiles}.WithText("references/api.md", "Use v2.\n")
+	require.NoError(t, err)
+	validated, err := ValidateSkillSuggestion(edited, "suggested-skill", base.CanonicalSHA256)
+	require.NoError(t, err)
+	require.NotEqual(t, base.CanonicalSHA256, validated.CanonicalSHA256)
+	require.Len(t, validated.Files, 2)
+	require.Equal(t, "assets/logo.png", validated.Files[0].Path)
+	require.Equal(t, []byte{0x89, 'P', 'N', 'G', 0}, validated.Files[0].Content)
+	require.Equal(t, "Use v2.\n", string(validated.Files[1].Content))
+}
+
+func TestValidateSkillSuggestionDigestWithoutFilesMatchesManifestDigest(t *testing.T) {
+	t.Parallel()
+
+	manifest := "---\nname: suggested-skill\ndescription: Base.\n---\n\nbody\n"
+	parsed, err := parseSkillManifest(manifest)
+	require.NoError(t, err)
+
+	validated, err := ValidateSkillSuggestion(skilldiff.Tree{Manifest: manifest, Files: nil}, "suggested-skill", "")
+	require.NoError(t, err)
+	require.Equal(t, parsed.CanonicalSHA256, validated.CanonicalSHA256)
 }
 
 func TestSkillFrontmatterKeepsAuthoredCodePoints(t *testing.T) {

@@ -27,4 +27,7 @@ type SkillEditSuggestionChange struct {
 	FeedbackSessionCount int64
 	// When the change was recorded.
 	CreatedAt string
+	// The file the change edits, relative to the skill root: SKILL.md or a
+	// supporting file such as references/REFERENCE.md.
+	Path string
 }

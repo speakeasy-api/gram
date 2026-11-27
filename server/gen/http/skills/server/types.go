@@ -94,9 +94,11 @@ type ApproveSuggestionRequestBody struct {
 	// edited content.
 	ChangeIds []string `form:"change_ids,omitempty" json:"change_ids,omitempty" xml:"change_ids,omitempty"`
 	// Supporting files stored with the approved SKILL.md. Omit to keep the
-	// supporting files of the suggestion's base version, send an empty list to
-	// remove them all, or send the complete new set. At most 100 files, 5 MiB per
-	// file and 10 MiB in total.
+	// supporting files of the suggestion's base version with any taken changes to
+	// them applied, send an empty list to remove them all, or send the complete
+	// new set. Cannot be sent while taking a change that edits a supporting file:
+	// approve without files so the suggested edits apply, or leave those changes
+	// out of change_ids. At most 100 files, 5 MiB per file and 10 MiB in total.
 	Files []*SkillFileInputRequestBodyRequestBody `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
 }
 
@@ -5795,6 +5797,9 @@ type SkillEditSuggestionChangeResponseBody struct {
 	FeedbackSessionCount int64 `form:"feedback_session_count" json:"feedback_session_count" xml:"feedback_session_count"`
 	// When the change was recorded.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The file the change edits, relative to the skill root: SKILL.md or a
+	// supporting file such as references/REFERENCE.md.
+	Path string `form:"path" json:"path" xml:"path"`
 }
 
 // SkillFeedbackCountsResponseBody is used to define fields on response body

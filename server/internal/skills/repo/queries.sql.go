@@ -1068,17 +1068,19 @@ INSERT INTO skill_edit_suggestion_changes (
   suggestion_id,
   proposed_diff,
   rationale,
-  position
+  position,
+  path
 )
 SELECT
   suggestion.project_id,
   suggestion.id,
   $1,
   $2,
-  $3
+  $3,
+  $4
 FROM skill_edit_suggestions suggestion
-WHERE suggestion.project_id = $4
-  AND suggestion.id = $5
+WHERE suggestion.project_id = $5
+  AND suggestion.id = $6
 RETURNING id, project_id, suggestion_id, proposed_diff, rationale, position, path, created_at, updated_at
 `
 
@@ -1086,6 +1088,7 @@ type CreateSkillEditSuggestionChangeParams struct {
 	ProposedDiff string
 	Rationale    string
 	Position     int32
+	Path         pgtype.Text
 	ProjectID    uuid.UUID
 	SuggestionID uuid.UUID
 }
@@ -1095,6 +1098,7 @@ func (q *Queries) CreateSkillEditSuggestionChange(ctx context.Context, arg Creat
 		arg.ProposedDiff,
 		arg.Rationale,
 		arg.Position,
+		arg.Path,
 		arg.ProjectID,
 		arg.SuggestionID,
 	)
@@ -5120,6 +5124,53 @@ func (q *Queries) ListSkillVersionFiles(ctx context.Context, arg ListSkillVersio
 			&i.Content,
 			&i.Sha256,
 			&i.SizeBytes,
+			&i.ContentType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSkillVersionFilesForVersions = `-- name: ListSkillVersionFilesForVersions :many
+SELECT skill_version_id, path, content, content_type
+FROM skill_version_files
+WHERE project_id = $1
+  AND skill_version_id = ANY($2::uuid[])
+ORDER BY skill_version_id, path
+`
+
+type ListSkillVersionFilesForVersionsParams struct {
+	ProjectID       uuid.UUID
+	SkillVersionIds []uuid.UUID
+}
+
+type ListSkillVersionFilesForVersionsRow struct {
+	SkillVersionID uuid.UUID
+	Path           string
+	Content        []byte
+	ContentType    string
+}
+
+// Lists the supporting files of several versions with their content, so a
+// page of suggestions loads its base files in one query.
+func (q *Queries) ListSkillVersionFilesForVersions(ctx context.Context, arg ListSkillVersionFilesForVersionsParams) ([]ListSkillVersionFilesForVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionFilesForVersions, arg.ProjectID, arg.SkillVersionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionFilesForVersionsRow
+	for rows.Next() {
+		var i ListSkillVersionFilesForVersionsRow
+		if err := rows.Scan(
+			&i.SkillVersionID,
+			&i.Path,
+			&i.Content,
 			&i.ContentType,
 		); err != nil {
 			return nil, err

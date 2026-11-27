@@ -10,7 +10,7 @@ import (
 const (
 	skillCreateFilesDescription   = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB per file and 10 MiB in total."
 	skillFilesInputDescription    = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit to keep the supporting files of the current version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
-	skillApprovalFilesDescription = "Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
+	skillApprovalFilesDescription = "Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version with any taken changes to them applied, send an empty list to remove them all, or send the complete new set. Cannot be sent while taking a change that edits a supporting file: approve without files so the suggested edits apply, or leave those changes out of change_ids. At most 100 files, 5 MiB per file and 10 MiB in total."
 )
 
 var _ = Service("skills", func() {
@@ -1248,8 +1248,9 @@ var SkillEditSuggestionChange = Type("SkillEditSuggestionChange", func() {
 	Attribute("feedback_count", Int64, "Feedback records cited as the reason for this change.")
 	Attribute("feedback_session_count", Int64, "Distinct sessions that reported the feedback behind this change.")
 	Attribute("created_at", String, "When the change was recorded.", func() { Format(FormatDateTime) })
+	Attribute("path", String, "The file the change edits, relative to the skill root: SKILL.md or a supporting file such as references/REFERENCE.md.")
 
-	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at")
+	Required("id", "suggestion_id", "proposed_diff", "rationale", "applies_cleanly", "feedback_count", "feedback_session_count", "created_at", "path")
 })
 
 var SkillFeedbackSource = Type("SkillFeedbackSource", String, func() {

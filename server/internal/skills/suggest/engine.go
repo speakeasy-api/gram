@@ -16,12 +16,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -213,6 +215,13 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 		return Result{Kind: ResultSkipped, Reenqueue: false, FeedbackConsumed: 0, SuggestionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}, nil
 	}
 
+	// Loaded only once the run is going ahead: the supporting files can total
+	// megabytes and only generation and resolution read them.
+	baseTree, err := skills.LoadSuggestionTree(ctx, queries, in.ProjectID, in.SkillID, base.BaseVersionID, base.BaseContent)
+	if err != nil {
+		return Result{}, fmt.Errorf("load suggestion base files: %w", err)
+	}
+
 	versionUUIDs := []uuid.UUID{base.BaseVersionID}
 	if base.PredecessorVersionID != uuid.Nil {
 		versionUUIDs = append(versionUUIDs, base.PredecessorVersionID)
@@ -254,6 +263,7 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 		ProjectID:       in.ProjectID,
 		SkillName:       skill.Name,
 		Base:            base,
+		BaseFiles:       baseTree.Files,
 		Feedback:        feedback,
 		Trend:           computedTrend,
 		Transcripts:     transcripts,
@@ -266,7 +276,7 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 	var resolved []ResolvedChange
 	if generation.Decision == DecisionPropose {
 		var failure error
-		_, resolved, failure = resolveGeneration(base, skill.Name, generation)
+		_, resolved, failure = resolveGeneration(base, baseTree, skill.Name, generation)
 		switch {
 		case failure == nil:
 		case errors.Is(failure, skills.ErrSkillSuggestionNoOp):
@@ -277,6 +287,7 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 				ProjectID:       in.ProjectID,
 				SkillName:       skill.Name,
 				Base:            base,
+				BaseFiles:       baseTree.Files,
 				Feedback:        feedback,
 				Trend:           computedTrend,
 				Transcripts:     transcripts,
@@ -286,7 +297,7 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 				return Result{}, err
 			}
 			if generation.Decision == DecisionPropose {
-				_, resolved, failure = resolveGeneration(base, skill.Name, generation)
+				_, resolved, failure = resolveGeneration(base, baseTree, skill.Name, generation)
 				if failure != nil {
 					e.logger.WarnContext(ctx, "discarding invalid corrected skill suggestion", attr.SlogError(failure), attr.SlogProjectID(in.ProjectID.String()), attr.SlogResourceID(in.SkillID.String()))
 					generation = Generation{Decision: DecisionDecline, Changes: nil, Rationale: "The proposed edit remained invalid after one correction attempt."}
@@ -553,6 +564,7 @@ func writeChanges(
 			ProposedDiff: change.Diff,
 			Rationale:    change.Rationale,
 			Position:     int32(i),
+			Path:         conv.ToPGTextEmpty(change.Path),
 			ProjectID:    projectID,
 			SuggestionID: suggestionID,
 		})
@@ -597,18 +609,18 @@ func clampUint64ToInt64(value uint64) int64 {
 	return int64(value)
 }
 
-// resolveGeneration turns a proposal into the manifest it produces and the
+// resolveGeneration turns a proposal into the SKILL.md it produces and the
 // per-change edits behind it, rejecting anything that does not survive the
-// normal manifest validation.
-func resolveGeneration(base repo.ResolveSkillSuggestionBaseRow, skillName string, generation Generation) (string, []ResolvedChange, error) {
-	content, resolved, err := ResolveChanges(base.BaseContent, generation.Changes)
+// normal skill validation.
+func resolveGeneration(base repo.ResolveSkillSuggestionBaseRow, baseTree skilldiff.Tree, skillName string, generation Generation) (string, []ResolvedChange, error) {
+	proposed, resolved, err := ResolveChanges(baseTree, generation.Changes)
 	if err != nil {
 		return "", nil, err
 	}
 	if len(resolved) == 0 {
 		return "", nil, fmt.Errorf("proposed changes left the skill unchanged: %w", skills.ErrSkillSuggestionNoOp)
 	}
-	validated, err := skills.ValidateSkillSuggestion(content, skillName, base.BaseCanonicalSha256)
+	validated, err := skills.ValidateSkillSuggestion(proposed, skillName, base.BaseCanonicalSha256)
 	if err != nil {
 		return "", nil, fmt.Errorf("validate proposed changes: %w", err)
 	}
