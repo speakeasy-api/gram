@@ -135,7 +135,8 @@ func TestTranscriptShadowSchemaCompatibility(t *testing.T) {
 		base := "CREATE TABLE chat_message_transcripts (" + columns + ", UNIQUE (message_id)); "
 		tests = append(tests,
 			schemaCase{name: "missing " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts DROP COLUMN " + column.name + " CASCADE"},
-			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL"},
+			// source_hash is deprecated and nullable in deployed schemas.
+			schemaCase{name: "nullable " + column.name, ddl: base + "ALTER TABLE chat_message_transcripts ALTER COLUMN " + column.name + " DROP NOT NULL", ok: column.name == "source_hash"},
 			schemaCase{name: "wrong type " + column.name, ddl: "CREATE TABLE chat_message_transcripts (" + strings.Replace(strings.ReplaceAll(columns, " DEFAULT clock_timestamp()", ""), column.name+" "+column.typ, column.name+" integer", 1) + ", UNIQUE (message_id))"},
 		)
 	}
@@ -186,6 +187,22 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 			}
 		})
 	}
+}
+
+// The check must accept the table that server/database/schema.sql defines.
+// Synthetic fixtures alone let a migration and the check drift apart.
+func TestTranscriptShadowSchemaAcceptsDatabaseSchema(t *testing.T) {
+	t.Parallel()
+	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	db, err := infra.CloneTestDatabase(t, "transcript_shadow_database_schema")
+	require.NoError(t, err)
+
+	tx, err := db.BeginTx(t.Context(), pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:glint // notestingrawsql: proves preflight is read-only.
+	require.NoError(t, err)
+	defer func() { require.NoError(t, tx.Rollback(t.Context())) }()
+	require.NoError(t, checkTranscriptShadowSchema(t.Context(), tx))
 }
 
 // Deployed databases keep application tables in a non-public schema reached
