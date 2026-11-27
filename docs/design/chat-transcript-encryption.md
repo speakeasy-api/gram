@@ -216,10 +216,9 @@ Storage-error coverage includes null/empty/value round trips, error-only changes
 invalidating freshness, backfill refresh, and rejection of a forged public source
 fingerprint when the authenticated storage error differs from the live row.
 
-Startup preflight checks required column types/nullability, defaults for omitted
-required columns, and a usable unique `message_id` conflict target before key
-provisioning and writer activation. Equivalent deferred conflict arbiters are
-rejected. Ordinary readers, encrypted-only writes, cutover fencing, and verified
+There is no startup schema check. Like every other store, capture trusts the
+migrated schema, and the store tests prove its queries against the database the
+migrations build. Ordinary readers, encrypted-only writes, cutover fencing, and verified
 plaintext destruction remain unimplemented. Do not
 interpret shadow coverage or key provisioning as completion of the ticket.
 
