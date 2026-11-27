@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  SkillFileInput,
+  SkillFileInput$Outbound,
+  SkillFileInput$outboundSchema,
+} from "./skillfileinput.js";
 
 export type AddSkillVersionRequestBody = {
   /**
@@ -19,6 +24,10 @@ export type AddSkillVersionRequestBody = {
    */
   expectedLatestVersionId?: string | undefined;
   /**
+   * Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit to keep the supporting files of the current version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total.
+   */
+  files?: Array<SkillFileInput> | undefined;
+  /**
    * The skill ID.
    */
   id: string;
@@ -29,6 +38,7 @@ export type AddSkillVersionRequestBody$Outbound = {
   content: string;
   derived_from_version_id?: string | undefined;
   expected_latest_version_id?: string | undefined;
+  files?: Array<SkillFileInput$Outbound> | undefined;
   id: string;
 };
 
@@ -41,6 +51,7 @@ export const AddSkillVersionRequestBody$outboundSchema: z.ZodMiniType<
     content: z.string(),
     derivedFromVersionId: z.optional(z.string()),
     expectedLatestVersionId: z.optional(z.string()),
+    files: z.optional(z.array(SkillFileInput$outboundSchema)),
     id: z.string(),
   }),
   z.transform((v) => {

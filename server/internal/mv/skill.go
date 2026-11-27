@@ -83,7 +83,9 @@ type SkillVersionSightingStats struct {
 	SeenCount   int64
 }
 
-func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
+// BuildSkillVersionView renders one skill version. files are the version's
+// supporting files; nil renders as an empty list.
+func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats, files []*types.SkillFile) (*types.SkillVersion, error) {
 	metadata := make(map[string]any)
 	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
 	metadataDecoder.UseNumber()
@@ -106,6 +108,9 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 	if validationErrors == nil {
 		validationErrors = make([]*types.SkillValidationError, 0)
 	}
+	if files == nil {
+		files = make([]*types.SkillFile, 0)
+	}
 
 	return &types.SkillVersion{
 		ID:                   version.ID.String(),
@@ -124,17 +129,50 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
 		LastSeenAt:           conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
 		SeenCount:            sightings.SeenCount,
+		Files:                files,
 	}, nil
 }
 
-func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
+// BuildSkillFileListView renders the supporting-file metadata of one skill
+// version.
+func BuildSkillFileListView(rows []repo.ListSkillVersionFileMetadataRow) []*types.SkillFile {
+	result := make([]*types.SkillFile, len(rows))
+	for i, row := range rows {
+		result[i] = &types.SkillFile{
+			Path:        row.Path,
+			Sha256:      row.Sha256,
+			SizeBytes:   row.SizeBytes,
+			ContentType: row.ContentType,
+		}
+	}
+	return result
+}
+
+// GroupSkillFilesByVersion renders the supporting-file metadata of several
+// skill versions, keyed by version ID.
+func GroupSkillFilesByVersion(rows []repo.ListSkillVersionFileMetadataForVersionsRow) map[uuid.UUID][]*types.SkillFile {
+	result := make(map[uuid.UUID][]*types.SkillFile)
+	for _, row := range rows {
+		result[row.SkillVersionID] = append(result[row.SkillVersionID], &types.SkillFile{
+			Path:        row.Path,
+			Sha256:      row.Sha256,
+			SizeBytes:   row.SizeBytes,
+			ContentType: row.ContentType,
+		})
+	}
+	return result
+}
+
+// BuildSkillVersionListView renders a page of skill versions. files holds
+// each version's supporting files keyed by version ID.
+func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any, files map[uuid.UUID][]*types.SkillFile) ([]*types.SkillVersion, error) {
 	result := make([]*types.SkillVersion, len(rows))
 	for i, row := range rows {
 		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
 			FirstSeenAt: row.FirstSeenAt,
 			LastSeenAt:  row.LastSeenAt,
 			SeenCount:   row.SeenCount,
-		})
+		}, files[row.SkillVersion.ID])
 		if err != nil {
 			return nil, fmt.Errorf("build skill version %s: %w", row.SkillVersion.ID, err)
 		}

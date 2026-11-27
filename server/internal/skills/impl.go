@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -52,11 +53,21 @@ import (
 )
 
 const (
-	maxSkillsRequestBodyBytes = 512 * 1024
-	maxSkillDisplayNameRunes  = 256
-	maxSkillSummaryRunes      = 1024
-	maxSkillTags              = 40
-	maxSkillTagRunes          = 64
+	// maxSkillsRequestBodyBytes bounds request bodies of skills methods that
+	// carry at most a SKILL.md and small metadata.
+	maxSkillsRequestBodyBytes = 512 * 1024 // 512 KiB
+
+	// maxSkillFilesRequestBodyBytes bounds request bodies of methods that
+	// accept supporting files: skilltree.MaxTotalBytes (10 MiB) of file bytes
+	// grow by 4/3 under base64 to about 13.4 MiB, plus a SKILL.md of up to
+	// 64 KiB that JSON escaping can expand to at most 384 KiB. That fits the
+	// server-wide request body ceiling, which applies anyway.
+	maxSkillFilesRequestBodyBytes = constants.MaxRequestBodyBytes // 15 MiB
+
+	maxSkillDisplayNameRunes = 256
+	maxSkillSummaryRunes     = 1024
+	maxSkillTags             = 40
+	maxSkillTagRunes         = 64
 )
 
 type Service struct {
@@ -130,7 +141,12 @@ func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
 		r.Body = io.NopCloser(strings.NewReader("{}"))
 	}
 	if r.Body != nil {
-		r.Body = http.MaxBytesReader(nil, r.Body, maxSkillsRequestBodyBytes)
+		limit := int64(maxSkillsRequestBodyBytes)
+		switch r.URL.Path {
+		case srv.CreateSkillsPath(), srv.AddVersionSkillsPath(), srv.ApproveSuggestionSkillsPath():
+			limit = maxSkillFilesRequestBodyBytes
+		}
+		r.Body = http.MaxBytesReader(nil, r.Body, limit)
 	}
 
 	return goahttp.RequestDecoder(r)
@@ -142,7 +158,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
 		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
-		"link", "unlink", "listLinks":
+		"link", "unlink", "listLinks", "getVersionFile":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
@@ -558,9 +574,13 @@ func (s *Service) recordVersion(
 		if getErr != nil {
 			return nil, false, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
 		}
+		matchedFiles, filesErr := listSkillFileViews(ctx, queries, *authCtx.ProjectID, skill.ID, matched.ID)
+		if filesErr != nil {
+			return nil, false, oops.E(oops.CodeUnexpected, filesErr, "load existing skill version files").LogError(ctx, logger)
+		}
 		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, matchedDetails.DerivedFromVersionID, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
-		})
+		}, matchedFiles)
 		if viewErr != nil {
 			return nil, false, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
 		}
@@ -574,6 +594,9 @@ func (s *Service) recordVersion(
 	}
 	if err != nil {
 		return nil, false, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
+	}
+	if err := insertSkillVersionFiles(ctx, queries, *authCtx.ProjectID, skill.ID, version.ID, parsed.files); err != nil {
+		return nil, false, oops.E(oops.CodeUnexpected, err, "create skill version files").LogError(ctx, logger)
 	}
 	if derivedFromVersionID.Valid {
 		if err := queries.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
@@ -609,7 +632,7 @@ func (s *Service) recordVersion(
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		SeenCount:   0,
-	})
+	}, skillFileViews(parsed.files))
 	if err != nil {
 		return nil, false, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
 	}
@@ -669,6 +692,15 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	parsed, err := parseSkillManifest(payload.Content)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", manifestErrorMessage(err))
+	}
+	files, err := validateSupportingFiles(payload.Files)
+	if err != nil {
+		return nil, err
+	}
+	// A created skill has no base version, so omitted files mean none.
+	parsed, err = parsed.withSupportingFiles(files.entries)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "digest skill files").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -770,6 +802,10 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", manifestErrorMessage(err))
 	}
+	files, err := validateSupportingFiles(payload.Files)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -809,10 +845,24 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if err != nil {
 		return nil, err
 	}
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	hasState := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+	}
+	// Omitted files carry the current version's supporting files forward.
+	baseVersionID := uuid.NullUUID{UUID: state.LatestVersionID, Valid: hasState && state.LatestVersionID != uuid.Nil}
+	entries, err := files.resolve(ctx, queries, *authCtx.ProjectID, skill.ID, baseVersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill version files").LogError(ctx, logger)
+	}
+	parsed, err = parsed.withSupportingFiles(entries)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "digest skill files").LogError(ctx, logger)
+	}
 	if expectedLatest.Valid {
-		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+		if !hasState {
+			return nil, oops.E(oops.CodeUnexpected, pgx.ErrNoRows, "load skill state before adding version").LogError(ctx, logger)
 		}
 		if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
 			// A retried write that already landed is stale by its own token,
@@ -935,9 +985,13 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load restored skill version").LogError(ctx, logger)
 	}
+	restoredFiles, err := listSkillFileViews(ctx, queries, *authCtx.ProjectID, skill.ID, versionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load restored skill version files").LogError(ctx, logger)
+	}
 	versionView, err := mv.BuildSkillVersionView(details.SkillVersion, details.DerivedFromVersionID, manifestFrontmatter(details.SkillVersion.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: details.FirstSeenAt, LastSeenAt: details.LastSeenAt, SeenCount: details.SeenCount,
-	})
+	}, restoredFiles)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build restored skill version").LogError(ctx, logger)
 	}
@@ -1471,9 +1525,13 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "get latest skill version details").LogError(ctx, logger)
 		}
+		latestFiles, filesErr := listSkillFileViews(ctx, queries, *authCtx.ProjectID, skillID, details.LatestVersionID)
+		if filesErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, filesErr, "list latest skill version files").LogError(ctx, logger)
+		}
 		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, latest.DerivedFromVersionID, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
 			FirstSeenAt: latest.FirstSeenAt, LastSeenAt: latest.LastSeenAt, SeenCount: latest.SeenCount,
-		})
+		}, latestFiles)
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
 		}
@@ -1676,7 +1734,19 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	if hasMore {
 		rows = rows[:payload.Limit]
 	}
-	views, err := mv.BuildSkillVersionListView(rows, manifestFrontmatter)
+	versionIDs := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		versionIDs[i] = row.SkillVersion.ID
+	}
+	fileRows, err := queries.ListSkillVersionFileMetadataForVersions(ctx, repo.ListSkillVersionFileMetadataForVersionsParams{
+		ProjectID:       *authCtx.ProjectID,
+		SkillID:         skillID,
+		SkillVersionIds: versionIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill version files").LogError(ctx, logger)
+	}
+	views, err := mv.BuildSkillVersionListView(rows, manifestFrontmatter, mv.GroupSkillFilesByVersion(fileRows))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build skill versions").LogError(ctx, logger)
 	}

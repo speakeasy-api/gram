@@ -119,6 +119,7 @@ func (s *Service) approveSuggestion(
 	suggestionID uuid.UUID,
 	editedContent *string,
 	changeIDs []uuid.UUID,
+	files supportingFiles,
 ) (approval suggestionApproval, err error) {
 	if len(changeIDs) > 0 && editedContent != nil {
 		return approval, oops.E(oops.CodeBadRequest, nil, "cannot take a subset of proposed changes and edited content together")
@@ -260,17 +261,31 @@ func (s *Service) approveSuggestion(
 		}
 	}
 
-	validated, err := ValidateSkillSuggestion(content, skill.Name, base.BaseCanonicalSha256)
+	rejectCode := oops.CodeConflict
+	if editedContent != nil || files.explicit {
+		rejectCode = oops.CodeBadRequest
+	}
+	// The no-op check below compares whole skill trees, so the manifest-only
+	// comparison is skipped here.
+	validated, err := ValidateSkillSuggestion(content, skill.Name, "")
 	if err != nil {
-		code := oops.CodeConflict
-		if editedContent != nil {
-			code = oops.CodeBadRequest
-		}
-		return approval, oops.E(code, nil, "%s", err.Error())
+		return approval, oops.E(rejectCode, nil, "%s", err.Error())
 	}
 	parsed, err := parseSkillManifest(validated.Content)
 	if err != nil {
 		return approval, oops.E(oops.CodeUnexpected, err, "parse validated skill suggestion").LogError(ctx, logger)
+	}
+	// Omitted files carry the base version's supporting files forward.
+	entries, err := files.resolve(ctx, queries, *authCtx.ProjectID, skill.ID, uuid.NullUUID{UUID: suggestion.BaseVersionID, Valid: true})
+	if err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "resolve approved skill version files").LogError(ctx, logger)
+	}
+	parsed, err = parsed.withSupportingFiles(entries)
+	if err != nil {
+		return approval, oops.E(oops.CodeUnexpected, err, "digest approved skill files").LogError(ctx, logger)
+	}
+	if parsed.CanonicalSHA256 == base.BaseCanonicalSha256 {
+		return approval, oops.E(rejectCode, nil, "validate proposed skill manifest: content is unchanged from base: %s", ErrSkillSuggestionNoOp.Error())
 	}
 
 	// Taking a subset leaves the suggestion open carrying the rest. Writing
@@ -451,7 +466,12 @@ func (s *Service) ApproveSuggestion(ctx context.Context, payload *gen.ApproveSug
 		changeIDs = append(changeIDs, parsed)
 	}
 
-	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, changeIDs)
+	files, err := validateSupportingFiles(payload.Files)
+	if err != nil {
+		return nil, err
+	}
+
+	approval, err := s.approveSuggestion(ctx, authCtx, logger, suggestionID, payload.Content, changeIDs, files)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +631,7 @@ func (s *Service) ApproveAllSuggestions(ctx context.Context, payload *gen.Approv
 	// project is checked and signalled once rather than once per suggestion.
 	versionedSkillIDs := make([]uuid.UUID, 0, len(snapshot))
 	for _, suggestion := range snapshot {
-		approval, approveErr := s.approveSuggestion(ctx, authCtx, logger, suggestion.ID, nil, nil)
+		approval, approveErr := s.approveSuggestion(ctx, authCtx, logger, suggestion.ID, nil, nil, supportingFiles{explicit: false, entries: nil})
 		item := &gen.SkillSuggestionApprovalItem{
 			SuggestionID:       suggestion.ID.String(),
 			SkillID:            suggestion.SkillID.String(),

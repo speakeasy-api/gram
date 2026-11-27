@@ -3908,6 +3908,249 @@ func DecodeListVersionsResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildGetVersionFileRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "getVersionFile" endpoint
+func (c *Client) BuildGetVersionFileRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetVersionFileSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "getVersionFile", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetVersionFileRequest returns an encoder for requests sent to the
+// skills getVersionFile server.
+func EncodeGetVersionFileRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.GetVersionFilePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "getVersionFile", "*skills.GetVersionFilePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("skill_id", p.SkillID)
+		values.Add("version_id", p.VersionID)
+		values.Add("path", p.Path)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetVersionFileResponse returns a decoder for responses returned by the
+// skills getVersionFile endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetVersionFileResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetVersionFileResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetVersionFileResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			res := NewGetVersionFileSkillVersionFileContentOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetVersionFileUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetVersionFileForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetVersionFileBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetVersionFileNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetVersionFileConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetVersionFileUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetVersionFileInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetVersionFileInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+				}
+				err = ValidateGetVersionFileInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+				}
+				return nil, NewGetVersionFileInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetVersionFileUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+				}
+				err = ValidateGetVersionFileUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+				}
+				return nil, NewGetVersionFileUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "getVersionFile", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetVersionFileGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getVersionFile", err)
+			}
+			err = ValidateGetVersionFileGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getVersionFile", err)
+			}
+			return nil, NewGetVersionFileGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "getVersionFile", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildArchiveRequest instantiates a HTTP request object with method and path
 // set to call the "skills" service "archive" endpoint
 func (c *Client) BuildArchiveRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -6302,6 +6545,38 @@ func DecodeListLinksResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// marshalTypesSkillFileInputToSkillFileInputRequestBodyRequestBody builds a
+// value of type *SkillFileInputRequestBodyRequestBody from a value of type
+// *types.SkillFileInput.
+func marshalTypesSkillFileInputToSkillFileInputRequestBodyRequestBody(v *types.SkillFileInput) *SkillFileInputRequestBodyRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SkillFileInputRequestBodyRequestBody{
+		Path:        v.Path,
+		Content:     v.Content,
+		ContentType: v.ContentType,
+	}
+
+	return res
+}
+
+// marshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput builds a
+// value of type *types.SkillFileInput from a value of type
+// *SkillFileInputRequestBodyRequestBody.
+func marshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(v *SkillFileInputRequestBodyRequestBody) *types.SkillFileInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.SkillFileInput{
+		Path:        v.Path,
+		Content:     v.Content,
+		ContentType: v.ContentType,
+	}
+
+	return res
+}
+
 // unmarshalSkillResponseBodyToTypesSkill builds a value of type *types.Skill
 // from a value of type *SkillResponseBody.
 func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
@@ -6370,6 +6645,14 @@ func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionRespons
 		}
 		res.ValidationErrors[i] = unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(val)
 	}
+	res.Files = make([]*types.SkillFile, len(v.Files))
+	for i, val := range v.Files {
+		if val == nil {
+			res.Files[i] = nil
+			continue
+		}
+		res.Files[i] = unmarshalSkillFileResponseBodyToTypesSkillFile(val)
+	}
 
 	return res
 }
@@ -6382,6 +6665,19 @@ func unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(v *Ski
 		Code:    *v.Code,
 		Field:   *v.Field,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalSkillFileResponseBodyToTypesSkillFile builds a value of type
+// *types.SkillFile from a value of type *SkillFileResponseBody.
+func unmarshalSkillFileResponseBodyToTypesSkillFile(v *SkillFileResponseBody) *types.SkillFile {
+	res := &types.SkillFile{
+		Path:        *v.Path,
+		Sha256:      *v.Sha256,
+		SizeBytes:   *v.SizeBytes,
+		ContentType: *v.ContentType,
 	}
 
 	return res

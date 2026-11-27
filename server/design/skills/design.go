@@ -7,6 +7,12 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
+const (
+	skillCreateFilesDescription   = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB per file and 10 MiB in total."
+	skillFilesInputDescription    = "Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit to keep the supporting files of the current version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
+	skillApprovalFilesDescription = "Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total."
+)
+
 var _ = Service("skills", func() {
 	Description("Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.")
 	Security(security.Session, security.ProjectSlug)
@@ -20,6 +26,7 @@ var _ = Service("skills", func() {
 
 		Payload(func() {
 			Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+			Attribute("files", ArrayOf(SkillFileInput), skillCreateFilesDescription)
 			Required("content")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -52,6 +59,7 @@ var _ = Service("skills", func() {
 			Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 			Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
 			Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
+			Attribute("files", ArrayOf(SkillFileInput), skillFilesInputDescription)
 			Required("id", "content")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -313,6 +321,7 @@ var _ = Service("skills", func() {
 			Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 			Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 			Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
+			Attribute("files", ArrayOf(SkillFileInput), skillApprovalFilesDescription)
 			Required("id")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -519,6 +528,37 @@ var _ = Service("skills", func() {
 		Meta("openapi:operationId", "listSkillVersions")
 		Meta("openapi:extension:x-speakeasy-name-override", "listVersions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillVersions"}`)
+	})
+
+	Method("getVersionFile", func() {
+		Description("Get one supporting file of a skill version, including its bytes. The implementation requires the skills product feature and skill read scope.")
+
+		Payload(func() {
+			Attribute("skill_id", String, "The skill ID.", func() { Format(FormatUUID) })
+			Attribute("version_id", String, "The skill version ID.", func() { Format(FormatUUID) })
+			Attribute("path", String, "The supporting file path relative to the skill root.")
+			Required("skill_id", "version_id", "path")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(SkillVersionFileContent)
+
+		HTTP(func() {
+			GET("/rpc/skills.getVersionFile")
+			Param("skill_id")
+			Param("version_id")
+			Param("path")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getSkillVersionFile")
+		Meta("openapi:extension:x-speakeasy-name-override", "getVersionFile")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SkillVersionFile"}`)
 	})
 
 	Method("archive", func() {
@@ -833,6 +873,7 @@ var CreateSkillRequestBody = Type("CreateSkillRequestBody", func() {
 	Meta("openapi:typename", "CreateSkillRequestBody")
 
 	Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
+	Attribute("files", ArrayOf(SkillFileInput), skillCreateFilesDescription)
 	Required("content")
 })
 
@@ -845,6 +886,7 @@ var AddSkillVersionRequestBody = Type("AddSkillVersionRequestBody", func() {
 	Attribute("content", String, "The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 	Attribute("derived_from_version_id", String, "The optional source version this new version was derived from.", func() { Format(FormatUUID) })
 	Attribute("expected_latest_version_id", String, "The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.", func() { Format(FormatUUID) })
+	Attribute("files", ArrayOf(SkillFileInput), skillFilesInputDescription)
 	Required("id", "content")
 })
 
@@ -862,6 +904,7 @@ var ApproveSkillSuggestionRequestBody = Type("ApproveSkillSuggestionRequestBody"
 	Attribute("id", String, "The suggestion ID.", func() { Format(FormatUUID) })
 	Attribute("content", String, "Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.")
 	Attribute("change_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional IDs of the proposed changes to take together as one new version. The suggestion stays open carrying whatever is left. Cannot be combined with edited content.")
+	Attribute("files", ArrayOf(SkillFileInput), skillApprovalFilesDescription)
 	Required("id")
 })
 
@@ -1081,8 +1124,47 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("first_seen_at", String, "When this exact version was first activated.", func() { Format(FormatDateTime) })
 	Attribute("last_seen_at", String, "When this exact version was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of activations attributed to this exact version.")
+	Attribute("files", ArrayOf(SkillFile), "The supporting files stored with this version besides SKILL.md, sorted by path. Fetch a file's bytes with getVersionFile.")
 
-	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
+	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count", "files")
+})
+
+var SkillFileInput = Type("SkillFileInput", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A supporting file of a skill directory, such as a script, reference document, or asset.")
+
+	Attribute("path", String, "The slash-separated path relative to the skill root, for example references/REFERENCE.md. Must be a clean relative path of at most 512 bytes and must not be SKILL.md.", func() {
+		MinLength(1)
+		MaxLength(512)
+	})
+	Attribute("content", Bytes, "The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.", func() {
+		MaxLength(5 * 1024 * 1024)
+	})
+	Attribute("content_type", String, "The media type of the file. Inferred from the path extension and content when omitted.")
+	Required("path", "content")
+})
+
+var SkillFile = Type("SkillFile", func() {
+	Meta("struct:pkg:path", "types")
+	Description("Metadata of a supporting file stored with a skill version.")
+
+	Attribute("path", String, "The slash-separated path relative to the skill root.")
+	Attribute("sha256", String, "The lowercase hex SHA-256 of the file bytes.")
+	Attribute("size_bytes", Int64, "The file size in bytes.")
+	Attribute("content_type", String, "The media type of the file.")
+	Required("path", "sha256", "size_bytes", "content_type")
+})
+
+var SkillVersionFileContent = Type("SkillVersionFileContent", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A supporting file of a skill version, including its bytes.")
+
+	Attribute("path", String, "The slash-separated path relative to the skill root.")
+	Attribute("content_type", String, "The media type of the file.")
+	Attribute("sha256", String, "The lowercase hex SHA-256 of the file bytes.")
+	Attribute("size_bytes", Int64, "The file size in bytes.")
+	Attribute("content", Bytes, "The exact file bytes, base64-encoded in JSON.")
+	Required("path", "content_type", "sha256", "size_bytes", "content")
 })
 
 var SkillEditSuggestion = Type("SkillEditSuggestion", func() {

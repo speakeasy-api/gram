@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 const (
@@ -54,8 +55,51 @@ type parsedSkillManifest struct {
 	SpecValid        bool
 	ValidationErrors []validationError
 	RawSHA256        string
-	CanonicalSHA256  string
+
+	// CanonicalSHA256 is the tree digest of the skill version: the
+	// canonicalized SKILL.md plus files. It starts as the SKILL.md-only
+	// digest; withSupportingFiles recomputes it.
+	CanonicalSHA256 string
+
 	canonicalContent string
+
+	// manifestDigest is the SHA-256 of canonicalContent.
+	manifestDigest [sha256.Size]byte
+
+	// files are the validated supporting files stored with the version.
+	files []skilltree.Entry
+}
+
+// CanonicalTreeSHA256 returns the canonical_sha256 the skills service records
+// for a version made of content as SKILL.md plus files, along with the
+// validated files. Writers that insert skill versions directly, such as the
+// demo seed, use it to keep version identity consistent with the service.
+func CanonicalTreeSHA256(content string, files []skilltree.File) (string, []skilltree.Entry, error) {
+	manifest, err := parseSkillManifest(content)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse skill manifest: %w", err)
+	}
+	entries, err := skilltree.Validate(files)
+	if err != nil {
+		return "", nil, fmt.Errorf("validate skill files: %w", err)
+	}
+	withFiles, err := manifest.withSupportingFiles(entries)
+	if err != nil {
+		return "", nil, err
+	}
+	return withFiles.CanonicalSHA256, entries, nil
+}
+
+// withSupportingFiles returns the manifest with files attached and its
+// canonical digest recomputed over the whole skill tree.
+func (m parsedSkillManifest) withSupportingFiles(files []skilltree.Entry) (parsedSkillManifest, error) {
+	digest, err := skilltree.Digest(m.manifestDigest, files)
+	if err != nil {
+		return parsedSkillManifest{}, fmt.Errorf("digest skill tree: %w", err)
+	}
+	m.CanonicalSHA256 = digest
+	m.files = files
+	return m, nil
 }
 
 // ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
@@ -265,14 +309,10 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 
 	rawDigest := sha256.Sum256([]byte(content))
 	fileDigest := sha256.Sum256([]byte(canonicalContent))
-	manifestPreimage := make([]byte, 0, len("skill-manifest-v1")+1+len("SKILL.md")+1+sha256.Size+1)
-	manifestPreimage = append(manifestPreimage, "skill-manifest-v1"...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestPreimage = append(manifestPreimage, "SKILL.md"...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestPreimage = append(manifestPreimage, fileDigest[:]...)
-	manifestPreimage = append(manifestPreimage, 0)
-	manifestDigest := sha256.Sum256(manifestPreimage)
+	canonicalSHA256, err := skilltree.Digest(fileDigest, nil)
+	if err != nil {
+		return parsedSkillManifest{}, fmt.Errorf("digest skill manifest: %w", err)
+	}
 
 	return parsedSkillManifest{
 		RawContent:       content,
@@ -284,8 +324,10 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 		SpecValid:        len(validationErrors) == 0,
 		ValidationErrors: validationErrors,
 		RawSHA256:        hex.EncodeToString(rawDigest[:]),
-		CanonicalSHA256:  hex.EncodeToString(manifestDigest[:]),
+		CanonicalSHA256:  canonicalSHA256,
 		canonicalContent: canonicalContent,
+		manifestDigest:   fileDigest,
+		files:            nil,
 	}, nil
 }
 
