@@ -257,7 +257,7 @@ func TestUpsertCorrelatedReturnsShadowBody(t *testing.T) {
 		tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: the upsert and its capture share one caller-owned transaction.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(t.Context()) }()
-		row, err := transcripts.UpsertCorrelatedChatMessage(t.Context(), tx, f.org, UpsertCorrelatedChatMessageParams{
+		row, err := transcripts.UpsertCorrelatedChatMessage(t.Context(), tx, UpsertCorrelatedChatMessageParams{
 			ID: uuid.New(), ChatID: f.chat, Role: "assistant", ProjectID: f.project, Content: content,
 			ExternalMessageID: pgtype.Text{String: externalID, Valid: true}, ToolCalls: []byte(`[{"id":"call_new"}]`),
 			Source: pgtype.Text{String: "codex", Valid: true}, CreatedAt: conv.ToPGTimestamptz(time.Now()),
@@ -274,12 +274,10 @@ func TestUpsertCorrelatedReturnsShadowBody(t *testing.T) {
 	require.Equal(t, "sensitive example", promoted.Content)
 	require.JSONEq(t, `[{"id":"example"}]`, string(promoted.ToolCalls))
 
-	// An insert captures the new message and returns its body from the shadow.
+	// An insert returns no body from the plaintext columns: the caller holds
+	// what it wrote, and the chat message writer seals it.
 	inserted := upsert("turn-2", "new turn")
 	require.True(t, inserted.Inserted)
-	require.Equal(t, "new turn", inserted.Content)
-	require.JSONEq(t, `[{"id":"call_new"}]`, string(inserted.ToolCalls))
-	ids, err := fixtures.ToolCallIDs(t.Context(), inserted.ID)
-	require.NoError(t, err)
-	require.Equal(t, []string{"call_new"}, ids, "the upsert captured the shadow")
+	require.Empty(t, inserted.Content)
+	require.Empty(t, inserted.ToolCalls)
 }

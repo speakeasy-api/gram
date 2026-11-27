@@ -118,13 +118,6 @@ func (s *Store) Prepare(ctx context.Context, organizationID string) error {
 // must roll back on error; a batch is not an independently committed unit.
 // IDs are deduplicated and sorted.
 func (s *Store) Capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	return s.captureIn(ctx, db, false, organizationID, projectID, messageIDs)
-}
-
-// captureIn is Capture for either mode. In encrypted mode the transcript is
-// the only copy of the protected fields, so a message that already has one is never resealed
-// from its plaintext row; only new messages are sealed.
-func (s *Store) captureIn(ctx context.Context, db repo.DBTX, encrypted bool, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	if len(messageIDs) == 0 {
 		return nil
 	}
@@ -142,7 +135,7 @@ func (s *Store) captureIn(ctx context.Context, db repo.DBTX, encrypted bool, org
 	defer span.End()
 
 	start := time.Now()
-	err := s.capture(ctx, db, encrypted, organizationID, projectID, messageIDs)
+	err := s.capture(ctx, db, organizationID, projectID, messageIDs)
 	result := classify(err)
 	s.metrics.capture.record(ctx, projectID, len(messageIDs), time.Since(start), result)
 
@@ -154,7 +147,7 @@ func (s *Store) captureIn(ctx context.Context, db repo.DBTX, encrypted bool, org
 	return err
 }
 
-func (s *Store) capture(ctx context.Context, db repo.DBTX, encrypted bool, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+func (s *Store) capture(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
 	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
 	if err != nil {
 		return safe(err)
@@ -170,14 +163,97 @@ func (s *Store) capture(ctx context.Context, db repo.DBTX, encrypted bool, organ
 		if err != nil {
 			return err
 		}
-		if encrypted && row.CurrentCiphertext != "" {
-			continue
-		}
 		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage, protectedFieldsOf(row.ChatMessage)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// insert runs a shadow or encrypted insert, with the Capture span and metrics;
+// see Transcripts.InsertChatMessages.
+func (s *Store) insert(ctx context.Context, db repo.DBTX, encrypted bool, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insertRows func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
+	if db == nil || organizationID == "" || projectID == uuid.Nil {
+		return nil, ErrInvalid
+	}
+	if !encrypted {
+		ids, err := insertRows()
+		if err != nil {
+			return nil, err
+		}
+		if err := s.Capture(ctx, db, organizationID, projectID, ids); err != nil {
+			return nil, err
+		}
+		return ids, nil
+	}
+
+	ctx, span := s.tracer.Start(ctx, "transcriptstore.Capture", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.OrganizationID(organizationID),
+		attr.TranscriptShadowMessageCount(len(refs)),
+	))
+	defer span.End()
+
+	start := time.Now()
+	ids, err := s.insertEncrypted(ctx, db, organizationID, projectID, refs, insertRows)
+	result := classify(err)
+	s.metrics.capture.record(ctx, projectID, len(refs), time.Since(start), result)
+
+	span.SetAttributes(attr.Outcome(result))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, string(result))
+	}
+	return ids, err
+}
+
+// insertEncrypted keeps plaintext out of chat_messages: it copies the
+// protected fields in the text form Postgres stores, empties them for the
+// insert, restores them afterwards, and seals each new row from the copy.
+// The codec is built first, so a cold key fails before anything is written.
+func (s *Store) insertEncrypted(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insertRows func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
+	codec, err := transcriptcrypto.NewIn(s.service, db, organizationID)
+	if err != nil {
+		return nil, safe(err)
+	}
+	q := repo.New(db)
+	originals := make([]transcriptcrypto.ProtectedFields, len(refs))
+	sealed := make(map[uuid.UUID]transcriptcrypto.ProtectedFields, len(refs))
+	for i, ref := range refs {
+		originals[i] = ref.fields()
+		fields, err := canonical(ctx, q, originals[i])
+		if err != nil {
+			return nil, err
+		}
+		sealed[ref.MessageID] = fields
+	}
+
+	for _, ref := range refs {
+		ref.set(emptyProtectedFields)
+	}
+	ids, err := insertRows()
+	for i, ref := range refs {
+		ref.set(originals[i])
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, id := range ids {
+		fields, ok := sealed[id]
+		if !ok {
+			// insert stored a row it gave no protected fields for.
+			return nil, ErrInvalid
+		}
+		row, err := lockChatMessage(ctx, q, organizationID, projectID, id)
+		if err != nil {
+			return nil, err
+		}
+		if err := seal(ctx, q, codec, organizationID, projectID, row.ChatMessage, fields); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
 }
 
 // UpdateChatMessage is the shadow-mode message update with a trace span and
@@ -388,23 +464,6 @@ func writeParams(projectID uuid.UUID, m chatrepo.ChatMessage) repo.WriteChatMess
 	}
 }
 
-// emptyPlaintext writes the plaintext protected fields of freshly sealed messages
-// empty, in the caller's transaction, for a project in encrypted mode: Seal ran
-// from the inserted row, so the transcript already holds the protected fields.
-func emptyPlaintext(ctx context.Context, q *repo.Queries, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
-	for _, id := range messageIDs {
-		row, err := lockChatMessage(ctx, q, organizationID, projectID, id)
-		if err != nil {
-			return err
-		}
-		emptied := withProtectedFields(chatrepo.ChatMessage(row.ChatMessage), emptyProtectedFields)
-		if _, err := q.WriteChatMessage(ctx, writeParams(projectID, emptied)); err != nil {
-			return safe(err)
-		}
-	}
-	return nil
-}
-
 // sanityCheck reads back the transcript just written, decrypts it and compares
 // it with the stored plaintext row. A difference is logged with each field's
 // size and nullness, never its contents, and counted; it does not fail the
@@ -442,7 +501,7 @@ func (s *Store) sanityCheck(ctx context.Context, q *repo.Queries, codec *transcr
 // Both cases are logged as errors and counted; consistent is false for them.
 func (s *Store) hydrate(ctx context.Context, codec *transcriptcrypto.Codec, encrypted bool, projectID uuid.UUID, row repo.LockChatMessageRow) (fields transcriptcrypto.ProtectedFields, consistent bool, err error) {
 	plain := protectedFieldsOf(row.ChatMessage)
-	// Snapshot read and locked the current transcript with the row.
+	// LockChatMessage read and locked the current transcript with the row.
 	ciphertext := row.CurrentCiphertext
 	if encrypted && ciphertext == "" {
 		s.metrics.check(ctx, projectID, outcomeMissingTranscript)

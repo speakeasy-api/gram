@@ -33,6 +33,7 @@ import { useState } from "react";
 import { Link, Outlet } from "react-router";
 import { toast } from "sonner";
 
+/** Outlet wrapper for the `/mcp/add/*` server creation routes. */
 export function AddMcpServerRoot(): JSX.Element {
   return <Outlet />;
 }
