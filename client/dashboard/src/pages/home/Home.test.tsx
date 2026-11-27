@@ -13,6 +13,10 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/components/home/HomeTerminal", () => ({
   HomeTerminal: () => <div data-testid="home-terminal" />,
 }));
+vi.mock("@/components/home/HomeSections", () => ({
+  HomeSections: () => <div data-testid="home-sections" />,
+  HomeSectionLeads: () => null,
+}));
 vi.mock("@/components/home/HomeWidgets", () => ({
   HomeWidgets: () => <div data-testid="home-widgets" />,
 }));
@@ -101,7 +105,9 @@ describe("Home", () => {
     state.terminalHome = "enabled";
     renderHome();
     expect(screen.getByTestId("home-terminal")).toBeTruthy();
-    expect(screen.getByTestId("home-widgets")).toBeTruthy();
+    // One set in the scrolling lane, one in the slot under the chat.
+    expect(screen.getAllByTestId("home-widgets")).toHaveLength(2);
+    expect(screen.getByTestId("home-sections")).toBeTruthy();
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
   });
 

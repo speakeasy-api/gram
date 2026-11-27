@@ -22,10 +22,15 @@ export function countUndecidedAITools(
 export function countUndecidedMCPServers(
   servers: readonly ShadowMCPInventoryServer[],
 ): number {
-  return servers.filter(
-    (server) =>
-      matchesReviewFilter(server, "none") ||
-      (matchesReviewFilter(server, "requested") &&
-        server.approvalRequest?.standingDecision === undefined),
-  ).length;
+  return servers.filter(isUndecidedMCPServer).length;
+}
+
+export function isUndecidedMCPServer(
+  server: ShadowMCPInventoryServer,
+): boolean {
+  return (
+    matchesReviewFilter(server, "none") ||
+    (matchesReviewFilter(server, "requested") &&
+      server.approvalRequest?.standingDecision === undefined)
+  );
 }
