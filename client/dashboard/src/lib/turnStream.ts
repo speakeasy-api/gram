@@ -28,6 +28,51 @@ interface TurnFrame {
   finish_reason?: string;
   tool_call_id?: string;
   output?: unknown;
+  /**
+   * The server left this frame's body out to keep the stream small: a
+   * `tool_output` arrives without `output`, and a `message` carries each tool
+   * call's id and name but not its arguments — or no calls at all, when even
+   * those would be too large. The body is in the persisted row.
+   */
+  body_omitted?: boolean;
+}
+
+/** A tool call as the persisted assistant row records it. */
+interface PersistedToolCall {
+  name: string;
+  input: unknown;
+}
+
+/**
+ * Reads the bodies the server leaves out of oversized frames from the
+ * persisted chat rows. Each resolves to `undefined` only when the row is not
+ * found; a persisted `null` is a value like any other.
+ */
+export interface PersistedTurnBodies {
+  toolOutput(toolCallId: string): Promise<unknown>;
+  toolCall(toolCallId: string): Promise<PersistedToolCall | undefined>;
+}
+
+/**
+ * Resolves an omitted body, falling back when it cannot be read. A failed
+ * lookup must not end the turn: the call is still answered, just without the
+ * body, which is what the turn showed before bodies were ever omitted. An
+ * abort is not a failed lookup, so it propagates and ends the turn as one.
+ */
+async function readOmitted<T>(
+  read: (() => Promise<T | undefined>) | undefined,
+  fallback: T,
+  abortSignal: AbortSignal | undefined,
+): Promise<T> {
+  if (!read) return fallback;
+  try {
+    const value = await read();
+    return value === undefined ? fallback : value;
+  } catch (err) {
+    if (abortSignal?.aborted) throw err;
+    console.warn("[turnstream] could not load an omitted frame body:", err);
+    return fallback;
+  }
 }
 
 interface ParsedToolCall {
@@ -102,6 +147,11 @@ export async function streamTurn(args: {
    * and end this one before it began.
    */
   replayFromStart?: boolean;
+  /**
+   * Reads bodies the server omitted from oversized frames. Without it an
+   * omitted tool output renders as empty and omitted arguments as `{}`.
+   */
+  persistedBodies?: PersistedTurnBodies;
 }): Promise<void> {
   const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
 
@@ -133,6 +183,11 @@ export async function streamTurn(args: {
   // the poll fallback, which resolves them from the persisted tool rows. Those
   // ids are `chat_messages.tool_call_id`, the same ids the poll matches on.
   const pendingToolCalls = args.pendingToolCalls ?? new Set<string>();
+  // Every call this turn has rendered, and whether a row arrived with its
+  // calls left out entirely, so an output for a call not yet seen knows to
+  // read that call from the row.
+  const announcedToolCalls = new Set<string>();
+  let callsOmitted = false;
   // Whether the turn reached its terminal frame. Only then is fabricating an
   // empty output for an unanswered call safe: on a failure the call may still
   // be running, and inventing a result both shows the user something that did
@@ -321,23 +376,66 @@ export async function streamTurn(args: {
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
+              const bodies = args.persistedBodies;
+              // Too many calls for even their ids to fit: each is read from
+              // the row when its output arrives, below.
+              if (frame.body_omitted && calls.length === 0) {
+                callsOmitted = true;
+              }
               for (const call of calls) {
+                const input = frame.body_omitted
+                  ? await readOmitted(
+                      bodies &&
+                        (async () => (await bodies.toolCall(call.id))?.input),
+                      call.input,
+                      abortSignal,
+                    )
+                  : call.input;
                 writer.write({
                   type: "tool-input-available",
                   toolCallId: call.id,
                   toolName: call.name,
-                  input: call.input,
+                  input,
                 });
+                announcedToolCalls.add(call.id);
                 pendingToolCalls.add(call.id);
               }
               break;
             }
             case "tool_output": {
               if (!frame.tool_call_id) break;
+              const toolCallId = frame.tool_call_id;
+              const bodies = args.persistedBodies;
+              // The output of a call whose row arrived without its calls: the
+              // call has to be announced first, or the output has nothing to
+              // attach to.
+              if (callsOmitted && !announcedToolCalls.has(toolCallId)) {
+                const call = await readOmitted(
+                  bodies && (() => bodies.toolCall(toolCallId)),
+                  undefined,
+                  abortSignal,
+                );
+                if (call) {
+                  writer.write({
+                    type: "tool-input-available",
+                    toolCallId,
+                    toolName: call.name,
+                    input: call.input,
+                  });
+                  announcedToolCalls.add(toolCallId);
+                }
+              }
+              const output = frame.body_omitted
+                ? await readOmitted<unknown>(
+                    bodies && (() => bodies.toolOutput(toolCallId)),
+                    "",
+                    abortSignal,
+                  )
+                : (frame.output ?? "");
               writer.write({
                 type: "tool-output-available",
-                toolCallId: frame.tool_call_id,
-                output: frame.output ?? "",
+                toolCallId,
+                output,
               });
               pendingToolCalls.delete(frame.tool_call_id);
               break;

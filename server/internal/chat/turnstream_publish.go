@@ -50,6 +50,7 @@ func (w *ChatMessageWriter) publishTurnFrames(
 			FinishReason: "",
 			ToolCallID:   row.toolCallID,
 			Output:       marshalToolOutput(row),
+			BodyOmitted:  false,
 		})
 	}
 
@@ -64,7 +65,7 @@ func (w *ChatMessageWriter) publishTurnFrames(
 				w.publishTurnFrame(ctx, msg.ChatID, TurnFrame{
 					Kind: TurnFrameToolOutput, Cursor: "", Text: "", MessageID: "",
 					ToolCalls: nil, FinishReason: "", ToolCallID: msg.ToolCallID.String,
-					Output: json.RawMessage(strconv.Quote(msg.Content)),
+					Output: json.RawMessage(strconv.Quote(msg.Content)), BodyOmitted: false,
 				})
 			}
 			continue
@@ -81,6 +82,7 @@ func (w *ChatMessageWriter) publishTurnFrames(
 			FinishReason: msg.FinishReason.String,
 			ToolCallID:   "",
 			Output:       nil,
+			BodyOmitted:  false,
 		})
 
 		// A turn ends on an assistant row that neither stops to call a tool
@@ -96,6 +98,7 @@ func (w *ChatMessageWriter) publishTurnFrames(
 				FinishReason: msg.FinishReason.String,
 				ToolCallID:   "",
 				Output:       nil,
+				BodyOmitted:  false,
 			})
 		}
 	}
@@ -141,6 +144,7 @@ func (w *ChatMessageWriter) PublishTurnInterrupted(ctx context.Context, chatID u
 		FinishReason: TurnInterruptedFinishReason,
 		ToolCallID:   "",
 		Output:       nil,
+		BodyOmitted:  false,
 	})
 }
 
@@ -155,8 +159,9 @@ func (w *ChatMessageWriter) publishTurnFrame(ctx context.Context, chatID uuid.UU
 
 // marshalToolOutput renders a tool row's content for the frame. A row whose
 // content will not marshal yields a nil output rather than dropping the frame:
-// the client still learns the call was answered and can resync for the body,
-// which beats leaving a tool call rendered as forever-pending.
+// Publish marks it BodyOmitted, so the client still learns the call was
+// answered and reads the body from the persisted row, which beats leaving a
+// tool call rendered as forever-pending.
 func marshalToolOutput(row chatMessageRow) json.RawMessage {
 	encoded, err := json.Marshal(row.content)
 	if err != nil {
@@ -182,7 +187,7 @@ func (w *ChatMessageWriter) publishRowFrames(ctx context.Context, rows []chatMes
 			w.publishTurnFrame(ctx, row.chatID, TurnFrame{
 				Kind: TurnFrameToolOutput, Cursor: "", Text: "", MessageID: "",
 				ToolCalls: nil, FinishReason: "", ToolCallID: row.toolCallID,
-				Output: marshalToolOutput(row),
+				Output: marshalToolOutput(row), BodyOmitted: false,
 			})
 		case "assistant":
 			finish := ""
@@ -192,12 +197,12 @@ func (w *ChatMessageWriter) publishRowFrames(ctx context.Context, rows []chatMes
 			w.publishTurnFrame(ctx, row.chatID, TurnFrame{
 				Kind: TurnFrameMessage, Cursor: "", Text: "", MessageID: row.messageID,
 				ToolCalls: json.RawMessage(row.toolCalls), FinishReason: finish,
-				ToolCallID: "", Output: nil,
+				ToolCallID: "", Output: nil, BodyOmitted: false,
 			})
 			if isTerminalRow(row.toolCalls, finish) {
 				w.publishTurnFrame(ctx, row.chatID, TurnFrame{
 					Kind: TurnFrameDone, Cursor: "", Text: "", MessageID: row.messageID,
-					ToolCalls: nil, FinishReason: finish, ToolCallID: "", Output: nil,
+					ToolCalls: nil, FinishReason: finish, ToolCallID: "", Output: nil, BodyOmitted: false,
 				})
 			}
 		}

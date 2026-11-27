@@ -1,8 +1,12 @@
 package chat_test
 
 import (
+	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -179,6 +183,158 @@ func TestTurnStreamPublishIsInertWithoutRedis(t *testing.T) {
 
 	_, err = stream.Subscribe(t.Context(), uuid.New(), "")
 	require.Error(t, err, "subscribing without a stream must fail loudly, not hang")
+}
+
+// TestTurnStreamPublishSetsTTLWithTheAppend: the append and the TTL are one
+// step, so a stream never exists without an expiry for a failed EXPIRE to
+// strand.
+func TestTurnStreamPublishSetsTTLWithTheAppend(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	stream := chat.NewTurnStream(redisClient)
+	chatID := uuid.New()
+
+	_, err = stream.Publish(ctx, chatID, textFrame("hello"))
+	require.NoError(t, err)
+
+	ttl, err := redisClient.PTTL(ctx, "chat:turnframes:"+chatID.String()).Result()
+	require.NoError(t, err)
+	require.Positive(t, ttl, "the stream must carry a TTL from its first append")
+	require.LessOrEqual(t, ttl, 30*time.Minute)
+}
+
+// TestTurnStreamPublishOmitsOversizedToolOutput: a large tool output is
+// already in Postgres, so the frame carries only the call id and the marker
+// that tells the client to read the row.
+func TestTurnStreamPublishOmitsOversizedToolOutput(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stream := newTurnStream(t)
+	chatID := uuid.New()
+
+	big, err := json.Marshal(strings.Repeat("x", 64<<10))
+	require.NoError(t, err)
+	_, err = stream.Publish(ctx, chatID, toolOutputFrame("call-big", big))
+	require.NoError(t, err)
+	_, err = stream.Publish(ctx, chatID, toolOutputFrame("call-small", json.RawMessage(`"ok"`)))
+	require.NoError(t, err)
+
+	frames, err := stream.Replay(ctx, chatID, "")
+	require.NoError(t, err)
+	require.Len(t, frames, 2)
+
+	require.Equal(t, "call-big", frames[0].ToolCallID)
+	require.True(t, frames[0].BodyOmitted)
+	require.Nil(t, frames[0].Output)
+
+	require.Equal(t, "call-small", frames[1].ToolCallID)
+	require.False(t, frames[1].BodyOmitted, "an output under the cap is published whole")
+	require.JSONEq(t, `"ok"`, string(frames[1].Output))
+}
+
+// TestTurnStreamPublishStripsOversizedToolCallArguments: a row whose tool
+// calls are too large keeps each call's id and name, so the client can still
+// render the call and pair it with its output, and loses only the arguments.
+func TestTurnStreamPublishStripsOversizedToolCallArguments(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stream := newTurnStream(t)
+	chatID := uuid.New()
+
+	args, err := json.Marshal(map[string]string{"content": strings.Repeat("y", 64<<10)})
+	require.NoError(t, err)
+	calls, err := json.Marshal([]map[string]any{{
+		"id":       "call-1",
+		"type":     "function",
+		"function": map[string]string{"name": "write_file", "arguments": string(args)},
+	}})
+	require.NoError(t, err)
+
+	_, err = stream.Publish(ctx, chatID, chat.TurnFrame{
+		Kind: chat.TurnFrameMessage, MessageID: "m1", ToolCalls: calls, FinishReason: "tool_calls",
+	})
+	require.NoError(t, err)
+
+	frames, err := stream.Replay(ctx, chatID, "")
+	require.NoError(t, err)
+	require.Len(t, frames, 1)
+	require.True(t, frames[0].BodyOmitted)
+	require.JSONEq(t, `[{"id":"call-1","type":"function","function":{"name":"write_file"}}]`, string(frames[0].ToolCalls))
+	require.Equal(t, "m1", frames[0].MessageID)
+}
+
+// TestTurnStreamPublishSplitsOversizedText: text the tee recovered in one
+// piece is published as several frames that concatenate back to it, each
+// valid UTF-8 on its own.
+func TestTurnStreamPublishSplitsOversizedText(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stream := newTurnStream(t)
+	chatID := uuid.New()
+
+	// Three-byte runes so a cut on a fixed byte offset would land mid-rune.
+	text := strings.Repeat("€", 10<<10)
+	cursor, err := stream.Publish(ctx, chatID, textFrame(text))
+	require.NoError(t, err)
+
+	frames, err := stream.Replay(ctx, chatID, "")
+	require.NoError(t, err)
+	require.Greater(t, len(frames), 1, "oversized text must be split")
+	require.Equal(t, cursor, frames[len(frames)-1].Cursor, "publish returns the last frame's cursor")
+
+	var joined strings.Builder
+	for _, f := range frames {
+		require.Equal(t, chat.TurnFrameText, f.Kind)
+		require.True(t, utf8.ValidString(f.Text), "a split must not cut a rune")
+		joined.WriteString(f.Text)
+	}
+	require.Equal(t, text, joined.String())
+}
+
+// TestTurnStreamReplayIsBoundedAndSubscribeContinues: a single replay read
+// is bounded, and a subscriber resuming from the start still receives every
+// frame because the tail read carries on from the last replayed cursor.
+func TestTurnStreamReplayIsBoundedAndSubscribeContinues(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stream := newTurnStream(t)
+	chatID := uuid.New()
+
+	const published = 600
+	for i := range published {
+		_, err := stream.Publish(ctx, chatID, textFrame(strconv.Itoa(i)))
+		require.NoError(t, err)
+	}
+	_, err := stream.Publish(ctx, chatID, doneFrame())
+	require.NoError(t, err)
+
+	replayed, err := stream.Replay(ctx, chatID, "0")
+	require.NoError(t, err)
+	require.Less(t, len(replayed), published, "one replay must not read the whole stream")
+	require.NotEmpty(t, replayed)
+
+	frames, err := stream.Subscribe(ctx, chatID, "0")
+	require.NoError(t, err)
+	got := collectFrames(t, frames, published+1)
+	for i := range published {
+		require.Equal(t, strconv.Itoa(i), got[i].Text)
+	}
+	require.Equal(t, chat.TurnFrameDone, got[published].Kind)
+}
+
+func toolOutputFrame(toolCallID string, output json.RawMessage) chat.TurnFrame {
+	return chat.TurnFrame{
+		Kind: chat.TurnFrameToolOutput, Cursor: "", Text: "", MessageID: "",
+		ToolCalls: nil, FinishReason: "", ToolCallID: toolCallID, Output: output,
+		BodyOmitted: false,
+	}
 }
 
 // collectFrames reads exactly n frames, failing rather than hanging if the
