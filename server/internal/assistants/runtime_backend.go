@@ -42,6 +42,11 @@ type runTurnRequest struct {
 	// reconcile newly attached or detached servers into a live thread
 	// without re-running the full thread bootstrap.
 	MCPServers []runtimeMCPServer
+
+	// KitDelegation, when set, is the delegation Kit exchanges for this
+	// turn's MCP calls; an empty value clears the previous one. Nil leaves
+	// Kit's session delegation untouched.
+	KitDelegation *string
 }
 
 type RuntimeBackend interface {

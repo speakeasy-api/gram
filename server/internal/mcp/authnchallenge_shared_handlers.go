@@ -105,11 +105,9 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
 		}
 	}
-	if idJAGAdvertised {
-		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
-	} else if s.workloadGrant != nil {
-		available, err := usersessions_repo.New(s.db).HasWorkloadGrantResourceForIssuer(ctx, usersessions_repo.HasWorkloadGrantResourceForIssuerParams{
+	workloadAvailable := false
+	if s.workloadGrant != nil {
+		workloadAvailable, err = usersessions_repo.New(s.db).HasWorkloadGrantResourceForIssuer(ctx, usersessions_repo.HasWorkloadGrantResourceForIssuerParams{
 			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.authorizationServer.issuerID, Valid: true},
 			OrganizationID:      issuer.organizationID,
 		})
@@ -119,9 +117,17 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
 		}
-		if available {
-			grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
-		}
+	}
+	if idJAGAdvertised {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
+	} else if workloadAvailable {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+	}
+	if workloadAvailable && s.assistantTokens != nil {
+		// An assistant runtime admitted by this issuer's workload grant
+		// exchanges a turn's delegation, with its assertion as the actor token.
+		grantTypes = append(grantTypes, oauthwire.GrantTypeTokenExchange)
 	}
 	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, grantProfiles))
 }
@@ -353,6 +359,15 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
 	}
 	switch grantType {
+	case oauthwire.GrantTypeTokenExchange:
+		// Only a workload acting for a delegated subject exchanges tokens here.
+		if !isDelegatedWorkloadExchange(r) {
+			creds := extractClientCredentials(r)
+			clientID, _ := resolvePresentedClientID(creds)
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
+		}
+		return s.handleDelegatedWorkloadExchange(ctx, w, r, issuer)
 	case oauthwire.GrantTypeAuthorizationCode:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))
 	case oauthwire.GrantTypeRefreshToken:

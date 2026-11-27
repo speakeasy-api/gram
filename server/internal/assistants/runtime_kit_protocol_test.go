@@ -240,6 +240,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	var mu sync.Mutex
 	streams := map[string]chan string{}
 	methods := []string{}
+	delegations := []string{}
 	connections := 0
 	controls := map[string]bool{}
 	prompts := 0
@@ -312,7 +313,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				if _, supplied := msg.Params["mcpServers"]; supplied {
 					t.Error("filesystem-owned MCP must not replace the session overlay")
 				}
-				assert.NotContains(t, msg.Params, "_meta", "chat identity belongs to the control plane")
+				// Only session options travel in _meta; chat identity belongs to the control plane.
+				assert.JSONEq(t, `{"kit/disabledTools":["shell","edit"]}`, string(msg.Params["_meta"]))
 				if msg.Method == "session/new" {
 					result = strings.TrimSuffix(catalog(), "}") + `,"sessionId":"session-one"}`
 				} else if string(msg.Params["replayFrom"]) != `{"type":"start"}` {
@@ -410,6 +412,10 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"final"}}}}` + "\n\n"
 				}
 				result = `{"sessionId":"session-one","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`
+			case "_kit/session/update_delegation":
+				mu.Lock()
+				delegations = append(delegations, string(msg.Params["subjectToken"]))
+				mu.Unlock()
 			case "session/cancel":
 				w.WriteHeader(202)
 				return
@@ -442,7 +448,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	defer server.Close()
 	endpoint, err := url.Parse(server.URL + "/acp/v2")
 	require.NoError(t, err)
-	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
+	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t), DisabledTools: []string{"shell", "edit"}})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
@@ -453,11 +459,12 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	mu.Lock()
 	require.Zero(t, connections, "missing session must not dial")
 	mu.Unlock()
-	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ReasoningEffort: "low", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	delegated, cleared := "delegation-one", ""
+	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ReasoningEffort: "low", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID, KitDelegation: &delegated}))
 	// A new adapter reconstructs the durable correlation before replay.
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
-	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ReasoningEffort: "high", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID, KitDelegation: &cleared}))
 	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
 	require.NoError(t, err)
 	users, finals := 0, 0
@@ -481,7 +488,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, interrupted)
 	mu.Lock()
-	require.Equal(t, []string{"session/new", "session/set_config_option", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)
+	require.Equal(t, []string{"session/new", "session/set_config_option", "session/set_config_option", "_kit/session/update_delegation", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/set_config_option", "_kit/session/update_delegation", "session/prompt", "kit/session/status"}, methods)
+	require.Equal(t, []string{`"delegation-one"`, `null`}, delegations, "each turn sets its person before prompting; an unattended turn clears it")
 	require.Equal(t, 2, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }

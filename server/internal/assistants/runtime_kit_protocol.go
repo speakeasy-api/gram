@@ -27,6 +27,8 @@ type KitRuntimeProtocolConfig struct {
 	Projector    *KitTranscriptProjector
 	CWD          string
 	GatewayToken string
+	// DisabledTools are Kit built-in tools removed from each session.
+	DisabledTools []string
 }
 type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 
@@ -135,6 +137,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	}
 	defer closeKitTransport(c)
 	params := map[string]any{"cwd": p.config.CWD}
+	if len(p.config.DisabledTools) > 0 {
+		params["_meta"] = map[string]any{"kit/disabledTools": p.config.DisabledTools}
+	}
 	// Only new sessions receive an explicit initial configuration. Omission
 	// retains resident configuration; [] is not a clearing operation.
 	if req.MCPServers != nil {
@@ -294,6 +299,17 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	// Startup replay is flushed, and no prompt has yet been submitted.
 	if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
 		return err
+	}
+	if req.KitDelegation != nil {
+		// Set after the stop check and before the prompt: a stopped turn never
+		// installs its person, and this turn's MCP calls act for that person.
+		var subject any
+		if *req.KitDelegation != "" {
+			subject = *req.KitDelegation
+		}
+		if _, err := c.Call(work, "_kit/session/update_delegation", map[string]any{"sessionId": session.SessionID, "subjectToken": subject}, session.SessionID); err != nil {
+			return fmt.Errorf("kit session delegation: %w", err)
+		}
 	}
 	echoMu.Lock()
 	awaitingEcho = req.CanonicalUserMessageID != uuid.Nil

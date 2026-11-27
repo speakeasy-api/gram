@@ -20,6 +20,14 @@ func TestKitCompositionMachineConfigUsesAssertions(t *testing.T) {
 	require.NotContains(t, string(raw), "client_id")
 }
 
+func TestKitCompositionUserDelegationOptsServersIn(t *testing.T) {
+	t.Parallel()
+	resource, _ := url.Parse("https://mcp.example/mcp/resource")
+	raw, err := kitCompositionMCP(KitLocalCompositionConfig{MCPResource: resource, UserDelegation: true}, &KitWorkloadBinding{Audience: "https://issuer.example/oauth/usi/test"})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"mcpServers":{"workload":{"headers":{},"type":"streamable-http","url":"https://mcp.example/mcp/resource","auth":{"type":"workload_identity","tokenFile":"/var/run/secrets/speakeasy/workload/assertion","endpointMode":"explicit","grant":"jwtBearer","tokenEndpoint":"https://issuer.example/oauth/usi/test/token","resource":"https://mcp.example/mcp/resource","scope":"mcp:connect","delegation":"session"}}}}`, string(raw))
+}
+
 func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 	t.Parallel()
 	origin, _ := url.Parse("https://ai.speakeasy.com")

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // KitLocalCompositionConfig composes runtime-owned workload authentication.
@@ -41,6 +42,12 @@ type KitLocalCompositionConfig struct {
 	WorkloadJWKSURL                                           string
 	WorkloadNamespace, WorkloadIssuerBaseURL                  string
 	TurnStream                                                *chat.TurnStream
+	// UserDelegation makes MCP calls act for the person in each turn: Kit
+	// exchanges a per-turn delegation with its workload assertion as the actor.
+	// It requires a Kit build that supports session delegation.
+	UserDelegation bool
+	// DisabledTools are Kit built-in tools removed from every session.
+	DisabledTools []string
 }
 
 func validateKitLocalComposition(c KitLocalCompositionConfig) error {
@@ -192,11 +199,11 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 				return nil, err
 			}
 		}
-		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: client, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
+		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: client, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token, DisabledTools: c.DisabledTools})
 		if err != nil {
 			return nil, err
 		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol, core: s}, nil
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol, core: s, userDelegation: c.UserDelegation, disabledTools: c.DisabledTools}, nil
 	}
 }
 
@@ -207,7 +214,9 @@ var errKitMCPConfigurationUnverified = fmt.Errorf("%w: kit runtime MCP configura
 // shadow it with legacy per-turn server overlays or management credentials.
 type kitConfiguredRuntimeProtocol struct {
 	*KitRuntimeProtocol
-	core *ServiceCore
+	core           *ServiceCore
+	userDelegation bool
+	disabledTools  []string
 }
 
 func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeRecord, turn runTurnRequest) error {
@@ -227,7 +236,7 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 		// Refuse dispatch until verified without destroying live admission.
 		return errKitMCPDiscoveryUnavailable
 	}
-	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) {
+	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) || metadata.Workload.UserDelegation != p.userDelegation || !slices.Equal(metadata.Workload.DisabledTools, p.disabledTools) {
 		// Disconnecting Kit's additive overlay cannot remove filesystem-owned
 		// connections. Withdraw the exact runtime workload; the turn worker then
 		// replaces the runtime with one configured for the new set.
@@ -238,6 +247,19 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 			return fmt.Errorf("fence changed Kit MCP set: %w", err)
 		}
 		return ErrKitMCPDesiredSetUnsupported
+	}
+	if p.userDelegation {
+		// Kit holds only a delegation its own workload can exchange, never
+		// the turn credential. An empty one clears the previous person.
+		if p.core == nil || p.core.assistantTokens == nil {
+			return ErrKitRuntimeBinding
+		}
+		actor := urn.NewWorkloadPrincipal(metadata.Workload.IssuerID, metadata.Workload.Subject)
+		delegation, err := p.core.assistantTokens.DelegateTurnCredential(ctx, turn.AuthToken, actor)
+		if err != nil {
+			return fmt.Errorf("delegate kit turn: %w", err)
+		}
+		turn.KitDelegation = &delegation
 	}
 	turn.AuthToken = ""
 	turn.MCPServers = nil
@@ -311,6 +333,8 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, err
 	}
 	workload.MCPDesiredSetHash = kitMCPDesiredSetHash(resolveAssistantMCPServers(ctx, s.logger, s.serverURL, assistant.MCPServers, slugs))
+	workload.UserDelegation = c.UserDelegation
+	workload.DisabledTools = c.DisabledTools
 	mcpJSON, err := kitCompositionMCP(c, workload)
 	if err != nil {
 		return zero, err
@@ -390,6 +414,9 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 		}
 		if connection.ProjectID != uuid.Nil {
 			auth["extensions"] = map[string]string{"project_id": connection.ProjectID.String()}
+		}
+		if c.UserDelegation {
+			auth["delegation"] = "session"
 		}
 		servers[connection.Name] = map[string]any{
 			"type": "streamable-http", "url": u.String(), "headers": headers, "auth": auth,
