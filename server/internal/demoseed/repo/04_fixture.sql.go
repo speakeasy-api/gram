@@ -79,13 +79,14 @@ JOIN remote_session_clients c
 LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
 WHERE rs.remote_session_client_id = ANY($2::uuid[])
   AND rs.deleted IS FALSE
-  AND rs.access_expires_at > clock_timestamp()
+  AND rs.access_expires_at > $3::timestamptz
 ORDER BY rs.id
 `
 
 type FixtureListLiveSessionsParams struct {
 	ProjectID uuid.UUID
 	ClientIds []uuid.UUID
+	Now       pgtype.Timestamptz
 }
 
 type FixtureListLiveSessionsRow struct {
@@ -93,9 +94,12 @@ type FixtureListLiveSessionsRow struct {
 	Email string
 }
 
-// The live seeded sign-ins on the given clients, with the email each signed in as.
+// The seeded sign-ins on the given clients that are live at the seed clock,
+// with the email each signed in as. The seed computed their expiry from that
+// clock, so comparing against it keeps the selection stable when the clock is
+// pinned.
 func (q *Queries) FixtureListLiveSessions(ctx context.Context, arg FixtureListLiveSessionsParams) ([]FixtureListLiveSessionsRow, error) {
-	rows, err := q.db.Query(ctx, fixtureListLiveSessions, arg.ProjectID, arg.ClientIds)
+	rows, err := q.db.Query(ctx, fixtureListLiveSessions, arg.ProjectID, arg.ClientIds, arg.Now)
 	if err != nil {
 		return nil, err
 	}

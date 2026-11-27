@@ -284,7 +284,6 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	"inference":       {"project_id": true},
 	"mcp":             {"project_id": true},
 	"mcp_auth_client": {"client_type": true, "connection_owner": true, "project_id": true, "upstream_client": true},
-	"risk_policy":     {"server_identity": true, "server_url": true},
 }
 
 // scopeSelectorKeys holds the keys single permissions declare beyond their
@@ -293,6 +292,8 @@ var scopeSelectorKeys = map[Scope]map[string]bool{
 	"mcp:blocked_connect": {"disposition": true, "tool": true},
 	"mcp:connect":         {"disposition": true, "tool": true},
 	"org:hooks_ingest":    {"project_id": true},
+	"risk_policy:block":   {"server_identity": true, "server_url": true},
+	"risk_policy:bypass":  {"server_identity": true, "server_url": true},
 }
 
 // scopeOpenKeys lists, per scope, the grant keys a probe, a connection or a
@@ -300,11 +301,10 @@ var scopeSelectorKeys = map[Scope]map[string]bool{
 // on them: the Open keys each permission declares. Every other check, and
 // every block or exemption, must carry each key a grant names.
 var scopeOpenKeys = map[Scope]openKeys{
-	"mcp:connect":          {Probe: []string{"tool", "disposition"}, Connection: []string{"tool", "disposition"}, PolicyAudience: nil},
-	"org:hooks_ingest":     {Probe: []string{"project_id"}, Connection: nil, PolicyAudience: nil},
-	"risk_policy:block":    {Probe: []string{"server_url", "server_identity"}, Connection: nil, PolicyAudience: nil},
-	"risk_policy:bypass":   {Probe: []string{"server_url", "server_identity"}, Connection: nil, PolicyAudience: nil},
-	"risk_policy:evaluate": {Probe: []string{"server_url", "server_identity"}, Connection: nil, PolicyAudience: []string{"server_url", "server_identity"}},
+	"mcp:connect":        {Probe: []string{"tool", "disposition"}, Connection: []string{"tool", "disposition"}},
+	"org:hooks_ingest":   {Probe: []string{"project_id"}, Connection: nil},
+	"risk_policy:block":  {Probe: []string{"server_url", "server_identity"}, Connection: nil},
+	"risk_policy:bypass": {Probe: []string{"server_url", "server_identity"}, Connection: nil},
 }
 
 // validAuthClientTypes is the closed value set of client_type.
@@ -313,6 +313,7 @@ var validAuthClientTypes = map[string]bool{
 	"pass_through":      true,
 	"remote_session":    true,
 	"service_account":   true,
+	"slack_app":         true,
 	"static_credential": true,
 }
 

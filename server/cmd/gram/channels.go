@@ -62,6 +62,10 @@ type channelsContextPreparer interface {
 	PrepareContext(context.Context, authn.Identity) (context.Context, error)
 }
 
+// errChannelsOrganizationDisabled refuses Channels admission into a disabled
+// organization.
+var errChannelsOrganizationDisabled = errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information")
+
 // channelsAdmission binds only verified identities to fresh organization policy.
 // Native agent/workload credentials are not admitted by this OAuth surface.
 type channelsAdmission struct {
@@ -86,9 +90,18 @@ func (a channelsAdmission) PrepareContext(ctx context.Context, identity authn.Id
 	if !member {
 		return ctx, errors.New("channels organization membership required")
 	}
+	if err := a.engine.CheckUsersBlocked(ctx, identity.Principal.ID); err != nil {
+		return ctx, fmt.Errorf("channels user: %w", err)
+	}
 	organization, err := organizationsrepo.New(a.db).GetOrganizationMetadata(ctx, identity.OrganizationID)
 	if err != nil {
 		return ctx, fmt.Errorf("load channels organization: %w", err)
+	}
+	// Admission reruns on every request and SSE reconciliation, so disabling
+	// the organization closes Channels on the next one, including for a user
+	// whose session is active in another organization.
+	if organization.DisabledAt.Valid {
+		return ctx, errChannelsOrganizationDisabled
 	}
 	project, err := projectsrepo.New(a.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: identity.ProjectID, OrganizationID: identity.OrganizationID})
 	if err != nil {
@@ -254,16 +267,12 @@ func newChannelsAuthenticator(config channelsConfig, tokens channelsTokenAuthent
 		// freshly loaded grants. None of them implies another, and none is
 		// implied by mcp:connect or by organization membership, so one combined
 		// check would quietly widen whichever of them the caller lacks.
-		allowed := make([]bool, 0, 3)
 		project := authz.Project(authz.ProjectIDOf(principal.ProjectID))
-		for _, check := range []authz.Check{project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll()} {
-			yes, err := config.Authz.Evaluate(prepared, check)
-			if err != nil {
-				return channels.Principal{}, fmt.Errorf("evaluate channels permission %s: %w", check.Scope, err)
-			}
-			allowed = append(allowed, yes)
+		decisions, err := config.Authz.Decide(authz.WithoutChallenges(prepared), project.ChannelsConnect(), project.ChannelsAdmin(), project.ChannelsReadAll())
+		if err != nil {
+			return channels.Principal{}, fmt.Errorf("evaluate channels permissions: %w", err)
 		}
-		return channels.Principal{OrganizationID: principal.OrganizationID, ProjectID: principal.ProjectID.String(), SubjectID: principal.Principal.ID, SubjectName: subjectName, CanConnect: allowed[0], CanAdmin: allowed[1], CanReadAll: allowed[2]}, nil
+		return channels.Principal{OrganizationID: principal.OrganizationID, ProjectID: principal.ProjectID.String(), SubjectID: principal.Principal.ID, SubjectName: subjectName, CanConnect: decisions.Each[0].Allowed, CanAdmin: decisions.Each[1].Allowed, CanReadAll: decisions.Each[2].Allowed}, nil
 	}
 }
 

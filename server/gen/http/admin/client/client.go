@@ -436,6 +436,18 @@ type Client struct {
 	// the backfillMcpConnectGrants endpoint.
 	BackfillMcpConnectGrantsDoer goahttp.Doer
 
+	// GetSecretBackfills Doer is the HTTP client used to make requests to the
+	// getSecretBackfills endpoint.
+	GetSecretBackfillsDoer goahttp.Doer
+
+	// RunMarketplaceTokenBackfill Doer is the HTTP client used to make requests to
+	// the runMarketplaceTokenBackfill endpoint.
+	RunMarketplaceTokenBackfillDoer goahttp.Doer
+
+	// RunRunnerKeyOrganizationBackfill Doer is the HTTP client used to make
+	// requests to the runRunnerKeyOrganizationBackfill endpoint.
+	RunRunnerKeyOrganizationBackfillDoer goahttp.Doer
+
 	// GetProjectRedeployPreview Doer is the HTTP client used to make requests to
 	// the getProjectRedeployPreview endpoint.
 	GetProjectRedeployPreviewDoer goahttp.Doer
@@ -495,6 +507,14 @@ type Client struct {
 	// RepairOrganizationAssistantAgentNames Doer is the HTTP client used to make
 	// requests to the repairOrganizationAssistantAgentNames endpoint.
 	RepairOrganizationAssistantAgentNamesDoer goahttp.Doer
+
+	// BackfillOrganizationAssistantBuiltinGrants Doer is the HTTP client used to
+	// make requests to the backfillOrganizationAssistantBuiltinGrants endpoint.
+	BackfillOrganizationAssistantBuiltinGrantsDoer goahttp.Doer
+
+	// MigrateOrganizationAssistantSlack Doer is the HTTP client used to make
+	// requests to the migrateOrganizationAssistantSlack endpoint.
+	MigrateOrganizationAssistantSlackDoer goahttp.Doer
 
 	// ListOrganizationAssistants Doer is the HTTP client used to make requests to
 	// the listOrganizationAssistants endpoint.
@@ -600,152 +620,157 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                                   doer,
-		CallbackDoer:                                doer,
-		LogoutDoer:                                  doer,
-		GetSessionDoer:                              doer,
-		GetOrganizationFeaturesDoer:                 doer,
-		SetOrganizationFeatureDoer:                  doer,
-		GetOrganizationChatAnalysisSettingsDoer:     doer,
-		SetOrganizationChatAnalysisSettingsDoer:     doer,
-		TriggerOrganizationChatAnalysisDoer:         doer,
-		OpenOrganizationInDashboardDoer:             doer,
-		GetProjectDoer:                              doer,
-		UpdateOrganizationDoer:                      doer,
-		BulkUpdateAccountTypeDoer:                   doer,
-		DisableOrganizationDoer:                     doer,
-		EnableOrganizationDoer:                      doer,
-		GetOrganizationDoer:                         doer,
-		ListOrganizationMembersDoer:                 doer,
-		ListOrganizationProjectsDoer:                doer,
-		ListProjectMcpServersDoer:                   doer,
-		ListOrganizationActivityDoer:                doer,
-		ListUsersDoer:                               doer,
-		ListUserOrganizationsDoer:                   doer,
-		ListOrganizationsDoer:                       doer,
-		ExtendTrialDoer:                             doer,
-		CreateOrganizationDoer:                      doer,
-		RearmTrialDoer:                              doer,
-		GetOrganizationStatsDoer:                    doer,
-		RepairInferenceKeyDoer:                      doer,
-		GetInferenceKeysDoer:                        doer,
-		SetInferenceKeyMonthlyLimitDoer:             doer,
-		GetInferenceSpendHistoryDoer:                doer,
-		GetPaygBillingSummaryDoer:                   doer,
-		GetStripeCustomerDoer:                       doer,
-		SetStripeCustomerDoer:                       doer,
-		SetAdoptionDashboardURLDoer:                 doer,
-		GetStripeSubscriptionDoer:                   doer,
-		CancelStripeSubscriptionDoer:                doer,
-		ResumeStripeSubscriptionDoer:                doer,
-		MarkEnterpriseTrialConvertedDoer:            doer,
-		CreateGlobalIssuerDoer:                      doer,
-		GetGlobalIssuerDuplicatePreflightDoer:       doer,
-		ListGlobalIssuersDoer:                       doer,
-		GetGlobalIssuerDoer:                         doer,
-		UpdateGlobalIssuerDoer:                      doer,
-		DeleteGlobalIssuerDoer:                      doer,
-		FetchGlobalIssuerMetadataDoer:               doer,
-		RefreshGlobalIssuerMetadataDoer:             doer,
-		ListGlobalIssuerConvergenceCandidatesDoer:   doer,
-		GetGlobalIssuerMigratePreflightDoer:         doer,
-		MigrateToGlobalIssuerDoer:                   doer,
-		UploadPlatformImageDoer:                     doer,
-		ServeImageDoer:                              doer,
-		StartTrialDoer:                              doer,
-		ChangeTrialEndDateDoer:                      doer,
-		GetMeterUsageDoer:                           doer,
-		GetSpendBreakdownDoer:                       doer,
-		GetSupportMatrixDoer:                        doer,
-		UpdateSupportMatrixDoer:                     doer,
-		GetSupportCoverageDoer:                      doer,
-		DescribeMcpServerHealthDoer:                 doer,
-		SetMcpServerScopePinDoer:                    doer,
-		GetMcpServerToolCallsDoer:                   doer,
-		GetHookClientsDoer:                          doer,
-		GetOrganizationHookFleetDoer:                doer,
-		ListRegistryPromotionCandidatesDoer:         doer,
-		GetRegistryPromotionCandidateDoer:           doer,
-		PromoteRegistryCandidateDoer:                doer,
-		CurateRegistryPromotionCandidateDoer:        doer,
-		RetryRegistryPromotionDocsDoer:              doer,
-		GetRegistryOktaCandidatesDoer:               doer,
-		ListRegistryOktaUnmappedDoer:                doer,
-		ListRegistryEntriesDoer:                     doer,
-		GetRegistryEntryDoer:                        doer,
-		CreateRegistryEntryDoer:                     doer,
-		SaveRegistryEntryDoer:                       doer,
-		SetRegistryEntryPublishedDoer:               doer,
-		ListOnboardingStepsDoer:                     doer,
-		GetOnboardingStackOptionsDoer:               doer,
-		GetOrganizationOnboardingStackDoer:          doer,
-		SetOrganizationOnboardingStackDoer:          doer,
-		ListOnboardingUseCasesDoer:                  doer,
-		CreateOnboardingUseCaseDoer:                 doer,
-		UpdateOnboardingUseCaseDoer:                 doer,
-		DeleteOnboardingUseCaseDoer:                 doer,
-		ListOnboardingPlaybooksDoer:                 doer,
-		CreateOnboardingPlaybookDoer:                doer,
-		UpdateOnboardingPlaybookDoer:                doer,
-		DeleteOnboardingPlaybookDoer:                doer,
-		CloneOnboardingPlaybookDoer:                 doer,
-		GetOrganizationOnboardingPlaybookDoer:       doer,
-		AssignOrganizationOnboardingPlaybookDoer:    doer,
-		ListSignupOffersDoer:                        doer,
-		CreateSignupOfferDoer:                       doer,
-		UpdateSignupOfferDoer:                       doer,
-		ListPlatformMcpFeedbackDoer:                 doer,
-		GetStripeSubscriptionCandidateDoer:          doer,
-		SetStripeSubscriptionDoer:                   doer,
-		ListCustomerUsageDoer:                       doer,
-		ListUpstreamOAuthMigrationOrganizationsDoer: doer,
-		GetUpstreamOAuthMigrationStatusDoer:         doer,
-		RunUpstreamOAuthMigrationDoer:               doer,
-		EnableUpstreamAuthEnforcementDoer:           doer,
-		DisableUpstreamAuthEnforcementDoer:          doer,
-		BackfillMcpAuthGrantsDoer:                   doer,
-		BackfillMcpConnectGrantsDoer:                doer,
-		GetProjectRedeployPreviewDoer:               doer,
-		RedeployProjectDoer:                         doer,
-		ListCustomDomainsDoer:                       doer,
-		ListPlatformExternalCredentialsDoer:         doer,
-		GetGcpIamPlatformCredentialDoer:             doer,
-		CreateGcpIamPlatformCredentialDoer:          doer,
-		UpdateGcpIamPlatformCredentialDoer:          doer,
-		VerifyGcpIamPlatformCredentialDoer:          doer,
-		DeleteGcpIamPlatformCredentialDoer:          doer,
-		GetMemoryEvalOptionsDoer:                    doer,
-		ListMemoryEvalRunsDoer:                      doer,
-		GetMemoryEvalRunDoer:                        doer,
-		StartMemoryEvalRunDoer:                      doer,
-		ListAssistantOrganizationsDoer:              doer,
-		RepairOrganizationAssistantAgentNamesDoer:   doer,
-		ListOrganizationAssistantsDoer:              doer,
-		MigrateOrganizationAssistantIdentitiesDoer:  doer,
-		MigrateOrganizationAssistantsToKitDoer:      doer,
-		GetHooksRolloutDoer:                         doer,
-		GetHooksReleaseProgressDoer:                 doer,
-		SetHooksRolloutDefaultDoer:                  doer,
-		GetOrganizationHooksRolloutDoer:             doer,
-		SetOrganizationHooksRolloutDoer:             doer,
-		ClearOrganizationHooksRolloutDoer:           doer,
-		StartHooksRolloutStageDoer:                  doer,
-		PauseHooksRolloutStageDoer:                  doer,
-		ResumeHooksRolloutStageDoer:                 doer,
-		CancelHooksRolloutStageDoer:                 doer,
-		ListTailscaleOAuthMigrationDoer:             doer,
-		RunTailscaleOAuthMigrationStepDoer:          doer,
-		GetOrganizationEncryptionDoer:               doer,
-		ListOrganizationEncryptionTransitionsDoer:   doer,
-		EnrollOrganizationEncryptionDoer:            doer,
-		RollbackOrganizationEncryptionDoer:          doer,
-		RunOrganizationEncryptionDoer:               doer,
-		FinalizeOrganizationEncryptionDoer:          doer,
-		RestoreResponseBody:                         restoreBody,
-		scheme:                                      scheme,
-		host:                                        host,
-		decoder:                                     dec,
-		encoder:                                     enc,
+		LoginDoer:                                      doer,
+		CallbackDoer:                                   doer,
+		LogoutDoer:                                     doer,
+		GetSessionDoer:                                 doer,
+		GetOrganizationFeaturesDoer:                    doer,
+		SetOrganizationFeatureDoer:                     doer,
+		GetOrganizationChatAnalysisSettingsDoer:        doer,
+		SetOrganizationChatAnalysisSettingsDoer:        doer,
+		TriggerOrganizationChatAnalysisDoer:            doer,
+		OpenOrganizationInDashboardDoer:                doer,
+		GetProjectDoer:                                 doer,
+		UpdateOrganizationDoer:                         doer,
+		BulkUpdateAccountTypeDoer:                      doer,
+		DisableOrganizationDoer:                        doer,
+		EnableOrganizationDoer:                         doer,
+		GetOrganizationDoer:                            doer,
+		ListOrganizationMembersDoer:                    doer,
+		ListOrganizationProjectsDoer:                   doer,
+		ListProjectMcpServersDoer:                      doer,
+		ListOrganizationActivityDoer:                   doer,
+		ListUsersDoer:                                  doer,
+		ListUserOrganizationsDoer:                      doer,
+		ListOrganizationsDoer:                          doer,
+		ExtendTrialDoer:                                doer,
+		CreateOrganizationDoer:                         doer,
+		RearmTrialDoer:                                 doer,
+		GetOrganizationStatsDoer:                       doer,
+		RepairInferenceKeyDoer:                         doer,
+		GetInferenceKeysDoer:                           doer,
+		SetInferenceKeyMonthlyLimitDoer:                doer,
+		GetInferenceSpendHistoryDoer:                   doer,
+		GetPaygBillingSummaryDoer:                      doer,
+		GetStripeCustomerDoer:                          doer,
+		SetStripeCustomerDoer:                          doer,
+		SetAdoptionDashboardURLDoer:                    doer,
+		GetStripeSubscriptionDoer:                      doer,
+		CancelStripeSubscriptionDoer:                   doer,
+		ResumeStripeSubscriptionDoer:                   doer,
+		MarkEnterpriseTrialConvertedDoer:               doer,
+		CreateGlobalIssuerDoer:                         doer,
+		GetGlobalIssuerDuplicatePreflightDoer:          doer,
+		ListGlobalIssuersDoer:                          doer,
+		GetGlobalIssuerDoer:                            doer,
+		UpdateGlobalIssuerDoer:                         doer,
+		DeleteGlobalIssuerDoer:                         doer,
+		FetchGlobalIssuerMetadataDoer:                  doer,
+		RefreshGlobalIssuerMetadataDoer:                doer,
+		ListGlobalIssuerConvergenceCandidatesDoer:      doer,
+		GetGlobalIssuerMigratePreflightDoer:            doer,
+		MigrateToGlobalIssuerDoer:                      doer,
+		UploadPlatformImageDoer:                        doer,
+		ServeImageDoer:                                 doer,
+		StartTrialDoer:                                 doer,
+		ChangeTrialEndDateDoer:                         doer,
+		GetMeterUsageDoer:                              doer,
+		GetSpendBreakdownDoer:                          doer,
+		GetSupportMatrixDoer:                           doer,
+		UpdateSupportMatrixDoer:                        doer,
+		GetSupportCoverageDoer:                         doer,
+		DescribeMcpServerHealthDoer:                    doer,
+		SetMcpServerScopePinDoer:                       doer,
+		GetMcpServerToolCallsDoer:                      doer,
+		GetHookClientsDoer:                             doer,
+		GetOrganizationHookFleetDoer:                   doer,
+		ListRegistryPromotionCandidatesDoer:            doer,
+		GetRegistryPromotionCandidateDoer:              doer,
+		PromoteRegistryCandidateDoer:                   doer,
+		CurateRegistryPromotionCandidateDoer:           doer,
+		RetryRegistryPromotionDocsDoer:                 doer,
+		GetRegistryOktaCandidatesDoer:                  doer,
+		ListRegistryOktaUnmappedDoer:                   doer,
+		ListRegistryEntriesDoer:                        doer,
+		GetRegistryEntryDoer:                           doer,
+		CreateRegistryEntryDoer:                        doer,
+		SaveRegistryEntryDoer:                          doer,
+		SetRegistryEntryPublishedDoer:                  doer,
+		ListOnboardingStepsDoer:                        doer,
+		GetOnboardingStackOptionsDoer:                  doer,
+		GetOrganizationOnboardingStackDoer:             doer,
+		SetOrganizationOnboardingStackDoer:             doer,
+		ListOnboardingUseCasesDoer:                     doer,
+		CreateOnboardingUseCaseDoer:                    doer,
+		UpdateOnboardingUseCaseDoer:                    doer,
+		DeleteOnboardingUseCaseDoer:                    doer,
+		ListOnboardingPlaybooksDoer:                    doer,
+		CreateOnboardingPlaybookDoer:                   doer,
+		UpdateOnboardingPlaybookDoer:                   doer,
+		DeleteOnboardingPlaybookDoer:                   doer,
+		CloneOnboardingPlaybookDoer:                    doer,
+		GetOrganizationOnboardingPlaybookDoer:          doer,
+		AssignOrganizationOnboardingPlaybookDoer:       doer,
+		ListSignupOffersDoer:                           doer,
+		CreateSignupOfferDoer:                          doer,
+		UpdateSignupOfferDoer:                          doer,
+		ListPlatformMcpFeedbackDoer:                    doer,
+		GetStripeSubscriptionCandidateDoer:             doer,
+		SetStripeSubscriptionDoer:                      doer,
+		ListCustomerUsageDoer:                          doer,
+		ListUpstreamOAuthMigrationOrganizationsDoer:    doer,
+		GetUpstreamOAuthMigrationStatusDoer:            doer,
+		RunUpstreamOAuthMigrationDoer:                  doer,
+		EnableUpstreamAuthEnforcementDoer:              doer,
+		DisableUpstreamAuthEnforcementDoer:             doer,
+		BackfillMcpAuthGrantsDoer:                      doer,
+		BackfillMcpConnectGrantsDoer:                   doer,
+		GetSecretBackfillsDoer:                         doer,
+		RunMarketplaceTokenBackfillDoer:                doer,
+		RunRunnerKeyOrganizationBackfillDoer:           doer,
+		GetProjectRedeployPreviewDoer:                  doer,
+		RedeployProjectDoer:                            doer,
+		ListCustomDomainsDoer:                          doer,
+		ListPlatformExternalCredentialsDoer:            doer,
+		GetGcpIamPlatformCredentialDoer:                doer,
+		CreateGcpIamPlatformCredentialDoer:             doer,
+		UpdateGcpIamPlatformCredentialDoer:             doer,
+		VerifyGcpIamPlatformCredentialDoer:             doer,
+		DeleteGcpIamPlatformCredentialDoer:             doer,
+		GetMemoryEvalOptionsDoer:                       doer,
+		ListMemoryEvalRunsDoer:                         doer,
+		GetMemoryEvalRunDoer:                           doer,
+		StartMemoryEvalRunDoer:                         doer,
+		ListAssistantOrganizationsDoer:                 doer,
+		RepairOrganizationAssistantAgentNamesDoer:      doer,
+		BackfillOrganizationAssistantBuiltinGrantsDoer: doer,
+		MigrateOrganizationAssistantSlackDoer:          doer,
+		ListOrganizationAssistantsDoer:                 doer,
+		MigrateOrganizationAssistantIdentitiesDoer:     doer,
+		MigrateOrganizationAssistantsToKitDoer:         doer,
+		GetHooksRolloutDoer:                            doer,
+		GetHooksReleaseProgressDoer:                    doer,
+		SetHooksRolloutDefaultDoer:                     doer,
+		GetOrganizationHooksRolloutDoer:                doer,
+		SetOrganizationHooksRolloutDoer:                doer,
+		ClearOrganizationHooksRolloutDoer:              doer,
+		StartHooksRolloutStageDoer:                     doer,
+		PauseHooksRolloutStageDoer:                     doer,
+		ResumeHooksRolloutStageDoer:                    doer,
+		CancelHooksRolloutStageDoer:                    doer,
+		ListTailscaleOAuthMigrationDoer:                doer,
+		RunTailscaleOAuthMigrationStepDoer:             doer,
+		GetOrganizationEncryptionDoer:                  doer,
+		ListOrganizationEncryptionTransitionsDoer:      doer,
+		EnrollOrganizationEncryptionDoer:               doer,
+		RollbackOrganizationEncryptionDoer:             doer,
+		RunOrganizationEncryptionDoer:                  doer,
+		FinalizeOrganizationEncryptionDoer:             doer,
+		RestoreResponseBody:                            restoreBody,
+		scheme:                                         scheme,
+		host:                                           host,
+		decoder:                                        dec,
+		encoder:                                        enc,
 	}
 }
 
@@ -3274,6 +3299,78 @@ func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
 	}
 }
 
+// GetSecretBackfills returns an endpoint that makes HTTP requests to the admin
+// service getSecretBackfills server.
+func (c *Client) GetSecretBackfills() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSecretBackfillsRequest(c.encoder)
+		decodeResponse = DecodeGetSecretBackfillsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSecretBackfillsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSecretBackfillsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSecretBackfills", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunMarketplaceTokenBackfill returns an endpoint that makes HTTP requests to
+// the admin service runMarketplaceTokenBackfill server.
+func (c *Client) RunMarketplaceTokenBackfill() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunMarketplaceTokenBackfillRequest(c.encoder)
+		decodeResponse = DecodeRunMarketplaceTokenBackfillResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunMarketplaceTokenBackfillRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunMarketplaceTokenBackfillDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runMarketplaceTokenBackfill", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunRunnerKeyOrganizationBackfill returns an endpoint that makes HTTP
+// requests to the admin service runRunnerKeyOrganizationBackfill server.
+func (c *Client) RunRunnerKeyOrganizationBackfill() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunRunnerKeyOrganizationBackfillRequest(c.encoder)
+		decodeResponse = DecodeRunRunnerKeyOrganizationBackfillResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunRunnerKeyOrganizationBackfillRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunRunnerKeyOrganizationBackfillDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runRunnerKeyOrganizationBackfill", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetProjectRedeployPreview returns an endpoint that makes HTTP requests to
 // the admin service getProjectRedeployPreview server.
 func (c *Client) GetProjectRedeployPreview() goa.Endpoint {
@@ -3629,6 +3726,55 @@ func (c *Client) RepairOrganizationAssistantAgentNames() goa.Endpoint {
 		resp, err := c.RepairOrganizationAssistantAgentNamesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "repairOrganizationAssistantAgentNames", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BackfillOrganizationAssistantBuiltinGrants returns an endpoint that makes
+// HTTP requests to the admin service
+// backfillOrganizationAssistantBuiltinGrants server.
+func (c *Client) BackfillOrganizationAssistantBuiltinGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBackfillOrganizationAssistantBuiltinGrantsRequest(c.encoder)
+		decodeResponse = DecodeBackfillOrganizationAssistantBuiltinGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBackfillOrganizationAssistantBuiltinGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BackfillOrganizationAssistantBuiltinGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateOrganizationAssistantSlack returns an endpoint that makes HTTP
+// requests to the admin service migrateOrganizationAssistantSlack server.
+func (c *Client) MigrateOrganizationAssistantSlack() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateOrganizationAssistantSlackRequest(c.encoder)
+		decodeResponse = DecodeMigrateOrganizationAssistantSlackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateOrganizationAssistantSlackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateOrganizationAssistantSlackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "migrateOrganizationAssistantSlack", err)
 		}
 		return decodeResponse(resp)
 	}

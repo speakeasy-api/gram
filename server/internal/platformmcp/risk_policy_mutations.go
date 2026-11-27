@@ -147,7 +147,6 @@ func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, p
 		Controls:                    controls,
 		CreatePolicy:                policyService.createPolicyTool,
 		UpdatePolicy:                policyService.updatePolicyTool,
-		RemoveSelf:                  policyService.removeSelfFromPolicyTool,
 		ChangeAudience:              policyService.changePolicyAudienceTool,
 		CreateExclusion:             nil,
 		UpdateExclusion:             nil,
@@ -248,10 +247,6 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 }
 
 func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw map[string]any, operation string) (*mcp.CallToolResult, UpdateRiskPolicyToolOutput, error) {
-	// Fail closed before admission, transactions, and even historical receipt replay.
-	if operation == operationRemoveSelfFromRiskPolicy {
-		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalUnavailable())
-	}
 	var zero UpdateRiskPolicyToolOutput
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
@@ -263,7 +258,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 	var deltaPrincipals []urn.Principal
 	if changeAudience {
 		if !externalRiskAudiencePrincipal(principal) {
-			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Audience changes require an external administrator OAuth connection."))
+			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](invalidRiskPolicyAudienceRefusal("Audience changes require an external administrator OAuth connection."))
 		}
 		if err := decodeRiskMutationInput(raw, &delta); err != nil {
 			return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
@@ -277,7 +272,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
 	if _, replacesAudience := input.Patch["audience"]; replacesAudience && !externalRiskAudiencePrincipal(principal) {
-		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](selfRemovalRefusal("Audience replacement requires an external administrator OAuth connection."))
+		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](invalidRiskPolicyAudienceRefusal("Audience replacement requires an external administrator OAuth connection."))
 	}
 	input.ProjectSlug = strings.TrimSpace(input.ProjectSlug)
 	project, err := s.controls.Admit(ctx, principal, input.ProjectSlug)

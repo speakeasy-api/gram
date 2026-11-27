@@ -23,6 +23,24 @@ The Homebrew `cli` formula conflicts with the Speakeasy SDK generator formula
 (`speakeasy-api/tap/speakeasy`), because both install a binary named
 `speakeasy`. Install one or the other with Homebrew.
 
+### Connecting to another Speakeasy host
+
+The CLI connects to `https://app.getgram.ai` by default. If your organization
+uses Speakeasy on another host, for example in another region, sign in with
+that host:
+
+```bash
+speakeasy auth --api-url https://<your-speakeasy-host>
+```
+
+`speakeasy auth` saves the host in your profile, and later commands use it.
+To use a different host without changing your profile, set
+`SPEAKEASY_AI_API_URL`, or pass `--api-url` before the command name
+(`speakeasy --api-url https://<your-speakeasy-host> push`). Either one
+overrides the saved host. In CI, where you cannot sign in, set
+`SPEAKEASY_AI_API_URL` together with `SPEAKEASY_AI_API_KEY`. The dashboard's
+setup instructions include the right host when it differs from the default.
+
 ### Migrating from `gram`
 
 This CLI was previously named `gram`. The `speakeasy-api/tap/gram` Homebrew

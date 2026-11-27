@@ -10,6 +10,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
 import { CodeBlock } from "@/components/code";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { shellQuote } from "@/lib/shell";
 
 interface OpenApiSourceInputProps {
@@ -35,6 +36,9 @@ export function OpenApiSourceInput({
   // Both CLI commands fall back to the slug as the name when none is given,
   // which would rename a document whose name differs from its slug.
   const cliName = documentName ?? documentSlug ?? "";
+  // The CLI's default host does not reach this deployment, so it signs in here
+  // first; later commands reuse the saved host.
+  const cliServerURL = clientServerURLOverride("cli");
   const client = useSdkClient();
 
   const fetchMutation = useMutation({
@@ -147,6 +151,16 @@ export function OpenApiSourceInput({
       </TabsContent>
       {documentSlug && (
         <TabsContent value="cli" className="my-3 space-y-3">
+          {cliServerURL && (
+            <div>
+              <p className="text-muted-foreground mb-1.5 text-xs">
+                Sign in to this Speakeasy host first
+              </p>
+              <CodeBlock language="bash" className="!bg-muted/50 !border-0">
+                {`speakeasy auth --api-url ${cliServerURL}`}
+              </CodeBlock>
+            </div>
+          )}
           <div>
             <p className="text-muted-foreground mb-1.5 text-xs">
               Direct upload
@@ -162,6 +176,13 @@ export function OpenApiSourceInput({
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`speakeasy stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\nspeakeasy push`}
             </CodeBlock>
+            {cliServerURL && (
+              <p className="text-muted-foreground mt-1.5 text-xs">
+                In CI, where you can&apos;t sign in, set{" "}
+                <code>SPEAKEASY_AI_API_URL={cliServerURL}</code> along with{" "}
+                <code>SPEAKEASY_AI_API_KEY</code>.
+              </p>
+            )}
           </div>
         </TabsContent>
       )}

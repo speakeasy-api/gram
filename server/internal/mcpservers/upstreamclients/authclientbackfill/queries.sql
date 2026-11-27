@@ -1765,9 +1765,9 @@ LIMIT @page_size::int;
 -- restricts results to choices that do not yet name a typed auth client.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
--- whether the server has any upstream OAuth client association, whether the
--- chosen registration is live and associated with the server, and whether the choice names
--- the server's headers, which reads as no-auth.
+-- whether the server has any enabled typed OAuth auth client offer
+-- (server_has_oauth_clients), whether the chosen registration is live, and
+-- whether the choice names the server's headers, which reads as no-auth.
 --
 -- The typed auth clients: an OAuth choice can name the live, enabled
 -- remote_session or service_account clients of its registration linked to
@@ -1828,22 +1828,6 @@ SELECT sel.id,
            AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
            AND headers_only.client_type IN ('static_credential', 'pass_through')
        )::boolean AS names_headers,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.deleted IS FALSE
-       )::boolean AS server_has_associations,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.remote_session_client_id = sel.remote_session_client_id
-           AND a.deleted IS FALSE
-       )::boolean AS registration_associated,
        -- The registration and its issuer are live, which the typed resolver
        -- requires of a choice whatever the server's associations.
        EXISTS (
@@ -2136,39 +2120,6 @@ WHERE ac.organization_id = @organization_id::text
   AND ac.deleted IS FALSE
 ORDER BY ac.id
 FOR SHARE OF ac;
-
--- name: ListLegacySelectionIssuerEvidence :many
--- Only the retired workflow reads this evidence, once per mapping page.
-SELECT sel.id
-FROM (
-    SELECT unnest(@selection_ids::uuid[]) AS selection_id,
-           unnest(@client_ids::uuid[]) AS client_id,
-           unnest(@issuer_ids::uuid[]) AS issuer_id
-) AS input
-JOIN upstream_client_selections AS sel ON sel.id = input.selection_id
-  AND sel.remote_session_client_id = input.client_id
-  AND sel.organization_id = @organization_id::text AND NOT sel.deleted
-JOIN projects AS project ON project.id = sel.project_id
-  AND project.organization_id = sel.organization_id AND NOT project.deleted
-JOIN remote_session_clients AS client ON client.id = sel.remote_session_client_id AND NOT client.deleted
-  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
-JOIN user_session_issuers AS issuer ON issuer.id = input.issuer_id AND NOT issuer.deleted
-  AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = client.id
-  AND link.user_session_issuer_id = issuer.id;
-
--- name: LockSelectionIssuerBinding :exec
--- Holds the binding of an unmapped OAuth choice's registration to its
--- credential's user session issuer, which is what makes the upstream client
--- choice usable, against unbinding until the transaction ends, so a choice is
--- never named after the binding it was decided from is gone. Taken after
--- LockSelectionServerAuthClients. A binding that is already gone locks
--- nothing, and the fresh decision then rejects the choice.
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = @remote_session_client_id::uuid
-  AND link.user_session_issuer_id = @user_session_issuer_id::uuid
-FOR SHARE OF link;
 
 -- name: MapSelectionToAuthClient :execrows
 -- Names a typed auth client on one choice, conditional on the evidence it was
@@ -2787,15 +2738,6 @@ VALUES (@project_id, @organization_id, @user_session_issuer_id, @subject_urn, @j
 SELECT remote_session_client_id, auth_client_id, no_auth, source
 FROM upstream_client_selections
 WHERE credential_id = @credential_id AND mcp_server_id = @mcp_server_id AND deleted IS FALSE;
-
--- name: BindClientIssuerFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES (@remote_session_client_id, @user_session_issuer_id)
-ON CONFLICT DO NOTHING;
-
--- name: UnbindClientIssuerFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id AND user_session_issuer_id = @user_session_issuer_id;
 
 -- name: ProbeServerLockFixture :one
 -- Fails with lock_not_available while anyone holds a lock on the server row.

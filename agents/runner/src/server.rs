@@ -450,6 +450,7 @@ mod tests {
                 id: "same-id".into(),
                 url: "http://127.0.0.1/mcp".into(),
                 headers: invalid_headers,
+                is_gateway: false,
             }]);
             let rejected =
                 thread_turn_inner(host.clone(), "T".into(), headers.clone(), invalid_config)

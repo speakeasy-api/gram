@@ -19,7 +19,7 @@ import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 
 const state = vi.hoisted(() => ({
-  hasScope: vi.fn(),
+  canWriteProjectMCPServers: vi.fn(),
   requireScope: vi.fn(),
   mutate: vi.fn(),
   isPending: false,
@@ -38,7 +38,9 @@ vi.mock("@/hooks/useToolsetUrl", async (importOriginal) => ({
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: state.hasScope }),
+  useRBAC: () => ({
+    canWriteProjectMCPServers: state.canWriteProjectMCPServers,
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: (props: {
@@ -113,7 +115,7 @@ const save = () =>
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  state.hasScope.mockReturnValue(true);
+  state.canWriteProjectMCPServers.mockReturnValue(true);
   state.isPending = false;
 });
 
@@ -151,13 +153,16 @@ describe("Gateway network access", () => {
 
 describe("Gateway instructions", () => {
   it("checks both edit and save permissions against the gateway project", () => {
-    state.hasScope.mockReturnValue(false);
+    state.canWriteProjectMCPServers.mockReturnValue(false);
     renderSection();
-    expect(state.hasScope).toHaveBeenCalledWith("mcp:write", server.projectId);
+    expect(state.canWriteProjectMCPServers).toHaveBeenCalledWith(
+      server.projectId,
+    );
     expect(state.requireScope).toHaveBeenCalledWith(
       expect.objectContaining({
         scope: "mcp:write",
         resourceId: server.projectId,
+        projectId: server.projectId,
       }),
     );
     expect(textarea().disabled).toBe(true);

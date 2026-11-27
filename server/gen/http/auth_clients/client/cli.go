@@ -36,8 +36,8 @@ func BuildListAuthClientsPayload(authClientsListAuthClientsMcpServerID string, a
 	{
 		if authClientsListAuthClientsClientType != "" {
 			clientType = &authClientsListAuthClientsClientType
-			if !(*clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential" || *clientType == "pass_through" || *clientType == "ema") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+			if !(*clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential" || *clientType == "pass_through" || *clientType == "ema" || *clientType == "slack_app") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app"}))
 			}
 			if err != nil {
 				return nil, err
@@ -178,8 +178,8 @@ func BuildCreateAuthClientPayload(authClientsCreateAuthClientBody string, authCl
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_type\": \"service_account\",\n      \"headers\": [\n         {\n            \"description\": \"abc123\",\n            \"is_required\": false,\n            \"is_secret\": false,\n            \"name\": \"aa\",\n            \"value\": \"abc123\",\n            \"value_from_request_header\": \"abc123\"\n         }\n      ],\n      \"mcp_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"name\": \"aa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_client_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if !(body.ClientType == "remote_session" || body.ClientType == "service_account" || body.ClientType == "static_credential" || body.ClientType == "pass_through") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through"}))
+		if !(body.ClientType == "remote_session" || body.ClientType == "service_account" || body.ClientType == "static_credential" || body.ClientType == "pass_through" || body.ClientType == "slack_app") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "slack_app"}))
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))

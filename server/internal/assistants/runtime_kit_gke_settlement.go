@@ -41,7 +41,7 @@ func (p *KitRuntimeProtocol) checkpointSessions(ctx context.Context, r assistant
 		}
 		bound[session.AcpSessionID] = true
 	}
-	c, err := p.dial(ctx, r)
+	c, _, err := p.dial(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func settleKitCheckpointSessions(ctx context.Context, c kitCheckpointTransport, 
 			return errors.New("kit session has unsettled foreground or background work")
 		}
 		if closeSessions {
-			// Released Kit v0.2.17 session/close waits for cleanup, update
+			// Kit session/close waits for cleanup, update
 			// delivery, and the transcript checkpoint. Idle status alone does
 			// not guarantee durable history. Never substitute session/delete.
 			if _, err := c.Call(ctx, "session/close", map[string]string{"sessionId": id}, id); err != nil {

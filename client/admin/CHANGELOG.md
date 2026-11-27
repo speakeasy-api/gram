@@ -1,5 +1,17 @@
 # admin
 
+## 0.14.3
+
+### Patch Changes
+
+- 2c4200a: Staff can preview and apply the plugin marketplace token backfill and the function runner key organization backfill from a temporary **Secret backfills** page in the admin dashboard. Both run inside the admin server, so nobody needs database write access or the platform key on their machine.
+
+## 0.14.2
+
+### Patch Changes
+
+- 5a611c9: The admin encryption transitions list now shows only organizations with values for the selected use case by default, with how many values each has and when one was last written, most recently written first. Staff can switch to every organization or sort oldest first, and the state counts follow the filter.
+
 ## 0.14.1
 
 ### Patch Changes

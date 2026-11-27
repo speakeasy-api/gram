@@ -129,6 +129,13 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
+        to: "/secret-backfills",
+        label: "Secret backfills",
+        keywords:
+          "marketplace tokens plaintext hash function runner keys functions access organization encryption backfill",
+        icon: LockKeyholeIcon,
+      },
+      {
         to: "/encryption-transitions",
         label: "Encryption transitions",
         keywords:

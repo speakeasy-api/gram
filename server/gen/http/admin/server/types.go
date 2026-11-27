@@ -651,6 +651,26 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
+// RunMarketplaceTokenBackfillRequestBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP request body.
+type RunMarketplaceTokenBackfillRequestBody struct {
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint *string `form:"platform_key_fingerprint,omitempty" json:"platform_key_fingerprint,omitempty" xml:"platform_key_fingerprint,omitempty"`
+}
+
+// RunRunnerKeyOrganizationBackfillRequestBody is the type of the "admin"
+// service "runRunnerKeyOrganizationBackfill" endpoint HTTP request body.
+type RunRunnerKeyOrganizationBackfillRequestBody struct {
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // RedeployProjectRequestBody is the type of the "admin" service
 // "redeployProject" endpoint HTTP request body.
 type RedeployProjectRequestBody struct {
@@ -725,6 +745,21 @@ type StartMemoryEvalRunRequestBody struct {
 // RepairOrganizationAssistantAgentNamesRequestBody is the type of the "admin"
 // service "repairOrganizationAssistantAgentNames" endpoint HTTP request body.
 type RepairOrganizationAssistantAgentNamesRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsRequestBody is the type of the
+// "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint HTTP
+// request body.
+type BackfillOrganizationAssistantBuiltinGrantsRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackRequestBody is the type of the "admin"
+// service "migrateOrganizationAssistantSlack" endpoint HTTP request body.
+type MigrateOrganizationAssistantSlackRequestBody struct {
+	// The organization ID.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
@@ -3212,6 +3247,63 @@ type BackfillMcpConnectGrantsResponseBody struct {
 	TakenOver int64 `form:"taken_over" json:"taken_over" xml:"taken_over"`
 }
 
+// GetSecretBackfillsResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body.
+type GetSecretBackfillsResponseBody struct {
+	// A preview of the marketplace token backfill.
+	MarketplaceTokens *AdminMarketplaceTokenBackfillResponseBody `form:"marketplace_tokens" json:"marketplace_tokens" xml:"marketplace_tokens"`
+	// A preview of the runner key organization backfill.
+	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfillResponseBody `form:"runner_key_organizations" json:"runner_key_organizations" xml:"runner_key_organizations"`
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	// The fingerprint of the platform key this admin process seals marketplace
+	// tokens with. It must match the fingerprint every server and worker logs at
+	// startup as "encryption key loaded". Absent when this process has no platform
+	// key, so the marketplace token backfill cannot be applied.
+	PlatformKeyFingerprint *string `form:"platform_key_fingerprint,omitempty" json:"platform_key_fingerprint,omitempty" xml:"platform_key_fingerprint,omitempty"`
+}
+
+// RunMarketplaceTokenBackfillResponseBody is the type of the "admin" service
+// "runMarketplaceTokenBackfill" endpoint HTTP response body.
+type RunMarketplaceTokenBackfillResponseBody struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed int64 `form:"attributed" json:"attributed" xml:"attributed"`
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved int64 `form:"moved" json:"moved" xml:"moved"`
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped int64 `form:"skipped" json:"skipped" xml:"skipped"`
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey int64 `form:"needs_organization_key" json:"needs_organization_key" xml:"needs_organization_key"`
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed int64 `form:"unattributed" json:"unattributed" xml:"unattributed"`
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy int64 `form:"legacy" json:"legacy" xml:"legacy"`
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed int64 `form:"hashed" json:"hashed" xml:"hashed"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
+}
+
+// RunRunnerKeyOrganizationBackfillResponseBody is the type of the "admin"
+// service "runRunnerKeyOrganizationBackfill" endpoint HTTP response body.
+type RunRunnerKeyOrganizationBackfillResponseBody struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled int64 `form:"filled" json:"filled" xml:"filled"`
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending int64 `form:"pending" json:"pending" xml:"pending"`
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
+}
+
 // GetProjectRedeployPreviewResponseBody is the type of the "admin" service
 // "getProjectRedeployPreview" endpoint HTTP response body.
 type GetProjectRedeployPreviewResponseBody struct {
@@ -3431,6 +3523,43 @@ type RepairOrganizationAssistantAgentNamesResponseBody struct {
 	Conflicts      int64                                              `form:"conflicts" json:"conflicts" xml:"conflicts"`
 	Failed         int64                                              `form:"failed" json:"failed" xml:"failed"`
 	Results        []*AdminAssistantAgentNameRepairResultResponseBody `form:"results" json:"results" xml:"results"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsResponseBody is the type of the
+// "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint HTTP
+// response body.
+type BackfillOrganizationAssistantBuiltinGrantsResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Assistants whose agents received one or more built-in Connect grants.
+	Granted int64 `form:"granted" json:"granted" xml:"granted"`
+	// Assistants whose agents already held all required permanent built-in Connect
+	// grants.
+	AlreadyGranted int64 `form:"already_granted" json:"already_granted" xml:"already_granted"`
+	// Assistants whose backfill failed. Running again retries them.
+	Failed int64 `form:"failed" json:"failed" xml:"failed"`
+	// One result per live agent-backed assistant.
+	Results []*AdminAssistantBuiltinGrantBackfillResultResponseBody `form:"results" json:"results" xml:"results"`
+}
+
+// MigrateOrganizationAssistantSlackResponseBody is the type of the "admin"
+// service "migrateOrganizationAssistantSlack" endpoint HTTP response body.
+type MigrateOrganizationAssistantSlackResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Assistants migrated in this run.
+	Migrated int64 `form:"migrated" json:"migrated" xml:"migrated"`
+	// Assistants already using the built-in assistant-slack toolset and slack_app
+	// auth client.
+	AlreadyMigrated int64 `form:"already_migrated" json:"already_migrated" xml:"already_migrated"`
+	// Assistants without any Slack toolset or trigger.
+	NoSlack int64 `form:"no_slack" json:"no_slack" xml:"no_slack"`
+	// Assistants with Slack configured that lack a live dedicated agent.
+	NeedsIdentity int64 `form:"needs_identity" json:"needs_identity" xml:"needs_identity"`
+	// Assistants whose migration failed. Running again retries them.
+	Failed int64 `form:"failed" json:"failed" xml:"failed"`
+	// One result per live assistant.
+	Results []*AdminAssistantSlackMigrationResultResponseBody `form:"results" json:"results" xml:"results"`
 }
 
 // ListOrganizationAssistantsResponseBody is the type of the "admin" service
@@ -23970,6 +24099,589 @@ type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSecretBackfillsUnauthorizedResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetSecretBackfillsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsForbiddenResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "forbidden" error.
+type GetSecretBackfillsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsBadRequestResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "bad_request" error.
+type GetSecretBackfillsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsNotFoundResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "not_found" error.
+type GetSecretBackfillsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsConflictResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "conflict" error.
+type GetSecretBackfillsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSecretBackfillsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsInvalidResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "invalid" error.
+type GetSecretBackfillsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsInvariantViolationResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSecretBackfillsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsUnexpectedResponseBody is the type of the "admin" service
+// "getSecretBackfills" endpoint HTTP response body for the "unexpected" error.
+type GetSecretBackfillsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSecretBackfillsGatewayErrorResponseBody is the type of the "admin"
+// service "getSecretBackfills" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetSecretBackfillsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillUnavailableResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unavailable" error.
+type RunMarketplaceTokenBackfillUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillUnauthorizedResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unauthorized" error.
+type RunMarketplaceTokenBackfillUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillForbiddenResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "forbidden" error.
+type RunMarketplaceTokenBackfillForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillBadRequestResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "bad_request" error.
+type RunMarketplaceTokenBackfillBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillNotFoundResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "not_found" error.
+type RunMarketplaceTokenBackfillNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillConflictResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "conflict" error.
+type RunMarketplaceTokenBackfillConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillUnsupportedMediaResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "unsupported_media" error.
+type RunMarketplaceTokenBackfillUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillInvalidResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "invalid" error.
+type RunMarketplaceTokenBackfillInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillInvariantViolationResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "invariant_violation" error.
+type RunMarketplaceTokenBackfillInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillUnexpectedResponseBody is the type of the "admin"
+// service "runMarketplaceTokenBackfill" endpoint HTTP response body for the
+// "unexpected" error.
+type RunMarketplaceTokenBackfillUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunMarketplaceTokenBackfillGatewayErrorResponseBody is the type of the
+// "admin" service "runMarketplaceTokenBackfill" endpoint HTTP response body
+// for the "gateway_error" error.
+type RunMarketplaceTokenBackfillGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "unauthorized" error.
+type RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillForbiddenResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "forbidden" error.
+type RunRunnerKeyOrganizationBackfillForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillBadRequestResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "bad_request" error.
+type RunRunnerKeyOrganizationBackfillBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillNotFoundResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "not_found" error.
+type RunRunnerKeyOrganizationBackfillNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillConflictResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "conflict" error.
+type RunRunnerKeyOrganizationBackfillConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody is the type of
+// the "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillInvalidResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "invalid" error.
+type RunRunnerKeyOrganizationBackfillInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody is the type
+// of the "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillUnexpectedResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "unexpected" error.
+type RunRunnerKeyOrganizationBackfillUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody is the type of the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint HTTP response
+// body for the "gateway_error" error.
+type RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetProjectRedeployPreviewUnauthorizedResponseBody is the type of the "admin"
 // service "getProjectRedeployPreview" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -26899,6 +27611,405 @@ type RepairOrganizationAssistantAgentNamesUnexpectedResponseBody struct {
 // the "admin" service "repairOrganizationAssistantAgentNames" endpoint HTTP
 // response body for the "gateway_error" error.
 type RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody is the
+// type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "unauthorized" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "forbidden" error.
+type BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "bad_request" error.
+type BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "not_found" error.
+type BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "conflict" error.
+type BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody is
+// the type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "unsupported_media" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody is the type of
+// the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "invalid" error.
+type BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody is
+// the type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "invariant_violation" error.
+type BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "unexpected" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody is the
+// type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "gateway_error" error.
+type BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackUnavailableResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unavailable" error.
+type MigrateOrganizationAssistantSlackUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackUnauthorizedResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unauthorized" error.
+type MigrateOrganizationAssistantSlackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackForbiddenResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "forbidden" error.
+type MigrateOrganizationAssistantSlackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackBadRequestResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "bad_request" error.
+type MigrateOrganizationAssistantSlackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackNotFoundResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "not_found" error.
+type MigrateOrganizationAssistantSlackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackConflictResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "conflict" error.
+type MigrateOrganizationAssistantSlackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody is the type of
+// the "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP
+// response body for the "unsupported_media" error.
+type MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackInvalidResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "invalid" error.
+type MigrateOrganizationAssistantSlackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackInvariantViolationResponseBody is the type
+// of the "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP
+// response body for the "invariant_violation" error.
+type MigrateOrganizationAssistantSlackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackUnexpectedResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unexpected" error.
+type MigrateOrganizationAssistantSlackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MigrateOrganizationAssistantSlackGatewayErrorResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "gateway_error" error.
+type MigrateOrganizationAssistantSlackGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -32632,6 +33743,63 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
+// AdminMarketplaceTokenBackfillResponseBody is used to define fields on
+// response body types.
+type AdminMarketplaceTokenBackfillResponseBody struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed int64 `form:"attributed" json:"attributed" xml:"attributed"`
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved int64 `form:"moved" json:"moved" xml:"moved"`
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped int64 `form:"skipped" json:"skipped" xml:"skipped"`
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey int64 `form:"needs_organization_key" json:"needs_organization_key" xml:"needs_organization_key"`
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed int64 `form:"unattributed" json:"unattributed" xml:"unattributed"`
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy int64 `form:"legacy" json:"legacy" xml:"legacy"`
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed int64 `form:"hashed" json:"hashed" xml:"hashed"`
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
+}
+
+// AdminRunnerKeyOrganizationBackfillResponseBody is used to define fields on
+// response body types.
+type AdminRunnerKeyOrganizationBackfillResponseBody struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled int64 `form:"filled" json:"filled" xml:"filled"`
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending int64 `form:"pending" json:"pending" xml:"pending"`
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization int64 `form:"missing_organization" json:"missing_organization" xml:"missing_organization"`
+}
+
+// AdminSecretBackfillOrganizationResponseBody is used to define fields on
+// response body types.
+type AdminSecretBackfillOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization's name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The organization's slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens int64 `form:"legacy_tokens" json:"legacy_tokens" xml:"legacy_tokens"`
+	// Its GitHub connections without an organization.
+	UnattributedConnections int64 `form:"unattributed_connections" json:"unattributed_connections" xml:"unattributed_connections"`
+	// Its runner keys without an organization.
+	PendingRunnerKeys int64 `form:"pending_runner_keys" json:"pending_runner_keys" xml:"pending_runner_keys"`
+}
+
 // AdminCustomDomainResponseBody is used to define fields on response body
 // types.
 type AdminCustomDomainResponseBody struct {
@@ -32749,6 +33917,51 @@ type AdminAssistantAgentNameRepairResultResponseBody struct {
 	ProjectID   string `form:"project_id" json:"project_id" xml:"project_id"`
 	Name        string `form:"name" json:"name" xml:"name"`
 	Outcome     string `form:"outcome" json:"outcome" xml:"outcome"`
+}
+
+// AdminAssistantBuiltinGrantBackfillResultResponseBody is used to define
+// fields on response body types.
+type AdminAssistantBuiltinGrantBackfillResultResponseBody struct {
+	// The assistant ID.
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	// The assistant's project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The assistant name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// granted when the run added one or more missing built-in Connect grants,
+	// already_granted when every built-in Connect grant was already present
+	// permanently, and failed when writing failed.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// How many built-in Connect grants were written or promoted to permanent for
+	// this assistant.
+	GrantsAdded int64 `form:"grants_added" json:"grants_added" xml:"grants_added"`
+}
+
+// AdminAssistantSlackMigrationResultResponseBody is used to define fields on
+// response body types.
+type AdminAssistantSlackMigrationResultResponseBody struct {
+	// The assistant ID.
+	AssistantID string `form:"assistant_id" json:"assistant_id" xml:"assistant_id"`
+	// The assistant's project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The assistant name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// migrated when Slack credentials, grants, triggers, or toolsets were updated;
+	// already_migrated when Slack was already using a slack_app auth client and
+	// built-in grants; no_slack when the assistant has no Slack setup;
+	// needs_identity when the assistant has Slack configured but no live dedicated
+	// agent; failed when migrating this assistant failed.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// The slack_app auth client created or reused for this assistant.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Legacy environment-backed Slack triggers repointed to the slack_app auth
+	// client.
+	TriggersRepointed int64 `form:"triggers_repointed" json:"triggers_repointed" xml:"triggers_repointed"`
+	// Per-assistant Slack-only toolsets detached from this assistant.
+	ToolsetsDetached int64 `form:"toolsets_detached" json:"toolsets_detached" xml:"toolsets_detached"`
+	// Detached per-assistant Slack-only toolsets soft-deleted because nothing else
+	// referenced them.
+	ToolsetsDeleted int64 `form:"toolsets_deleted" json:"toolsets_deleted" xml:"toolsets_deleted"`
 }
 
 // AdminOrganizationAssistantResponseBody is used to define fields on response
@@ -35871,6 +37084,62 @@ func NewBackfillMcpConnectGrantsResponseBody(res *admin.AdminBackfillMCPConnectG
 	return body
 }
 
+// NewGetSecretBackfillsResponseBody builds the HTTP response body from the
+// result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsResponseBody(res *admin.AdminSecretBackfills) *GetSecretBackfillsResponseBody {
+	body := &GetSecretBackfillsResponseBody{
+		PlatformKeyFingerprint: res.PlatformKeyFingerprint,
+	}
+	if res.MarketplaceTokens != nil {
+		body.MarketplaceTokens = marshalAdminAdminMarketplaceTokenBackfillToAdminMarketplaceTokenBackfillResponseBody(res.MarketplaceTokens)
+	}
+	if res.RunnerKeyOrganizations != nil {
+		body.RunnerKeyOrganizations = marshalAdminAdminRunnerKeyOrganizationBackfillToAdminRunnerKeyOrganizationBackfillResponseBody(res.RunnerKeyOrganizations)
+	}
+	if res.Organizations != nil {
+		body.Organizations = make([]*AdminSecretBackfillOrganizationResponseBody, len(res.Organizations))
+		for i, val := range res.Organizations {
+			if val == nil {
+				body.Organizations[i] = nil
+				continue
+			}
+			body.Organizations[i] = marshalAdminAdminSecretBackfillOrganizationToAdminSecretBackfillOrganizationResponseBody(val)
+		}
+	} else {
+		body.Organizations = []*AdminSecretBackfillOrganizationResponseBody{}
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillResponseBody builds the HTTP response body
+// from the result of the "runMarketplaceTokenBackfill" endpoint of the "admin"
+// service.
+func NewRunMarketplaceTokenBackfillResponseBody(res *admin.AdminMarketplaceTokenBackfill) *RunMarketplaceTokenBackfillResponseBody {
+	body := &RunMarketplaceTokenBackfillResponseBody{
+		Attributed:           res.Attributed,
+		Moved:                res.Moved,
+		Skipped:              res.Skipped,
+		NeedsOrganizationKey: res.NeedsOrganizationKey,
+		Unattributed:         res.Unattributed,
+		Legacy:               res.Legacy,
+		Hashed:               res.Hashed,
+		MissingOrganization:  res.MissingOrganization,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillResponseBody builds the HTTP response
+// body from the result of the "runRunnerKeyOrganizationBackfill" endpoint of
+// the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillResponseBody(res *admin.AdminRunnerKeyOrganizationBackfill) *RunRunnerKeyOrganizationBackfillResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillResponseBody{
+		Filled:              res.Filled,
+		Pending:             res.Pending,
+		MissingOrganization: res.MissingOrganization,
+	}
+	return body
+}
+
 // NewGetProjectRedeployPreviewResponseBody builds the HTTP response body from
 // the result of the "getProjectRedeployPreview" endpoint of the "admin"
 // service.
@@ -36130,6 +37399,58 @@ func NewRepairOrganizationAssistantAgentNamesResponseBody(res *admin.AdminAssist
 		}
 	} else {
 		body.Results = []*AdminAssistantAgentNameRepairResultResponseBody{}
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsResponseBody builds the HTTP
+// response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsResponseBody(res *admin.AdminAssistantBuiltinGrantBackfillRun) *BackfillOrganizationAssistantBuiltinGrantsResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsResponseBody{
+		OrganizationID: res.OrganizationID,
+		Granted:        res.Granted,
+		AlreadyGranted: res.AlreadyGranted,
+		Failed:         res.Failed,
+	}
+	if res.Results != nil {
+		body.Results = make([]*AdminAssistantBuiltinGrantBackfillResultResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalAdminAdminAssistantBuiltinGrantBackfillResultToAdminAssistantBuiltinGrantBackfillResultResponseBody(val)
+		}
+	} else {
+		body.Results = []*AdminAssistantBuiltinGrantBackfillResultResponseBody{}
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackResponseBody builds the HTTP response
+// body from the result of the "migrateOrganizationAssistantSlack" endpoint of
+// the "admin" service.
+func NewMigrateOrganizationAssistantSlackResponseBody(res *admin.AdminAssistantSlackMigrationRun) *MigrateOrganizationAssistantSlackResponseBody {
+	body := &MigrateOrganizationAssistantSlackResponseBody{
+		OrganizationID:  res.OrganizationID,
+		Migrated:        res.Migrated,
+		AlreadyMigrated: res.AlreadyMigrated,
+		NoSlack:         res.NoSlack,
+		NeedsIdentity:   res.NeedsIdentity,
+		Failed:          res.Failed,
+	}
+	if res.Results != nil {
+		body.Results = make([]*AdminAssistantSlackMigrationResultResponseBody, len(res.Results))
+		for i, val := range res.Results {
+			if val == nil {
+				body.Results[i] = nil
+				continue
+			}
+			body.Results[i] = marshalAdminAdminAssistantSlackMigrationResultToAdminAssistantSlackMigrationResultResponseBody(val)
+		}
+	} else {
+		body.Results = []*AdminAssistantSlackMigrationResultResponseBody{}
 	}
 	return body
 }
@@ -52548,6 +53869,463 @@ func NewBackfillMcpConnectGrantsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetSecretBackfillsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsUnauthorizedResponseBody(res *goa.ServiceError) *GetSecretBackfillsUnauthorizedResponseBody {
+	body := &GetSecretBackfillsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsForbiddenResponseBody(res *goa.ServiceError) *GetSecretBackfillsForbiddenResponseBody {
+	body := &GetSecretBackfillsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsBadRequestResponseBody(res *goa.ServiceError) *GetSecretBackfillsBadRequestResponseBody {
+	body := &GetSecretBackfillsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsNotFoundResponseBody(res *goa.ServiceError) *GetSecretBackfillsNotFoundResponseBody {
+	body := &GetSecretBackfillsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsConflictResponseBody builds the HTTP response body from
+// the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsConflictResponseBody(res *goa.ServiceError) *GetSecretBackfillsConflictResponseBody {
+	body := &GetSecretBackfillsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSecretBackfills" endpoint of the "admin"
+// service.
+func NewGetSecretBackfillsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSecretBackfillsUnsupportedMediaResponseBody {
+	body := &GetSecretBackfillsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsInvalidResponseBody builds the HTTP response body from
+// the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsInvalidResponseBody(res *goa.ServiceError) *GetSecretBackfillsInvalidResponseBody {
+	body := &GetSecretBackfillsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSecretBackfills" endpoint of the "admin"
+// service.
+func NewGetSecretBackfillsInvariantViolationResponseBody(res *goa.ServiceError) *GetSecretBackfillsInvariantViolationResponseBody {
+	body := &GetSecretBackfillsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsUnexpectedResponseBody(res *goa.ServiceError) *GetSecretBackfillsUnexpectedResponseBody {
+	body := &GetSecretBackfillsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSecretBackfillsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSecretBackfills" endpoint of the "admin" service.
+func NewGetSecretBackfillsGatewayErrorResponseBody(res *goa.ServiceError) *GetSecretBackfillsGatewayErrorResponseBody {
+	body := &GetSecretBackfillsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillUnavailableResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillUnavailableResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillUnavailableResponseBody {
+	body := &RunMarketplaceTokenBackfillUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillUnauthorizedResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillUnauthorizedResponseBody {
+	body := &RunMarketplaceTokenBackfillUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillForbiddenResponseBody builds the HTTP response
+// body from the result of the "runMarketplaceTokenBackfill" endpoint of the
+// "admin" service.
+func NewRunMarketplaceTokenBackfillForbiddenResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillForbiddenResponseBody {
+	body := &RunMarketplaceTokenBackfillForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillBadRequestResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillBadRequestResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillBadRequestResponseBody {
+	body := &RunMarketplaceTokenBackfillBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillNotFoundResponseBody builds the HTTP response
+// body from the result of the "runMarketplaceTokenBackfill" endpoint of the
+// "admin" service.
+func NewRunMarketplaceTokenBackfillNotFoundResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillNotFoundResponseBody {
+	body := &RunMarketplaceTokenBackfillNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillConflictResponseBody builds the HTTP response
+// body from the result of the "runMarketplaceTokenBackfill" endpoint of the
+// "admin" service.
+func NewRunMarketplaceTokenBackfillConflictResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillConflictResponseBody {
+	body := &RunMarketplaceTokenBackfillConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillUnsupportedMediaResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillUnsupportedMediaResponseBody {
+	body := &RunMarketplaceTokenBackfillUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillInvalidResponseBody builds the HTTP response
+// body from the result of the "runMarketplaceTokenBackfill" endpoint of the
+// "admin" service.
+func NewRunMarketplaceTokenBackfillInvalidResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillInvalidResponseBody {
+	body := &RunMarketplaceTokenBackfillInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillInvariantViolationResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillInvariantViolationResponseBody {
+	body := &RunMarketplaceTokenBackfillInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillUnexpectedResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillUnexpectedResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillUnexpectedResponseBody {
+	body := &RunMarketplaceTokenBackfillUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunMarketplaceTokenBackfillGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "runMarketplaceTokenBackfill" endpoint
+// of the "admin" service.
+func NewRunMarketplaceTokenBackfillGatewayErrorResponseBody(res *goa.ServiceError) *RunMarketplaceTokenBackfillGatewayErrorResponseBody {
+	body := &RunMarketplaceTokenBackfillGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillUnauthorizedResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillForbiddenResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillForbiddenResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillForbiddenResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillBadRequestResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillBadRequestResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillBadRequestResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillNotFoundResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillNotFoundResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillNotFoundResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillConflictResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillConflictResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillConflictResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillInvalidResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillInvalidResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillInvalidResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillInvariantViolationResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillUnexpectedResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillUnexpectedResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillUnexpectedResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRunRunnerKeyOrganizationBackfillGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "runRunnerKeyOrganizationBackfill"
+// endpoint of the "admin" service.
+func NewRunRunnerKeyOrganizationBackfillGatewayErrorResponseBody(res *goa.ServiceError) *RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody {
+	body := &RunRunnerKeyOrganizationBackfillGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetProjectRedeployPreviewUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getProjectRedeployPreview" endpoint of
 // the "admin" service.
@@ -54852,6 +56630,321 @@ func NewRepairOrganizationAssistantAgentNamesUnexpectedResponseBody(res *goa.Ser
 // "repairOrganizationAssistantAgentNames" endpoint of the "admin" service.
 func NewRepairOrganizationAssistantAgentNamesGatewayErrorResponseBody(res *goa.ServiceError) *RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody {
 	body := &RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody builds
+// the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody builds
+// the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody builds
+// the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody builds the
+// HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsConflictResponseBody builds the
+// HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsConflictResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody
+// builds the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody builds the
+// HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody builds
+// the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody builds
+// the HTTP response body from the result of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody(res *goa.ServiceError) *BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackUnavailableResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackUnavailableResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackUnavailableResponseBody {
+	body := &MigrateOrganizationAssistantSlackUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackUnauthorizedResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackUnauthorizedResponseBody {
+	body := &MigrateOrganizationAssistantSlackUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackForbiddenResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackForbiddenResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackForbiddenResponseBody {
+	body := &MigrateOrganizationAssistantSlackForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackBadRequestResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackBadRequestResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackBadRequestResponseBody {
+	body := &MigrateOrganizationAssistantSlackBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackNotFoundResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackNotFoundResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackNotFoundResponseBody {
+	body := &MigrateOrganizationAssistantSlackNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackConflictResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackConflictResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackConflictResponseBody {
+	body := &MigrateOrganizationAssistantSlackConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "migrateOrganizationAssistantSlack" endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackUnsupportedMediaResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody {
+	body := &MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackInvalidResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackInvalidResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackInvalidResponseBody {
+	body := &MigrateOrganizationAssistantSlackInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "migrateOrganizationAssistantSlack" endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackInvariantViolationResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackInvariantViolationResponseBody {
+	body := &MigrateOrganizationAssistantSlackInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackUnexpectedResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackUnexpectedResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackUnexpectedResponseBody {
+	body := &MigrateOrganizationAssistantSlackUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "migrateOrganizationAssistantSlack"
+// endpoint of the "admin" service.
+func NewMigrateOrganizationAssistantSlackGatewayErrorResponseBody(res *goa.ServiceError) *MigrateOrganizationAssistantSlackGatewayErrorResponseBody {
+	body := &MigrateOrganizationAssistantSlackGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -59539,6 +61632,38 @@ func NewBackfillMcpConnectGrantsPayload(body *BackfillMcpConnectGrantsRequestBod
 	return v
 }
 
+// NewGetSecretBackfillsPayload builds a admin service getSecretBackfills
+// endpoint payload.
+func NewGetSecretBackfillsPayload(adminSessionToken *string) *admin.GetSecretBackfillsPayload {
+	v := &admin.GetSecretBackfillsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRunMarketplaceTokenBackfillPayload builds a admin service
+// runMarketplaceTokenBackfill endpoint payload.
+func NewRunMarketplaceTokenBackfillPayload(body *RunMarketplaceTokenBackfillRequestBody, adminSessionToken *string) *admin.RunMarketplaceTokenBackfillPayload {
+	v := &admin.RunMarketplaceTokenBackfillPayload{
+		OrganizationID:         body.OrganizationID,
+		PlatformKeyFingerprint: *body.PlatformKeyFingerprint,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRunRunnerKeyOrganizationBackfillPayload builds a admin service
+// runRunnerKeyOrganizationBackfill endpoint payload.
+func NewRunRunnerKeyOrganizationBackfillPayload(body *RunRunnerKeyOrganizationBackfillRequestBody, adminSessionToken *string) *admin.RunRunnerKeyOrganizationBackfillPayload {
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetProjectRedeployPreviewPayload builds a admin service
 // getProjectRedeployPreview endpoint payload.
 func NewGetProjectRedeployPreviewPayload(organizationID string, projectID string, adminSessionToken *string) *admin.GetProjectRedeployPreviewPayload {
@@ -59700,6 +61825,28 @@ func NewListAssistantOrganizationsPayload(adminSessionToken *string) *admin.List
 // repairOrganizationAssistantAgentNames endpoint payload.
 func NewRepairOrganizationAssistantAgentNamesPayload(body *RepairOrganizationAssistantAgentNamesRequestBody, adminSessionToken *string) *admin.RepairOrganizationAssistantAgentNamesPayload {
 	v := &admin.RepairOrganizationAssistantAgentNamesPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsPayload builds a admin service
+// backfillOrganizationAssistantBuiltinGrants endpoint payload.
+func NewBackfillOrganizationAssistantBuiltinGrantsPayload(body *BackfillOrganizationAssistantBuiltinGrantsRequestBody, adminSessionToken *string) *admin.BackfillOrganizationAssistantBuiltinGrantsPayload {
+	v := &admin.BackfillOrganizationAssistantBuiltinGrantsPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackPayload builds a admin service
+// migrateOrganizationAssistantSlack endpoint payload.
+func NewMigrateOrganizationAssistantSlackPayload(body *MigrateOrganizationAssistantSlackRequestBody, adminSessionToken *string) *admin.MigrateOrganizationAssistantSlackPayload {
+	v := &admin.MigrateOrganizationAssistantSlackPayload{
 		OrganizationID: *body.OrganizationID,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -60934,6 +63081,36 @@ func ValidateBackfillMcpConnectGrantsRequestBody(body *BackfillMcpConnectGrantsR
 	return
 }
 
+// ValidateRunMarketplaceTokenBackfillRequestBody runs the validations defined
+// on RunMarketplaceTokenBackfillRequestBody
+func ValidateRunMarketplaceTokenBackfillRequestBody(body *RunMarketplaceTokenBackfillRequestBody) (err error) {
+	if body.PlatformKeyFingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_key_fingerprint", "body"))
+	}
+	if body.OrganizationID != nil {
+		if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+		}
+	}
+	if body.PlatformKeyFingerprint != nil {
+		if utf8.RuneCountInString(*body.PlatformKeyFingerprint) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", *body.PlatformKeyFingerprint, utf8.RuneCountInString(*body.PlatformKeyFingerprint), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateRunRunnerKeyOrganizationBackfillRequestBody runs the validations
+// defined on RunRunnerKeyOrganizationBackfillRequestBody
+func ValidateRunRunnerKeyOrganizationBackfillRequestBody(body *RunRunnerKeyOrganizationBackfillRequestBody) (err error) {
+	if body.OrganizationID != nil {
+		if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+		}
+	}
+	return
+}
+
 // ValidateRedeployProjectRequestBody runs the validations defined on
 // RedeployProjectRequestBody
 func ValidateRedeployProjectRequestBody(body *RedeployProjectRequestBody) (err error) {
@@ -61014,6 +63191,24 @@ func ValidateStartMemoryEvalRunRequestBody(body *StartMemoryEvalRunRequestBody) 
 // ValidateRepairOrganizationAssistantAgentNamesRequestBody runs the
 // validations defined on RepairOrganizationAssistantAgentNamesRequestBody
 func ValidateRepairOrganizationAssistantAgentNamesRequestBody(body *RepairOrganizationAssistantAgentNamesRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsRequestBody runs the
+// validations defined on BackfillOrganizationAssistantBuiltinGrantsRequestBody
+func ValidateBackfillOrganizationAssistantBuiltinGrantsRequestBody(body *BackfillOrganizationAssistantBuiltinGrantsRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackRequestBody runs the validations
+// defined on MigrateOrganizationAssistantSlackRequestBody
+func ValidateMigrateOrganizationAssistantSlackRequestBody(body *MigrateOrganizationAssistantSlackRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}

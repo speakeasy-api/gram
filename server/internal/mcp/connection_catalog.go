@@ -452,22 +452,26 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 		if private {
 			resourceID := member.serverID
 			disposition := dispositions[name]
-			if member.backend == metaMemberBackendHosted {
+			switch member.backend {
+			case metaMemberBackendHosted:
 				resourceID = member.toolsetID.UUID
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
+			case metaMemberBackendPlatform:
+				disposition = dispositionFromAnnotations(entry.Annotations)
+			case metaMemberBackendProxied:
 			}
 			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
 	}
 	if len(checks) > 0 {
-		matched, err := s.authz.FindMatched(ctx, checks)
+		decisions, err := s.authz.Decide(ctx, checks...)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)
 		}
 		kept := catalog.entries[:0]
 		for i, entry := range catalog.entries {
-			if matched[i] {
+			if decisions.Each[i].Allowed {
 				kept = append(kept, entry)
 			}
 		}

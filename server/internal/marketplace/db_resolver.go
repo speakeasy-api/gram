@@ -68,10 +68,11 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 	}, nil
 }
 
-// lookup finds the connection a token belongs to by the token's hash. Until
-// the marketplace token backfill moves every connection, a token stored in
-// the deprecated plaintext column still resolves; each such lookup is logged
-// so the backfill's progress shows in the logs.
+// lookup finds the connection a token belongs to by the token's hash. A token
+// whose organization is disabled is not found, so no installation token is
+// minted for it. Until the marketplace token backfill moves every connection,
+// a token stored in the deprecated plaintext column still resolves; each such
+// lookup is logged so the backfill's progress shows in the logs.
 func (r *DBResolver) lookup(ctx context.Context, token string) (pluginsrepo.PluginGithubConnection, error) {
 	row, err := r.queries.ResolveGitHubConnectionByMarketplaceToken(ctx, pluginsrepo.ResolveGitHubConnectionByMarketplaceTokenParams{
 		MarketplaceTokenHash: pgtype.Text{String: marketplacetokens.Hash(token), Valid: true},
@@ -82,6 +83,12 @@ func (r *DBResolver) lookup(ctx context.Context, token string) (pluginsrepo.Plug
 		return pluginsrepo.PluginGithubConnection{}, ErrNotFound
 	case err != nil:
 		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by marketplace token: %w", err)
+	}
+
+	if row.OrganizationDisabled {
+		r.logger.InfoContext(ctx, "refuse marketplace token for disabled organization",
+			attr.SlogProjectID(row.PluginGithubConnection.ProjectID.String()), attr.SlogReason("organization_disabled"))
+		return pluginsrepo.PluginGithubConnection{}, ErrNotFound
 	}
 
 	if row.PlaintextToken {

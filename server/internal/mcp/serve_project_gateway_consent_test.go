@@ -37,7 +37,7 @@ func TestProjectGateway_ConsentRejectsAnotherProjectsClient(t *testing.T) {
 	seedMetaMember(t, ctx, ti.conn, otherProject.ID, otherMeta.ID, "other public", otherSlug, 0, mcpservers.VisibilityPublic)
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(otherSlug), ProjectID: otherProject.ID})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", nil)
+	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "")
 	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client)
 	seedServerAuthOffer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
 

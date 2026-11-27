@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
@@ -71,10 +70,6 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if db == nil || writer == nil {
 		return none, fmt.Errorf("chat transcript shadow requires database and writer")
 	}
-	// Check compatibility before resolving projects, provisioning keys or enabling writes.
-	if err := checkTranscriptShadowSchema(ctx, db); err != nil {
-		return none, err
-	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
 	seen := make(map[string]struct{}, len(projectIDs))
@@ -103,63 +98,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 		}
 	}
 	writer.WithTranscriptShadow(store, projectIDs...)
+	// Captures run inside write transactions: keep the transcript key warm so
+	// a request does not wait for KMS each time the cached key expires.
+	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
 	return transcriptShadow{Store: store, ProjectIDs: projectIDs}, nil
-}
-
-// checkTranscriptShadowSchema checks only the sidecar contract used by the store.
-// Catalog reads neither touch transcript payloads nor execute trial inserts.
-// The table is looked up through the connection's search_path, the same way
-// the store's queries resolve it: deployed databases keep it outside public.
-// Every omitted NOT NULL column must be supplied by the database. All inferred
-// arbiters must be immediate: PostgreSQL rejects even a redundant deferred one.
-func checkTranscriptShadowSchema(ctx context.Context, db interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}) error {
-	var compatible bool
-	err := db.QueryRow(ctx, `
-WITH sidecar AS (
- SELECT oid FROM pg_catalog.pg_class
- WHERE oid = pg_catalog.to_regclass('chat_message_transcripts')
- AND relkind IN ('r', 'p')
-), required(name, type_oid) AS (
- VALUES ('message_id', 'uuid'::regtype),
-        ('project_id', 'uuid'::regtype),
-        ('organization_id', 'text'::regtype),
-        ('ciphertext', 'text'::regtype),
-        ('source_hash', 'bytea'::regtype),
-        ('updated_at', 'timestamptz'::regtype)
-), arbiters AS (
- SELECT i.indimmediate, i.indisready
- FROM pg_catalog.pg_index i
- JOIN sidecar s ON s.oid = i.indrelid
- JOIN pg_catalog.pg_attribute a ON a.attrelid = s.oid AND a.attname = 'message_id'
- WHERE i.indisunique AND i.indisvalid
-   AND i.indpred IS NULL AND i.indexprs IS NULL
-   AND i.indnkeyatts = 1 AND i.indkey[0] = a.attnum
-)
-SELECT EXISTS (SELECT 1 FROM sidecar)
- AND NOT EXISTS (
- SELECT 1 FROM required r
- WHERE NOT EXISTS (
-  SELECT 1 FROM pg_catalog.pg_attribute a
-  JOIN sidecar s ON s.oid = a.attrelid
-  WHERE a.attname = r.name AND a.atttypid = r.type_oid
-    AND a.attnotnull AND NOT a.attisdropped
- ))
- AND NOT EXISTS (
- SELECT 1 FROM pg_catalog.pg_attribute a
- JOIN sidecar s ON s.oid = a.attrelid
- WHERE a.attnum > 0 AND NOT a.attisdropped AND a.attnotnull
-   AND NOT a.atthasdef AND a.attgenerated = '' AND a.attidentity = ''
-   AND a.attname NOT IN ('message_id', 'project_id', 'organization_id', 'ciphertext', 'source_hash')
- )
- AND EXISTS (SELECT 1 FROM arbiters WHERE indimmediate AND indisready)
- AND NOT EXISTS (SELECT 1 FROM arbiters WHERE NOT indimmediate)`).Scan(&compatible)
-	if err != nil {
-		return fmt.Errorf("check chat transcript shadow schema: %w", err)
-	}
-	if !compatible {
-		return fmt.Errorf("chat transcript shadow schema is unavailable or incompatible")
-	}
-	return nil
 }

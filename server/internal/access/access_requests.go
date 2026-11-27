@@ -27,6 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -281,11 +283,11 @@ func (s *Service) ListAccessRequests(ctx context.Context, payload *gen.ListAcces
 
 	requester := pgtype.Text{String: ac.UserID, Valid: true}
 	if !payload.Mine {
-		admin, err := s.authz.Can(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
+		decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, logger)
 		}
-		if admin {
+		if decision.AllAllowed {
 			requester = pgtype.Text{String: "", Valid: false}
 		}
 	}
@@ -396,6 +398,16 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 	}
 	if current.AccessRequest.RequesterUserID == input.DeciderUserID {
 		return nil, ErrAccessRequestSelfDecision
+	}
+	// A decider staff blocked from the platform decides nothing, from the
+	// dashboard or from Slack.
+	blocked, err := usersrepo.New(s.db).IsUserBlacklisted(ctx, input.DeciderUserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check decider block state").LogError(ctx, logger)
+	}
+	if blocked {
+		userblock.LogRefusal(ctx, logger, "access_request_decision", input.DeciderUserID)
+		return nil, ErrAccessRequestNotAdmin
 	}
 	admin, err := isOrganizationAdmin(ctx, s.db, input.OrganizationID, input.DeciderUserID)
 	if err != nil {

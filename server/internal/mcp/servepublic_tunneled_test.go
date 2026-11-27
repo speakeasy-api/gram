@@ -677,7 +677,8 @@ func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	logger := ti.logger
-	mcpEndpoint, mcpServer, _, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, fixture.endpointSlug)
+	resolved, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, fixture.endpointSlug)
+	mcpEndpoint, mcpServer := resolved.Endpoint, resolved.Server
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+fixture.endpointSlug, nil)

@@ -71,7 +71,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	ti.service.SetConsentBindingService(bindings)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.toolset.McpSlug.String, "mcp")
 	require.NoError(t, err)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-reuse", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-reuse", "")
 	cipher, err := ti.enc.Encrypt([]byte("upstream-placeholder"))
 	require.NoError(t, err)
 	createSession := func(subject urn.SessionSubject) uuid.UUID {

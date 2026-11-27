@@ -9,7 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 )
 
-// Kit v0.2.17's gateway serves HTTP only. Keep that listener inside the Pod's
+// Kit's gateway serves HTTP only. Keep that listener inside the Pod's
 // loopback namespace and terminate verified TLS with the repository's nginx
 // unprivileged image pattern. Neither container receives a cluster API token.
 const kitGKETLSProxyImage = "nginxinc/nginx-unprivileged:1.28-alpine"

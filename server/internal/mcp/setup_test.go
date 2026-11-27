@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -59,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -148,17 +148,38 @@ type testInstance struct {
 	// remoteProxyManager builds the service's remote and tunnel proxies; tests
 	// that assert tunnel activity metrics install a collector on it.
 	remoteProxyManager *remotemcp.ProxyManager
+	// slackTransport intercepts outbound Slack API calls made by the built-in
+	// assistant-slack toolset in tests.
+	slackTransport *testSlackTransport
 }
 
-// migratedService models an organization after the upstream OAuth migration:
-// every request entry point first runs the association and credential choice
-// backfills over the test database, as an operator runs them before serving
-// reads choices, so fixtures that write bindings, members and grants directly
-// are served as the migrated state they describe. Everything else is the
-// service itself.
+type testSlackTransport struct {
+	mu      sync.Mutex
+	handler func(*http.Request) (*http.Response, error)
+}
+
+func (t *testSlackTransport) set(fn func(*http.Request) (*http.Response, error)) {
+	t.mu.Lock()
+	t.handler = fn
+	t.mu.Unlock()
+}
+
+func (t *testSlackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	fn := t.handler
+	t.mu.Unlock()
+	if fn != nil {
+		return fn(req)
+	}
+	return nil, fmt.Errorf("unexpected Slack HTTP request (%s %s) with no test handler configured", req.Method, req.URL.String())
+}
+
+// migratedService records typed choices for fixtures that explicitly seed a
+// server offer but don't exercise credential issuance themselves.
 type migratedService struct {
 	*mcp.Service
-	conn *pgxpool.Pool
+	conn  *pgxpool.Pool
+	orgID string
 	// manual leaves associations and choices to the test, for tests of how
 	// serving treats a missing or particular choice.
 	manual bool
@@ -171,10 +192,7 @@ func (s *migratedService) migrate(ctx context.Context) {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	if _, err := associationbackfill.Run(ctx, s.conn, associationbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0}); err != nil {
-		return
-	}
-	_, _ = selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: "", Apply: true, PageSize: 0})
+	_, _ = selectionbackfill.Run(ctx, s.conn, selectionbackfill.Options{OrganizationID: s.orgID, Apply: true, PageSize: 0, TypedOnly: true})
 }
 
 func (s *migratedService) ServePublic(w http.ResponseWriter, r *http.Request) error {
@@ -603,6 +621,8 @@ func buildTestMCPService(
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	fixtureAuth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	rawServerURL := "http://0.0.0.0"
 	if serverURLOverride != "" {
 		rawServerURL = serverURLOverride
@@ -645,6 +665,7 @@ func buildTestMCPService(
 	})
 
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	features := &feature.InMemory{}
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
@@ -657,6 +678,7 @@ func buildTestMCPService(
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
+		features,
 	)
 
 	var temporalEnv *temporal.Environment
@@ -674,7 +696,6 @@ func buildTestMCPService(
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	require.NoError(t, err)
-	features := &feature.InMemory{}
 	// One prober shared by login and proxy, as in production.
 	protectedResources := protectedresource.NewProber(conn, guardianPolicy)
 	clientCredentials := &testClientCredentials{}
@@ -716,12 +737,16 @@ func buildTestMCPService(
 		)
 		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
 	}
+	slackTransport := &testSlackTransport{}
+	slackAppCreds := authclients.NewSlackAppCredentialStore(conn, authzEngine, enc)
+	assistantSlackTools := platformtoolsruntime.AssistantSlackTools(&http.Client{Transport: slackTransport}, nil, enc, serverURL, slackAppCreds)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:         nil,
 		AssistantSkillTools:          assistantSkillTools,
 		AssistantTriggerTools:        nil,
 		PlatformMCPReadTools:         platformMCPReadTools,
 		PlatformMCPReadActingContext: platformMCPReadActingContext,
+		AssistantSlackTools:          assistantSlackTools,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
@@ -741,7 +766,7 @@ func buildTestMCPService(
 	return ctx, &testInstance{
 		principalCredentials: principalCredentials,
 		assistantTokens:      assistantTokens,
-		service:              &migratedService{Service: svc, conn: conn, manual: false},
+		service:              &migratedService{Service: svc, conn: conn, orgID: fixtureAuth.ActiveOrganizationID, manual: false},
 		conn:                 conn,
 		sessionManager:       sessionManager,
 		serverURL:            serverURL,
@@ -761,6 +786,7 @@ func buildTestMCPService(
 		clientCredentials:    clientCredentials,
 		toolCallRecords:      toolCallRecords,
 		remoteProxyManager:   remoteProxyManager,
+		slackTransport:       slackTransport,
 	}
 }
 

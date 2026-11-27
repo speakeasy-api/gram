@@ -376,6 +376,23 @@ type Service interface {
 	// organization, ahead of read and write no longer implying connect. Never
 	// removes access. Safe to run more than once.
 	BackfillMcpConnectGrants(context.Context, *BackfillMcpConnectGrantsPayload) (res *AdminBackfillMCPConnectGrantsResult, err error)
+	// Previews the temporary secret backfills: what applying each would change
+	// now. Writes nothing.
+	GetSecretBackfills(context.Context, *GetSecretBackfillsPayload) (res *AdminSecretBackfills, err error)
+	// Applies the marketplace token backfill to one organization or to all: gives
+	// each GitHub connection its project's organization, then moves each plaintext
+	// marketplace token to its hash and the copies its organization's transition
+	// state writes, sealed with this process's platform key. Install URLs do not
+	// change. Safe to run again; an interrupted run continues where it stopped.
+	// Refused while another run of it is in progress, and when this process's
+	// platform key fingerprint is not the one the operator checked.
+	RunMarketplaceTokenBackfill(context.Context, *RunMarketplaceTokenBackfillPayload) (res *AdminMarketplaceTokenBackfill, err error)
+	// Applies the runner key organization backfill to one organization or to all:
+	// sets functions_access.organization_id from each runner key's project, in
+	// batches that each commit on their own. Runner keys and deployed function
+	// runners do not change. Safe to run again; an interrupted run continues where
+	// it stopped. Refused while another run of it is in progress.
+	RunRunnerKeyOrganizationBackfill(context.Context, *RunRunnerKeyOrganizationBackfillPayload) (res *AdminRunnerKeyOrganizationBackfill, err error)
 	// Returns what redeploying a project would act on, for review before
 	// redeployProject.
 	GetProjectRedeployPreview(context.Context, *GetProjectRedeployPreviewPayload) (res *AdminProjectRedeployPreview, err error)
@@ -424,6 +441,20 @@ type Service interface {
 	// Repairs exact legacy generated names of live bound agents in one
 	// organization, preserving custom names and reporting conflicts. Safe to retry.
 	RepairOrganizationAssistantAgentNames(context.Context, *RepairOrganizationAssistantAgentNamesPayload) (res *AdminAssistantAgentNameRepairRun, err error)
+	// Grants every live agent-backed assistant in one organization explicit
+	// mcp:connect policy grants for its built-in toolsets (assistants for every
+	// assistant; platform and speakeasy-slack as well for managed assistants).
+	// Idempotent, so it is safe to run again.
+	BackfillOrganizationAssistantBuiltinGrants(context.Context, *BackfillOrganizationAssistantBuiltinGrantsPayload) (res *AdminAssistantBuiltinGrantBackfillRun, err error)
+	// Migrates every live assistant with legacy per-assistant Slack toolsets or
+	// environment-backed Slack triggers in one organization to the built-in
+	// assistant-slack toolset backed by a slack_app typed auth client. Creates or
+	// reuses an encrypted slack_app auth client, grants the assistant's agent
+	// mcp:connect on assistant-slack and mcp:auth on the client, repoints Slack
+	// triggers to the client, and detaches (and soft-deletes if unreferenced)
+	// Slack-only per-assistant toolsets without deleting environments. Idempotent,
+	// so it is safe to run again.
+	MigrateOrganizationAssistantSlack(context.Context, *MigrateOrganizationAssistantSlackPayload) (res *AdminAssistantSlackMigrationRun, err error)
 	// Lists every live assistant of one organization with its identity state,
 	// runtime, and whether its creator is still a member.
 	ListOrganizationAssistants(context.Context, *ListOrganizationAssistantsPayload) (res *AdminOrganizationAssistants, err error)
@@ -539,7 +570,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [141]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "startHooksRolloutStage", "pauseHooksRolloutStage", "resumeHooksRolloutStage", "cancelHooksRolloutStage", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [146]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "startHooksRolloutStage", "pauseHooksRolloutStage", "resumeHooksRolloutStage", "cancelHooksRolloutStage", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -556,6 +587,40 @@ type AdminAssistantAgentNameRepairRun struct {
 	Conflicts      int64
 	Failed         int64
 	Results        []*AdminAssistantAgentNameRepairResult
+}
+
+// What the built-in toolset Connect grant backfill did to one agent-backed
+// assistant.
+type AdminAssistantBuiltinGrantBackfillResult struct {
+	// The assistant ID.
+	AssistantID string
+	// The assistant's project ID.
+	ProjectID string
+	// The assistant name.
+	Name string
+	// granted when the run added one or more missing built-in Connect grants,
+	// already_granted when every built-in Connect grant was already present
+	// permanently, and failed when writing failed.
+	Outcome string
+	// How many built-in Connect grants were written or promoted to permanent for
+	// this assistant.
+	GrantsAdded int64
+}
+
+// AdminAssistantBuiltinGrantBackfillRun is the result type of the admin
+// service backfillOrganizationAssistantBuiltinGrants method.
+type AdminAssistantBuiltinGrantBackfillRun struct {
+	// The organization ID.
+	OrganizationID string
+	// Assistants whose agents received one or more built-in Connect grants.
+	Granted int64
+	// Assistants whose agents already held all required permanent built-in Connect
+	// grants.
+	AlreadyGranted int64
+	// Assistants whose backfill failed. Running again retries them.
+	Failed int64
+	// One result per live agent-backed assistant.
+	Results []*AdminAssistantBuiltinGrantBackfillResult
 }
 
 // What the identity migration did to one assistant.
@@ -640,6 +705,52 @@ type AdminAssistantOrganization struct {
 // listAssistantOrganizations method.
 type AdminAssistantOrganizations struct {
 	Organizations []*AdminAssistantOrganization
+}
+
+// What the assistant Slack migration did to one live assistant.
+type AdminAssistantSlackMigrationResult struct {
+	// The assistant ID.
+	AssistantID string
+	// The assistant's project ID.
+	ProjectID string
+	// The assistant name.
+	Name string
+	// migrated when Slack credentials, grants, triggers, or toolsets were updated;
+	// already_migrated when Slack was already using a slack_app auth client and
+	// built-in grants; no_slack when the assistant has no Slack setup;
+	// needs_identity when the assistant has Slack configured but no live dedicated
+	// agent; failed when migrating this assistant failed.
+	Outcome string
+	// The slack_app auth client created or reused for this assistant.
+	AuthClientID *string
+	// Legacy environment-backed Slack triggers repointed to the slack_app auth
+	// client.
+	TriggersRepointed int64
+	// Per-assistant Slack-only toolsets detached from this assistant.
+	ToolsetsDetached int64
+	// Detached per-assistant Slack-only toolsets soft-deleted because nothing else
+	// referenced them.
+	ToolsetsDeleted int64
+}
+
+// AdminAssistantSlackMigrationRun is the result type of the admin service
+// migrateOrganizationAssistantSlack method.
+type AdminAssistantSlackMigrationRun struct {
+	// The organization ID.
+	OrganizationID string
+	// Assistants migrated in this run.
+	Migrated int64
+	// Assistants already using the built-in assistant-slack toolset and slack_app
+	// auth client.
+	AlreadyMigrated int64
+	// Assistants without any Slack toolset or trigger.
+	NoSlack int64
+	// Assistants with Slack configured that lack a live dedicated agent.
+	NeedsIdentity int64
+	// Assistants whose migration failed. Running again retries them.
+	Failed int64
+	// One result per live assistant.
+	Results []*AdminAssistantSlackMigrationResult
 }
 
 type AdminAuditLog struct {
@@ -1261,6 +1372,33 @@ type AdminListUsersResult struct {
 	Total int64
 	Page  int
 	Limit int
+}
+
+// AdminMarketplaceTokenBackfill is the result type of the admin service
+// runMarketplaceTokenBackfill method.
+type AdminMarketplaceTokenBackfill struct {
+	// Connections this run gave an organization. Zero in a preview.
+	Attributed int64
+	// Plaintext tokens this run moved. Zero in a preview.
+	Moved int64
+	// Plaintext tokens that changed between the read and the write, such as when
+	// another run moved them first. Zero in a preview.
+	Skipped int64
+	// Plaintext tokens left in place because their organization's transition state
+	// needs organization encryption this process does not have. Zero in a preview.
+	NeedsOrganizationKey int64
+	// Connections without an organization whose project's organization exists. An
+	// apply gives these one.
+	Unattributed int64
+	// Connections that still hold a plaintext token, not counting those in
+	// missing_organization.
+	Legacy int64
+	// Connections whose token is stored as a hash and sealed copies.
+	Hashed int64
+	// Connections whose project's organization has no metadata row. An apply can't
+	// give them an organization or move their plaintext token, so they stay as
+	// they are.
+	MissingOrganization int64
 }
 
 // MCP server surfaced to admin operators. Covers both server models:
@@ -2401,6 +2539,53 @@ type AdminRegistrySummary struct {
 	Issues    []*AdminRegistryIssue
 }
 
+// AdminRunnerKeyOrganizationBackfill is the result type of the admin service
+// runRunnerKeyOrganizationBackfill method.
+type AdminRunnerKeyOrganizationBackfill struct {
+	// Runner keys this run gave an organization. Zero in a preview.
+	Filled int64
+	// Runner keys without an organization whose project's organization exists. An
+	// apply fills these.
+	Pending int64
+	// Runner keys without an organization whose project is gone or whose project's
+	// organization has no metadata row. They stay without one.
+	MissingOrganization int64
+}
+
+// One organization with secret backfill work left. A GitHub connection or
+// runner key without an organization belongs to its project's organization.
+type AdminSecretBackfillOrganization struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization's name.
+	Name string
+	// The organization's slug.
+	Slug string
+	// Its GitHub connections that still hold a plaintext marketplace token.
+	LegacyTokens int64
+	// Its GitHub connections without an organization.
+	UnattributedConnections int64
+	// Its runner keys without an organization.
+	PendingRunnerKeys int64
+}
+
+// AdminSecretBackfills is the result type of the admin service
+// getSecretBackfills method.
+type AdminSecretBackfills struct {
+	// A preview of the marketplace token backfill.
+	MarketplaceTokens *AdminMarketplaceTokenBackfill
+	// A preview of the runner key organization backfill.
+	RunnerKeyOrganizations *AdminRunnerKeyOrganizationBackfill
+	// Every organization either backfill has work left in, by name. Rows whose
+	// project's organization has no metadata row belong to none of them.
+	Organizations []*AdminSecretBackfillOrganization
+	// The fingerprint of the platform key this admin process seals marketplace
+	// tokens with. It must match the fingerprint every server and worker logs at
+	// startup as "encryption key loaded". Absent when this process has no platform
+	// key, so the marketplace token backfill cannot be applied.
+	PlatformKeyFingerprint *string
+}
+
 // AdminSession is the result type of the admin service getSession method.
 type AdminSession struct {
 	Email string
@@ -2892,6 +3077,14 @@ type BackfillMcpConnectGrantsPayload struct {
 	// Only copy grants created before this time. Set it to when read and write
 	// stopped implying connect, so grants written since are left alone.
 	CreatedBefore *string
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsPayload is the payload type of the
+// admin service backfillOrganizationAssistantBuiltinGrants method.
+type BackfillOrganizationAssistantBuiltinGrantsPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
 }
 
 // BulkUpdateAccountTypePayload is the payload type of the admin service
@@ -3580,6 +3773,12 @@ type GetRegistryPromotionCandidatePayload struct {
 	McpServerID       string
 }
 
+// GetSecretBackfillsPayload is the payload type of the admin service
+// getSecretBackfills method.
+type GetSecretBackfillsPayload struct {
+	AdminSessionToken *string
+}
+
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
@@ -4119,6 +4318,14 @@ type MigrateOrganizationAssistantIdentitiesPayload struct {
 	OrganizationID string
 }
 
+// MigrateOrganizationAssistantSlackPayload is the payload type of the admin
+// service migrateOrganizationAssistantSlack method.
+type MigrateOrganizationAssistantSlackPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // MigrateOrganizationAssistantsToKitPayload is the payload type of the admin
 // service migrateOrganizationAssistantsToKit method.
 type MigrateOrganizationAssistantsToKitPayload struct {
@@ -4359,6 +4566,19 @@ type RollbackOrganizationEncryptionPayload struct {
 	UseCase string
 }
 
+// RunMarketplaceTokenBackfillPayload is the payload type of the admin service
+// runMarketplaceTokenBackfill method.
+type RunMarketplaceTokenBackfillPayload struct {
+	AdminSessionToken *string
+	// Limits the run to this organization's GitHub connections. Omit it to run for
+	// every organization. The result's counts then cover only this organization.
+	OrganizationID *string
+	// The platform key fingerprint the operator checked against the servers'
+	// "encryption key loaded" log. The run is refused when this process's platform
+	// key has another fingerprint, such as after a restart with a different key.
+	PlatformKeyFingerprint string
+}
+
 // RunOrganizationEncryptionPayload is the payload type of the admin service
 // runOrganizationEncryption method.
 type RunOrganizationEncryptionPayload struct {
@@ -4367,6 +4587,15 @@ type RunOrganizationEncryptionPayload struct {
 	OrganizationID string
 	// The use case, such as oauth-client-secrets.
 	UseCase string
+}
+
+// RunRunnerKeyOrganizationBackfillPayload is the payload type of the admin
+// service runRunnerKeyOrganizationBackfill method.
+type RunRunnerKeyOrganizationBackfillPayload struct {
+	AdminSessionToken *string
+	// Limits the run to this organization's runner keys. Omit it to run for every
+	// organization. The result's counts then cover only this organization.
+	OrganizationID *string
 }
 
 // RunTailscaleOAuthMigrationStepPayload is the payload type of the admin

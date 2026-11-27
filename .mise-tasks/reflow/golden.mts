@@ -4,22 +4,29 @@
 //MISE dir="{{ config_root }}"
 
 //USAGE flag "--collection <id>" env="REFLOW_COLLECTION" required=#true help="Reflow application collection ID"
-//USAGE flag "--shard-size <n>" default="15" help="Golden flows per shard when one run of all of them is refused"
+//USAGE flag "--shard-size <n>" default="15" help="Flows per shard when one run of all of them is refused"
 //USAGE flag "--parallelism <n>" default="1" help="Flows to overlap within a shard (1-16); the dev dashboard times out page loads above 1"
 //USAGE flag "--base-branch <name>" help="Pull requests: borrow passes from, compare with, and fail only on new failures against this branch's CI runs"
 //USAGE flag "--branch <name>" help="Branch to record the CI runs on (default: the checked-out branch)"
-//USAGE flag "--ci-context <file>" help="CI provenance JSON passed to reflow ci run"
+//USAGE flag "--ci-context <file>" help="CI provenance JSON passed to reflow ci run; its pr_number scopes the run to that pull request's flow drafts"
 //USAGE flag "--out-dir <dir>" default=".reflow-ci" help="Directory for CI run results and the Markdown report"
+//USAGE flag "--fresh" help="Run every flow again (--since none) instead of carrying earlier passes, as after promoting merged pull request drafts"
 //USAGE flag "--publish" help="Publish the report as a private Reflow review page"
 //USAGE flag "--post" help="Ask the Reflow GitHub App to write the report as the pull request's comment"
 
-// One CI run covers every golden flow, so there is one report, one gate and
-// one pull request comment. Reflow refuses a run in which more than 20 flows
-// (with their `needs` ancestors) have to execute; flows it can carry a pass
-// for do not count. A pull request usually touches few flows, so the single run
-// fits. When it does not (the first run on a branch, or a change many flows
-// cover), the sorted golden list is cut into fixed-size shards that each run
-// their share, and the full run is repeated, now carrying those results.
+// The roots are the collection's golden flows. On a pull request they are the
+// golden flows as the pull request sees them, plus every flow the pull request
+// edits as a PR draft that runs on its own (a `use` helper edited inline-only
+// runs through its callers). One CI run tries to cover all roots. Reflow
+// refuses a run in which more than 20 flows (with their `needs` ancestors) have
+// to execute; flows it can carry a pass for do not count. When the run is
+// refused, the sorted roots are cut into fixed-size shards. Every shard must
+// pass its gate, the shards together must cover every root, and one report
+// judges all the shards' CI runs together.
+//
+// On a pull request every run is locked to the edit set read at the start
+// (--pr-edit-set): if someone changes a draft mid-run, the run fails instead of
+// mixing draft versions. ci run takes the pull request from --ci-context.
 
 import assert from "node:assert";
 import fs from "node:fs/promises";
@@ -29,13 +36,26 @@ import { $ } from "zx";
 $.verbose = false;
 
 type SearchPage = {
-  flows: { slug: string; golden?: unknown }[];
+  flows: {
+    slug: string;
+    golden?: unknown;
+    pr_draft?: { inline_only?: boolean } | null;
+  }[];
   next_offset?: number | null;
+  pr?: { edit_set_hash: string };
 };
 type CiRunResult = {
-  ci_run_id?: string;
+  ci_run_id?: string | null;
+  ci_run?: { flows: { slug: string | null; outcome: string }[] } | null;
   error?: unknown;
   apply?: { error?: { reason?: string; message?: string } } | null;
+};
+type CiRun = {
+  name: string;
+  id?: string;
+  exitCode: number | null;
+  tooLarge: boolean;
+  result: CiRunResult;
 };
 
 const collection = process.env["usage_collection"];
@@ -50,19 +70,36 @@ const baseBranch = process.env["usage_base_branch"];
 const branch = process.env["usage_branch"];
 const ciContext = process.env["usage_ci_context"];
 const outDir = path.resolve(process.env["usage_out_dir"] ?? ".reflow-ci");
+const fresh = process.env["usage_fresh"] === "true";
 const publish = process.env["usage_publish"] === "true";
 const post = process.env["usage_post"] === "true";
 const baseArgs = baseBranch ? ["--base-branch", baseBranch] : [];
 
-// search_flows is the CLI's one flow listing. Its golden filter "golden" keeps
-// every golden flow (pristine or edited); pages follow next_offset.
-async function goldenSlugs(): Promise<string[]> {
-  const slugs: string[] = [];
+async function prNumberFromContext(): Promise<number | undefined> {
+  if (!ciContext) return undefined;
+  const context = JSON.parse(await fs.readFile(ciContext, "utf8")) as {
+    pr_number?: number;
+  };
+  return context.pr_number ?? undefined;
+}
+
+// search_flows is the CLI's one flow listing; pages follow next_offset. With pr
+// it lists flows as the pull request sees them: golden is the flow's golden
+// state on the pull request, pr_draft names an edit, and pr.edit_set_hash
+// identifies the whole set of the pull request's drafts.
+async function expectedRoots(
+  prNumber: number | undefined,
+): Promise<{ roots: string[]; editSet?: string }> {
+  const roots = new Set<string>();
+  let editSet: string | undefined;
   let offset: number | null = 0;
   while (offset !== null) {
     const request = JSON.stringify({
       collection_id: collection,
-      golden: "golden",
+      // A pull request can demote a golden flow it edits; that draft is still
+      // a root, so its search keeps every flow and filters below.
+      golden: prNumber === undefined ? "golden" : "any",
+      ...(prNumber === undefined ? {} : { pr: prNumber }),
       limit: 200,
       offset,
     });
@@ -84,12 +121,26 @@ async function goldenSlugs(): Promise<string[]> {
       page && Array.isArray(page.flows),
       "search_flows returned no flows list",
     );
-    slugs.push(
-      ...page.flows.filter((f) => f.golden != null).map((f) => f.slug),
-    );
+    if (prNumber !== undefined) {
+      const hash = page.pr?.edit_set_hash;
+      assert(hash, `search_flows named no edit set for PR #${prNumber}`);
+      if (editSet !== undefined && editSet !== hash) {
+        throw new Error(
+          `PR #${prNumber} flow drafts changed while they were listed; run again`,
+        );
+      }
+      editSet = hash;
+    }
+    for (const flow of page.flows) {
+      const runnableDraft =
+        flow.pr_draft != null && flow.pr_draft.inline_only !== true;
+      if (flow.golden != null || runnableDraft) {
+        roots.add(flow.slug);
+      }
+    }
     offset = page.next_offset ?? null;
   }
-  return slugs.sort();
+  return { roots: [...roots].sort(), editSet };
 }
 
 function shards<T>(items: T[], size: number): T[][] {
@@ -103,7 +154,8 @@ function shards<T>(items: T[], size: number): T[][] {
 async function ciRun(
   name: string,
   selection: string[],
-): Promise<{ id?: string; exitCode: number | null; tooLarge: boolean }> {
+  editSet: string | undefined,
+): Promise<CiRun> {
   const resultFile = path.join(outDir, `${name}.json`);
   const runArgs = [
     ...selection,
@@ -115,6 +167,8 @@ async function ciRun(
     "--result-file",
     resultFile,
     ...baseArgs,
+    ...(fresh ? ["--since", "none"] : []),
+    ...(editSet ? ["--pr-edit-set", editSet] : []),
     ...(branch ? ["--branch", branch] : []),
     ...(ciContext ? ["--ci-context", ciContext] : []),
   ];
@@ -131,13 +185,15 @@ async function ciRun(
   // and "Golden selection exceeds 20 flows" on its output, so check those too.
   const refusal = `${ran.stdout}\n${ran.stderr}\n${JSON.stringify(result.error ?? "")}`;
   return {
-    id: result.ci_run_id,
+    name,
+    id: result.ci_run_id ?? undefined,
     exitCode: ran.exitCode,
     // Reflow refused to run this many flows at once.
     tooLarge:
       applyError?.reason === "plan_too_large" ||
       /more than 20/i.test(applyError?.message ?? "") ||
       /Golden selection exceeds 20 flows/.test(refusal),
+    result,
   };
 }
 
@@ -153,50 +209,84 @@ async function gate(ciRunId: string): Promise<boolean> {
   return gated.exitCode === 0;
 }
 
+// A CI run counts only when ci run exited 0 with no error, recorded a CI run
+// and that CI run passes its gate. Anything else, including an incomplete run
+// that recorded nothing, fails the job.
+async function judge(run: CiRun): Promise<string | undefined> {
+  if (!run.id) return `no CI run recorded (exit ${run.exitCode})`;
+  if (run.exitCode !== 0) return `exit ${run.exitCode}, CI run \`${run.id}\``;
+  const error = run.result.error ?? run.result.apply?.error;
+  if (error != null) {
+    return `error ${JSON.stringify(error)}, CI run \`${run.id}\``;
+  }
+  if (!(await gate(run.id))) return `failed, CI run \`${run.id}\``;
+  return undefined;
+}
+
+// A root is covered when a CI run ran it or carried its pass.
+function uncovered(roots: string[], runs: CiRun[]): string[] {
+  const covered = new Set(
+    runs.flatMap((run) =>
+      (run.result.ci_run?.flows ?? [])
+        .filter((f) => f.outcome === "ran" || f.outcome === "not_affected")
+        .map((f) => f.slug),
+    ),
+  );
+  return roots.filter((slug) => !covered.has(slug));
+}
+
 async function run() {
   await fs.mkdir(outDir, { recursive: true });
-  const slugs = await goldenSlugs();
-  if (slugs.length === 0) {
+  const prNumber = await prNumberFromContext();
+  const { roots, editSet } = await expectedRoots(prNumber);
+  if (roots.length === 0) {
     throw new Error(
       "The collection has no golden flows, so there is nothing to gate on",
     );
   }
   let failed = false;
-  const shardLines: string[] = [];
+  const lines: string[] = [];
+  const scope =
+    prNumber === undefined
+      ? ""
+      : ` on PR #${prNumber} (edit set ${editSet ?? "none"})`;
 
-  console.log(`== all ${slugs.length} golden flows`);
-  let full = await ciRun("all", []);
-  if (!full.id && full.tooLarge) {
-    // Usually more than 20 flows had to run. Each shard runs its share, so
-    // the second full run can carry those results and run little or nothing.
-    const groups = shards(slugs, shardSize);
+  console.log(`== all ${roots.length} flows${scope}`);
+  const all = await ciRun("all", [], editSet);
+  let runs: CiRun[] = [all];
+  if (!all.id && all.tooLarge) {
+    const groups = shards(roots, shardSize);
     console.log(
-      `\nNo CI run was recorded for all flows (exit ${full.exitCode}); running ${groups.length} shards first`,
+      `\nAll flows did not fit in one run (exit ${all.exitCode}); running ${groups.length} shards`,
     );
+    runs = [];
     for (const [index, group] of groups.entries()) {
       const name = `shard-${index + 1}`;
       console.log(`\n== ${name}: ${group.join(", ")}`);
-      const shard = await ciRun(name, group);
-      const passed = shard.id ? await gate(shard.id) : false;
-      if (!passed) {
-        failed = true;
-      }
-      shardLines.push(
-        `- ${name} (${group.length} flows): ${shard.id ? (passed ? "passed" : `failed, CI run \`${shard.id}\``) : `no CI run recorded (exit ${shard.exitCode})`}`,
-      );
+      runs.push(await ciRun(name, group, editSet));
     }
-    console.log(`\n== all ${slugs.length} golden flows, again`);
-    full = await ciRun("all", []);
   }
 
-  let report: string;
-  if (!full.id) {
+  for (const run of runs) {
+    const problem = await judge(run);
+    if (problem) failed = true;
+    if (runs.length > 1) {
+      lines.push(`- ${run.name}: ${problem ?? "passed"}`);
+    } else if (problem) {
+      lines.push(`- all flows: ${problem}`);
+    }
+  }
+  const missing = uncovered(roots, runs);
+  if (missing.length) {
     failed = true;
-    report = `No CI run was recorded for all golden flows (exit ${full.exitCode}).\n`;
-  } else {
+    lines.push(`- not covered by any CI run: ${missing.join(", ")}`);
+  }
+
+  let report = "";
+  const ids = runs.flatMap((run) => (run.id ? [run.id] : []));
+  if (ids.length) {
     const reportArgs = [
-      "--ci-run",
-      full.id,
+      ...ids.flatMap((id) => ["--ci-run", id]),
       ...baseArgs,
       "--format",
       "markdown",
@@ -208,15 +298,16 @@ async function run() {
     report = rendered.stdout;
     if (rendered.exitCode !== 0) {
       failed = true;
-      report += `\nThe report for CI run \`${full.id}\` failed (exit ${rendered.exitCode}).\n`;
-    }
-    if (!(await gate(full.id))) {
-      failed = true;
+      report += `\nThe report failed (exit ${rendered.exitCode}).\n`;
     }
   }
 
-  if (shardLines.length) {
-    report = `All flows did not fit in one run, so they ran in shards first:\n\n${shardLines.join("\n")}\n\n${report}`;
+  if (lines.length) {
+    const intro =
+      runs.length > 1
+        ? "All flows did not fit in one run, so they ran in shards:"
+        : "The CI run did not pass:";
+    report = `${intro}\n\n${lines.join("\n")}\n\n${report}`;
   }
   await fs.writeFile(path.join(outDir, "report.md"), report);
   if (failed) {

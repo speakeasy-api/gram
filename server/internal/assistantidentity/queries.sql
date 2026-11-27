@@ -3,9 +3,19 @@
 -- through the ordinary agent and workload identity surfaces.
 
 -- name: LockAssistant :one
-SELECT id, organization_id, name, created_by_user_id
-FROM assistants
-WHERE project_id = @project_id AND id = @assistant_id AND deleted IS FALSE
+SELECT a.id,
+       a.organization_id,
+       a.name,
+       a.created_by_user_id,
+       a.runtime_version,
+       EXISTS (
+         SELECT 1
+         FROM project_managed_assistants pma
+         WHERE pma.project_id = a.project_id
+           AND pma.assistant_id = a.id
+       )::boolean AS is_managed
+FROM assistants a
+WHERE a.project_id = @project_id AND a.id = @assistant_id AND a.deleted IS FALSE
 FOR UPDATE;
 
 -- Conflicts with LockAssistant, so a trigger bind and an upgrade of the same
@@ -60,6 +70,16 @@ WHERE project_id = @project_id
   AND definition_slug <> 'wake' AND deleted IS FALSE
 ORDER BY id
 FOR UPDATE;
+
+-- name: ListAssistantSlackAuthClientIDs :many
+SELECT DISTINCT auth_client_id
+FROM trigger_instances
+WHERE project_id = @project_id
+  AND target_kind = 'assistant' AND target_ref = @assistant_id::text
+  AND definition_slug = 'slack'
+  AND auth_client_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY auth_client_id;
 
 -- name: GetTriggerBinding :one
 SELECT id, organization_id, original_workload_issuer_id AS workload_issuer_id, subject

@@ -46,11 +46,12 @@ const (
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
 
-	ActionOrganizationDisabled         Action = "organization:disabled"
-	ActionOrganizationEnabled          Action = "organization:enabled"
-	ActionOrganizationWhitelistUpdated Action = "organization:whitelist_updated"
-	ActionOrganizationPaygActivated    Action = "organization:payg_activated"
-	ActionOrganizationPaygDeactivated  Action = "organization:payg_deactivated"
+	ActionOrganizationDisabled                Action = "organization:disabled"
+	ActionOrganizationEnabled                 Action = "organization:enabled"
+	ActionOrganizationDisabledByMembershipCap Action = "organization:disabled_by_membership_cap"
+	ActionOrganizationWhitelistUpdated        Action = "organization:whitelist_updated"
+	ActionOrganizationPaygActivated           Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated         Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationSetupTaskUpdatedEvent struct {
@@ -1081,6 +1082,10 @@ func (l *Logger) LogOrganizationEnabled(ctx context.Context, dbtx repo.DBTX, eve
 
 func (l *Logger) LogOrganizationDisabled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
 	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabled)
+}
+
+func (l *Logger) LogOrganizationDisabledByMembershipCap(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent) error {
+	return l.logOrganizationAccess(ctx, dbtx, event, ActionOrganizationDisabledByMembershipCap)
 }
 
 func (l *Logger) logOrganizationAccess(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccessEvent, action Action) error {

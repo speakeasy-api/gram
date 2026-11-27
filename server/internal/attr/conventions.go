@@ -544,6 +544,14 @@ const (
 	// (whose detail stays on gram.oauth.failure_reason), or the request
 	// validation failure class such as "header_mismatch".
 	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
+	// McpGatewayCallerKindKey is the bounded principal class evaluated by gateway admission.
+	McpGatewayCallerKindKey = attribute.Key("gram.mcp.gateway.caller_kind")
+	// McpGatewayTypeKey is the bounded gateway policy type evaluated by admission.
+	McpGatewayTypeKey = attribute.Key("gram.mcp.gateway.type")
+	// McpGatewayRefusalReasonKey is the bounded policy reason a caller was refused.
+	McpGatewayRefusalReasonKey = attribute.Key("gram.mcp.gateway.refusal_reason")
+	// AgentIDKey identifies an agent on telemetry that intentionally reports per-agent usage.
+	AgentIDKey = attribute.Key("gram.agent.id")
 	// McpSkillOriginKey is the bounded origin of a skill served over MCP:
 	// "distribution" for a managed skill linked to the MCP surface, or
 	// "embedded" for a reviewed skill compiled into the platform toolset.
@@ -1215,6 +1223,10 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// TelemetryOverviewSourceKey names the table that served an observability overview.
+	TelemetryOverviewSourceKey = attribute.Key("gram.telemetry.overview.source")
+
 	// InferenceConversationOutcomeKey records how an Anthropic inference frame
 	// was mapped to a stored conversation: "session" (the frame's session id
 	// named an existing chat), "adopted_prefix" (the chat already holding the
@@ -1764,6 +1776,10 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
+
+func TelemetryOverviewSource(v string) attribute.KeyValue {
+	return TelemetryOverviewSourceKey.String(v)
+}
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
 func SlogTelemetryCHRowCount(v int) slog.Attr {
@@ -4128,6 +4144,20 @@ func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurf
 func McpRejectionReason[V ~string](v V) attribute.KeyValue {
 	return McpRejectionReasonKey.String(string(v))
 }
+
+func McpGatewayCallerKind[V ~string](v V) attribute.KeyValue {
+	return McpGatewayCallerKindKey.String(string(v))
+}
+
+func McpGatewayType[V ~string](v V) attribute.KeyValue {
+	return McpGatewayTypeKey.String(string(v))
+}
+
+func McpGatewayRefusalReason[V ~string](v V) attribute.KeyValue {
+	return McpGatewayRefusalReasonKey.String(string(v))
+}
+
+func AgentID(v string) attribute.KeyValue { return AgentIDKey.String(v) }
 func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 	return slog.String(string(McpRejectionReasonKey), string(v))
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -54,6 +55,7 @@ type testInstance struct {
 	coverage           *telemetry.SupportCoverage
 	telemLogger        *telemetry.Logger
 	service            *telemetry.Service
+	features           *feature.InMemory
 	logger             *slog.Logger
 	conn               *pgxpool.Pool
 	chConn             clickhouse.Conn
@@ -134,10 +136,12 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	coverage := telemetry.NewSupportCoverage(conn, chConn)
-	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+	features := &feature.InMemory{}
+	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, features)
 
 	return ctx, &testInstance{
 		service:            svc,
+		features:           features,
 		coverage:           coverage,
 		telemLogger:        telemLogger,
 		logger:             logger,

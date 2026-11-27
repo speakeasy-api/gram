@@ -532,6 +532,21 @@ func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"
 }
 
+// GetSecretBackfillsAdminPath returns the URL path to the admin service getSecretBackfills HTTP endpoint.
+func GetSecretBackfillsAdminPath() string {
+	return "/admin/secretBackfills.get"
+}
+
+// RunMarketplaceTokenBackfillAdminPath returns the URL path to the admin service runMarketplaceTokenBackfill HTTP endpoint.
+func RunMarketplaceTokenBackfillAdminPath() string {
+	return "/admin/secretBackfills.runMarketplaceTokens"
+}
+
+// RunRunnerKeyOrganizationBackfillAdminPath returns the URL path to the admin service runRunnerKeyOrganizationBackfill HTTP endpoint.
+func RunRunnerKeyOrganizationBackfillAdminPath() string {
+	return "/admin/secretBackfills.runRunnerKeyOrganizations"
+}
+
 // GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
 func GetProjectRedeployPreviewAdminPath() string {
 	return "/admin/project.redeployPreview"
@@ -605,6 +620,16 @@ func ListAssistantOrganizationsAdminPath() string {
 // RepairOrganizationAssistantAgentNamesAdminPath returns the URL path to the admin service repairOrganizationAssistantAgentNames HTTP endpoint.
 func RepairOrganizationAssistantAgentNamesAdminPath() string {
 	return "/admin/organization.repairAssistantAgentNames"
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsAdminPath returns the URL path to the admin service backfillOrganizationAssistantBuiltinGrants HTTP endpoint.
+func BackfillOrganizationAssistantBuiltinGrantsAdminPath() string {
+	return "/admin/organization.backfillAssistantBuiltinGrants"
+}
+
+// MigrateOrganizationAssistantSlackAdminPath returns the URL path to the admin service migrateOrganizationAssistantSlack HTTP endpoint.
+func MigrateOrganizationAssistantSlackAdminPath() string {
+	return "/admin/organization.migrateAssistantSlack"
 }
 
 // ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.

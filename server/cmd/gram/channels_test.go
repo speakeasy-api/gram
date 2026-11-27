@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
@@ -655,20 +656,20 @@ func TestChannelsAdmissionRebuildsLiveMembershipAndGrants(t *testing.T) {
 	inherited := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeChannelsReadAll, project.ID.String())})
 	prepared, err := admission.PrepareContext(inherited, identity)
 	require.NoError(t, err)
-	allowed, err := engine.Evaluate(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+	decision, err := engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
-	require.True(t, allowed)
-	allowed, err = engine.Evaluate(prepared, authz.Check{Scope: authz.ScopeChannelsReadAll, ResourceID: project.ID.String(), ResourceKind: "project"})
+	require.True(t, decision.AllAllowed)
+	decision, err = engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsReadAll, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
-	require.False(t, allowed, "inherited grants must not cross the authentication boundary")
+	require.False(t, decision.AllAllowed, "inherited grants must not cross the authentication boundary")
 	_, err = accessrepo.New(db).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: grant.ID, OrganizationID: orgID})
 	require.NoError(t, err)
 	// SSE reconciliation must rebuild even with a previously admitted context.
 	prepared, err = admission.PrepareContext(prepared, identity)
 	require.NoError(t, err)
-	allowed, err = engine.Evaluate(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+	decision, err = engine.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 	require.NoError(t, err)
-	require.False(t, allowed)
+	require.False(t, decision.AllAllowed)
 	features.SetFlag(feature.FlagChannels, orgID, false)
 	_, err = admission.PrepareContext(prepared, identity)
 	require.ErrorContains(t, err, "not enabled for this organization")
@@ -681,6 +682,50 @@ func TestChannelsAdmissionRebuildsLiveMembershipAndGrants(t *testing.T) {
 	require.NoError(t, err)
 	_, err = admission.PrepareContext(prepared, identity)
 	require.ErrorContains(t, err, "membership required")
+}
+
+func TestChannelsAdmissionRefusesADisabledOrganization(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	infra, cleanup, err := testenv.Launch(ctx, testenv.LaunchOptions{Postgres: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	db, err := infra.CloneTestDatabase(t, "channels_disabled_organization")
+	require.NoError(t, err)
+	orgID, userID := "org_"+uuid.NewString(), "user_"+uuid.NewString()
+	_, err = organizationsrepo.New(db).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Channels test", Slug: "channels-" + uuid.NewString()})
+	require.NoError(t, err)
+	_, err = usersrepo.New(db).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: userID, Email: userID + "@example.test", DisplayName: "Test user"})
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(db).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(userID)})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Target project", Slug: "target", OrganizationID: orgID})
+	require.NoError(t, err)
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, userID)
+	for _, scope := range []authz.Scope{authz.ScopeChannelsConnect, authz.ScopeProjectRead} {
+		selectors, err := authz.NewSelector(scope, project.ID.String()).MarshalJSON()
+		require.NoError(t, err)
+		_, err = accessrepo.New(db).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: orgID, PrincipalUrn: principal, Scope: string(scope), Selectors: selectors})
+		require.NoError(t, err)
+	}
+	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	features := new(feature.InMemory)
+	features.SetFlag(feature.FlagChannels, orgID, true)
+	admission := channelsAdmission{db: db, engine: engine, features: features}
+	identity := authn.Identity{OrganizationID: orgID, ProjectID: project.ID, Principal: principal}
+	prepared, err := admission.PrepareContext(ctx, identity)
+	require.NoError(t, err)
+
+	_, err = adminrepo.New(db).AdminDisableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	// SSE reconciliation reruns admission with the previously admitted context.
+	_, err = admission.PrepareContext(prepared, identity)
+	require.ErrorIs(t, err, errChannelsOrganizationDisabled)
+
+	_, err = adminrepo.New(db).AdminEnableOrganization(ctx, orgID)
+	require.NoError(t, err)
+	_, err = admission.PrepareContext(prepared, identity)
+	require.NoError(t, err, "re-enabling the organization restores admission")
 }
 
 func TestChannelsOAuthDefersToEffectiveAccessExceptions(t *testing.T) {
@@ -731,9 +776,9 @@ func TestChannelsOAuthDefersToEffectiveAccessExceptions(t *testing.T) {
 		t.Helper()
 		prepared, err := admission.PrepareContext(ctx, identity)
 		require.NoError(t, err)
-		allowed, err := config.Authz.Evaluate(prepared, authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
+		decision, err := config.Authz.Decide(authz.WithoutChallenges(prepared), authz.Check{Scope: authz.ScopeChannelsConnect, ResourceID: project.ID.String(), ResourceKind: "project"})
 		require.NoError(t, err)
-		return allowed
+		return decision.AllAllowed
 	}
 	require.False(t, nativeConnect(), "fixture must not have a native connect grant")
 	serviceCtx, cancelService := context.WithCancel(ctx)

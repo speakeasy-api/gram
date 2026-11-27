@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -60,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const dispositionAssistants = "assistants"
@@ -446,6 +448,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SkipMembershipSync: supportOrgID != "",
 		Attribution:        attribution,
 	})
+	if errors.Is(err, identity.ErrUserBlocked) {
+		// The generic login failure, so the page does not reveal the block.
+		userblock.LogRefusal(ctx, s.logger, "dashboard_login", idpUser.Sub)
+		return redirectWithError(authErrInit, err)
+	}
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -1266,33 +1273,24 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, err
 		}
-		// Build the full list of project IDs, then filter to only those the
-		// user is allowed to see (mirrors the projects.List endpoint).
-		projectIDs := make([]string, 0, len(projectRows))
-		for _, p := range projectRows {
-			projectIDs = append(projectIDs, p.ID.String())
-		}
-
-		allowedIDs := projectIDs
-		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
-			checks := make([]authz.Check, len(projectIDs))
-			for i, id := range projectIDs {
-				checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
+		// Keep only the projects the user is allowed to see (mirrors the
+		// projects.List endpoint).
+		filtered := len(projectRows) > 0 && org.ID == authCtx.ActiveOrganizationID
+		var decisions authz.Decisions
+		if filtered {
+			checks := make([]authz.Check, len(projectRows))
+			for i, project := range projectRows {
+				checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 			}
-			allowedIDs, err = s.authz.Filter(ctx, checks)
+			decisions, err = s.authz.Decide(ctx, checks...)
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		allowed := make(map[string]struct{}, len(allowedIDs))
-		for _, id := range allowedIDs {
-			allowed[id] = struct{}{}
-		}
-
-		orgProjects := make([]*gen.ProjectEntry, 0, len(allowedIDs))
-		for _, project := range projectRows {
-			if _, ok := allowed[project.ID.String()]; !ok {
+		orgProjects := make([]*gen.ProjectEntry, 0, len(projectRows))
+		for i, project := range projectRows {
+			if filtered && !decisions.Each[i].Allowed {
 				continue
 			}
 			orgProjects = append(orgProjects, &gen.ProjectEntry{
@@ -1480,6 +1478,9 @@ type orgProvisionOptions struct {
 // ActiveOrganizationID on an in-memory session before storing it once.
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
+	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
+		return empty, fmt.Errorf("check organization cap: %w", err)
+	}
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
 	if err != nil {
 		return empty, err
@@ -1543,6 +1544,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		CreationSource:        orgprovision.SourceSignup,
 	})
 	if err != nil {
+		if errors.Is(err, orgcap.ErrUserHasOrganization) {
+			return oops.E(oops.CodeConflict, err, "user already has an organization").LogWarn(ctx, s.logger)
+		}
 		if oops.IsClientFault(err) {
 			return err
 		}
@@ -1639,6 +1643,18 @@ func (s *Service) persistProvisionedOrganization(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := orgRepo.New(tx)
+	// The membership sync locks on the identity-provider user ID, so lock on the
+	// same key when there is one.
+	lockKey := provisionedOrg.WorkOSUserID
+	if lockKey == "" {
+		lockKey = userID
+	}
+	if err := orgcap.LockUser(ctx, tx, lockKey); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("lock organization provisioning: %w", err)
+	}
+	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("recheck organization cap: %w", err)
+	}
 	if opts.StripePromotionCodeID != "" {
 		// The existing create-only primitive rejects a row already inserted by
 		// identity sync (or a concurrent signup). Attribution never adopts an org.

@@ -219,6 +219,17 @@ export const TERMINAL_SKIN_CSS = `
   ${host} .gram-term-tips button:hover {
     color: var(--term-accent);
   }
+  ${host} .gram-term-recent ul {
+    padding-left: 0.5rem;
+  }
+  ${host} .gram-term-recent a {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  ${host} .gram-term-recent a:hover {
+    color: var(--term-accent);
+  }
 
   /* Boxed composer with a > prompt */
   ${host} .aui-composer-wrapper {

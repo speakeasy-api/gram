@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
@@ -504,7 +505,8 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 	}
 
 	// The dedicated agent starts with the grants provisioning gives it: every
-	// MCP server and skill in the assistant's project, and its own assistant.
+	// MCP server and skill in the assistant's project, an explicit mcp:connect
+	// grant on the assistants built-in toolset, and its own assistant.
 	if err := s.q.DeployInsertAgent(ctx, repo.DeployInsertAgentParams{
 		ID:             agent,
 		OrganizationID: org,
@@ -517,12 +519,18 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 
 	principal := "agent:" + agent.String()
 	mcpSelectors := map[string]string{"resource_kind": "mcp", "resource_id": "*", "project_id": proj.String()}
+	assistantsBuiltinSelectors := map[string]string{
+		"resource_kind": "mcp",
+		"resource_id":   platformtoolscore.PlatformToolsetID(platformtoolscore.AssistantsPlatformToolsetSlug).String(),
+		"project_id":    proj.String(),
+	}
 	grants := []struct {
 		name      string
 		scope     string
 		selectors map[string]string
 	}{
 		{"mcp-connect", "mcp:connect", mcpSelectors},
+		{"mcp-connect-builtin-assistants", "mcp:connect", assistantsBuiltinSelectors},
 		{"mcp-read", "mcp:read", mcpSelectors},
 		{"skill-read", "skill:read", map[string]string{"resource_kind": "skill", "resource_id": proj.String()}},
 		{"assistant-write", "assistant:write", map[string]string{"resource_kind": "assistant", "resource_id": bound.String()}},
