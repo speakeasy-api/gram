@@ -27,9 +27,9 @@ type table struct {
 // registry. Each is computed here, at generation time, so package authz holds
 // plain values and no derivation logic.
 func tables(r registry.Registry) []table {
-	declaredKinds := make(map[string]bool, len(r.Types))
+	kinds := make([]string, 0, len(r.Types))
 	for _, t := range r.Types {
-		declaredKinds[string(t.Kind)] = true
+		kinds = append(kinds, string(t.Kind))
 	}
 	return []table{
 		{
@@ -67,10 +67,10 @@ is set where its permission is.`,
 kind its checks and grant selectors name.`,
 		},
 		{
-			name:   "declaredResourceKinds",
-			goType: "map[string]bool",
-			value:  declaredKinds,
-			doc:    `declaredResourceKinds is the set of resource kinds the registry declares.`,
+			name:   "resourceKinds",
+			goType: "[]string",
+			value:  kinds,
+			doc:    `resourceKinds lists the resource kinds the registry declares, in declaration order.`,
 		},
 		{
 			name:   "requiredCheckDimensions",

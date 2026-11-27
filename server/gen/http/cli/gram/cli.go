@@ -125,6 +125,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|find-shadow-mcp-inventory-servers|update-shadow-mcp-inventory-server-name|set-shadow-mcp-official-server|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant|list-access-requests|decide-access-request|withdraw-access-request)",
 		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff|list-pending-access-requests|list-requestable-access|request-access)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-org-units|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -218,10 +219,9 @@ func UsageCommands() []string {
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-authentication-host-impact|set-authentication-host|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"gateway-sessions (list-gateway-sessions|list-gateway-session-facets)",
+		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
-		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|find-shadow-mcp-inventory-servers|update-shadow-mcp-inventory-server-name|set-shadow-mcp-official-server|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant|list-access-requests|decide-access-request|withdraw-access-request)",
 	}
 }
 
@@ -230,8 +230,8 @@ func UsageExamples() string {
 	return os.Args[0] + " " + "external receive-work-os-webhook --workos-signature \"abc123\" --stream \"goa.png\"" + "\n" +
 		os.Args[0] + " " + "killswitches list-capabilities --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
+		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --device-agent-token \"abc123\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
-		os.Args[0] + " " + "agents list-sessions --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\"" + "\n" +
 		""
 }
 
@@ -294,6 +294,259 @@ func ParseEndpoint(
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
+
+		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
+
+		accessListRolesFlags            = flag.NewFlagSet("list-roles", flag.ExitOnError)
+		accessListRolesApikeyTokenFlag  = accessListRolesFlags.String("apikey-token", "", "")
+		accessListRolesSessionTokenFlag = accessListRolesFlags.String("session-token", "", "")
+
+		accessGetRoleFlags            = flag.NewFlagSet("get-role", flag.ExitOnError)
+		accessGetRoleIDFlag           = accessGetRoleFlags.String("id", "REQUIRED", "")
+		accessGetRoleApikeyTokenFlag  = accessGetRoleFlags.String("apikey-token", "", "")
+		accessGetRoleSessionTokenFlag = accessGetRoleFlags.String("session-token", "", "")
+
+		accessCreateRoleFlags            = flag.NewFlagSet("create-role", flag.ExitOnError)
+		accessCreateRoleBodyFlag         = accessCreateRoleFlags.String("body", "REQUIRED", "")
+		accessCreateRoleApikeyTokenFlag  = accessCreateRoleFlags.String("apikey-token", "", "")
+		accessCreateRoleSessionTokenFlag = accessCreateRoleFlags.String("session-token", "", "")
+
+		accessUpdateRoleFlags            = flag.NewFlagSet("update-role", flag.ExitOnError)
+		accessUpdateRoleBodyFlag         = accessUpdateRoleFlags.String("body", "REQUIRED", "")
+		accessUpdateRoleApikeyTokenFlag  = accessUpdateRoleFlags.String("apikey-token", "", "")
+		accessUpdateRoleSessionTokenFlag = accessUpdateRoleFlags.String("session-token", "", "")
+
+		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
+		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
+		accessDeleteRoleApikeyTokenFlag  = accessDeleteRoleFlags.String("apikey-token", "", "")
+		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
+
+		accessListDirectoryRoleMappingsFlags            = flag.NewFlagSet("list-directory-role-mappings", flag.ExitOnError)
+		accessListDirectoryRoleMappingsApikeyTokenFlag  = accessListDirectoryRoleMappingsFlags.String("apikey-token", "", "")
+		accessListDirectoryRoleMappingsSessionTokenFlag = accessListDirectoryRoleMappingsFlags.String("session-token", "", "")
+
+		accessListDirectoryPeopleFlags            = flag.NewFlagSet("list-directory-people", flag.ExitOnError)
+		accessListDirectoryPeopleLimitFlag        = accessListDirectoryPeopleFlags.String("limit", "500", "")
+		accessListDirectoryPeopleCursorFlag       = accessListDirectoryPeopleFlags.String("cursor", "", "")
+		accessListDirectoryPeopleSessionTokenFlag = accessListDirectoryPeopleFlags.String("session-token", "", "")
+
+		accessSyncDirectoryGroupsFlags            = flag.NewFlagSet("sync-directory-groups", flag.ExitOnError)
+		accessSyncDirectoryGroupsApikeyTokenFlag  = accessSyncDirectoryGroupsFlags.String("apikey-token", "", "")
+		accessSyncDirectoryGroupsSessionTokenFlag = accessSyncDirectoryGroupsFlags.String("session-token", "", "")
+
+		accessSetDirectoryRoleMappingFlags            = flag.NewFlagSet("set-directory-role-mapping", flag.ExitOnError)
+		accessSetDirectoryRoleMappingBodyFlag         = accessSetDirectoryRoleMappingFlags.String("body", "REQUIRED", "")
+		accessSetDirectoryRoleMappingApikeyTokenFlag  = accessSetDirectoryRoleMappingFlags.String("apikey-token", "", "")
+		accessSetDirectoryRoleMappingSessionTokenFlag = accessSetDirectoryRoleMappingFlags.String("session-token", "", "")
+
+		accessSetDirectoryRoleMappingsFlags            = flag.NewFlagSet("set-directory-role-mappings", flag.ExitOnError)
+		accessSetDirectoryRoleMappingsBodyFlag         = accessSetDirectoryRoleMappingsFlags.String("body", "REQUIRED", "")
+		accessSetDirectoryRoleMappingsApikeyTokenFlag  = accessSetDirectoryRoleMappingsFlags.String("apikey-token", "", "")
+		accessSetDirectoryRoleMappingsSessionTokenFlag = accessSetDirectoryRoleMappingsFlags.String("session-token", "", "")
+
+		accessDeleteDirectoryRoleMappingFlags            = flag.NewFlagSet("delete-directory-role-mapping", flag.ExitOnError)
+		accessDeleteDirectoryRoleMappingIDFlag           = accessDeleteDirectoryRoleMappingFlags.String("id", "REQUIRED", "")
+		accessDeleteDirectoryRoleMappingApikeyTokenFlag  = accessDeleteDirectoryRoleMappingFlags.String("apikey-token", "", "")
+		accessDeleteDirectoryRoleMappingSessionTokenFlag = accessDeleteDirectoryRoleMappingFlags.String("session-token", "", "")
+
+		accessPreviewDirectoryRoleSetupFlags            = flag.NewFlagSet("preview-directory-role-setup", flag.ExitOnError)
+		accessPreviewDirectoryRoleSetupApikeyTokenFlag  = accessPreviewDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessPreviewDirectoryRoleSetupSessionTokenFlag = accessPreviewDirectoryRoleSetupFlags.String("session-token", "", "")
+
+		accessApplyDirectoryRoleSetupFlags            = flag.NewFlagSet("apply-directory-role-setup", flag.ExitOnError)
+		accessApplyDirectoryRoleSetupBodyFlag         = accessApplyDirectoryRoleSetupFlags.String("body", "REQUIRED", "")
+		accessApplyDirectoryRoleSetupApikeyTokenFlag  = accessApplyDirectoryRoleSetupFlags.String("apikey-token", "", "")
+		accessApplyDirectoryRoleSetupSessionTokenFlag = accessApplyDirectoryRoleSetupFlags.String("session-token", "", "")
+
+		accessListDirectoryReviewItemsFlags            = flag.NewFlagSet("list-directory-review-items", flag.ExitOnError)
+		accessListDirectoryReviewItemsApikeyTokenFlag  = accessListDirectoryReviewItemsFlags.String("apikey-token", "", "")
+		accessListDirectoryReviewItemsSessionTokenFlag = accessListDirectoryReviewItemsFlags.String("session-token", "", "")
+
+		accessResolveDirectoryReviewItemFlags            = flag.NewFlagSet("resolve-directory-review-item", flag.ExitOnError)
+		accessResolveDirectoryReviewItemBodyFlag         = accessResolveDirectoryReviewItemFlags.String("body", "REQUIRED", "")
+		accessResolveDirectoryReviewItemApikeyTokenFlag  = accessResolveDirectoryReviewItemFlags.String("apikey-token", "", "")
+		accessResolveDirectoryReviewItemSessionTokenFlag = accessResolveDirectoryReviewItemFlags.String("session-token", "", "")
+
+		accessGetDirectoryReviewSettingsFlags            = flag.NewFlagSet("get-directory-review-settings", flag.ExitOnError)
+		accessGetDirectoryReviewSettingsApikeyTokenFlag  = accessGetDirectoryReviewSettingsFlags.String("apikey-token", "", "")
+		accessGetDirectoryReviewSettingsSessionTokenFlag = accessGetDirectoryReviewSettingsFlags.String("session-token", "", "")
+
+		accessUpdateDirectoryReviewSettingsFlags            = flag.NewFlagSet("update-directory-review-settings", flag.ExitOnError)
+		accessUpdateDirectoryReviewSettingsBodyFlag         = accessUpdateDirectoryReviewSettingsFlags.String("body", "REQUIRED", "")
+		accessUpdateDirectoryReviewSettingsApikeyTokenFlag  = accessUpdateDirectoryReviewSettingsFlags.String("apikey-token", "", "")
+		accessUpdateDirectoryReviewSettingsSessionTokenFlag = accessUpdateDirectoryReviewSettingsFlags.String("session-token", "", "")
+
+		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
+		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
+		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
+
+		accessListAgentPolicyScopesFlags            = flag.NewFlagSet("list-agent-policy-scopes", flag.ExitOnError)
+		accessListAgentPolicyScopesSessionTokenFlag = accessListAgentPolicyScopesFlags.String("session-token", "", "")
+
+		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
+		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
+		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
+
+		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
+		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
+		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
+
+		accessUpdateMemberRolesFlags            = flag.NewFlagSet("update-member-roles", flag.ExitOnError)
+		accessUpdateMemberRolesBodyFlag         = accessUpdateMemberRolesFlags.String("body", "REQUIRED", "")
+		accessUpdateMemberRolesApikeyTokenFlag  = accessUpdateMemberRolesFlags.String("apikey-token", "", "")
+		accessUpdateMemberRolesSessionTokenFlag = accessUpdateMemberRolesFlags.String("session-token", "", "")
+
+		accessListShadowMCPInventoryFlags            = flag.NewFlagSet("list-shadow-mcp-inventory", flag.ExitOnError)
+		accessListShadowMCPInventoryProjectIDFlag    = accessListShadowMCPInventoryFlags.String("project-id", "REQUIRED", "")
+		accessListShadowMCPInventoryLimitFlag        = accessListShadowMCPInventoryFlags.String("limit", "50", "")
+		accessListShadowMCPInventoryCursorFlag       = accessListShadowMCPInventoryFlags.String("cursor", "", "")
+		accessListShadowMCPInventorySessionTokenFlag = accessListShadowMCPInventoryFlags.String("session-token", "", "")
+
+		accessGetShadowMCPInventoryServerFlags            = flag.NewFlagSet("get-shadow-mcp-inventory-server", flag.ExitOnError)
+		accessGetShadowMCPInventoryServerProjectIDFlag    = accessGetShadowMCPInventoryServerFlags.String("project-id", "REQUIRED", "")
+		accessGetShadowMCPInventoryServerServerSlugFlag   = accessGetShadowMCPInventoryServerFlags.String("server-slug", "REQUIRED", "")
+		accessGetShadowMCPInventoryServerSessionTokenFlag = accessGetShadowMCPInventoryServerFlags.String("session-token", "", "")
+
+		accessFindShadowMCPInventoryServersFlags            = flag.NewFlagSet("find-shadow-mcp-inventory-servers", flag.ExitOnError)
+		accessFindShadowMCPInventoryServersProjectIDFlag    = accessFindShadowMCPInventoryServersFlags.String("project-id", "REQUIRED", "")
+		accessFindShadowMCPInventoryServersServerUrlsFlag   = accessFindShadowMCPInventoryServersFlags.String("server-urls", "REQUIRED", "")
+		accessFindShadowMCPInventoryServersSessionTokenFlag = accessFindShadowMCPInventoryServersFlags.String("session-token", "", "")
+
+		accessUpdateShadowMCPInventoryServerNameFlags            = flag.NewFlagSet("update-shadow-mcp-inventory-server-name", flag.ExitOnError)
+		accessUpdateShadowMCPInventoryServerNameBodyFlag         = accessUpdateShadowMCPInventoryServerNameFlags.String("body", "REQUIRED", "")
+		accessUpdateShadowMCPInventoryServerNameSessionTokenFlag = accessUpdateShadowMCPInventoryServerNameFlags.String("session-token", "", "")
+
+		accessSetShadowMCPOfficialServerFlags            = flag.NewFlagSet("set-shadow-mcp-official-server", flag.ExitOnError)
+		accessSetShadowMCPOfficialServerBodyFlag         = accessSetShadowMCPOfficialServerFlags.String("body", "REQUIRED", "")
+		accessSetShadowMCPOfficialServerSessionTokenFlag = accessSetShadowMCPOfficialServerFlags.String("session-token", "", "")
+
+		accessListShadowMCPInventoryUsersFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-users", flag.ExitOnError)
+		accessListShadowMCPInventoryUsersProjectIDFlag    = accessListShadowMCPInventoryUsersFlags.String("project-id", "REQUIRED", "")
+		accessListShadowMCPInventoryUsersServerURLFlag    = accessListShadowMCPInventoryUsersFlags.String("server-url", "REQUIRED", "")
+		accessListShadowMCPInventoryUsersLimitFlag        = accessListShadowMCPInventoryUsersFlags.String("limit", "50", "")
+		accessListShadowMCPInventoryUsersCursorFlag       = accessListShadowMCPInventoryUsersFlags.String("cursor", "", "")
+		accessListShadowMCPInventoryUsersSessionTokenFlag = accessListShadowMCPInventoryUsersFlags.String("session-token", "", "")
+
+		accessListShadowMCPInventoryServersForUserFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-servers-for-user", flag.ExitOnError)
+		accessListShadowMCPInventoryServersForUserProjectIDFlag    = accessListShadowMCPInventoryServersForUserFlags.String("project-id", "REQUIRED", "")
+		accessListShadowMCPInventoryServersForUserUserKeysFlag     = accessListShadowMCPInventoryServersForUserFlags.String("user-keys", "REQUIRED", "")
+		accessListShadowMCPInventoryServersForUserFromFlag         = accessListShadowMCPInventoryServersForUserFlags.String("from", "", "")
+		accessListShadowMCPInventoryServersForUserToFlag           = accessListShadowMCPInventoryServersForUserFlags.String("to", "", "")
+		accessListShadowMCPInventoryServersForUserLimitFlag        = accessListShadowMCPInventoryServersForUserFlags.String("limit", "50", "")
+		accessListShadowMCPInventoryServersForUserSessionTokenFlag = accessListShadowMCPInventoryServersForUserFlags.String("session-token", "", "")
+
+		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
+		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
+		accessResolveShadowMCPInventoryRequestSessionTokenFlag = accessResolveShadowMCPInventoryRequestFlags.String("session-token", "", "")
+
+		accessListAIDetectionsFlags                = flag.NewFlagSet("list-ai-detections", flag.ExitOnError)
+		accessListAIDetectionsCategoryFlag         = accessListAIDetectionsFlags.String("category", "", "")
+		accessListAIDetectionsDirectoryGroupIDFlag = accessListAIDetectionsFlags.String("directory-group-id", "", "")
+		accessListAIDetectionsSessionTokenFlag     = accessListAIDetectionsFlags.String("session-token", "", "")
+
+		accessListEmployeeAIDetectionsFlags                = flag.NewFlagSet("list-employee-ai-detections", flag.ExitOnError)
+		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
+		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
+		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
+
+		accessListAIDetectionUsersFlags            = flag.NewFlagSet("list-ai-detection-users", flag.ExitOnError)
+		accessListAIDetectionUsersTargetIDFlag     = accessListAIDetectionUsersFlags.String("target-id", "REQUIRED", "")
+		accessListAIDetectionUsersSessionTokenFlag = accessListAIDetectionUsersFlags.String("session-token", "", "")
+
+		accessSetAIToolDecisionFlags            = flag.NewFlagSet("set-ai-tool-decision", flag.ExitOnError)
+		accessSetAIToolDecisionBodyFlag         = accessSetAIToolDecisionFlags.String("body", "REQUIRED", "")
+		accessSetAIToolDecisionSessionTokenFlag = accessSetAIToolDecisionFlags.String("session-token", "", "")
+
+		accessListResourceAudienceFlags            = flag.NewFlagSet("list-resource-audience", flag.ExitOnError)
+		accessListResourceAudienceResourceKindFlag = accessListResourceAudienceFlags.String("resource-kind", "REQUIRED", "")
+		accessListResourceAudienceResourceIDFlag   = accessListResourceAudienceFlags.String("resource-id", "REQUIRED", "")
+		accessListResourceAudienceApikeyTokenFlag  = accessListResourceAudienceFlags.String("apikey-token", "", "")
+		accessListResourceAudienceSessionTokenFlag = accessListResourceAudienceFlags.String("session-token", "", "")
+
+		accessSetResourceAudienceFlags            = flag.NewFlagSet("set-resource-audience", flag.ExitOnError)
+		accessSetResourceAudienceBodyFlag         = accessSetResourceAudienceFlags.String("body", "REQUIRED", "")
+		accessSetResourceAudienceApikeyTokenFlag  = accessSetResourceAudienceFlags.String("apikey-token", "", "")
+		accessSetResourceAudienceSessionTokenFlag = accessSetResourceAudienceFlags.String("session-token", "", "")
+
+		accessListAudienceOptionsFlags            = flag.NewFlagSet("list-audience-options", flag.ExitOnError)
+		accessListAudienceOptionsApikeyTokenFlag  = accessListAudienceOptionsFlags.String("apikey-token", "", "")
+		accessListAudienceOptionsSessionTokenFlag = accessListAudienceOptionsFlags.String("session-token", "", "")
+
+		accessExplainResourceAccessFlags            = flag.NewFlagSet("explain-resource-access", flag.ExitOnError)
+		accessExplainResourceAccessResourceKindFlag = accessExplainResourceAccessFlags.String("resource-kind", "REQUIRED", "")
+		accessExplainResourceAccessResourceIDFlag   = accessExplainResourceAccessFlags.String("resource-id", "REQUIRED", "")
+		accessExplainResourceAccessUserIDFlag       = accessExplainResourceAccessFlags.String("user-id", "REQUIRED", "")
+		accessExplainResourceAccessSessionTokenFlag = accessExplainResourceAccessFlags.String("session-token", "", "")
+
+		accessRequestAccessFlags            = flag.NewFlagSet("request-access", flag.ExitOnError)
+		accessRequestAccessBodyFlag         = accessRequestAccessFlags.String("body", "REQUIRED", "")
+		accessRequestAccessApikeyTokenFlag  = accessRequestAccessFlags.String("apikey-token", "", "")
+		accessRequestAccessSessionTokenFlag = accessRequestAccessFlags.String("session-token", "", "")
+
+		accessListChallengesFlags             = flag.NewFlagSet("list-challenges", flag.ExitOnError)
+		accessListChallengesOutcomeFlag       = accessListChallengesFlags.String("outcome", "", "")
+		accessListChallengesPrincipalUrnFlag  = accessListChallengesFlags.String("principal-urn", "", "")
+		accessListChallengesScopeFlag         = accessListChallengesFlags.String("scope", "", "")
+		accessListChallengesExcludeScopesFlag = accessListChallengesFlags.String("exclude-scopes", "", "")
+		accessListChallengesProjectIDFlag     = accessListChallengesFlags.String("project-id", "", "")
+		accessListChallengesResolvedFlag      = accessListChallengesFlags.String("resolved", "", "")
+		accessListChallengesIdsFlag           = accessListChallengesFlags.String("ids", "", "")
+		accessListChallengesFromFlag          = accessListChallengesFlags.String("from", "", "")
+		accessListChallengesToFlag            = accessListChallengesFlags.String("to", "", "")
+		accessListChallengesLimitFlag         = accessListChallengesFlags.String("limit", "50", "")
+		accessListChallengesOffsetFlag        = accessListChallengesFlags.String("offset", "", "")
+		accessListChallengesApikeyTokenFlag   = accessListChallengesFlags.String("apikey-token", "", "")
+		accessListChallengesSessionTokenFlag  = accessListChallengesFlags.String("session-token", "", "")
+
+		accessListChallengeBucketsFlags            = flag.NewFlagSet("list-challenge-buckets", flag.ExitOnError)
+		accessListChallengeBucketsOutcomeFlag      = accessListChallengeBucketsFlags.String("outcome", "", "")
+		accessListChallengeBucketsPrincipalUrnFlag = accessListChallengeBucketsFlags.String("principal-urn", "", "")
+		accessListChallengeBucketsScopeFlag        = accessListChallengeBucketsFlags.String("scope", "", "")
+		accessListChallengeBucketsProjectIDFlag    = accessListChallengeBucketsFlags.String("project-id", "", "")
+		accessListChallengeBucketsResolvedFlag     = accessListChallengeBucketsFlags.String("resolved", "", "")
+		accessListChallengeBucketsLimitFlag        = accessListChallengeBucketsFlags.String("limit", "50", "")
+		accessListChallengeBucketsOffsetFlag       = accessListChallengeBucketsFlags.String("offset", "", "")
+		accessListChallengeBucketsApikeyTokenFlag  = accessListChallengeBucketsFlags.String("apikey-token", "", "")
+		accessListChallengeBucketsSessionTokenFlag = accessListChallengeBucketsFlags.String("session-token", "", "")
+
+		accessResolveChallengeFlags            = flag.NewFlagSet("resolve-challenge", flag.ExitOnError)
+		accessResolveChallengeBodyFlag         = accessResolveChallengeFlags.String("body", "REQUIRED", "")
+		accessResolveChallengeApikeyTokenFlag  = accessResolveChallengeFlags.String("apikey-token", "", "")
+		accessResolveChallengeSessionTokenFlag = accessResolveChallengeFlags.String("session-token", "", "")
+
+		accessListIdentityAccessFlags            = flag.NewFlagSet("list-identity-access", flag.ExitOnError)
+		accessListIdentityAccessUserIDFlag       = accessListIdentityAccessFlags.String("user-id", "REQUIRED", "")
+		accessListIdentityAccessSessionTokenFlag = accessListIdentityAccessFlags.String("session-token", "", "")
+
+		accessCreateTemporaryGrantFlags            = flag.NewFlagSet("create-temporary-grant", flag.ExitOnError)
+		accessCreateTemporaryGrantBodyFlag         = accessCreateTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessCreateTemporaryGrantSessionTokenFlag = accessCreateTemporaryGrantFlags.String("session-token", "", "")
+
+		accessListTemporaryGrantsFlags              = flag.NewFlagSet("list-temporary-grants", flag.ExitOnError)
+		accessListTemporaryGrantsPrincipalUrnFlag   = accessListTemporaryGrantsFlags.String("principal-urn", "REQUIRED", "")
+		accessListTemporaryGrantsIncludeExpiredFlag = accessListTemporaryGrantsFlags.String("include-expired", "", "")
+		accessListTemporaryGrantsSessionTokenFlag   = accessListTemporaryGrantsFlags.String("session-token", "", "")
+
+		accessRenewTemporaryGrantFlags            = flag.NewFlagSet("renew-temporary-grant", flag.ExitOnError)
+		accessRenewTemporaryGrantBodyFlag         = accessRenewTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessRenewTemporaryGrantSessionTokenFlag = accessRenewTemporaryGrantFlags.String("session-token", "", "")
+
+		accessRevokeTemporaryGrantFlags            = flag.NewFlagSet("revoke-temporary-grant", flag.ExitOnError)
+		accessRevokeTemporaryGrantBodyFlag         = accessRevokeTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessRevokeTemporaryGrantSessionTokenFlag = accessRevokeTemporaryGrantFlags.String("session-token", "", "")
+
+		accessListAccessRequestsFlags            = flag.NewFlagSet("list-access-requests", flag.ExitOnError)
+		accessListAccessRequestsStatusFlag       = accessListAccessRequestsFlags.String("status", "", "")
+		accessListAccessRequestsMineFlag         = accessListAccessRequestsFlags.String("mine", "", "")
+		accessListAccessRequestsSessionTokenFlag = accessListAccessRequestsFlags.String("session-token", "", "")
+
+		accessDecideAccessRequestFlags            = flag.NewFlagSet("decide-access-request", flag.ExitOnError)
+		accessDecideAccessRequestBodyFlag         = accessDecideAccessRequestFlags.String("body", "REQUIRED", "")
+		accessDecideAccessRequestSessionTokenFlag = accessDecideAccessRequestFlags.String("session-token", "", "")
+
+		accessWithdrawAccessRequestFlags            = flag.NewFlagSet("withdraw-access-request", flag.ExitOnError)
+		accessWithdrawAccessRequestBodyFlag         = accessWithdrawAccessRequestFlags.String("body", "REQUIRED", "")
+		accessWithdrawAccessRequestSessionTokenFlag = accessWithdrawAccessRequestFlags.String("session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -5475,6 +5728,35 @@ func ParseEndpoint(
 		gatewaySessionsListGatewaySessionFacetsSessionTokenFlag = gatewaySessionsListGatewaySessionFacetsFlags.String("session-token", "", "")
 		gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag  = gatewaySessionsListGatewaySessionFacetsFlags.String("apikey-token", "", "")
 
+		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
+
+		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
+		variationsUpsertGlobalBodyFlag             = variationsUpsertGlobalFlags.String("body", "REQUIRED", "")
+		variationsUpsertGlobalSessionTokenFlag     = variationsUpsertGlobalFlags.String("session-token", "", "")
+		variationsUpsertGlobalApikeyTokenFlag      = variationsUpsertGlobalFlags.String("apikey-token", "", "")
+		variationsUpsertGlobalProjectSlugInputFlag = variationsUpsertGlobalFlags.String("project-slug-input", "", "")
+
+		variationsDeleteGlobalFlags                = flag.NewFlagSet("delete-global", flag.ExitOnError)
+		variationsDeleteGlobalVariationIDFlag      = variationsDeleteGlobalFlags.String("variation-id", "REQUIRED", "")
+		variationsDeleteGlobalSessionTokenFlag     = variationsDeleteGlobalFlags.String("session-token", "", "")
+		variationsDeleteGlobalApikeyTokenFlag      = variationsDeleteGlobalFlags.String("apikey-token", "", "")
+		variationsDeleteGlobalProjectSlugInputFlag = variationsDeleteGlobalFlags.String("project-slug-input", "", "")
+
+		variationsListGlobalFlags                = flag.NewFlagSet("list-global", flag.ExitOnError)
+		variationsListGlobalSessionTokenFlag     = variationsListGlobalFlags.String("session-token", "", "")
+		variationsListGlobalApikeyTokenFlag      = variationsListGlobalFlags.String("apikey-token", "", "")
+		variationsListGlobalProjectSlugInputFlag = variationsListGlobalFlags.String("project-slug-input", "", "")
+
+		variationsListGroupsFlags                = flag.NewFlagSet("list-groups", flag.ExitOnError)
+		variationsListGroupsSessionTokenFlag     = variationsListGroupsFlags.String("session-token", "", "")
+		variationsListGroupsApikeyTokenFlag      = variationsListGroupsFlags.String("apikey-token", "", "")
+		variationsListGroupsProjectSlugInputFlag = variationsListGroupsFlags.String("project-slug-input", "", "")
+
+		variationsCreateGlobalFlags                = flag.NewFlagSet("create-global", flag.ExitOnError)
+		variationsCreateGlobalSessionTokenFlag     = variationsCreateGlobalFlags.String("session-token", "", "")
+		variationsCreateGlobalApikeyTokenFlag      = variationsCreateGlobalFlags.String("apikey-token", "", "")
+		variationsCreateGlobalProjectSlugInputFlag = variationsCreateGlobalFlags.String("project-slug-input", "", "")
+
 		widgetsFlags = flag.NewFlagSet("widgets", flag.ContinueOnError)
 
 		widgetsListWidgetsFlags                = flag.NewFlagSet("list-widgets", flag.ExitOnError)
@@ -5572,288 +5854,6 @@ func ParseEndpoint(
 
 		workloadIdentitiesRegisterDeviceFlags    = flag.NewFlagSet("register-device", flag.ExitOnError)
 		workloadIdentitiesRegisterDeviceBodyFlag = workloadIdentitiesRegisterDeviceFlags.String("body", "REQUIRED", "")
-
-		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
-
-		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
-		variationsUpsertGlobalBodyFlag             = variationsUpsertGlobalFlags.String("body", "REQUIRED", "")
-		variationsUpsertGlobalSessionTokenFlag     = variationsUpsertGlobalFlags.String("session-token", "", "")
-		variationsUpsertGlobalApikeyTokenFlag      = variationsUpsertGlobalFlags.String("apikey-token", "", "")
-		variationsUpsertGlobalProjectSlugInputFlag = variationsUpsertGlobalFlags.String("project-slug-input", "", "")
-
-		variationsDeleteGlobalFlags                = flag.NewFlagSet("delete-global", flag.ExitOnError)
-		variationsDeleteGlobalVariationIDFlag      = variationsDeleteGlobalFlags.String("variation-id", "REQUIRED", "")
-		variationsDeleteGlobalSessionTokenFlag     = variationsDeleteGlobalFlags.String("session-token", "", "")
-		variationsDeleteGlobalApikeyTokenFlag      = variationsDeleteGlobalFlags.String("apikey-token", "", "")
-		variationsDeleteGlobalProjectSlugInputFlag = variationsDeleteGlobalFlags.String("project-slug-input", "", "")
-
-		variationsListGlobalFlags                = flag.NewFlagSet("list-global", flag.ExitOnError)
-		variationsListGlobalSessionTokenFlag     = variationsListGlobalFlags.String("session-token", "", "")
-		variationsListGlobalApikeyTokenFlag      = variationsListGlobalFlags.String("apikey-token", "", "")
-		variationsListGlobalProjectSlugInputFlag = variationsListGlobalFlags.String("project-slug-input", "", "")
-
-		variationsListGroupsFlags                = flag.NewFlagSet("list-groups", flag.ExitOnError)
-		variationsListGroupsSessionTokenFlag     = variationsListGroupsFlags.String("session-token", "", "")
-		variationsListGroupsApikeyTokenFlag      = variationsListGroupsFlags.String("apikey-token", "", "")
-		variationsListGroupsProjectSlugInputFlag = variationsListGroupsFlags.String("project-slug-input", "", "")
-
-		variationsCreateGlobalFlags                = flag.NewFlagSet("create-global", flag.ExitOnError)
-		variationsCreateGlobalSessionTokenFlag     = variationsCreateGlobalFlags.String("session-token", "", "")
-		variationsCreateGlobalApikeyTokenFlag      = variationsCreateGlobalFlags.String("apikey-token", "", "")
-		variationsCreateGlobalProjectSlugInputFlag = variationsCreateGlobalFlags.String("project-slug-input", "", "")
-
-		accessFlags = flag.NewFlagSet("access", flag.ContinueOnError)
-
-		accessListRolesFlags            = flag.NewFlagSet("list-roles", flag.ExitOnError)
-		accessListRolesApikeyTokenFlag  = accessListRolesFlags.String("apikey-token", "", "")
-		accessListRolesSessionTokenFlag = accessListRolesFlags.String("session-token", "", "")
-
-		accessGetRoleFlags            = flag.NewFlagSet("get-role", flag.ExitOnError)
-		accessGetRoleIDFlag           = accessGetRoleFlags.String("id", "REQUIRED", "")
-		accessGetRoleApikeyTokenFlag  = accessGetRoleFlags.String("apikey-token", "", "")
-		accessGetRoleSessionTokenFlag = accessGetRoleFlags.String("session-token", "", "")
-
-		accessCreateRoleFlags            = flag.NewFlagSet("create-role", flag.ExitOnError)
-		accessCreateRoleBodyFlag         = accessCreateRoleFlags.String("body", "REQUIRED", "")
-		accessCreateRoleApikeyTokenFlag  = accessCreateRoleFlags.String("apikey-token", "", "")
-		accessCreateRoleSessionTokenFlag = accessCreateRoleFlags.String("session-token", "", "")
-
-		accessUpdateRoleFlags            = flag.NewFlagSet("update-role", flag.ExitOnError)
-		accessUpdateRoleBodyFlag         = accessUpdateRoleFlags.String("body", "REQUIRED", "")
-		accessUpdateRoleApikeyTokenFlag  = accessUpdateRoleFlags.String("apikey-token", "", "")
-		accessUpdateRoleSessionTokenFlag = accessUpdateRoleFlags.String("session-token", "", "")
-
-		accessDeleteRoleFlags            = flag.NewFlagSet("delete-role", flag.ExitOnError)
-		accessDeleteRoleIDFlag           = accessDeleteRoleFlags.String("id", "REQUIRED", "")
-		accessDeleteRoleApikeyTokenFlag  = accessDeleteRoleFlags.String("apikey-token", "", "")
-		accessDeleteRoleSessionTokenFlag = accessDeleteRoleFlags.String("session-token", "", "")
-
-		accessListDirectoryRoleMappingsFlags            = flag.NewFlagSet("list-directory-role-mappings", flag.ExitOnError)
-		accessListDirectoryRoleMappingsApikeyTokenFlag  = accessListDirectoryRoleMappingsFlags.String("apikey-token", "", "")
-		accessListDirectoryRoleMappingsSessionTokenFlag = accessListDirectoryRoleMappingsFlags.String("session-token", "", "")
-
-		accessListDirectoryPeopleFlags            = flag.NewFlagSet("list-directory-people", flag.ExitOnError)
-		accessListDirectoryPeopleLimitFlag        = accessListDirectoryPeopleFlags.String("limit", "500", "")
-		accessListDirectoryPeopleCursorFlag       = accessListDirectoryPeopleFlags.String("cursor", "", "")
-		accessListDirectoryPeopleSessionTokenFlag = accessListDirectoryPeopleFlags.String("session-token", "", "")
-
-		accessSyncDirectoryGroupsFlags            = flag.NewFlagSet("sync-directory-groups", flag.ExitOnError)
-		accessSyncDirectoryGroupsApikeyTokenFlag  = accessSyncDirectoryGroupsFlags.String("apikey-token", "", "")
-		accessSyncDirectoryGroupsSessionTokenFlag = accessSyncDirectoryGroupsFlags.String("session-token", "", "")
-
-		accessSetDirectoryRoleMappingFlags            = flag.NewFlagSet("set-directory-role-mapping", flag.ExitOnError)
-		accessSetDirectoryRoleMappingBodyFlag         = accessSetDirectoryRoleMappingFlags.String("body", "REQUIRED", "")
-		accessSetDirectoryRoleMappingApikeyTokenFlag  = accessSetDirectoryRoleMappingFlags.String("apikey-token", "", "")
-		accessSetDirectoryRoleMappingSessionTokenFlag = accessSetDirectoryRoleMappingFlags.String("session-token", "", "")
-
-		accessSetDirectoryRoleMappingsFlags            = flag.NewFlagSet("set-directory-role-mappings", flag.ExitOnError)
-		accessSetDirectoryRoleMappingsBodyFlag         = accessSetDirectoryRoleMappingsFlags.String("body", "REQUIRED", "")
-		accessSetDirectoryRoleMappingsApikeyTokenFlag  = accessSetDirectoryRoleMappingsFlags.String("apikey-token", "", "")
-		accessSetDirectoryRoleMappingsSessionTokenFlag = accessSetDirectoryRoleMappingsFlags.String("session-token", "", "")
-
-		accessDeleteDirectoryRoleMappingFlags            = flag.NewFlagSet("delete-directory-role-mapping", flag.ExitOnError)
-		accessDeleteDirectoryRoleMappingIDFlag           = accessDeleteDirectoryRoleMappingFlags.String("id", "REQUIRED", "")
-		accessDeleteDirectoryRoleMappingApikeyTokenFlag  = accessDeleteDirectoryRoleMappingFlags.String("apikey-token", "", "")
-		accessDeleteDirectoryRoleMappingSessionTokenFlag = accessDeleteDirectoryRoleMappingFlags.String("session-token", "", "")
-
-		accessPreviewDirectoryRoleSetupFlags            = flag.NewFlagSet("preview-directory-role-setup", flag.ExitOnError)
-		accessPreviewDirectoryRoleSetupApikeyTokenFlag  = accessPreviewDirectoryRoleSetupFlags.String("apikey-token", "", "")
-		accessPreviewDirectoryRoleSetupSessionTokenFlag = accessPreviewDirectoryRoleSetupFlags.String("session-token", "", "")
-
-		accessApplyDirectoryRoleSetupFlags            = flag.NewFlagSet("apply-directory-role-setup", flag.ExitOnError)
-		accessApplyDirectoryRoleSetupBodyFlag         = accessApplyDirectoryRoleSetupFlags.String("body", "REQUIRED", "")
-		accessApplyDirectoryRoleSetupApikeyTokenFlag  = accessApplyDirectoryRoleSetupFlags.String("apikey-token", "", "")
-		accessApplyDirectoryRoleSetupSessionTokenFlag = accessApplyDirectoryRoleSetupFlags.String("session-token", "", "")
-
-		accessListDirectoryReviewItemsFlags            = flag.NewFlagSet("list-directory-review-items", flag.ExitOnError)
-		accessListDirectoryReviewItemsApikeyTokenFlag  = accessListDirectoryReviewItemsFlags.String("apikey-token", "", "")
-		accessListDirectoryReviewItemsSessionTokenFlag = accessListDirectoryReviewItemsFlags.String("session-token", "", "")
-
-		accessResolveDirectoryReviewItemFlags            = flag.NewFlagSet("resolve-directory-review-item", flag.ExitOnError)
-		accessResolveDirectoryReviewItemBodyFlag         = accessResolveDirectoryReviewItemFlags.String("body", "REQUIRED", "")
-		accessResolveDirectoryReviewItemApikeyTokenFlag  = accessResolveDirectoryReviewItemFlags.String("apikey-token", "", "")
-		accessResolveDirectoryReviewItemSessionTokenFlag = accessResolveDirectoryReviewItemFlags.String("session-token", "", "")
-
-		accessGetDirectoryReviewSettingsFlags            = flag.NewFlagSet("get-directory-review-settings", flag.ExitOnError)
-		accessGetDirectoryReviewSettingsApikeyTokenFlag  = accessGetDirectoryReviewSettingsFlags.String("apikey-token", "", "")
-		accessGetDirectoryReviewSettingsSessionTokenFlag = accessGetDirectoryReviewSettingsFlags.String("session-token", "", "")
-
-		accessUpdateDirectoryReviewSettingsFlags            = flag.NewFlagSet("update-directory-review-settings", flag.ExitOnError)
-		accessUpdateDirectoryReviewSettingsBodyFlag         = accessUpdateDirectoryReviewSettingsFlags.String("body", "REQUIRED", "")
-		accessUpdateDirectoryReviewSettingsApikeyTokenFlag  = accessUpdateDirectoryReviewSettingsFlags.String("apikey-token", "", "")
-		accessUpdateDirectoryReviewSettingsSessionTokenFlag = accessUpdateDirectoryReviewSettingsFlags.String("session-token", "", "")
-
-		accessListScopesFlags            = flag.NewFlagSet("list-scopes", flag.ExitOnError)
-		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
-		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
-
-		accessListAgentPolicyScopesFlags            = flag.NewFlagSet("list-agent-policy-scopes", flag.ExitOnError)
-		accessListAgentPolicyScopesSessionTokenFlag = accessListAgentPolicyScopesFlags.String("session-token", "", "")
-
-		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
-		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
-		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
-
-		accessListGrantsFlags            = flag.NewFlagSet("list-grants", flag.ExitOnError)
-		accessListGrantsApikeyTokenFlag  = accessListGrantsFlags.String("apikey-token", "", "")
-		accessListGrantsSessionTokenFlag = accessListGrantsFlags.String("session-token", "", "")
-
-		accessUpdateMemberRolesFlags            = flag.NewFlagSet("update-member-roles", flag.ExitOnError)
-		accessUpdateMemberRolesBodyFlag         = accessUpdateMemberRolesFlags.String("body", "REQUIRED", "")
-		accessUpdateMemberRolesApikeyTokenFlag  = accessUpdateMemberRolesFlags.String("apikey-token", "", "")
-		accessUpdateMemberRolesSessionTokenFlag = accessUpdateMemberRolesFlags.String("session-token", "", "")
-
-		accessListShadowMCPInventoryFlags            = flag.NewFlagSet("list-shadow-mcp-inventory", flag.ExitOnError)
-		accessListShadowMCPInventoryProjectIDFlag    = accessListShadowMCPInventoryFlags.String("project-id", "REQUIRED", "")
-		accessListShadowMCPInventoryLimitFlag        = accessListShadowMCPInventoryFlags.String("limit", "50", "")
-		accessListShadowMCPInventoryCursorFlag       = accessListShadowMCPInventoryFlags.String("cursor", "", "")
-		accessListShadowMCPInventorySessionTokenFlag = accessListShadowMCPInventoryFlags.String("session-token", "", "")
-
-		accessGetShadowMCPInventoryServerFlags            = flag.NewFlagSet("get-shadow-mcp-inventory-server", flag.ExitOnError)
-		accessGetShadowMCPInventoryServerProjectIDFlag    = accessGetShadowMCPInventoryServerFlags.String("project-id", "REQUIRED", "")
-		accessGetShadowMCPInventoryServerServerSlugFlag   = accessGetShadowMCPInventoryServerFlags.String("server-slug", "REQUIRED", "")
-		accessGetShadowMCPInventoryServerSessionTokenFlag = accessGetShadowMCPInventoryServerFlags.String("session-token", "", "")
-
-		accessFindShadowMCPInventoryServersFlags            = flag.NewFlagSet("find-shadow-mcp-inventory-servers", flag.ExitOnError)
-		accessFindShadowMCPInventoryServersProjectIDFlag    = accessFindShadowMCPInventoryServersFlags.String("project-id", "REQUIRED", "")
-		accessFindShadowMCPInventoryServersServerUrlsFlag   = accessFindShadowMCPInventoryServersFlags.String("server-urls", "REQUIRED", "")
-		accessFindShadowMCPInventoryServersSessionTokenFlag = accessFindShadowMCPInventoryServersFlags.String("session-token", "", "")
-
-		accessUpdateShadowMCPInventoryServerNameFlags            = flag.NewFlagSet("update-shadow-mcp-inventory-server-name", flag.ExitOnError)
-		accessUpdateShadowMCPInventoryServerNameBodyFlag         = accessUpdateShadowMCPInventoryServerNameFlags.String("body", "REQUIRED", "")
-		accessUpdateShadowMCPInventoryServerNameSessionTokenFlag = accessUpdateShadowMCPInventoryServerNameFlags.String("session-token", "", "")
-
-		accessSetShadowMCPOfficialServerFlags            = flag.NewFlagSet("set-shadow-mcp-official-server", flag.ExitOnError)
-		accessSetShadowMCPOfficialServerBodyFlag         = accessSetShadowMCPOfficialServerFlags.String("body", "REQUIRED", "")
-		accessSetShadowMCPOfficialServerSessionTokenFlag = accessSetShadowMCPOfficialServerFlags.String("session-token", "", "")
-
-		accessListShadowMCPInventoryUsersFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-users", flag.ExitOnError)
-		accessListShadowMCPInventoryUsersProjectIDFlag    = accessListShadowMCPInventoryUsersFlags.String("project-id", "REQUIRED", "")
-		accessListShadowMCPInventoryUsersServerURLFlag    = accessListShadowMCPInventoryUsersFlags.String("server-url", "REQUIRED", "")
-		accessListShadowMCPInventoryUsersLimitFlag        = accessListShadowMCPInventoryUsersFlags.String("limit", "50", "")
-		accessListShadowMCPInventoryUsersCursorFlag       = accessListShadowMCPInventoryUsersFlags.String("cursor", "", "")
-		accessListShadowMCPInventoryUsersSessionTokenFlag = accessListShadowMCPInventoryUsersFlags.String("session-token", "", "")
-
-		accessListShadowMCPInventoryServersForUserFlags            = flag.NewFlagSet("list-shadow-mcp-inventory-servers-for-user", flag.ExitOnError)
-		accessListShadowMCPInventoryServersForUserProjectIDFlag    = accessListShadowMCPInventoryServersForUserFlags.String("project-id", "REQUIRED", "")
-		accessListShadowMCPInventoryServersForUserUserKeysFlag     = accessListShadowMCPInventoryServersForUserFlags.String("user-keys", "REQUIRED", "")
-		accessListShadowMCPInventoryServersForUserFromFlag         = accessListShadowMCPInventoryServersForUserFlags.String("from", "", "")
-		accessListShadowMCPInventoryServersForUserToFlag           = accessListShadowMCPInventoryServersForUserFlags.String("to", "", "")
-		accessListShadowMCPInventoryServersForUserLimitFlag        = accessListShadowMCPInventoryServersForUserFlags.String("limit", "50", "")
-		accessListShadowMCPInventoryServersForUserSessionTokenFlag = accessListShadowMCPInventoryServersForUserFlags.String("session-token", "", "")
-
-		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
-		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
-		accessResolveShadowMCPInventoryRequestSessionTokenFlag = accessResolveShadowMCPInventoryRequestFlags.String("session-token", "", "")
-
-		accessListAIDetectionsFlags                = flag.NewFlagSet("list-ai-detections", flag.ExitOnError)
-		accessListAIDetectionsCategoryFlag         = accessListAIDetectionsFlags.String("category", "", "")
-		accessListAIDetectionsDirectoryGroupIDFlag = accessListAIDetectionsFlags.String("directory-group-id", "", "")
-		accessListAIDetectionsSessionTokenFlag     = accessListAIDetectionsFlags.String("session-token", "", "")
-
-		accessListEmployeeAIDetectionsFlags                = flag.NewFlagSet("list-employee-ai-detections", flag.ExitOnError)
-		accessListEmployeeAIDetectionsUserEmailFlag        = accessListEmployeeAIDetectionsFlags.String("user-email", "REQUIRED", "")
-		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
-		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
-
-		accessListAIDetectionUsersFlags            = flag.NewFlagSet("list-ai-detection-users", flag.ExitOnError)
-		accessListAIDetectionUsersTargetIDFlag     = accessListAIDetectionUsersFlags.String("target-id", "REQUIRED", "")
-		accessListAIDetectionUsersSessionTokenFlag = accessListAIDetectionUsersFlags.String("session-token", "", "")
-
-		accessSetAIToolDecisionFlags            = flag.NewFlagSet("set-ai-tool-decision", flag.ExitOnError)
-		accessSetAIToolDecisionBodyFlag         = accessSetAIToolDecisionFlags.String("body", "REQUIRED", "")
-		accessSetAIToolDecisionSessionTokenFlag = accessSetAIToolDecisionFlags.String("session-token", "", "")
-
-		accessListResourceAudienceFlags            = flag.NewFlagSet("list-resource-audience", flag.ExitOnError)
-		accessListResourceAudienceResourceKindFlag = accessListResourceAudienceFlags.String("resource-kind", "REQUIRED", "")
-		accessListResourceAudienceResourceIDFlag   = accessListResourceAudienceFlags.String("resource-id", "REQUIRED", "")
-		accessListResourceAudienceApikeyTokenFlag  = accessListResourceAudienceFlags.String("apikey-token", "", "")
-		accessListResourceAudienceSessionTokenFlag = accessListResourceAudienceFlags.String("session-token", "", "")
-
-		accessSetResourceAudienceFlags            = flag.NewFlagSet("set-resource-audience", flag.ExitOnError)
-		accessSetResourceAudienceBodyFlag         = accessSetResourceAudienceFlags.String("body", "REQUIRED", "")
-		accessSetResourceAudienceApikeyTokenFlag  = accessSetResourceAudienceFlags.String("apikey-token", "", "")
-		accessSetResourceAudienceSessionTokenFlag = accessSetResourceAudienceFlags.String("session-token", "", "")
-
-		accessListAudienceOptionsFlags            = flag.NewFlagSet("list-audience-options", flag.ExitOnError)
-		accessListAudienceOptionsApikeyTokenFlag  = accessListAudienceOptionsFlags.String("apikey-token", "", "")
-		accessListAudienceOptionsSessionTokenFlag = accessListAudienceOptionsFlags.String("session-token", "", "")
-
-		accessExplainResourceAccessFlags            = flag.NewFlagSet("explain-resource-access", flag.ExitOnError)
-		accessExplainResourceAccessResourceKindFlag = accessExplainResourceAccessFlags.String("resource-kind", "REQUIRED", "")
-		accessExplainResourceAccessResourceIDFlag   = accessExplainResourceAccessFlags.String("resource-id", "REQUIRED", "")
-		accessExplainResourceAccessUserIDFlag       = accessExplainResourceAccessFlags.String("user-id", "REQUIRED", "")
-		accessExplainResourceAccessSessionTokenFlag = accessExplainResourceAccessFlags.String("session-token", "", "")
-
-		accessRequestAccessFlags            = flag.NewFlagSet("request-access", flag.ExitOnError)
-		accessRequestAccessBodyFlag         = accessRequestAccessFlags.String("body", "REQUIRED", "")
-		accessRequestAccessApikeyTokenFlag  = accessRequestAccessFlags.String("apikey-token", "", "")
-		accessRequestAccessSessionTokenFlag = accessRequestAccessFlags.String("session-token", "", "")
-
-		accessListChallengesFlags             = flag.NewFlagSet("list-challenges", flag.ExitOnError)
-		accessListChallengesOutcomeFlag       = accessListChallengesFlags.String("outcome", "", "")
-		accessListChallengesPrincipalUrnFlag  = accessListChallengesFlags.String("principal-urn", "", "")
-		accessListChallengesScopeFlag         = accessListChallengesFlags.String("scope", "", "")
-		accessListChallengesExcludeScopesFlag = accessListChallengesFlags.String("exclude-scopes", "", "")
-		accessListChallengesProjectIDFlag     = accessListChallengesFlags.String("project-id", "", "")
-		accessListChallengesResolvedFlag      = accessListChallengesFlags.String("resolved", "", "")
-		accessListChallengesIdsFlag           = accessListChallengesFlags.String("ids", "", "")
-		accessListChallengesFromFlag          = accessListChallengesFlags.String("from", "", "")
-		accessListChallengesToFlag            = accessListChallengesFlags.String("to", "", "")
-		accessListChallengesLimitFlag         = accessListChallengesFlags.String("limit", "50", "")
-		accessListChallengesOffsetFlag        = accessListChallengesFlags.String("offset", "", "")
-		accessListChallengesApikeyTokenFlag   = accessListChallengesFlags.String("apikey-token", "", "")
-		accessListChallengesSessionTokenFlag  = accessListChallengesFlags.String("session-token", "", "")
-
-		accessListChallengeBucketsFlags            = flag.NewFlagSet("list-challenge-buckets", flag.ExitOnError)
-		accessListChallengeBucketsOutcomeFlag      = accessListChallengeBucketsFlags.String("outcome", "", "")
-		accessListChallengeBucketsPrincipalUrnFlag = accessListChallengeBucketsFlags.String("principal-urn", "", "")
-		accessListChallengeBucketsScopeFlag        = accessListChallengeBucketsFlags.String("scope", "", "")
-		accessListChallengeBucketsProjectIDFlag    = accessListChallengeBucketsFlags.String("project-id", "", "")
-		accessListChallengeBucketsResolvedFlag     = accessListChallengeBucketsFlags.String("resolved", "", "")
-		accessListChallengeBucketsLimitFlag        = accessListChallengeBucketsFlags.String("limit", "50", "")
-		accessListChallengeBucketsOffsetFlag       = accessListChallengeBucketsFlags.String("offset", "", "")
-		accessListChallengeBucketsApikeyTokenFlag  = accessListChallengeBucketsFlags.String("apikey-token", "", "")
-		accessListChallengeBucketsSessionTokenFlag = accessListChallengeBucketsFlags.String("session-token", "", "")
-
-		accessResolveChallengeFlags            = flag.NewFlagSet("resolve-challenge", flag.ExitOnError)
-		accessResolveChallengeBodyFlag         = accessResolveChallengeFlags.String("body", "REQUIRED", "")
-		accessResolveChallengeApikeyTokenFlag  = accessResolveChallengeFlags.String("apikey-token", "", "")
-		accessResolveChallengeSessionTokenFlag = accessResolveChallengeFlags.String("session-token", "", "")
-
-		accessListIdentityAccessFlags            = flag.NewFlagSet("list-identity-access", flag.ExitOnError)
-		accessListIdentityAccessUserIDFlag       = accessListIdentityAccessFlags.String("user-id", "REQUIRED", "")
-		accessListIdentityAccessSessionTokenFlag = accessListIdentityAccessFlags.String("session-token", "", "")
-
-		accessCreateTemporaryGrantFlags            = flag.NewFlagSet("create-temporary-grant", flag.ExitOnError)
-		accessCreateTemporaryGrantBodyFlag         = accessCreateTemporaryGrantFlags.String("body", "REQUIRED", "")
-		accessCreateTemporaryGrantSessionTokenFlag = accessCreateTemporaryGrantFlags.String("session-token", "", "")
-
-		accessListTemporaryGrantsFlags              = flag.NewFlagSet("list-temporary-grants", flag.ExitOnError)
-		accessListTemporaryGrantsPrincipalUrnFlag   = accessListTemporaryGrantsFlags.String("principal-urn", "REQUIRED", "")
-		accessListTemporaryGrantsIncludeExpiredFlag = accessListTemporaryGrantsFlags.String("include-expired", "", "")
-		accessListTemporaryGrantsSessionTokenFlag   = accessListTemporaryGrantsFlags.String("session-token", "", "")
-
-		accessRenewTemporaryGrantFlags            = flag.NewFlagSet("renew-temporary-grant", flag.ExitOnError)
-		accessRenewTemporaryGrantBodyFlag         = accessRenewTemporaryGrantFlags.String("body", "REQUIRED", "")
-		accessRenewTemporaryGrantSessionTokenFlag = accessRenewTemporaryGrantFlags.String("session-token", "", "")
-
-		accessRevokeTemporaryGrantFlags            = flag.NewFlagSet("revoke-temporary-grant", flag.ExitOnError)
-		accessRevokeTemporaryGrantBodyFlag         = accessRevokeTemporaryGrantFlags.String("body", "REQUIRED", "")
-		accessRevokeTemporaryGrantSessionTokenFlag = accessRevokeTemporaryGrantFlags.String("session-token", "", "")
-
-		accessListAccessRequestsFlags            = flag.NewFlagSet("list-access-requests", flag.ExitOnError)
-		accessListAccessRequestsStatusFlag       = accessListAccessRequestsFlags.String("status", "", "")
-		accessListAccessRequestsMineFlag         = accessListAccessRequestsFlags.String("mine", "", "")
-		accessListAccessRequestsSessionTokenFlag = accessListAccessRequestsFlags.String("session-token", "", "")
-
-		accessDecideAccessRequestFlags            = flag.NewFlagSet("decide-access-request", flag.ExitOnError)
-		accessDecideAccessRequestBodyFlag         = accessDecideAccessRequestFlags.String("body", "REQUIRED", "")
-		accessDecideAccessRequestSessionTokenFlag = accessDecideAccessRequestFlags.String("session-token", "", "")
-
-		accessWithdrawAccessRequestFlags            = flag.NewFlagSet("withdraw-access-request", flag.ExitOnError)
-		accessWithdrawAccessRequestBodyFlag         = accessWithdrawAccessRequestFlags.String("body", "REQUIRED", "")
-		accessWithdrawAccessRequestSessionTokenFlag = accessWithdrawAccessRequestFlags.String("session-token", "", "")
 	)
 	externalFlags.Usage = externalUsage
 	externalReceiveWorkOSWebhookFlags.Usage = externalReceiveWorkOSWebhookUsage
@@ -5871,6 +5871,58 @@ func ParseEndpoint(
 
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
+
+	accessFlags.Usage = accessUsage
+	accessListRolesFlags.Usage = accessListRolesUsage
+	accessGetRoleFlags.Usage = accessGetRoleUsage
+	accessCreateRoleFlags.Usage = accessCreateRoleUsage
+	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
+	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
+	accessListDirectoryRoleMappingsFlags.Usage = accessListDirectoryRoleMappingsUsage
+	accessListDirectoryPeopleFlags.Usage = accessListDirectoryPeopleUsage
+	accessSyncDirectoryGroupsFlags.Usage = accessSyncDirectoryGroupsUsage
+	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
+	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
+	accessDeleteDirectoryRoleMappingFlags.Usage = accessDeleteDirectoryRoleMappingUsage
+	accessPreviewDirectoryRoleSetupFlags.Usage = accessPreviewDirectoryRoleSetupUsage
+	accessApplyDirectoryRoleSetupFlags.Usage = accessApplyDirectoryRoleSetupUsage
+	accessListDirectoryReviewItemsFlags.Usage = accessListDirectoryReviewItemsUsage
+	accessResolveDirectoryReviewItemFlags.Usage = accessResolveDirectoryReviewItemUsage
+	accessGetDirectoryReviewSettingsFlags.Usage = accessGetDirectoryReviewSettingsUsage
+	accessUpdateDirectoryReviewSettingsFlags.Usage = accessUpdateDirectoryReviewSettingsUsage
+	accessListScopesFlags.Usage = accessListScopesUsage
+	accessListAgentPolicyScopesFlags.Usage = accessListAgentPolicyScopesUsage
+	accessListMembersFlags.Usage = accessListMembersUsage
+	accessListGrantsFlags.Usage = accessListGrantsUsage
+	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
+	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
+	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
+	accessFindShadowMCPInventoryServersFlags.Usage = accessFindShadowMCPInventoryServersUsage
+	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
+	accessSetShadowMCPOfficialServerFlags.Usage = accessSetShadowMCPOfficialServerUsage
+	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
+	accessListShadowMCPInventoryServersForUserFlags.Usage = accessListShadowMCPInventoryServersForUserUsage
+	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
+	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
+	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
+	accessListAIDetectionUsersFlags.Usage = accessListAIDetectionUsersUsage
+	accessSetAIToolDecisionFlags.Usage = accessSetAIToolDecisionUsage
+	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
+	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
+	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
+	accessExplainResourceAccessFlags.Usage = accessExplainResourceAccessUsage
+	accessRequestAccessFlags.Usage = accessRequestAccessUsage
+	accessListChallengesFlags.Usage = accessListChallengesUsage
+	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
+	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
+	accessListIdentityAccessFlags.Usage = accessListIdentityAccessUsage
+	accessCreateTemporaryGrantFlags.Usage = accessCreateTemporaryGrantUsage
+	accessListTemporaryGrantsFlags.Usage = accessListTemporaryGrantsUsage
+	accessRenewTemporaryGrantFlags.Usage = accessRenewTemporaryGrantUsage
+	accessRevokeTemporaryGrantFlags.Usage = accessRevokeTemporaryGrantUsage
+	accessListAccessRequestsFlags.Usage = accessListAccessRequestsUsage
+	accessDecideAccessRequestFlags.Usage = accessDecideAccessRequestUsage
+	accessWithdrawAccessRequestFlags.Usage = accessWithdrawAccessRequestUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -7012,6 +7064,13 @@ func ParseEndpoint(
 	gatewaySessionsListGatewaySessionsFlags.Usage = gatewaySessionsListGatewaySessionsUsage
 	gatewaySessionsListGatewaySessionFacetsFlags.Usage = gatewaySessionsListGatewaySessionFacetsUsage
 
+	variationsFlags.Usage = variationsUsage
+	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
+	variationsDeleteGlobalFlags.Usage = variationsDeleteGlobalUsage
+	variationsListGlobalFlags.Usage = variationsListGlobalUsage
+	variationsListGroupsFlags.Usage = variationsListGroupsUsage
+	variationsCreateGlobalFlags.Usage = variationsCreateGlobalUsage
+
 	widgetsFlags.Usage = widgetsUsage
 	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
 	widgetsGetWidgetFlags.Usage = widgetsGetWidgetUsage
@@ -7034,65 +7093,6 @@ func ParseEndpoint(
 	workloadIdentitiesCreateDeviceJoinTokenFlags.Usage = workloadIdentitiesCreateDeviceJoinTokenUsage
 	workloadIdentitiesRegisterDeviceFlags.Usage = workloadIdentitiesRegisterDeviceUsage
 
-	variationsFlags.Usage = variationsUsage
-	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
-	variationsDeleteGlobalFlags.Usage = variationsDeleteGlobalUsage
-	variationsListGlobalFlags.Usage = variationsListGlobalUsage
-	variationsListGroupsFlags.Usage = variationsListGroupsUsage
-	variationsCreateGlobalFlags.Usage = variationsCreateGlobalUsage
-
-	accessFlags.Usage = accessUsage
-	accessListRolesFlags.Usage = accessListRolesUsage
-	accessGetRoleFlags.Usage = accessGetRoleUsage
-	accessCreateRoleFlags.Usage = accessCreateRoleUsage
-	accessUpdateRoleFlags.Usage = accessUpdateRoleUsage
-	accessDeleteRoleFlags.Usage = accessDeleteRoleUsage
-	accessListDirectoryRoleMappingsFlags.Usage = accessListDirectoryRoleMappingsUsage
-	accessListDirectoryPeopleFlags.Usage = accessListDirectoryPeopleUsage
-	accessSyncDirectoryGroupsFlags.Usage = accessSyncDirectoryGroupsUsage
-	accessSetDirectoryRoleMappingFlags.Usage = accessSetDirectoryRoleMappingUsage
-	accessSetDirectoryRoleMappingsFlags.Usage = accessSetDirectoryRoleMappingsUsage
-	accessDeleteDirectoryRoleMappingFlags.Usage = accessDeleteDirectoryRoleMappingUsage
-	accessPreviewDirectoryRoleSetupFlags.Usage = accessPreviewDirectoryRoleSetupUsage
-	accessApplyDirectoryRoleSetupFlags.Usage = accessApplyDirectoryRoleSetupUsage
-	accessListDirectoryReviewItemsFlags.Usage = accessListDirectoryReviewItemsUsage
-	accessResolveDirectoryReviewItemFlags.Usage = accessResolveDirectoryReviewItemUsage
-	accessGetDirectoryReviewSettingsFlags.Usage = accessGetDirectoryReviewSettingsUsage
-	accessUpdateDirectoryReviewSettingsFlags.Usage = accessUpdateDirectoryReviewSettingsUsage
-	accessListScopesFlags.Usage = accessListScopesUsage
-	accessListAgentPolicyScopesFlags.Usage = accessListAgentPolicyScopesUsage
-	accessListMembersFlags.Usage = accessListMembersUsage
-	accessListGrantsFlags.Usage = accessListGrantsUsage
-	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
-	accessListShadowMCPInventoryFlags.Usage = accessListShadowMCPInventoryUsage
-	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
-	accessFindShadowMCPInventoryServersFlags.Usage = accessFindShadowMCPInventoryServersUsage
-	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
-	accessSetShadowMCPOfficialServerFlags.Usage = accessSetShadowMCPOfficialServerUsage
-	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
-	accessListShadowMCPInventoryServersForUserFlags.Usage = accessListShadowMCPInventoryServersForUserUsage
-	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
-	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
-	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
-	accessListAIDetectionUsersFlags.Usage = accessListAIDetectionUsersUsage
-	accessSetAIToolDecisionFlags.Usage = accessSetAIToolDecisionUsage
-	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
-	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
-	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
-	accessExplainResourceAccessFlags.Usage = accessExplainResourceAccessUsage
-	accessRequestAccessFlags.Usage = accessRequestAccessUsage
-	accessListChallengesFlags.Usage = accessListChallengesUsage
-	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
-	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
-	accessListIdentityAccessFlags.Usage = accessListIdentityAccessUsage
-	accessCreateTemporaryGrantFlags.Usage = accessCreateTemporaryGrantUsage
-	accessListTemporaryGrantsFlags.Usage = accessListTemporaryGrantsUsage
-	accessRenewTemporaryGrantFlags.Usage = accessRenewTemporaryGrantUsage
-	accessRevokeTemporaryGrantFlags.Usage = accessRevokeTemporaryGrantUsage
-	accessListAccessRequestsFlags.Usage = accessListAccessRequestsUsage
-	accessDecideAccessRequestFlags.Usage = accessDecideAccessRequestUsage
-	accessWithdrawAccessRequestFlags.Usage = accessWithdrawAccessRequestUsage
-
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
 	}
@@ -7114,6 +7114,8 @@ func ParseEndpoint(
 			svcf = killswitchesFlags
 		case "about":
 			svcf = aboutFlags
+		case "access":
+			svcf = accessFlags
 		case "agent":
 			svcf = agentFlags
 		case "agents":
@@ -7300,14 +7302,12 @@ func ParseEndpoint(
 			svcf = userSessionsFlags
 		case "gateway-sessions":
 			svcf = gatewaySessionsFlags
+		case "variations":
+			svcf = variationsFlags
 		case "widgets":
 			svcf = widgetsFlags
 		case "workload-identities":
 			svcf = workloadIdentitiesFlags
-		case "variations":
-			svcf = variationsFlags
-		case "access":
-			svcf = accessFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -7365,6 +7365,160 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				epf = aboutOpenapiFlags
+
+			}
+
+		case "access":
+			switch epn {
+			case "list-roles":
+				epf = accessListRolesFlags
+
+			case "get-role":
+				epf = accessGetRoleFlags
+
+			case "create-role":
+				epf = accessCreateRoleFlags
+
+			case "update-role":
+				epf = accessUpdateRoleFlags
+
+			case "delete-role":
+				epf = accessDeleteRoleFlags
+
+			case "list-directory-role-mappings":
+				epf = accessListDirectoryRoleMappingsFlags
+
+			case "list-directory-people":
+				epf = accessListDirectoryPeopleFlags
+
+			case "sync-directory-groups":
+				epf = accessSyncDirectoryGroupsFlags
+
+			case "set-directory-role-mapping":
+				epf = accessSetDirectoryRoleMappingFlags
+
+			case "set-directory-role-mappings":
+				epf = accessSetDirectoryRoleMappingsFlags
+
+			case "delete-directory-role-mapping":
+				epf = accessDeleteDirectoryRoleMappingFlags
+
+			case "preview-directory-role-setup":
+				epf = accessPreviewDirectoryRoleSetupFlags
+
+			case "apply-directory-role-setup":
+				epf = accessApplyDirectoryRoleSetupFlags
+
+			case "list-directory-review-items":
+				epf = accessListDirectoryReviewItemsFlags
+
+			case "resolve-directory-review-item":
+				epf = accessResolveDirectoryReviewItemFlags
+
+			case "get-directory-review-settings":
+				epf = accessGetDirectoryReviewSettingsFlags
+
+			case "update-directory-review-settings":
+				epf = accessUpdateDirectoryReviewSettingsFlags
+
+			case "list-scopes":
+				epf = accessListScopesFlags
+
+			case "list-agent-policy-scopes":
+				epf = accessListAgentPolicyScopesFlags
+
+			case "list-members":
+				epf = accessListMembersFlags
+
+			case "list-grants":
+				epf = accessListGrantsFlags
+
+			case "update-member-roles":
+				epf = accessUpdateMemberRolesFlags
+
+			case "list-shadow-mcp-inventory":
+				epf = accessListShadowMCPInventoryFlags
+
+			case "get-shadow-mcp-inventory-server":
+				epf = accessGetShadowMCPInventoryServerFlags
+
+			case "find-shadow-mcp-inventory-servers":
+				epf = accessFindShadowMCPInventoryServersFlags
+
+			case "update-shadow-mcp-inventory-server-name":
+				epf = accessUpdateShadowMCPInventoryServerNameFlags
+
+			case "set-shadow-mcp-official-server":
+				epf = accessSetShadowMCPOfficialServerFlags
+
+			case "list-shadow-mcp-inventory-users":
+				epf = accessListShadowMCPInventoryUsersFlags
+
+			case "list-shadow-mcp-inventory-servers-for-user":
+				epf = accessListShadowMCPInventoryServersForUserFlags
+
+			case "resolve-shadow-mcp-inventory-request":
+				epf = accessResolveShadowMCPInventoryRequestFlags
+
+			case "list-ai-detections":
+				epf = accessListAIDetectionsFlags
+
+			case "list-employee-ai-detections":
+				epf = accessListEmployeeAIDetectionsFlags
+
+			case "list-ai-detection-users":
+				epf = accessListAIDetectionUsersFlags
+
+			case "set-ai-tool-decision":
+				epf = accessSetAIToolDecisionFlags
+
+			case "list-resource-audience":
+				epf = accessListResourceAudienceFlags
+
+			case "set-resource-audience":
+				epf = accessSetResourceAudienceFlags
+
+			case "list-audience-options":
+				epf = accessListAudienceOptionsFlags
+
+			case "explain-resource-access":
+				epf = accessExplainResourceAccessFlags
+
+			case "request-access":
+				epf = accessRequestAccessFlags
+
+			case "list-challenges":
+				epf = accessListChallengesFlags
+
+			case "list-challenge-buckets":
+				epf = accessListChallengeBucketsFlags
+
+			case "resolve-challenge":
+				epf = accessResolveChallengeFlags
+
+			case "list-identity-access":
+				epf = accessListIdentityAccessFlags
+
+			case "create-temporary-grant":
+				epf = accessCreateTemporaryGrantFlags
+
+			case "list-temporary-grants":
+				epf = accessListTemporaryGrantsFlags
+
+			case "renew-temporary-grant":
+				epf = accessRenewTemporaryGrantFlags
+
+			case "revoke-temporary-grant":
+				epf = accessRevokeTemporaryGrantFlags
+
+			case "list-access-requests":
+				epf = accessListAccessRequestsFlags
+
+			case "decide-access-request":
+				epf = accessDecideAccessRequestFlags
+
+			case "withdraw-access-request":
+				epf = accessWithdrawAccessRequestFlags
 
 			}
 
@@ -10602,6 +10756,25 @@ func ParseEndpoint(
 
 			}
 
+		case "variations":
+			switch epn {
+			case "upsert-global":
+				epf = variationsUpsertGlobalFlags
+
+			case "delete-global":
+				epf = variationsDeleteGlobalFlags
+
+			case "list-global":
+				epf = variationsListGlobalFlags
+
+			case "list-groups":
+				epf = variationsListGroupsFlags
+
+			case "create-global":
+				epf = variationsCreateGlobalFlags
+
+			}
+
 		case "widgets":
 			switch epn {
 			case "list-widgets":
@@ -10661,179 +10834,6 @@ func ParseEndpoint(
 
 			case "register-device":
 				epf = workloadIdentitiesRegisterDeviceFlags
-
-			}
-
-		case "variations":
-			switch epn {
-			case "upsert-global":
-				epf = variationsUpsertGlobalFlags
-
-			case "delete-global":
-				epf = variationsDeleteGlobalFlags
-
-			case "list-global":
-				epf = variationsListGlobalFlags
-
-			case "list-groups":
-				epf = variationsListGroupsFlags
-
-			case "create-global":
-				epf = variationsCreateGlobalFlags
-
-			}
-
-		case "access":
-			switch epn {
-			case "list-roles":
-				epf = accessListRolesFlags
-
-			case "get-role":
-				epf = accessGetRoleFlags
-
-			case "create-role":
-				epf = accessCreateRoleFlags
-
-			case "update-role":
-				epf = accessUpdateRoleFlags
-
-			case "delete-role":
-				epf = accessDeleteRoleFlags
-
-			case "list-directory-role-mappings":
-				epf = accessListDirectoryRoleMappingsFlags
-
-			case "list-directory-people":
-				epf = accessListDirectoryPeopleFlags
-
-			case "sync-directory-groups":
-				epf = accessSyncDirectoryGroupsFlags
-
-			case "set-directory-role-mapping":
-				epf = accessSetDirectoryRoleMappingFlags
-
-			case "set-directory-role-mappings":
-				epf = accessSetDirectoryRoleMappingsFlags
-
-			case "delete-directory-role-mapping":
-				epf = accessDeleteDirectoryRoleMappingFlags
-
-			case "preview-directory-role-setup":
-				epf = accessPreviewDirectoryRoleSetupFlags
-
-			case "apply-directory-role-setup":
-				epf = accessApplyDirectoryRoleSetupFlags
-
-			case "list-directory-review-items":
-				epf = accessListDirectoryReviewItemsFlags
-
-			case "resolve-directory-review-item":
-				epf = accessResolveDirectoryReviewItemFlags
-
-			case "get-directory-review-settings":
-				epf = accessGetDirectoryReviewSettingsFlags
-
-			case "update-directory-review-settings":
-				epf = accessUpdateDirectoryReviewSettingsFlags
-
-			case "list-scopes":
-				epf = accessListScopesFlags
-
-			case "list-agent-policy-scopes":
-				epf = accessListAgentPolicyScopesFlags
-
-			case "list-members":
-				epf = accessListMembersFlags
-
-			case "list-grants":
-				epf = accessListGrantsFlags
-
-			case "update-member-roles":
-				epf = accessUpdateMemberRolesFlags
-
-			case "list-shadow-mcp-inventory":
-				epf = accessListShadowMCPInventoryFlags
-
-			case "get-shadow-mcp-inventory-server":
-				epf = accessGetShadowMCPInventoryServerFlags
-
-			case "find-shadow-mcp-inventory-servers":
-				epf = accessFindShadowMCPInventoryServersFlags
-
-			case "update-shadow-mcp-inventory-server-name":
-				epf = accessUpdateShadowMCPInventoryServerNameFlags
-
-			case "set-shadow-mcp-official-server":
-				epf = accessSetShadowMCPOfficialServerFlags
-
-			case "list-shadow-mcp-inventory-users":
-				epf = accessListShadowMCPInventoryUsersFlags
-
-			case "list-shadow-mcp-inventory-servers-for-user":
-				epf = accessListShadowMCPInventoryServersForUserFlags
-
-			case "resolve-shadow-mcp-inventory-request":
-				epf = accessResolveShadowMCPInventoryRequestFlags
-
-			case "list-ai-detections":
-				epf = accessListAIDetectionsFlags
-
-			case "list-employee-ai-detections":
-				epf = accessListEmployeeAIDetectionsFlags
-
-			case "list-ai-detection-users":
-				epf = accessListAIDetectionUsersFlags
-
-			case "set-ai-tool-decision":
-				epf = accessSetAIToolDecisionFlags
-
-			case "list-resource-audience":
-				epf = accessListResourceAudienceFlags
-
-			case "set-resource-audience":
-				epf = accessSetResourceAudienceFlags
-
-			case "list-audience-options":
-				epf = accessListAudienceOptionsFlags
-
-			case "explain-resource-access":
-				epf = accessExplainResourceAccessFlags
-
-			case "request-access":
-				epf = accessRequestAccessFlags
-
-			case "list-challenges":
-				epf = accessListChallengesFlags
-
-			case "list-challenge-buckets":
-				epf = accessListChallengeBucketsFlags
-
-			case "resolve-challenge":
-				epf = accessResolveChallengeFlags
-
-			case "list-identity-access":
-				epf = accessListIdentityAccessFlags
-
-			case "create-temporary-grant":
-				epf = accessCreateTemporaryGrantFlags
-
-			case "list-temporary-grants":
-				epf = accessListTemporaryGrantsFlags
-
-			case "renew-temporary-grant":
-				epf = accessRenewTemporaryGrantFlags
-
-			case "revoke-temporary-grant":
-				epf = accessRevokeTemporaryGrantFlags
-
-			case "list-access-requests":
-				epf = accessListAccessRequestsFlags
-
-			case "decide-access-request":
-				epf = accessDecideAccessRequestFlags
-
-			case "withdraw-access-request":
-				epf = accessWithdrawAccessRequestFlags
 
 			}
 
@@ -10903,6 +10903,160 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				endpoint = c.Openapi()
+			}
+		case "access":
+			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-roles":
+				endpoint = c.ListRoles()
+				data, err = accessc.BuildListRolesPayload(*accessListRolesApikeyTokenFlag, *accessListRolesSessionTokenFlag)
+			case "get-role":
+				endpoint = c.GetRole()
+				data, err = accessc.BuildGetRolePayload(*accessGetRoleIDFlag, *accessGetRoleApikeyTokenFlag, *accessGetRoleSessionTokenFlag)
+			case "create-role":
+				endpoint = c.CreateRole()
+				data, err = accessc.BuildCreateRolePayload(*accessCreateRoleBodyFlag, *accessCreateRoleApikeyTokenFlag, *accessCreateRoleSessionTokenFlag)
+			case "update-role":
+				endpoint = c.UpdateRole()
+				data, err = accessc.BuildUpdateRolePayload(*accessUpdateRoleBodyFlag, *accessUpdateRoleApikeyTokenFlag, *accessUpdateRoleSessionTokenFlag)
+			case "delete-role":
+				endpoint = c.DeleteRole()
+				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleApikeyTokenFlag, *accessDeleteRoleSessionTokenFlag)
+			case "list-directory-role-mappings":
+				endpoint = c.ListDirectoryRoleMappings()
+				data, err = accessc.BuildListDirectoryRoleMappingsPayload(*accessListDirectoryRoleMappingsApikeyTokenFlag, *accessListDirectoryRoleMappingsSessionTokenFlag)
+			case "list-directory-people":
+				endpoint = c.ListDirectoryPeople()
+				data, err = accessc.BuildListDirectoryPeoplePayload(*accessListDirectoryPeopleLimitFlag, *accessListDirectoryPeopleCursorFlag, *accessListDirectoryPeopleSessionTokenFlag)
+			case "sync-directory-groups":
+				endpoint = c.SyncDirectoryGroups()
+				data, err = accessc.BuildSyncDirectoryGroupsPayload(*accessSyncDirectoryGroupsApikeyTokenFlag, *accessSyncDirectoryGroupsSessionTokenFlag)
+			case "set-directory-role-mapping":
+				endpoint = c.SetDirectoryRoleMapping()
+				data, err = accessc.BuildSetDirectoryRoleMappingPayload(*accessSetDirectoryRoleMappingBodyFlag, *accessSetDirectoryRoleMappingApikeyTokenFlag, *accessSetDirectoryRoleMappingSessionTokenFlag)
+			case "set-directory-role-mappings":
+				endpoint = c.SetDirectoryRoleMappings()
+				data, err = accessc.BuildSetDirectoryRoleMappingsPayload(*accessSetDirectoryRoleMappingsBodyFlag, *accessSetDirectoryRoleMappingsApikeyTokenFlag, *accessSetDirectoryRoleMappingsSessionTokenFlag)
+			case "delete-directory-role-mapping":
+				endpoint = c.DeleteDirectoryRoleMapping()
+				data, err = accessc.BuildDeleteDirectoryRoleMappingPayload(*accessDeleteDirectoryRoleMappingIDFlag, *accessDeleteDirectoryRoleMappingApikeyTokenFlag, *accessDeleteDirectoryRoleMappingSessionTokenFlag)
+			case "preview-directory-role-setup":
+				endpoint = c.PreviewDirectoryRoleSetup()
+				data, err = accessc.BuildPreviewDirectoryRoleSetupPayload(*accessPreviewDirectoryRoleSetupApikeyTokenFlag, *accessPreviewDirectoryRoleSetupSessionTokenFlag)
+			case "apply-directory-role-setup":
+				endpoint = c.ApplyDirectoryRoleSetup()
+				data, err = accessc.BuildApplyDirectoryRoleSetupPayload(*accessApplyDirectoryRoleSetupBodyFlag, *accessApplyDirectoryRoleSetupApikeyTokenFlag, *accessApplyDirectoryRoleSetupSessionTokenFlag)
+			case "list-directory-review-items":
+				endpoint = c.ListDirectoryReviewItems()
+				data, err = accessc.BuildListDirectoryReviewItemsPayload(*accessListDirectoryReviewItemsApikeyTokenFlag, *accessListDirectoryReviewItemsSessionTokenFlag)
+			case "resolve-directory-review-item":
+				endpoint = c.ResolveDirectoryReviewItem()
+				data, err = accessc.BuildResolveDirectoryReviewItemPayload(*accessResolveDirectoryReviewItemBodyFlag, *accessResolveDirectoryReviewItemApikeyTokenFlag, *accessResolveDirectoryReviewItemSessionTokenFlag)
+			case "get-directory-review-settings":
+				endpoint = c.GetDirectoryReviewSettings()
+				data, err = accessc.BuildGetDirectoryReviewSettingsPayload(*accessGetDirectoryReviewSettingsApikeyTokenFlag, *accessGetDirectoryReviewSettingsSessionTokenFlag)
+			case "update-directory-review-settings":
+				endpoint = c.UpdateDirectoryReviewSettings()
+				data, err = accessc.BuildUpdateDirectoryReviewSettingsPayload(*accessUpdateDirectoryReviewSettingsBodyFlag, *accessUpdateDirectoryReviewSettingsApikeyTokenFlag, *accessUpdateDirectoryReviewSettingsSessionTokenFlag)
+			case "list-scopes":
+				endpoint = c.ListScopes()
+				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
+			case "list-agent-policy-scopes":
+				endpoint = c.ListAgentPolicyScopes()
+				data, err = accessc.BuildListAgentPolicyScopesPayload(*accessListAgentPolicyScopesSessionTokenFlag)
+			case "list-members":
+				endpoint = c.ListMembers()
+				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
+			case "list-grants":
+				endpoint = c.ListGrants()
+				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
+			case "update-member-roles":
+				endpoint = c.UpdateMemberRoles()
+				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
+			case "list-shadow-mcp-inventory":
+				endpoint = c.ListShadowMCPInventory()
+				data, err = accessc.BuildListShadowMCPInventoryPayload(*accessListShadowMCPInventoryProjectIDFlag, *accessListShadowMCPInventoryLimitFlag, *accessListShadowMCPInventoryCursorFlag, *accessListShadowMCPInventorySessionTokenFlag)
+			case "get-shadow-mcp-inventory-server":
+				endpoint = c.GetShadowMCPInventoryServer()
+				data, err = accessc.BuildGetShadowMCPInventoryServerPayload(*accessGetShadowMCPInventoryServerProjectIDFlag, *accessGetShadowMCPInventoryServerServerSlugFlag, *accessGetShadowMCPInventoryServerSessionTokenFlag)
+			case "find-shadow-mcp-inventory-servers":
+				endpoint = c.FindShadowMCPInventoryServers()
+				data, err = accessc.BuildFindShadowMCPInventoryServersPayload(*accessFindShadowMCPInventoryServersProjectIDFlag, *accessFindShadowMCPInventoryServersServerUrlsFlag, *accessFindShadowMCPInventoryServersSessionTokenFlag)
+			case "update-shadow-mcp-inventory-server-name":
+				endpoint = c.UpdateShadowMCPInventoryServerName()
+				data, err = accessc.BuildUpdateShadowMCPInventoryServerNamePayload(*accessUpdateShadowMCPInventoryServerNameBodyFlag, *accessUpdateShadowMCPInventoryServerNameSessionTokenFlag)
+			case "set-shadow-mcp-official-server":
+				endpoint = c.SetShadowMCPOfficialServer()
+				data, err = accessc.BuildSetShadowMCPOfficialServerPayload(*accessSetShadowMCPOfficialServerBodyFlag, *accessSetShadowMCPOfficialServerSessionTokenFlag)
+			case "list-shadow-mcp-inventory-users":
+				endpoint = c.ListShadowMCPInventoryUsers()
+				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
+			case "list-shadow-mcp-inventory-servers-for-user":
+				endpoint = c.ListShadowMCPInventoryServersForUser()
+				data, err = accessc.BuildListShadowMCPInventoryServersForUserPayload(*accessListShadowMCPInventoryServersForUserProjectIDFlag, *accessListShadowMCPInventoryServersForUserUserKeysFlag, *accessListShadowMCPInventoryServersForUserFromFlag, *accessListShadowMCPInventoryServersForUserToFlag, *accessListShadowMCPInventoryServersForUserLimitFlag, *accessListShadowMCPInventoryServersForUserSessionTokenFlag)
+			case "resolve-shadow-mcp-inventory-request":
+				endpoint = c.ResolveShadowMCPInventoryRequest()
+				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
+			case "list-ai-detections":
+				endpoint = c.ListAIDetections()
+				data, err = accessc.BuildListAIDetectionsPayload(*accessListAIDetectionsCategoryFlag, *accessListAIDetectionsDirectoryGroupIDFlag, *accessListAIDetectionsSessionTokenFlag)
+			case "list-employee-ai-detections":
+				endpoint = c.ListEmployeeAIDetections()
+				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
+			case "list-ai-detection-users":
+				endpoint = c.ListAIDetectionUsers()
+				data, err = accessc.BuildListAIDetectionUsersPayload(*accessListAIDetectionUsersTargetIDFlag, *accessListAIDetectionUsersSessionTokenFlag)
+			case "set-ai-tool-decision":
+				endpoint = c.SetAIToolDecision()
+				data, err = accessc.BuildSetAIToolDecisionPayload(*accessSetAIToolDecisionBodyFlag, *accessSetAIToolDecisionSessionTokenFlag)
+			case "list-resource-audience":
+				endpoint = c.ListResourceAudience()
+				data, err = accessc.BuildListResourceAudiencePayload(*accessListResourceAudienceResourceKindFlag, *accessListResourceAudienceResourceIDFlag, *accessListResourceAudienceApikeyTokenFlag, *accessListResourceAudienceSessionTokenFlag)
+			case "set-resource-audience":
+				endpoint = c.SetResourceAudience()
+				data, err = accessc.BuildSetResourceAudiencePayload(*accessSetResourceAudienceBodyFlag, *accessSetResourceAudienceApikeyTokenFlag, *accessSetResourceAudienceSessionTokenFlag)
+			case "list-audience-options":
+				endpoint = c.ListAudienceOptions()
+				data, err = accessc.BuildListAudienceOptionsPayload(*accessListAudienceOptionsApikeyTokenFlag, *accessListAudienceOptionsSessionTokenFlag)
+			case "explain-resource-access":
+				endpoint = c.ExplainResourceAccess()
+				data, err = accessc.BuildExplainResourceAccessPayload(*accessExplainResourceAccessResourceKindFlag, *accessExplainResourceAccessResourceIDFlag, *accessExplainResourceAccessUserIDFlag, *accessExplainResourceAccessSessionTokenFlag)
+			case "request-access":
+				endpoint = c.RequestAccess()
+				data, err = accessc.BuildRequestAccessPayload(*accessRequestAccessBodyFlag, *accessRequestAccessApikeyTokenFlag, *accessRequestAccessSessionTokenFlag)
+			case "list-challenges":
+				endpoint = c.ListChallenges()
+				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesExcludeScopesFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesFromFlag, *accessListChallengesToFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
+			case "list-challenge-buckets":
+				endpoint = c.ListChallengeBuckets()
+				data, err = accessc.BuildListChallengeBucketsPayload(*accessListChallengeBucketsOutcomeFlag, *accessListChallengeBucketsPrincipalUrnFlag, *accessListChallengeBucketsScopeFlag, *accessListChallengeBucketsProjectIDFlag, *accessListChallengeBucketsResolvedFlag, *accessListChallengeBucketsLimitFlag, *accessListChallengeBucketsOffsetFlag, *accessListChallengeBucketsApikeyTokenFlag, *accessListChallengeBucketsSessionTokenFlag)
+			case "resolve-challenge":
+				endpoint = c.ResolveChallenge()
+				data, err = accessc.BuildResolveChallengePayload(*accessResolveChallengeBodyFlag, *accessResolveChallengeApikeyTokenFlag, *accessResolveChallengeSessionTokenFlag)
+			case "list-identity-access":
+				endpoint = c.ListIdentityAccess()
+				data, err = accessc.BuildListIdentityAccessPayload(*accessListIdentityAccessUserIDFlag, *accessListIdentityAccessSessionTokenFlag)
+			case "create-temporary-grant":
+				endpoint = c.CreateTemporaryGrant()
+				data, err = accessc.BuildCreateTemporaryGrantPayload(*accessCreateTemporaryGrantBodyFlag, *accessCreateTemporaryGrantSessionTokenFlag)
+			case "list-temporary-grants":
+				endpoint = c.ListTemporaryGrants()
+				data, err = accessc.BuildListTemporaryGrantsPayload(*accessListTemporaryGrantsPrincipalUrnFlag, *accessListTemporaryGrantsIncludeExpiredFlag, *accessListTemporaryGrantsSessionTokenFlag)
+			case "renew-temporary-grant":
+				endpoint = c.RenewTemporaryGrant()
+				data, err = accessc.BuildRenewTemporaryGrantPayload(*accessRenewTemporaryGrantBodyFlag, *accessRenewTemporaryGrantSessionTokenFlag)
+			case "revoke-temporary-grant":
+				endpoint = c.RevokeTemporaryGrant()
+				data, err = accessc.BuildRevokeTemporaryGrantPayload(*accessRevokeTemporaryGrantBodyFlag, *accessRevokeTemporaryGrantSessionTokenFlag)
+			case "list-access-requests":
+				endpoint = c.ListAccessRequests()
+				data, err = accessc.BuildListAccessRequestsPayload(*accessListAccessRequestsStatusFlag, *accessListAccessRequestsMineFlag, *accessListAccessRequestsSessionTokenFlag)
+			case "decide-access-request":
+				endpoint = c.DecideAccessRequest()
+				data, err = accessc.BuildDecideAccessRequestPayload(*accessDecideAccessRequestBodyFlag, *accessDecideAccessRequestSessionTokenFlag)
+			case "withdraw-access-request":
+				endpoint = c.WithdrawAccessRequest()
+				data, err = accessc.BuildWithdrawAccessRequestPayload(*accessWithdrawAccessRequestBodyFlag, *accessWithdrawAccessRequestSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14167,6 +14321,25 @@ func ParseEndpoint(
 				endpoint = c.ListGatewaySessionFacets()
 				data, err = gatewaysessionsc.BuildListGatewaySessionFacetsPayload(*gatewaySessionsListGatewaySessionFacetsGatewayIDFlag, *gatewaySessionsListGatewaySessionFacetsProjectIDFlag, *gatewaySessionsListGatewaySessionFacetsSessionTokenFlag, *gatewaySessionsListGatewaySessionFacetsApikeyTokenFlag)
 			}
+		case "variations":
+			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "upsert-global":
+				endpoint = c.UpsertGlobal()
+				data, err = variationsc.BuildUpsertGlobalPayload(*variationsUpsertGlobalBodyFlag, *variationsUpsertGlobalSessionTokenFlag, *variationsUpsertGlobalApikeyTokenFlag, *variationsUpsertGlobalProjectSlugInputFlag)
+			case "delete-global":
+				endpoint = c.DeleteGlobal()
+				data, err = variationsc.BuildDeleteGlobalPayload(*variationsDeleteGlobalVariationIDFlag, *variationsDeleteGlobalSessionTokenFlag, *variationsDeleteGlobalApikeyTokenFlag, *variationsDeleteGlobalProjectSlugInputFlag)
+			case "list-global":
+				endpoint = c.ListGlobal()
+				data, err = variationsc.BuildListGlobalPayload(*variationsListGlobalSessionTokenFlag, *variationsListGlobalApikeyTokenFlag, *variationsListGlobalProjectSlugInputFlag)
+			case "list-groups":
+				endpoint = c.ListGroups()
+				data, err = variationsc.BuildListGroupsPayload(*variationsListGroupsSessionTokenFlag, *variationsListGroupsApikeyTokenFlag, *variationsListGroupsProjectSlugInputFlag)
+			case "create-global":
+				endpoint = c.CreateGlobal()
+				data, err = variationsc.BuildCreateGlobalPayload(*variationsCreateGlobalSessionTokenFlag, *variationsCreateGlobalApikeyTokenFlag, *variationsCreateGlobalProjectSlugInputFlag)
+			}
 		case "widgets":
 			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -14228,179 +14401,6 @@ func ParseEndpoint(
 			case "register-device":
 				endpoint = c.RegisterDevice()
 				data, err = workloadidentitiesc.BuildRegisterDevicePayload(*workloadIdentitiesRegisterDeviceBodyFlag)
-			}
-		case "variations":
-			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "upsert-global":
-				endpoint = c.UpsertGlobal()
-				data, err = variationsc.BuildUpsertGlobalPayload(*variationsUpsertGlobalBodyFlag, *variationsUpsertGlobalSessionTokenFlag, *variationsUpsertGlobalApikeyTokenFlag, *variationsUpsertGlobalProjectSlugInputFlag)
-			case "delete-global":
-				endpoint = c.DeleteGlobal()
-				data, err = variationsc.BuildDeleteGlobalPayload(*variationsDeleteGlobalVariationIDFlag, *variationsDeleteGlobalSessionTokenFlag, *variationsDeleteGlobalApikeyTokenFlag, *variationsDeleteGlobalProjectSlugInputFlag)
-			case "list-global":
-				endpoint = c.ListGlobal()
-				data, err = variationsc.BuildListGlobalPayload(*variationsListGlobalSessionTokenFlag, *variationsListGlobalApikeyTokenFlag, *variationsListGlobalProjectSlugInputFlag)
-			case "list-groups":
-				endpoint = c.ListGroups()
-				data, err = variationsc.BuildListGroupsPayload(*variationsListGroupsSessionTokenFlag, *variationsListGroupsApikeyTokenFlag, *variationsListGroupsProjectSlugInputFlag)
-			case "create-global":
-				endpoint = c.CreateGlobal()
-				data, err = variationsc.BuildCreateGlobalPayload(*variationsCreateGlobalSessionTokenFlag, *variationsCreateGlobalApikeyTokenFlag, *variationsCreateGlobalProjectSlugInputFlag)
-			}
-		case "access":
-			c := accessc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "list-roles":
-				endpoint = c.ListRoles()
-				data, err = accessc.BuildListRolesPayload(*accessListRolesApikeyTokenFlag, *accessListRolesSessionTokenFlag)
-			case "get-role":
-				endpoint = c.GetRole()
-				data, err = accessc.BuildGetRolePayload(*accessGetRoleIDFlag, *accessGetRoleApikeyTokenFlag, *accessGetRoleSessionTokenFlag)
-			case "create-role":
-				endpoint = c.CreateRole()
-				data, err = accessc.BuildCreateRolePayload(*accessCreateRoleBodyFlag, *accessCreateRoleApikeyTokenFlag, *accessCreateRoleSessionTokenFlag)
-			case "update-role":
-				endpoint = c.UpdateRole()
-				data, err = accessc.BuildUpdateRolePayload(*accessUpdateRoleBodyFlag, *accessUpdateRoleApikeyTokenFlag, *accessUpdateRoleSessionTokenFlag)
-			case "delete-role":
-				endpoint = c.DeleteRole()
-				data, err = accessc.BuildDeleteRolePayload(*accessDeleteRoleIDFlag, *accessDeleteRoleApikeyTokenFlag, *accessDeleteRoleSessionTokenFlag)
-			case "list-directory-role-mappings":
-				endpoint = c.ListDirectoryRoleMappings()
-				data, err = accessc.BuildListDirectoryRoleMappingsPayload(*accessListDirectoryRoleMappingsApikeyTokenFlag, *accessListDirectoryRoleMappingsSessionTokenFlag)
-			case "list-directory-people":
-				endpoint = c.ListDirectoryPeople()
-				data, err = accessc.BuildListDirectoryPeoplePayload(*accessListDirectoryPeopleLimitFlag, *accessListDirectoryPeopleCursorFlag, *accessListDirectoryPeopleSessionTokenFlag)
-			case "sync-directory-groups":
-				endpoint = c.SyncDirectoryGroups()
-				data, err = accessc.BuildSyncDirectoryGroupsPayload(*accessSyncDirectoryGroupsApikeyTokenFlag, *accessSyncDirectoryGroupsSessionTokenFlag)
-			case "set-directory-role-mapping":
-				endpoint = c.SetDirectoryRoleMapping()
-				data, err = accessc.BuildSetDirectoryRoleMappingPayload(*accessSetDirectoryRoleMappingBodyFlag, *accessSetDirectoryRoleMappingApikeyTokenFlag, *accessSetDirectoryRoleMappingSessionTokenFlag)
-			case "set-directory-role-mappings":
-				endpoint = c.SetDirectoryRoleMappings()
-				data, err = accessc.BuildSetDirectoryRoleMappingsPayload(*accessSetDirectoryRoleMappingsBodyFlag, *accessSetDirectoryRoleMappingsApikeyTokenFlag, *accessSetDirectoryRoleMappingsSessionTokenFlag)
-			case "delete-directory-role-mapping":
-				endpoint = c.DeleteDirectoryRoleMapping()
-				data, err = accessc.BuildDeleteDirectoryRoleMappingPayload(*accessDeleteDirectoryRoleMappingIDFlag, *accessDeleteDirectoryRoleMappingApikeyTokenFlag, *accessDeleteDirectoryRoleMappingSessionTokenFlag)
-			case "preview-directory-role-setup":
-				endpoint = c.PreviewDirectoryRoleSetup()
-				data, err = accessc.BuildPreviewDirectoryRoleSetupPayload(*accessPreviewDirectoryRoleSetupApikeyTokenFlag, *accessPreviewDirectoryRoleSetupSessionTokenFlag)
-			case "apply-directory-role-setup":
-				endpoint = c.ApplyDirectoryRoleSetup()
-				data, err = accessc.BuildApplyDirectoryRoleSetupPayload(*accessApplyDirectoryRoleSetupBodyFlag, *accessApplyDirectoryRoleSetupApikeyTokenFlag, *accessApplyDirectoryRoleSetupSessionTokenFlag)
-			case "list-directory-review-items":
-				endpoint = c.ListDirectoryReviewItems()
-				data, err = accessc.BuildListDirectoryReviewItemsPayload(*accessListDirectoryReviewItemsApikeyTokenFlag, *accessListDirectoryReviewItemsSessionTokenFlag)
-			case "resolve-directory-review-item":
-				endpoint = c.ResolveDirectoryReviewItem()
-				data, err = accessc.BuildResolveDirectoryReviewItemPayload(*accessResolveDirectoryReviewItemBodyFlag, *accessResolveDirectoryReviewItemApikeyTokenFlag, *accessResolveDirectoryReviewItemSessionTokenFlag)
-			case "get-directory-review-settings":
-				endpoint = c.GetDirectoryReviewSettings()
-				data, err = accessc.BuildGetDirectoryReviewSettingsPayload(*accessGetDirectoryReviewSettingsApikeyTokenFlag, *accessGetDirectoryReviewSettingsSessionTokenFlag)
-			case "update-directory-review-settings":
-				endpoint = c.UpdateDirectoryReviewSettings()
-				data, err = accessc.BuildUpdateDirectoryReviewSettingsPayload(*accessUpdateDirectoryReviewSettingsBodyFlag, *accessUpdateDirectoryReviewSettingsApikeyTokenFlag, *accessUpdateDirectoryReviewSettingsSessionTokenFlag)
-			case "list-scopes":
-				endpoint = c.ListScopes()
-				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
-			case "list-agent-policy-scopes":
-				endpoint = c.ListAgentPolicyScopes()
-				data, err = accessc.BuildListAgentPolicyScopesPayload(*accessListAgentPolicyScopesSessionTokenFlag)
-			case "list-members":
-				endpoint = c.ListMembers()
-				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
-			case "list-grants":
-				endpoint = c.ListGrants()
-				data, err = accessc.BuildListGrantsPayload(*accessListGrantsApikeyTokenFlag, *accessListGrantsSessionTokenFlag)
-			case "update-member-roles":
-				endpoint = c.UpdateMemberRoles()
-				data, err = accessc.BuildUpdateMemberRolesPayload(*accessUpdateMemberRolesBodyFlag, *accessUpdateMemberRolesApikeyTokenFlag, *accessUpdateMemberRolesSessionTokenFlag)
-			case "list-shadow-mcp-inventory":
-				endpoint = c.ListShadowMCPInventory()
-				data, err = accessc.BuildListShadowMCPInventoryPayload(*accessListShadowMCPInventoryProjectIDFlag, *accessListShadowMCPInventoryLimitFlag, *accessListShadowMCPInventoryCursorFlag, *accessListShadowMCPInventorySessionTokenFlag)
-			case "get-shadow-mcp-inventory-server":
-				endpoint = c.GetShadowMCPInventoryServer()
-				data, err = accessc.BuildGetShadowMCPInventoryServerPayload(*accessGetShadowMCPInventoryServerProjectIDFlag, *accessGetShadowMCPInventoryServerServerSlugFlag, *accessGetShadowMCPInventoryServerSessionTokenFlag)
-			case "find-shadow-mcp-inventory-servers":
-				endpoint = c.FindShadowMCPInventoryServers()
-				data, err = accessc.BuildFindShadowMCPInventoryServersPayload(*accessFindShadowMCPInventoryServersProjectIDFlag, *accessFindShadowMCPInventoryServersServerUrlsFlag, *accessFindShadowMCPInventoryServersSessionTokenFlag)
-			case "update-shadow-mcp-inventory-server-name":
-				endpoint = c.UpdateShadowMCPInventoryServerName()
-				data, err = accessc.BuildUpdateShadowMCPInventoryServerNamePayload(*accessUpdateShadowMCPInventoryServerNameBodyFlag, *accessUpdateShadowMCPInventoryServerNameSessionTokenFlag)
-			case "set-shadow-mcp-official-server":
-				endpoint = c.SetShadowMCPOfficialServer()
-				data, err = accessc.BuildSetShadowMCPOfficialServerPayload(*accessSetShadowMCPOfficialServerBodyFlag, *accessSetShadowMCPOfficialServerSessionTokenFlag)
-			case "list-shadow-mcp-inventory-users":
-				endpoint = c.ListShadowMCPInventoryUsers()
-				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
-			case "list-shadow-mcp-inventory-servers-for-user":
-				endpoint = c.ListShadowMCPInventoryServersForUser()
-				data, err = accessc.BuildListShadowMCPInventoryServersForUserPayload(*accessListShadowMCPInventoryServersForUserProjectIDFlag, *accessListShadowMCPInventoryServersForUserUserKeysFlag, *accessListShadowMCPInventoryServersForUserFromFlag, *accessListShadowMCPInventoryServersForUserToFlag, *accessListShadowMCPInventoryServersForUserLimitFlag, *accessListShadowMCPInventoryServersForUserSessionTokenFlag)
-			case "resolve-shadow-mcp-inventory-request":
-				endpoint = c.ResolveShadowMCPInventoryRequest()
-				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
-			case "list-ai-detections":
-				endpoint = c.ListAIDetections()
-				data, err = accessc.BuildListAIDetectionsPayload(*accessListAIDetectionsCategoryFlag, *accessListAIDetectionsDirectoryGroupIDFlag, *accessListAIDetectionsSessionTokenFlag)
-			case "list-employee-ai-detections":
-				endpoint = c.ListEmployeeAIDetections()
-				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
-			case "list-ai-detection-users":
-				endpoint = c.ListAIDetectionUsers()
-				data, err = accessc.BuildListAIDetectionUsersPayload(*accessListAIDetectionUsersTargetIDFlag, *accessListAIDetectionUsersSessionTokenFlag)
-			case "set-ai-tool-decision":
-				endpoint = c.SetAIToolDecision()
-				data, err = accessc.BuildSetAIToolDecisionPayload(*accessSetAIToolDecisionBodyFlag, *accessSetAIToolDecisionSessionTokenFlag)
-			case "list-resource-audience":
-				endpoint = c.ListResourceAudience()
-				data, err = accessc.BuildListResourceAudiencePayload(*accessListResourceAudienceResourceKindFlag, *accessListResourceAudienceResourceIDFlag, *accessListResourceAudienceApikeyTokenFlag, *accessListResourceAudienceSessionTokenFlag)
-			case "set-resource-audience":
-				endpoint = c.SetResourceAudience()
-				data, err = accessc.BuildSetResourceAudiencePayload(*accessSetResourceAudienceBodyFlag, *accessSetResourceAudienceApikeyTokenFlag, *accessSetResourceAudienceSessionTokenFlag)
-			case "list-audience-options":
-				endpoint = c.ListAudienceOptions()
-				data, err = accessc.BuildListAudienceOptionsPayload(*accessListAudienceOptionsApikeyTokenFlag, *accessListAudienceOptionsSessionTokenFlag)
-			case "explain-resource-access":
-				endpoint = c.ExplainResourceAccess()
-				data, err = accessc.BuildExplainResourceAccessPayload(*accessExplainResourceAccessResourceKindFlag, *accessExplainResourceAccessResourceIDFlag, *accessExplainResourceAccessUserIDFlag, *accessExplainResourceAccessSessionTokenFlag)
-			case "request-access":
-				endpoint = c.RequestAccess()
-				data, err = accessc.BuildRequestAccessPayload(*accessRequestAccessBodyFlag, *accessRequestAccessApikeyTokenFlag, *accessRequestAccessSessionTokenFlag)
-			case "list-challenges":
-				endpoint = c.ListChallenges()
-				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesExcludeScopesFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesFromFlag, *accessListChallengesToFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
-			case "list-challenge-buckets":
-				endpoint = c.ListChallengeBuckets()
-				data, err = accessc.BuildListChallengeBucketsPayload(*accessListChallengeBucketsOutcomeFlag, *accessListChallengeBucketsPrincipalUrnFlag, *accessListChallengeBucketsScopeFlag, *accessListChallengeBucketsProjectIDFlag, *accessListChallengeBucketsResolvedFlag, *accessListChallengeBucketsLimitFlag, *accessListChallengeBucketsOffsetFlag, *accessListChallengeBucketsApikeyTokenFlag, *accessListChallengeBucketsSessionTokenFlag)
-			case "resolve-challenge":
-				endpoint = c.ResolveChallenge()
-				data, err = accessc.BuildResolveChallengePayload(*accessResolveChallengeBodyFlag, *accessResolveChallengeApikeyTokenFlag, *accessResolveChallengeSessionTokenFlag)
-			case "list-identity-access":
-				endpoint = c.ListIdentityAccess()
-				data, err = accessc.BuildListIdentityAccessPayload(*accessListIdentityAccessUserIDFlag, *accessListIdentityAccessSessionTokenFlag)
-			case "create-temporary-grant":
-				endpoint = c.CreateTemporaryGrant()
-				data, err = accessc.BuildCreateTemporaryGrantPayload(*accessCreateTemporaryGrantBodyFlag, *accessCreateTemporaryGrantSessionTokenFlag)
-			case "list-temporary-grants":
-				endpoint = c.ListTemporaryGrants()
-				data, err = accessc.BuildListTemporaryGrantsPayload(*accessListTemporaryGrantsPrincipalUrnFlag, *accessListTemporaryGrantsIncludeExpiredFlag, *accessListTemporaryGrantsSessionTokenFlag)
-			case "renew-temporary-grant":
-				endpoint = c.RenewTemporaryGrant()
-				data, err = accessc.BuildRenewTemporaryGrantPayload(*accessRenewTemporaryGrantBodyFlag, *accessRenewTemporaryGrantSessionTokenFlag)
-			case "revoke-temporary-grant":
-				endpoint = c.RevokeTemporaryGrant()
-				data, err = accessc.BuildRevokeTemporaryGrantPayload(*accessRevokeTemporaryGrantBodyFlag, *accessRevokeTemporaryGrantSessionTokenFlag)
-			case "list-access-requests":
-				endpoint = c.ListAccessRequests()
-				data, err = accessc.BuildListAccessRequestsPayload(*accessListAccessRequestsStatusFlag, *accessListAccessRequestsMineFlag, *accessListAccessRequestsSessionTokenFlag)
-			case "decide-access-request":
-				endpoint = c.DecideAccessRequest()
-				data, err = accessc.BuildDecideAccessRequestPayload(*accessDecideAccessRequestBodyFlag, *accessDecideAccessRequestSessionTokenFlag)
-			case "withdraw-access-request":
-				endpoint = c.WithdrawAccessRequest()
-				data, err = accessc.BuildWithdrawAccessRequestPayload(*accessWithdrawAccessRequestBodyFlag, *accessWithdrawAccessRequestSessionTokenFlag)
 			}
 		}
 	}
@@ -14668,6 +14668,1167 @@ func aboutOpenapiUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "about openapi")
+}
+
+// accessUsage displays the usage of the access command and its subcommands.
+func accessUsage() {
+	fmt.Fprintln(os.Stderr, `Manage roles, team member access control, and authorization challenge events.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
+	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
+	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
+	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
+	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
+	fmt.Fprintln(os.Stderr, `    list-directory-role-mappings: List the organization's directory groups and attribute values, and the roles mapped to them.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-people: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
+	fmt.Fprintln(os.Stderr, `    sync-directory-groups: Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
+	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
+	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
+	fmt.Fprintln(os.Stderr, `    delete-directory-role-mapping: Remove a directory role mapping.`)
+	fmt.Fprintln(os.Stderr, `    preview-directory-role-setup: Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+	fmt.Fprintln(os.Stderr, `    apply-directory-role-setup: Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
+	fmt.Fprintln(os.Stderr, `    list-directory-review-items: List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
+	fmt.Fprintln(os.Stderr, `    resolve-directory-review-item: Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
+	fmt.Fprintln(os.Stderr, `    get-directory-review-settings: Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
+	fmt.Fprintln(os.Stderr, `    update-directory-review-settings: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
+	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
+	fmt.Fprintln(os.Stderr, `    list-agent-policy-scopes: List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
+	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
+	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
+	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    find-shadow-mcp-inventory-servers: Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
+	fmt.Fprintln(os.Stderr, `    set-shadow-mcp-official-server: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
+	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
+	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detection-users: List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
+	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
+	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
+	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
+	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
+	fmt.Fprintln(os.Stderr, `    explain-resource-access: Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
+	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
+	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
+	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
+	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
+	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
+	fmt.Fprintln(os.Stderr, `    create-temporary-grant: Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+	fmt.Fprintln(os.Stderr, `    list-temporary-grants: List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+	fmt.Fprintln(os.Stderr, `    renew-temporary-grant: Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-temporary-grant: End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
+	fmt.Fprintln(os.Stderr, `    list-access-requests: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.`)
+	fmt.Fprintln(os.Stderr, `    decide-access-request: Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.`)
+	fmt.Fprintln(os.Stderr, `    withdraw-access-request: Withdraw a pending access request you made. Only the requester can withdraw it.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
+}
+func accessListRolesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-roles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all roles for the current organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessGetRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a role by ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessCreateRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access create-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a new custom role.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"pass_through\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"idempotent\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"chat\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpdateRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update an existing custom role.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"pass_through\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"idempotent\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"chat\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"pass_through\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"idempotent\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"chat\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessDeleteRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a custom role (system roles cannot be deleted).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryRoleMappingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-role-mappings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's directory groups and attribute values, and the roles mapped to them.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-role-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryPeopleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-people", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-people --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
+func accessSyncDirectoryGroupsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access sync-directory-groups", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access sync-directory-groups --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessSetDirectoryRoleMappingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-directory-role-mapping", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-directory-role-mapping --body '{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role_urn\": \"abc123\",\n      \"source_kind\": \"attribute\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessSetDirectoryRoleMappingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-directory-role-mappings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-directory-role-mappings --body '{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_role_urns\": [\n         \"abc123\"\n      ],\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessDeleteDirectoryRoleMappingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access delete-directory-role-mapping", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a directory role mapping.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-directory-role-mapping --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessPreviewDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access preview-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access preview-directory-role-setup --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessApplyDirectoryRoleSetupUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access apply-directory-role-setup", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"pass_through\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"idempotent\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"chat\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListDirectoryReviewItemsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-review-items", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-review-items --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessResolveDirectoryReviewItemUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-directory-review-item", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-directory-review-item --body '{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"pass_through\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"idempotent\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"chat\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessGetDirectoryReviewSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-directory-review-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-directory-review-settings --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpdateDirectoryReviewSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-directory-review-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-directory-review-settings --body '{\n      \"emails_enabled\": false\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all available scopes and their resource types.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListAgentPolicyScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-agent-policy-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-agent-policy-scopes --session-token \"abc123\"")
+}
+
+func accessListMembersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-members", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List all team members with their role assignments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the current user's effective grants, including inherited role grants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessUpdateMemberRolesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-roles", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a team member's role assignments.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-roles --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListShadowMCPInventoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory --project-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
+func accessGetShadowMCPInventoryServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access get-shadow-mcp-inventory-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -server-slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-shadow-mcp-inventory-server --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-slug \"abc123\" --session-token \"abc123\"")
+}
+
+func accessFindShadowMCPInventoryServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access find-shadow-mcp-inventory-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -server-urls JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-urls JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access find-shadow-mcp-inventory-servers --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-urls '[\n      \"abc123\",\n      \"abc123\"\n   ]' --session-token \"abc123\"")
+}
+
+func accessUpdateShadowMCPInventoryServerNameUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access update-shadow-mcp-inventory-server-name", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-shadow-mcp-inventory-server-name --body '{\n      \"name\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+func accessSetShadowMCPOfficialServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-shadow-mcp-official-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-shadow-mcp-official-server --body '{\n      \"keep_shadow\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+func accessListShadowMCPInventoryUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -server-url STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListShadowMCPInventoryServersForUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory-servers-for-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -user-keys JSON")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-keys JSON: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-servers-for-user --project-id \"550e8400-e29b-41d4-a716-446655440000\" --user-keys '[\n      \"abc123\",\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --session-token \"abc123\"")
+}
+
+func accessResolveShadowMCPInventoryRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-shadow-mcp-inventory-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-shadow-mcp-inventory-request --body '{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
+}
+
+func accessListAIDetectionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-ai-detections", os.Args[0])
+	fmt.Fprint(os.Stderr, " -category STRING")
+	fmt.Fprint(os.Stderr, " -directory-group-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -category STRING: `)
+	fmt.Fprintln(os.Stderr, `    -directory-group-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func accessListEmployeeAIDetectionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-employee-ai-detections", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-email STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func accessListAIDetectionUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-ai-detection-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detection-users --target-id \"aa\" --session-token \"abc123\"")
+}
+
+func accessSetAIToolDecisionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-ai-tool-decision", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-ai-tool-decision --body '{\n      \"decision\": \"approved\",\n      \"rationale\": \"aaa\",\n      \"target_id\": \"1\"\n   }' --session-token \"abc123\"")
+}
+
+func accessListResourceAudienceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-resource-audience", os.Args[0])
+	fmt.Fprint(os.Stderr, " -resource-kind STRING")
+	fmt.Fprint(os.Stderr, " -resource-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-resource-audience --resource-kind \"mcp\" --resource-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessSetResourceAudienceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access set-resource-audience", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the rules that name one resource. Organization-wide rules are left untouched.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-resource-audience --body '{\n      \"entries\": [\n         {\n            \"dispositions\": [\n               \"idempotent\"\n            ],\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"expected_version\": \"abc123\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListAudienceOptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-audience-options", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the principals that can be given access: everyone, roles, people, and agents.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-audience-options --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessExplainResourceAccessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access explain-resource-access", os.Args[0])
+	fmt.Fprint(os.Stderr, " -resource-kind STRING")
+	fmt.Fprint(os.Stderr, " -resource-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access explain-resource-access --resource-kind \"mcp\" --resource-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessRequestAccessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access request-access", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access request-access --body '{\n      \"duration\": \"2h\",\n      \"message\": \"aaa\",\n      \"requested_until\": \"1970-01-01T00:00:01Z\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListChallengesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-challenges", os.Args[0])
+	fmt.Fprint(os.Stderr, " -outcome STRING")
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -exclude-scopes JSON")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -resolved BOOL")
+	fmt.Fprint(os.Stderr, " -ids JSON")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-scopes JSON: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --exclude-scopes '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --project-id \"abc123\" --resolved false --ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListChallengeBucketsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-challenge-buckets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -outcome STRING")
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -resolved BOOL")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -offset INT")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -offset INT: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenge-buckets --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessResolveChallengeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-challenge", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_assignment_confirmed\": false,\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListIdentityAccessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-identity-access", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-identity-access --user-id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessCreateTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access create-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-temporary-grant --body '{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"pass_through\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"idempotent\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"chat\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func accessListTemporaryGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-temporary-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
+	fmt.Fprint(os.Stderr, " -include-expired BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-expired BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-temporary-grants --principal-urn \"abc123\" --include-expired false --session-token \"abc123\"")
+}
+
+func accessRenewTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access renew-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access renew-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func accessRevokeTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access revoke-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access revoke-temporary-grant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func accessListAccessRequestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-access-requests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -mine BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -mine BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-access-requests --status \"abc123\" --mine false --session-token \"abc123\"")
+}
+
+func accessDecideAccessRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access decide-access-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access decide-access-request --body '{\n      \"approve\": false,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func accessWithdrawAccessRequestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access withdraw-access-request", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Withdraw a pending access request you made. Only the requester can withdraw it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access withdraw-access-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.
@@ -15258,7 +16419,7 @@ func agentsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create --body '{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create --body '{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsGetUsage() {
@@ -15364,7 +16525,7 @@ func agentsCheckPolicyGrantsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents check-policy-grants --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents check-policy-grants --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func agentsCreatePolicyGrantUsage() {
@@ -15384,7 +16545,7 @@ func agentsCreatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents create-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"pass_through\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"idempotent\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsUpdatePolicyGrantUsage() {
@@ -15404,7 +16565,7 @@ func agentsUpdatePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents update-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"effect\": \"allow\",\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": \"aa\",\n      \"selector\": {\n         \"client_type\": \"pass_through\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"idempotent\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_identity\": \"abc123\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func agentsDeletePolicyGrantUsage() {
@@ -15424,7 +16585,7 @@ func agentsDeletePolicyGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_policy\": {\n         \"scope\": \"aa\",\n         \"selector\": {\n            \"client_type\": \"service_account\",\n            \"connection_owner\": \"abc123\",\n            \"disposition\": \"destructive\",\n            \"project_id\": \"abc123\",\n            \"resource_id\": \"abc123\",\n            \"resource_kind\": \"mcp\",\n            \"server_identity\": \"abc123\",\n            \"server_url\": \"https://example.com/foo\",\n            \"tool\": \"abc123\",\n            \"upstream_client\": \"abc123\"\n         }\n      },\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents delete-policy-grant --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_policy\": {\n         \"scope\": \"aa\",\n         \"selector\": {\n            \"client_type\": \"pass_through\",\n            \"connection_owner\": \"abc123\",\n            \"disposition\": \"idempotent\",\n            \"project_id\": \"abc123\",\n            \"resource_id\": \"abc123\",\n            \"resource_kind\": \"mcp\",\n            \"server_identity\": \"abc123\",\n            \"server_url\": \"https://example.com/foo\",\n            \"tool\": \"abc123\",\n            \"upstream_client\": \"abc123\"\n         }\n      },\n      \"grant_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func agentsListConnectionBlocksUsage() {
@@ -17066,7 +18227,7 @@ func authClientsListAuthClientsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-auth-clients --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --client-type \"service_account\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth-clients list-auth-clients --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --client-type \"pass_through\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func authClientsGetAuthClientUsage() {
@@ -21434,7 +22595,7 @@ func keysCreateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys create-key --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"name\": \"aaa\",\n      \"policy_grants\": [\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         },\n         {\n            \"scope\": \"mcp:blocked_connect\",\n            \"selector\": {\n               \"client_type\": \"static_credential\",\n               \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp_auth_client\"\n            }\n         }\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysRotateKeyUsage() {
@@ -21454,7 +22615,7 @@ func keysRotateKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysExtendAgentKeysUsage() {
@@ -21474,7 +22635,7 @@ func keysExtendAgentKeysUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys extend-agent-keys --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys extend-agent-keys --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_choices\": [\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"mcp:connect\",\n            \"selector\": {\n               \"client_type\": \"pass_through\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"idempotent\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysListKeysUsage() {
@@ -38013,6 +39174,135 @@ func gatewaySessionsListGatewaySessionFacetsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "gateway-sessions list-gateway-session-facets --gateway-id \"550e8400-e29b-41d4-a716-446655440000\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
+// variationsUsage displays the usage of the variations command and its
+// subcommands.
+func variationsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage variations of tools.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] variations COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    upsert-global: Create or update a globally defined tool variation.`)
+	fmt.Fprintln(os.Stderr, `    delete-global: Create or update a globally defined tool variation.`)
+	fmt.Fprintln(os.Stderr, `    list-global: List globally defined tool variations.`)
+	fmt.Fprintln(os.Stderr, `    list-groups: List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
+	fmt.Fprintln(os.Stderr, `    create-global: Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s variations COMMAND --help\n", os.Args[0])
+}
+func variationsUpsertGlobalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations upsert-global", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update a globally defined tool variation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations upsert-global --body '{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"name\": \"abc123\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ],\n      \"title\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsDeleteGlobalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations delete-global", os.Args[0])
+	fmt.Fprint(os.Stderr, " -variation-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create or update a globally defined tool variation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -variation-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations delete-global --variation-id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsListGlobalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations list-global", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List globally defined tool variations.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsListGroupsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations list-groups", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-groups --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func variationsCreateGlobalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] variations create-global", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations create-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // widgetsUsage displays the usage of the widgets command and its subcommands.
 func widgetsUsage() {
 	fmt.Fprintln(os.Stderr, `Widgets: Explore's saved questions, each kept with the chart that draws it.`)
@@ -38452,1294 +39742,4 @@ func workloadIdentitiesRegisterDeviceUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-device --body '{\n      \"hostname\": \"aaa\",\n      \"join_token\": \"aa\",\n      \"public_jwk\": {\n         \"abc123\": \"abc123\"\n      },\n      \"serial\": \"aaa\"\n   }'")
-}
-
-// variationsUsage displays the usage of the variations command and its
-// subcommands.
-func variationsUsage() {
-	fmt.Fprintln(os.Stderr, `Manage variations of tools.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] variations COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    upsert-global: Create or update a globally defined tool variation.`)
-	fmt.Fprintln(os.Stderr, `    delete-global: Create or update a globally defined tool variation.`)
-	fmt.Fprintln(os.Stderr, `    list-global: List globally defined tool variations.`)
-	fmt.Fprintln(os.Stderr, `    list-groups: List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
-	fmt.Fprintln(os.Stderr, `    create-global: Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s variations COMMAND --help\n", os.Args[0])
-}
-func variationsUpsertGlobalUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] variations upsert-global", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update a globally defined tool variation.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations upsert-global --body '{\n      \"confirm\": \"never\",\n      \"confirm_prompt\": \"abc123\",\n      \"description\": \"abc123\",\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"name\": \"abc123\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"src_tool_name\": \"abc123\",\n      \"src_tool_urn\": \"abc123\",\n      \"summarizer\": \"abc123\",\n      \"summary\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ],\n      \"title\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func variationsDeleteGlobalUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] variations delete-global", os.Args[0])
-	fmt.Fprint(os.Stderr, " -variation-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or update a globally defined tool variation.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -variation-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations delete-global --variation-id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func variationsListGlobalUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] variations list-global", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List globally defined tool variations.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func variationsListGroupsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] variations list-groups", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the tool variation groups visible to the project. In v1 this returns the project-default group when it exists, or an empty list otherwise.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations list-groups --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func variationsCreateGlobalUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] variations create-global", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "variations create-global --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-// accessUsage displays the usage of the access command and its subcommands.
-func accessUsage() {
-	fmt.Fprintln(os.Stderr, `Manage roles, team member access control, and authorization challenge events.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] access COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    list-roles: List all roles for the current organization.`)
-	fmt.Fprintln(os.Stderr, `    get-role: Get a role by ID.`)
-	fmt.Fprintln(os.Stderr, `    create-role: Create a new custom role.`)
-	fmt.Fprintln(os.Stderr, `    update-role: Update an existing custom role.`)
-	fmt.Fprintln(os.Stderr, `    delete-role: Delete a custom role (system roles cannot be deleted).`)
-	fmt.Fprintln(os.Stderr, `    list-directory-role-mappings: List the organization's directory groups and attribute values, and the roles mapped to them.`)
-	fmt.Fprintln(os.Stderr, `    list-directory-people: List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
-	fmt.Fprintln(os.Stderr, `    sync-directory-groups: Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
-	fmt.Fprintln(os.Stderr, `    set-directory-role-mapping: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
-	fmt.Fprintln(os.Stderr, `    set-directory-role-mappings: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
-	fmt.Fprintln(os.Stderr, `    delete-directory-role-mapping: Remove a directory role mapping.`)
-	fmt.Fprintln(os.Stderr, `    preview-directory-role-setup: Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
-	fmt.Fprintln(os.Stderr, `    apply-directory-role-setup: Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
-	fmt.Fprintln(os.Stderr, `    list-directory-review-items: List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
-	fmt.Fprintln(os.Stderr, `    resolve-directory-review-item: Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
-	fmt.Fprintln(os.Stderr, `    get-directory-review-settings: Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
-	fmt.Fprintln(os.Stderr, `    update-directory-review-settings: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
-	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
-	fmt.Fprintln(os.Stderr, `    list-agent-policy-scopes: List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
-	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
-	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory: List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
-	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
-	fmt.Fprintln(os.Stderr, `    find-shadow-mcp-inventory-servers: Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.`)
-	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
-	fmt.Fprintln(os.Stderr, `    set-shadow-mcp-official-server: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-servers-for-user: List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
-	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
-	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
-	fmt.Fprintln(os.Stderr, `    list-ai-detection-users: List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
-	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
-	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
-	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
-	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
-	fmt.Fprintln(os.Stderr, `    explain-resource-access: Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
-	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
-	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
-	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
-	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
-	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
-	fmt.Fprintln(os.Stderr, `    create-temporary-grant: Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
-	fmt.Fprintln(os.Stderr, `    list-temporary-grants: List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
-	fmt.Fprintln(os.Stderr, `    renew-temporary-grant: Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    revoke-temporary-grant: End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
-	fmt.Fprintln(os.Stderr, `    list-access-requests: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.`)
-	fmt.Fprintln(os.Stderr, `    decide-access-request: Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.`)
-	fmt.Fprintln(os.Stderr, `    withdraw-access-request: Withdraw a pending access request you made. Only the requester can withdraw it.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
-}
-func accessListRolesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-roles", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all roles for the current organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessGetRoleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access get-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get a role by ID.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessCreateRoleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access create-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new custom role.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-role --body '{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessUpdateRoleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an existing custom role.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-role --body '{\n      \"add_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"description\": \"abc123\",\n      \"id\": \"abc123\",\n      \"member_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"remove_grants\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessDeleteRoleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access delete-role", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete a custom role (system roles cannot be deleted).`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-role --id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListDirectoryRoleMappingsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-role-mappings", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the organization's directory groups and attribute values, and the roles mapped to them.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-role-mappings --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListDirectoryPeopleUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-people", os.Args[0])
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List every live directory profile in the active organization with its name, groups and whether it belongs to a member. Requires an authenticated session authorized for org:admin, because it names people who are not members; API keys cannot enumerate it. Attribute values are not returned.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-people --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
-func accessSyncDirectoryGroupsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access sync-directory-groups", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Fetch the organization's directory groups from WorkOS and save any that are new or changed.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access sync-directory-groups --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessSetDirectoryRoleMappingUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access set-directory-role-mapping", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-directory-role-mapping --body '{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role_urn\": \"abc123\",\n      \"source_kind\": \"attribute\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessSetDirectoryRoleMappingsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access set-directory-role-mappings", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-directory-role-mappings --body '{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_role_urns\": [\n         \"abc123\"\n      ],\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessDeleteDirectoryRoleMappingUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access delete-directory-role-mapping", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a directory role mapping.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-directory-role-mapping --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessPreviewDirectoryRoleSetupUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access preview-directory-role-setup", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access preview-directory-role-setup --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessApplyDirectoryRoleSetupUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access apply-directory-role-setup", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Apply a reviewed bulk setup in one transaction: create the requested new roles and replace each listed source's role set. New roles get no grants unless grant_set is given, in which case every new role in the batch gets exactly that set. If any item's version no longer matches, nothing is written and the request returns conflict; preview again. WorkOS role sync for new roles is requested after commit and reported as requested, not done. Creating roles sets up no plugin distribution.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access apply-directory-role-setup --body '{\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"items\": [\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         },\n         {\n            \"roles\": [\n               {\n                  \"create_name\": \"aa\",\n                  \"role_urn\": \"abc123\"\n               }\n            ],\n            \"source\": {\n               \"attribute_key\": \"aa\",\n               \"attribute_value\": \"aa\",\n               \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"source_kind\": \"attribute\"\n            },\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListDirectoryReviewItemsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-directory-review-items", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the directory changes waiting for an admin decision, oldest first: a directory group first seen after review started, with no mapping; a new value of an attribute key that already has mappings; and a mapped group or attribute value that has gone from the directory. Each item carries the same proposal and version as previewDirectoryRoleSetup, for resolveDirectoryReviewItem. Nothing is written.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-directory-review-items --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessResolveDirectoryReviewItemUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-directory-review-item", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Decide one pending directory review item. approve on a new group or attribute value maps it to the given role set, creating new roles as applyDirectoryRoleSetup does; approve on a missing source removes its mappings. dismiss leaves a new source unmapped, or keeps a missing source's mappings. opt_out_key dismisses a new attribute value and stops raising new values of its key. approve checks version as applyDirectoryRoleSetup does and returns conflict if the source changed. An item that is no longer pending returns conflict.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-directory-review-item --body '{\n      \"decision\": \"dismiss\",\n      \"grant_set\": [\n         {\n            \"scope\": \"org:blocked_read\",\n            \"selectors\": [\n               {\n                  \"client_type\": \"service_account\",\n                  \"connection_owner\": \"abc123\",\n                  \"disposition\": \"destructive\",\n                  \"project_id\": \"abc123\",\n                  \"resource_id\": \"abc123\",\n                  \"resource_kind\": \"mcp\",\n                  \"server_url\": \"https://example.com/foo\",\n                  \"tool\": \"abc123\",\n                  \"upstream_client\": \"abc123\"\n               }\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"roles\": [\n         {\n            \"create_name\": \"aa\",\n            \"role_urn\": \"abc123\"\n         }\n      ],\n      \"version\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessGetDirectoryReviewSettingsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access get-directory-review-settings", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-directory-review-settings --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessUpdateDirectoryReviewSettingsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-directory-review-settings", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-directory-review-settings --body '{\n      \"emails_enabled\": false\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListScopesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-scopes", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all available scopes and their resource types.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListAgentPolicyScopesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-agent-policy-scopes", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-agent-policy-scopes --session-token \"abc123\"")
-}
-
-func accessListMembersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-members", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List all team members with their role assignments.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-members --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the current user's effective grants, including inherited role grants.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-grants --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessUpdateMemberRolesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-member-roles", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a team member's role assignments.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-member-roles --body '{\n      \"role_ids\": [\n         \"abc123\"\n      ],\n      \"user_id\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListShadowMCPInventoryUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory --project-id \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
-func accessGetShadowMCPInventoryServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access get-shadow-mcp-inventory-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access get-shadow-mcp-inventory-server --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-slug \"abc123\" --session-token \"abc123\"")
-}
-
-func accessFindShadowMCPInventoryServersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access find-shadow-mcp-inventory-servers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-urls JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Find the Shadow MCP servers in use whose upstream URL matches one of the given URLs, for example the endpoints of a server about to be added from the catalog. URLs match when they name the same upstream (case, default ports and a trailing slash are ignored). Requires an authenticated session authorized for org:admin on the active organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-urls JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access find-shadow-mcp-inventory-servers --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-urls '[\n      \"abc123\",\n      \"abc123\"\n   ]' --session-token \"abc123\"")
-}
-
-func accessUpdateShadowMCPInventoryServerNameUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access update-shadow-mcp-inventory-server-name", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access update-shadow-mcp-inventory-server-name --body '{\n      \"name\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessSetShadowMCPOfficialServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access set-shadow-mcp-official-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-shadow-mcp-official-server --body '{\n      \"keep_shadow\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessListShadowMCPInventoryUsersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory-users", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-url STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -cursor STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListShadowMCPInventoryServersForUserUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-shadow-mcp-inventory-servers-for-user", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -user-keys JSON")
-	fmt.Fprint(os.Stderr, " -from STRING")
-	fmt.Fprint(os.Stderr, " -to STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -user-keys JSON: `)
-	fmt.Fprintln(os.Stderr, `    -from STRING: `)
-	fmt.Fprintln(os.Stderr, `    -to STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-servers-for-user --project-id \"550e8400-e29b-41d4-a716-446655440000\" --user-keys '[\n      \"abc123\",\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --session-token \"abc123\"")
-}
-
-func accessResolveShadowMCPInventoryRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-shadow-mcp-inventory-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-shadow-mcp-inventory-request --body '{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessListAIDetectionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-ai-detections", os.Args[0])
-	fmt.Fprint(os.Stderr, " -category STRING")
-	fmt.Fprint(os.Stderr, " -directory-group-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -category STRING: `)
-	fmt.Fprintln(os.Stderr, `    -directory-group-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detections --category \"assistant\" --directory-group-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
-}
-
-func accessListEmployeeAIDetectionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-employee-ai-detections", os.Args[0])
-	fmt.Fprint(os.Stderr, " -user-email STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -user-email STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func accessListAIDetectionUsersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-ai-detection-users", os.Args[0])
-	fmt.Fprint(os.Stderr, " -target-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detection-users --target-id \"aa\" --session-token \"abc123\"")
-}
-
-func accessSetAIToolDecisionUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access set-ai-tool-decision", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-ai-tool-decision --body '{\n      \"decision\": \"approved\",\n      \"rationale\": \"aaa\",\n      \"target_id\": \"1\"\n   }' --session-token \"abc123\"")
-}
-
-func accessListResourceAudienceUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-resource-audience", os.Args[0])
-	fmt.Fprint(os.Stderr, " -resource-kind STRING")
-	fmt.Fprint(os.Stderr, " -resource-id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
-	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-resource-audience --resource-kind \"mcp\" --resource-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessSetResourceAudienceUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access set-resource-audience", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace the rules that name one resource. Organization-wide rules are left untouched.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access set-resource-audience --body '{\n      \"entries\": [\n         {\n            \"dispositions\": [\n               \"destructive\"\n            ],\n            \"level\": \"view\",\n            \"principal_urn\": \"abc123\",\n            \"tools\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"expected_version\": \"abc123\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"mcp\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListAudienceOptionsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-audience-options", os.Args[0])
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the principals that can be given access: everyone, roles, people, and agents.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-audience-options --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessExplainResourceAccessUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access explain-resource-access", os.Args[0])
-	fmt.Fprint(os.Stderr, " -resource-kind STRING")
-	fmt.Fprint(os.Stderr, " -resource-id STRING")
-	fmt.Fprint(os.Stderr, " -user-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
-	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access explain-resource-access --resource-kind \"mcp\" --resource-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
-}
-
-func accessRequestAccessUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access request-access", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access request-access --body '{\n      \"duration\": \"2h\",\n      \"message\": \"aaa\",\n      \"requested_until\": \"1970-01-01T00:00:01Z\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListChallengesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-challenges", os.Args[0])
-	fmt.Fprint(os.Stderr, " -outcome STRING")
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
-	fmt.Fprint(os.Stderr, " -scope STRING")
-	fmt.Fprint(os.Stderr, " -exclude-scopes JSON")
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -resolved BOOL")
-	fmt.Fprint(os.Stderr, " -ids JSON")
-	fmt.Fprint(os.Stderr, " -from STRING")
-	fmt.Fprint(os.Stderr, " -to STRING")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -offset INT")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
-	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
-	fmt.Fprintln(os.Stderr, `    -exclude-scopes JSON: `)
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -ids JSON: `)
-	fmt.Fprintln(os.Stderr, `    -from STRING: `)
-	fmt.Fprintln(os.Stderr, `    -to STRING: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -offset INT: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --exclude-scopes '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --project-id \"abc123\" --resolved false --ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListChallengeBucketsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-challenge-buckets", os.Args[0])
-	fmt.Fprint(os.Stderr, " -outcome STRING")
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
-	fmt.Fprint(os.Stderr, " -scope STRING")
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -resolved BOOL")
-	fmt.Fprint(os.Stderr, " -limit INT")
-	fmt.Fprint(os.Stderr, " -offset INT")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
-	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -limit INT: `)
-	fmt.Fprintln(os.Stderr, `    -offset INT: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenge-buckets --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessResolveChallengeUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access resolve-challenge", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access resolve-challenge --body '{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"principal_urn\": \"abc123\",\n      \"resolution_type\": \"dismissed\",\n      \"resource_id\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"role_assignment_confirmed\": false,\n      \"role_slug\": \"abc123\",\n      \"scope\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
-}
-
-func accessListIdentityAccessUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-identity-access", os.Args[0])
-	fmt.Fprint(os.Stderr, " -user-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-identity-access --user-id \"abc123\" --session-token \"abc123\"")
-}
-
-func accessCreateTemporaryGrantUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access create-temporary-grant", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-temporary-grant --body '{\n      \"challenge_ids\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
-}
-
-func accessListTemporaryGrantsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-temporary-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -principal-urn STRING")
-	fmt.Fprint(os.Stderr, " -include-expired BOOL")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
-	fmt.Fprintln(os.Stderr, `    -include-expired BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-temporary-grants --principal-urn \"abc123\" --include-expired false --session-token \"abc123\"")
-}
-
-func accessRenewTemporaryGrantUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access renew-temporary-grant", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access renew-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func accessRevokeTemporaryGrantUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access revoke-temporary-grant", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access revoke-temporary-grant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func accessListAccessRequestsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access list-access-requests", os.Args[0])
-	fmt.Fprint(os.Stderr, " -status STRING")
-	fmt.Fprint(os.Stderr, " -mine BOOL")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -status STRING: `)
-	fmt.Fprintln(os.Stderr, `    -mine BOOL: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-access-requests --status \"abc123\" --mine false --session-token \"abc123\"")
-}
-
-func accessDecideAccessRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access decide-access-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access decide-access-request --body '{\n      \"approve\": false,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
-}
-
-func accessWithdrawAccessRequestUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access withdraw-access-request", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Withdraw a pending access request you made. Only the requester can withdraw it.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access withdraw-access-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }

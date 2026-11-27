@@ -5,8 +5,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var _ = Service("access", func() {
@@ -1442,14 +1440,14 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client", "*")
+		shared.SelectorResourceKindEnum()
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
 	})
 	Attribute("client_type", String, func() {
 		Description("Auth client type filter (mcp:auth and mcp:blocked_auth only).")
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+		shared.SelectorAuthClientTypeEnum()
 	})
 	Attribute("connection_owner", String, func() {
 		Description("Personal connection owner filter (mcp:auth and mcp:blocked_auth on remote_session clients only). A user ID, '*', or '$represented_user' for the user the request acts for. Never lets a caller use another user's connection.")
@@ -1459,7 +1457,7 @@ var SelectorModel = Type("Selector", func() {
 	})
 	Attribute("disposition", String, func() {
 		Description("Tool disposition filter (MCP scopes only).")
-		Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+		shared.DispositionEnum()
 	})
 	Attribute("tool", String, func() {
 		Description("Specific tool name filter (MCP scopes only).")
@@ -1478,7 +1476,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum(conv.AnySlice(authz.ScopeNames())...)
+		shared.ScopeEnum()
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -1492,13 +1490,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum(conv.AnySlice(authz.ScopeNames())...)
+		shared.ScopeEnum()
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum(conv.AnySlice(authz.ScopeNames())...)
+			shared.ScopeEnum()
 		})
 	})
 
@@ -1541,33 +1539,33 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum(conv.AnySlice(authz.ScopeNames())...)
+		shared.ScopeEnum()
 	})
 	Attribute("label", String, "Short name for the permission as people see it, e.g. \"View tool logs\".")
 	Attribute("description", String, "What a holder of this scope can do and, where it matters, what the scope does not include.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "workload", "mcp_auth_client")
+		shared.ResourceKindEnum()
 	})
 	Attribute("category", String, func() {
 		Description("How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.")
-		Enum("org", "project", "mcp", "mcp_auth_client", "environment", "skill", "plugin", "assistant", "risk_policy", "session", "inference", "log", "agent", "workload")
+		shared.ScopeCategoryEnum()
 	})
 	Attribute("sensitive", Boolean, "Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.")
 	Attribute("sensitivity", String, func() {
 		Description("Why the scope is sensitive. Absent when sensitive is false.")
-		Enum("conversations", "tool_logs", "destructive_admin")
+		shared.SensitivityEnum()
 	})
 	Attribute("sub_scopes", ArrayOf(String), "User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.")
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
-		Enum("user_visible", "internal")
+		shared.ScopeVisibilityEnum()
 	})
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("temporary_grantable", Boolean, "Whether an administrator can give this scope for a limited time with createTemporaryGrant.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum(conv.AnySlice(authz.ExclusionScopeNames())...)
+		shared.ExclusionScopeEnum()
 	})
 })
 
@@ -1581,7 +1579,7 @@ var ScopeTaskModel = Type("ScopeTask", func() {
 		Example("Review other members' sessions")
 	})
 	Attribute("scopes", ArrayOf(String, func() {
-		Enum(conv.AnySlice(authz.ScopeNames())...)
+		shared.ScopeEnum()
 	}), "Every scope the task needs end to end.", func() {
 		Example([]string{"chat:read", "log:read"})
 	})
@@ -1651,7 +1649,7 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+			shared.DispositionEnum()
 		})
 	})
 })
@@ -1683,7 +1681,7 @@ var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
 	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
 	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+			shared.DispositionEnum()
 		})
 	})
 })
@@ -1746,7 +1744,7 @@ var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
 	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
 	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
 		Elem(func() {
-			Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
+			shared.DispositionEnum()
 		})
 	})
 	Attribute("effect", String, "How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.", func() {
@@ -1797,7 +1795,7 @@ var ExplainedCredentialAccessModel = Type("ExplainedCredentialAccess", func() {
 	})
 	Attribute("name", String, "The credential's name.")
 	Attribute("client_type", String, "The kind of credential.", func() {
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+		shared.AuthClientTypeEnum()
 	})
 	Attribute("enabled", Boolean, "Whether the credential is turned on. A turned-off credential is unusable whatever the rules say.")
 	Attribute("allowed", Boolean, "Whether the member's rules let them use it, with their own connection for a personal credential.")
@@ -2397,7 +2395,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "inference:execute", "log:read", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest", "channels:connect", "channels:admin", "channels:read_all")
+		shared.UserVisibleScopeEnum()
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")

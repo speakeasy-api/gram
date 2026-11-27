@@ -3228,13 +3228,13 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		}
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "ema" || *body.ClientType == "pass_through" || *body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential", "*"}))
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
+		if !(*body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "read_only" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"destructive", "idempotent", "open_world", "read_only", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {

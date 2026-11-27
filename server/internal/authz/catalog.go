@@ -32,6 +32,10 @@ type ScopeEntry struct {
 
 	// Sensitivity says why the scope deserves a warning before it is granted.
 	Sensitivity Sensitivity
+
+	// TemporaryAccess says an administrator may give the scope for a limited
+	// time, and a member may ask for it that way.
+	TemporaryAccess bool
 }
 
 // Sensitive reports whether granting the scope deserves a warning.
@@ -73,6 +77,35 @@ func ScopeNames() []string {
 		out = append(out, string(entry.Scope))
 	}
 	return out
+}
+
+// TemporaryAccessScopeNames returns, in presentation order, every scope an
+// administrator may give for a limited time.
+func TemporaryAccessScopeNames() []string {
+	var out []string
+	for _, entry := range scopeCatalog {
+		if entry.TemporaryAccess {
+			out = append(out, string(entry.Scope))
+		}
+	}
+	return out
+}
+
+// UserVisibleScopeNames returns, in presentation order, every scope a person
+// grants or asks for by name. Blocks and internal scopes are left out.
+func UserVisibleScopeNames() []string {
+	var out []string
+	for _, entry := range scopeCatalog {
+		if visibility, _ := ScopeVisibilityFor(entry.Scope); visibility == ScopeVisibilityUserVisible {
+			out = append(out, string(entry.Scope))
+		}
+	}
+	return out
+}
+
+// AllowsTemporaryAccess reports whether scope can be given for a limited time.
+func AllowsTemporaryAccess(scope Scope) bool {
+	return scopeCatalogByScope[scope].TemporaryAccess
 }
 
 // ExclusionScopeNames returns, in presentation order of the scopes they

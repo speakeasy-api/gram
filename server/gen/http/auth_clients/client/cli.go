@@ -36,8 +36,8 @@ func BuildListAuthClientsPayload(authClientsListAuthClientsMcpServerID string, a
 	{
 		if authClientsListAuthClientsClientType != "" {
 			clientType = &authClientsListAuthClientsClientType
-			if !(*clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential" || *clientType == "pass_through" || *clientType == "ema") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema"}))
+			if !(*clientType == "ema" || *clientType == "pass_through" || *clientType == "remote_session" || *clientType == "service_account" || *clientType == "static_credential") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("client_type", *clientType, []any{"ema", "pass_through", "remote_session", "service_account", "static_credential"}))
 			}
 			if err != nil {
 				return nil, err
