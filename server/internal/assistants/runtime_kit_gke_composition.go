@@ -132,7 +132,7 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	// Projects without a served Project Gateway keep the legacy default.
+	// Projects without a served Project Gateway use the Default runtime.
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
@@ -216,9 +216,9 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 }
 
 // kitAssistantEligible reports whether the project's Project Gateway is served
-// for machine access, retaining the legacy default otherwise. This predicate
+// for machine access, keeping the Default runtime otherwise. This predicate
 // itself does not read tool assignments or backing-agent grants (CreateAssistant
-// keeps creates with initial legacy attachments on Default before calling it).
+// keeps creates with explicit MCP attachments on Default before calling it).
 func (s *ServiceCore) kitAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, hosts *orghost.Resolver) (bool, error) {
 	_, _, err := s.kitProjectGateway(ctx, tx, assistant, hosts)
 	if errors.Is(err, errKitMCPIneligible) {
