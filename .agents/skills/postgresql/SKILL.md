@@ -65,6 +65,14 @@ Reference these guidelines when:
 
 ## Schema design rules
 
+### Chat message bodies
+
+`chat_messages.content`, `content_raw`, `tool_calls`, `tool_outcome_notes`, `tool_call_summaries` and `storage_error` are the message body. Projects with encrypted transcripts keep a copy in `chat_message_transcripts`, so:
+
+- Never add SQL that updates these columns of an existing message. Change the body through `transcriptstore.Transcripts.UpdateBody`, which locks the row, applies the change in Go and writes every copy in one transaction. Keep non-body columns in your own statements in the same transaction.
+- Read bodies through `transcriptstore.Transcripts`, and insert messages through the chat message writer, which seals them.
+- The `noplaintexttranscriptread` glint rule fails CI on a violation.
+
 ### Multi-tenancy by project
 
 When creating any tables, add a non-nullable column named `project_id` of type `uuid` with a foreign key constraint to the `projects` table. If appropriate to the nature and usage patterns of the table also include `organization_id TEXT NOT NULL` column.

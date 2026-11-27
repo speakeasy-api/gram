@@ -70,6 +70,9 @@ reviews:
       description: |-
         The demo org (app.getgram.ai/explore-demo) and every developer's local org are populated by the demo seed in server/internal/demoseed/. A feature that ships without seed data shows an empty page in both. When a diff introduces or reshapes data a dashboard page renders (a new table or entity kind, a column or field a page reads, a new telemetry dimension or ClickHouse attribute, a new page or tab backed by new data) and the diff does not seed that data in server/internal/demoseed/, flag the omission on the changed feature code. A seed change for unrelated data is not coverage. Name the affected page and the rows, fields, or facets it will be missing.
         Do not flag internal-only or admin-only data, backend plumbing no page renders, purely cosmetic UI changes, renames, or features whose data the existing seed already covers. Accept an explicit, justified exclusion in the PR description. When the seed does change, check it follows .agents/skills/gram-demo-seed/SKILL.md: ids, users and emails derived from demoseed.Spec, no hardcoded demo identifiers, and seed/demo/PAGES.md updated. Follow REVIEW.md for the checklist.
+    - name: Keep Message Bodies Behind The Transcript Store
+      description: |-
+        The chat message body is content, content_raw, tool_calls, tool_outcome_notes, tool_call_summaries and storage_error on chat_messages, and projects with encrypted transcripts keep a copy in chat_message_transcripts. Flag any change that updates these columns of an existing message outside server/internal/chat/transcriptstore (a sqlc query, raw SQL, or a new allowlist entry in glint/no_plaintext_transcript_read.go) instead of going through transcriptstore.Transcripts.UpdateBody, and any new reader of these columns that does not read through transcriptstore.Transcripts. Follow REVIEW.md "Message Bodies".
 pr_descriptions:
   generate: true
   cubic_review_link: true

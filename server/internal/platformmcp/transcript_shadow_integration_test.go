@@ -29,6 +29,7 @@ func newShadowTranscripts(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 
 func captureShadows(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *transcriptstore.Store, organizationID string, projectID uuid.UUID, ids ...uuid.UUID) {
 	t.Helper()
+	require.NoError(t, store.Prepare(ctx, organizationID), "writers load the key before the transaction")
 	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
