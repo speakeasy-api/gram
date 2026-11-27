@@ -3656,7 +3656,10 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		return nil, err
 	}
 
-	mcpServers, deliveryMode, platformSlugs := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
+	mcpServers, deliveryMode, platformSlugs, err := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
+	if err != nil {
+		return nil, err
+	}
 
 	notice := ""
 	if event.SkillSetSnapshot != nil {
@@ -3753,25 +3756,22 @@ func (s *ServiceCore) currentRuntimeMCPServersForTurn(
 	runtimeVersion int16,
 	agentBacked bool,
 	turnToken string,
-) ([]runtimeMCPServer, MCPDeliveryMode, []string) {
+) ([]runtimeMCPServer, MCPDeliveryMode, []string, error) {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
-		return nil, MCPDeliveryPerServer, nil
+		return nil, MCPDeliveryPerServer, nil, nil
 	}
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
-			attr.SlogError(err),
-		)
-		return nil, MCPDeliveryPerServer, nil
+		return nil, MCPDeliveryPerServer, nil, fmt.Errorf("resolve platform toolsets for mcp reconcile: %w", err)
 	}
 	if runtimeVersion != 3 && agentBacked {
 		elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
 		if elig.Eligible {
-			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs
+			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs, nil
 		}
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer, platformSlugs
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer, platformSlugs, nil
 }
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
