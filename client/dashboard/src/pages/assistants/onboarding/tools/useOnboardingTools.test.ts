@@ -87,7 +87,7 @@ describe("isOnboardingToolAllowed", () => {
     expect(isOnboardingToolAllowed("propose_slack_setup", admin)).toBe(true);
   });
 
-  it("hides legacy MCP attachment tools for Kit assistants while keeping Slack and MCP reads", () => {
+  it("omits attachment write tools for Kit assistants while keeping Slack and MCP reads", () => {
     const kitAdmin: OnboardingToolPermissions = {
       usesProjectMCPAccess: true,
       canWriteAssistant: true,

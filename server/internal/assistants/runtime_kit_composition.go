@@ -137,7 +137,7 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	// Projects without a served Project Gateway keep the legacy default.
+	// Projects without a served Project Gateway use the Default runtime.
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
@@ -190,7 +190,7 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 var errKitMCPConfigurationUnverified = fmt.Errorf("%w: kit runtime MCP configuration is unverified", errKitRuntimeUnrecoverable)
 
 // The verified filesystem config owns the single Project Gateway connection.
-// Do not shadow it with legacy per-turn server overlays or management credentials.
+// Do not shadow it with per-turn server overlays or management credentials.
 type kitConfiguredRuntimeProtocol struct {
 	*KitRuntimeProtocol
 }
@@ -203,8 +203,8 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 		return ErrKitRuntimeBinding
 	}
 	if metadata.Workload == nil || !metadata.Workload.MCPProjectGateway {
-		// An older runtime lacks the single-entry Project Gateway config.
-		// The turn worker revokes its credentials and replaces it cleanly.
+		// Runtimes without verified Project Gateway metadata fail closed so
+		// the turn worker revokes their credentials and replaces them cleanly.
 		return errKitMCPConfigurationUnverified
 	}
 	turn.AuthToken = ""

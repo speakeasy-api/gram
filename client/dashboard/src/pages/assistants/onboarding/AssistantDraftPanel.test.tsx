@@ -83,7 +83,7 @@ vi.mock("./AssistantKitMCPAccess", () => ({
   ),
 }));
 vi.mock("./AssistantMCPServersSection", () => ({
-  AssistantMCPServersSection: () => <div>Legacy MCP servers</div>,
+  AssistantMCPServersSection: () => <div>Attached MCP servers</div>,
 }));
 vi.mock("./AssistantSkillsSection", () => ({
   AssistantSkillsSection: () => null,
@@ -156,14 +156,14 @@ it("disables the onboarding selector without write permission", () => {
   ).toBe(true);
 });
 
-it("shows Kit MCP access on Overview for Kit assistants and legacy attachments otherwise", () => {
+it("shows Kit MCP access on Overview for Kit assistants and attached MCP servers otherwise", () => {
   renderPanel();
-  expect(screen.getByText("Legacy MCP servers")).toBeTruthy();
+  expect(screen.getByText("Attached MCP servers")).toBeTruthy();
   expect(screen.queryByText(/Kit MCP access/)).toBeNull();
 
   cleanup();
   state.runtimeVersion = 3;
   renderPanel();
   expect(screen.getByText("Kit MCP access (agent-1)")).toBeTruthy();
-  expect(screen.queryByText("Legacy MCP servers")).toBeNull();
+  expect(screen.queryByText("Attached MCP servers")).toBeNull();
 });
