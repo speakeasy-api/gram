@@ -17,7 +17,7 @@ import (
 // the decision a caller would otherwise repeat: whether a project has encrypted
 // transcripts, so its messages are sealed on write and opened on read. Today
 // that is the projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS. Every other
-// project reads plaintext: inserts, updates and Open touch no transcript. A nil *Transcripts
+// project reads plaintext: inserts, updates and OpenChatMessages touch no transcript. A nil *Transcripts
 // means no project has encrypted transcripts.
 type Transcripts struct {
 	store     *Store
@@ -93,6 +93,41 @@ const (
 	ModeEncrypted
 )
 
+// modeRules is everything that depends on a project's mode, in one place, so
+// a new mode is one new value and no call site changes. Inserts, updates,
+// reads and reseals ask these questions instead of checking the mode.
+type modeRules struct {
+	// sealsTranscript: every write also stores an encrypted transcript, and
+	// reads and updates open it.
+	sealsTranscript bool
+	// writesPlaintextColumns: the protected fields are also written to the
+	// chat_messages columns. When false the columns are written empty.
+	writesPlaintextColumns bool
+	// comparesTranscriptToPlaintext: an opened transcript is checked against
+	// the plaintext row, and the plaintext row is served when they disagree.
+	comparesTranscriptToPlaintext bool
+	// missingTranscriptError is returned when a message has no current
+	// transcript. Nil serves the plaintext row instead.
+	missingTranscriptError error
+}
+
+var (
+	plaintextRules = modeRules{sealsTranscript: false, writesPlaintextColumns: true, comparesTranscriptToPlaintext: false, missingTranscriptError: nil}
+	shadowRules    = modeRules{sealsTranscript: true, writesPlaintextColumns: true, comparesTranscriptToPlaintext: true, missingTranscriptError: nil}
+	encryptedRules = modeRules{sealsTranscript: true, writesPlaintextColumns: false, comparesTranscriptToPlaintext: false, missingTranscriptError: ErrMissingTranscript}
+)
+
+// rules returns the mode's rules.
+func (m Mode) rules() modeRules {
+	if m == ModeEncrypted {
+		return encryptedRules
+	}
+	if m == ModeShadow {
+		return shadowRules
+	}
+	return plaintextRules
+}
+
 // Mode reports how the project stores protected fields.
 func (t *Transcripts) Mode(projectID uuid.UUID) Mode {
 	if t == nil || t.store == nil {
@@ -128,7 +163,7 @@ func (t *Transcripts) UpdateChatMessage(ctx context.Context, db repo.DBTX, organ
 	return changed, nil
 }
 
-// OpenTarget is one loaded message for Open: its ID, and Set, which writes
+// OpenTarget is one loaded message for OpenChatMessages: its ID, and Set, which writes
 // the opened protected fields into the row the caller loaded. Each row type's
 // Set writes only the fields that row has.
 type OpenTarget struct {
@@ -152,7 +187,7 @@ func (t *Transcripts) open(ctx context.Context, organizationID string, projectID
 	for i, target := range targets {
 		ids[i] = target.MessageID
 	}
-	opened, err := t.store.open(ctx, organizationID, projectID, ids, t.Mode(projectID) == ModeEncrypted)
+	opened, err := t.store.open(ctx, organizationID, projectID, ids, t.Mode(projectID).rules())
 	if err != nil {
 		return fmt.Errorf("open encrypted chat transcript: %w", err)
 	}
