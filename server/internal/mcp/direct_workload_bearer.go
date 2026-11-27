@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
@@ -458,8 +460,8 @@ func (s *Service) admitDirectWorkloadForAuthorizer(
 	if err != nil {
 		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: load workload organization: %w", errWorkloadSessionAdmissionLoad, err)
 	}
-	if org.DisabledAt.Valid {
-		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: organization is disabled", errCredentialRejected)
+	if refusal := orgserving.Check(org); refusal != orgserving.RefusalNone {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: organization is not served (%s)", errCredentialRejected, refusal)
 	}
 
 	principals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, s.db, organizationID, authorizerUserID)
@@ -628,6 +630,21 @@ func (s *Service) authorizeDirectWorkloadInference(
 			}
 		}
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, project.OrganizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ctx, true, oops.C(oops.CodeUnauthorized)
+	}
+	if err != nil {
+		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+	}
+	if refusal := orgserving.Check(organization); refusal != orgserving.RefusalNone {
+		s.logger.DebugContext(ctx, "workload inference refused for unserved organization",
+			attr.SlogOrganizationID(project.OrganizationID),
+			attr.SlogReason(string(refusal)),
+		)
+		return ctx, true, oops.E(oops.CodeUnauthorized, nil, "invalid inference credential")
 	}
 
 	version := runtimepolicy.InferenceIssuedPolicyVersion
