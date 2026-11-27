@@ -2,7 +2,6 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import type { RegisterMutationVariables } from "@gram/client/react-query/register.js";
 import { buildRegisterMutation } from "@gram/client/react-query/register.js";
@@ -59,12 +58,6 @@ export function RegisterPanel({
           ? `/${org.slug}/billing`
           : (safeSameOriginUrl(redirectTo) ?? "/");
       window.location.replace(destination);
-    },
-
-    onError: (error) => {
-      if (error instanceof GramError && error.statusCode === 409) {
-        window.location.replace(safeSameOriginUrl(redirectTo) ?? "/");
-      }
     },
   });
 
