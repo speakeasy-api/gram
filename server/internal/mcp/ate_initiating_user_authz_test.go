@@ -49,6 +49,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type testATEAuthorizerAdapter struct {
@@ -1006,4 +1008,90 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 		}))
 		require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fxStopped.f.ti, fxStopped.gateway, tokStopped, listServersBody(t), "", nil).Code)
 	})
+}
+
+func TestATEInitiatingUserAuthz_BlockedUserRefusedOnGatewayAndInference(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	fx := newATEActorAuthzFixture(t)
+	fx.f.ti.service.SetAuthClientPermitted(true)
+
+	// Freeze the Stage-1 cache clock to prove blocked-user refusal runs fresh on
+	// every request inside the 5-second Stage-1 cache window.
+	frozenNow := time.Now()
+	fx.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
+
+	userA := fx.seedOrgMember(t, "alice-blocked", true, true)
+
+	slugA := "svc-blocked-" + uuid.NewString()[:6]
+	serverA, _ := fx.seedRemoteMemberServer(t, slugA, "ping_blocked")
+	agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, fx.f.agentID.String())
+	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, fx.ownerUserID, serverA.String())
+	seedPrincipalMCPConnectGrant(t, ctx, fx.f.ti, fx.orgID, agentURN, serverA)
+	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, userA, serverA.String())
+	enableWorkloadInference(t, fx.f)
+
+	actorA := fx.seedThreadActor(t, "alice-blocked", userA, assistants.ATEInitiatorDashboardSender)
+	actorNoUser := fx.seedThreadActor(t, "cron-blocked", "", assistants.ATEInitiatorNoUser)
+
+	gwTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
+	infTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadInferenceAudience)
+	gwTokenNoUser := fx.mintActorToken(t, actorNoUser, mcp.DirectWorkloadProjectGatewayAudience)
+	infTokenNoUser := fx.mintActorToken(t, actorNoUser, mcp.DirectWorkloadInferenceAudience)
+
+	var inferenceCalls atomic.Int32
+	completionClient := &managedInferenceCompletion{complete: func(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+		inferenceCalls.Add(1)
+		msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{})
+		return &openrouter.CompletionResponse{Message: &msg, Model: "test/model"}, nil
+	}}
+	chatRouter := newDirectWorkloadChatMux(t, fx.f, completionClient)
+	infPath := "/projects/" + fx.projectID.String() + "/chat/completions"
+	infBodyA := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorA.acpSessionID)
+	infBodyNoUser := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorNoUser.acpSessionID)
+
+	// Warm Stage-1 cache for both threads while neither user is blocked.
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenNoUser, nil, infBodyNoUser).Code)
+	require.EqualValues(t, 2, inferenceCalls.Load())
+
+	setBlocked := func(userID string, blocked bool) {
+		require.NoError(t, usersrepo.New(fx.f.ti.conn).SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
+			Blacklisted: blocked,
+			ID:          userID,
+		}))
+		userblock.Forget(fx.f.ti.conn)
+	}
+
+	// 1. Blocking the initiating user immediately refuses Thread A on BOTH Project
+	//    Gateway and inference with 401 (never falling back to userless authority),
+	//    while leaving the unaffected userless thread working.
+	setBlocked(userA, true)
+	gwBlocked := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil)
+	require.Equal(t, http.StatusUnauthorized, gwBlocked.Code, gwBlocked.Body.String())
+	infBlocked := postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA)
+	require.Equal(t, http.StatusUnauthorized, infBlocked.Code, infBlocked.Body.String())
+	require.EqualValues(t, 2, inferenceCalls.Load(), "blocked initiating user must not reach inference")
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
+
+	// Unblocking the initiating user restores both endpoints.
+	setBlocked(userA, false)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
+	require.EqualValues(t, 3, inferenceCalls.Load())
+
+	// 2. Blocking the assistant's owner refuses BOTH human-initiated and userless
+	//    direct-bearer workload requests on Project Gateway and inference.
+	setBlocked(fx.ownerUserID, true)
+	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusUnauthorized, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
+	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusUnauthorized, postCompletionRequest(chatRouter, infPath, infTokenNoUser, nil, infBodyNoUser).Code)
+	require.EqualValues(t, 3, inferenceCalls.Load(), "blocked owner must not reach inference")
+
+	// Unblocking the owner restores access.
+	setBlocked(fx.ownerUserID, false)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
 }
