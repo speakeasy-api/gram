@@ -74,6 +74,9 @@ type OrganizationMetadatum struct {
 	// Staff-entered link to the adoption dashboard for this organization.
 	// @access: restricted
 	AdoptionDashboardUrl pgtype.Text
+	// Staff-set limit in seconds on one function invocation; NULL means the platform default.
+	// @access: confidential
+	FunctionTimeoutSeconds pgtype.Int4
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
