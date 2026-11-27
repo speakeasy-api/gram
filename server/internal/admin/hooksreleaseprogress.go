@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
@@ -27,21 +28,10 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read hooks generator version").LogError(ctx, s.logger)
 	}
-	store := hooksrollout.NewStore(s.db)
-	defaultPin, err := store.DefaultPin(ctx)
+	result, err := s.readHooksPublishState(ctx, current)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read default hooks rollout pin").LogError(ctx, s.logger)
+		return nil, err
 	}
-	overrides, err := store.ListOverrides(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout overrides").LogError(ctx, s.logger)
-	}
-	repos, err := repo.New(s.db).AdminListHooksPublishState(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
-	}
-
-	result := summarizeHooksPublishState(repos, current, defaultPin, overrides, s.staffOrg)
 	if s.hookFleetVersions.Latest != nil {
 		result.CurrentBinaryVersion = new(s.hookFleetVersions.Latest.String())
 	}
@@ -59,7 +49,37 @@ func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksRe
 	return result, nil
 }
 
-func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
+// readHooksPublishState reads the pins, the stage and the publish state
+// from one snapshot, so a stage completing mid-read can't pair the old default
+// pin with the completed stage. The transaction ends before the slower fleet
+// read.
+func (s *Service) readHooksPublishState(ctx context.Context, current int) (*gen.AdminHooksReleaseProgress, error) {
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin hooks release progress read").LogError(ctx, s.logger)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	store := hooksrollout.NewStore(tx)
+	defaultPin, err := store.DefaultPin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read default hooks rollout pin").LogError(ctx, s.logger)
+	}
+	overrides, err := store.ListOverrides(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list hooks rollout overrides").LogError(ctx, s.logger)
+	}
+	stage, err := hooksrollout.NewStageStore(tx).Current(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read staged hooks rollout").LogError(ctx, s.logger)
+	}
+	repos, err := repo.New(tx).AdminListHooksPublishState(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list hooks publish state").LogError(ctx, s.logger)
+	}
+	return summarizeHooksPublishState(repos, current, defaultPin, stage, overrides, s.staffOrg), nil
+}
+
+func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, current int, defaultPin *hooksrollout.Pin, stage *hooksrollout.Stage, overrides []hooksrollout.Override, staffOrg staff.Organization) *gen.AdminHooksReleaseProgress {
 	overrideByOrg := make(map[string]*hooksrollout.Pin, len(overrides))
 	for _, override := range overrides {
 		overrideByOrg[override.OrganizationID] = &override.Pin
@@ -91,8 +111,8 @@ func summarizeHooksPublishState(rows []repo.AdminListHooksPublishStateRow, curre
 		seen[row.OrganizationID] = true
 		result.Organizations++
 
-		pins := hooksrollout.OrganizationPins{Override: overrideByOrg[row.OrganizationID], Default: defaultPin}
-		pin, _ := pins.Effective()
+		pins := hooksrollout.OrganizationPins{Override: overrideByOrg[row.OrganizationID], Default: defaultPin, Stage: stage}
+		pin, _ := pins.Effective(row.OrganizationID)
 		switch {
 		case staffOrg.Is(row.OrganizationID):
 			result.OrganizationsCleared++
