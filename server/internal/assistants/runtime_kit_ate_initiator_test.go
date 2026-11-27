@@ -318,6 +318,42 @@ func TestKitATEInitiator_RecordedOnceAndImmutableAcrossTurnsCrashesAndRuntimeRep
 		require.False(t, row2.InitiatingUserID.Valid, "userless thread must remain userless on replacement")
 		require.Equal(t, ATEInitiatorNoUser, row2.InitiatingUserResolution)
 	})
+
+	t.Run("legacy not_recorded actor row fails closed on replacement instead of adopting a later sender", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		core, q, runtimeSeed, ateBackend, _, _, reserveAndEnsure := newFixture(t)
+		threadLegacy := insertATEThreadFixture(t, core.db, runtimeSeed.ProjectID, runtimeSeed.AssistantID, "initiator-legacy")
+		rec1 := reserveAndEnsure(threadLegacy)
+
+		// Seed a soft-deleted legacy actor row whose initiating_user_resolution is not_recorded.
+		legacyRow, err := q.InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
+			ActorName:                "spk-kit-legacy-actor",
+			ActorUid:                 "uid-legacy-" + uuid.NewString(),
+			State:                    ateActorStateRunning,
+			Configured:               true,
+			InitiatingUserResolution: ATEInitiatorNotRecorded,
+			RuntimeID:                rec1.ID,
+			ProjectID:                runtimeSeed.ProjectID,
+			AssistantID:              runtimeSeed.AssistantID,
+			ThreadID:                 threadLegacy,
+		})
+		require.NoError(t, err)
+		_, err = q.SoftDeleteAssistantATEActor(ctx, assistantrepo.SoftDeleteAssistantATEActorParams{
+			RetiredState: ateActorStateRetired,
+			ProjectID:    runtimeSeed.ProjectID,
+			ID:           legacyRow.ID,
+		})
+		require.NoError(t, err)
+
+		// Attempting to create a replacement actor on a later turn by User B must fail closed.
+		err = ateBackend.RunTurn(ctx, rec1, runTurnRequest{
+			ThreadID: threadLegacy, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
+			Initiator: ateThreadInitiator{UserID: "user-later-sender", Resolution: ATEInitiatorDashboardSender},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "validate earliest ATE thread initiator")
+	})
 }
 
 // TestAssistantATEActorInitiatorColumnsAreNeverUpdated verifies statically that

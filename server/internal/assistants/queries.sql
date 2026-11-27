@@ -2124,13 +2124,14 @@ FOR UPDATE;
 
 -- name: GetEarliestAssistantATEActorInitiatorForThread :one
 -- Returns the thread's earliest recorded ATE actor initiator across all
--- runtimes (including soft-deleted rows) so replacement actors inherit the
--- original initiating user immutably. Uses assistant_ate_actors_project_thread_idx.
+-- runtimes (including soft-deleted and legacy not_recorded rows) so replacement
+-- actors inherit the original initiating user immutably and legacy unrecorded
+-- threads fail closed instead of adopting a later sender. Uses
+-- assistant_ate_actors_project_thread_idx.
 SELECT initiating_user_id, initiating_user_resolution
 FROM assistant_ate_actors
 WHERE project_id = @project_id
   AND assistant_thread_id = @thread_id
-  AND initiating_user_resolution <> 'not_recorded'
 ORDER BY created_at ASC, id ASC
 LIMIT 1;
 
