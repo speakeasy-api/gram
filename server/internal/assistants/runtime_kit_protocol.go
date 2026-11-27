@@ -648,6 +648,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 				SourceInstructions:     steer.SourceInstructions,
 				InputParts:             steer.InputParts,
 				MCPServers:             nil,
+				Initiator:              ateThreadInitiator{UserID: "", Resolution: ""},
 				NextSteerEvent:         nil,
 			}
 			steerKey, err := kitPromptIdempotencyKey(steerReq)
