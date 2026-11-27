@@ -44,6 +44,7 @@ type workosOrganization struct {
 	CreatedAt                        string                     `json:"created_at"`
 	UpdatedAt                        string                     `json:"updated_at"`
 	ExternalID                       string                     `json:"external_id"`
+	Metadata                         map[string]string          `json:"metadata"`
 }
 
 type workosDirectoryGroup struct {

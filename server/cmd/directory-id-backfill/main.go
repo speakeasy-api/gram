@@ -65,7 +65,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("organization %q has no WorkOS organization ID", *organizationID)
 	}
 
-	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: "", RetryConfig: nil})
+	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: "", RetryConfig: nil, Partition: ""})
 	var report any
 	if *fillNames {
 		report, err = directory.FillDirectoryUserNames(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)

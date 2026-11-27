@@ -16,9 +16,9 @@ import (
 // Unlike Open, it may drop retired columns and indexes, so callers should run
 // it only at an explicit upgrade boundary such as git:worksync.
 //
-// This is temporary support for schema changes introduced on 2026-09-07.
-// Remove it after 2026-10-15, when local environments can be assumed to have
-// run the evolution.
+// This is temporary support for schema changes introduced on 2026-09-07 and
+// 2026-11-27. Remove it after 2027-01-15, when local environments can be
+// assumed to have run the evolution.
 func Evolve(ctx context.Context, cfg config.DB, logger *slog.Logger) error {
 	db, err := openSQLite(ctx, cfg)
 	if err != nil {

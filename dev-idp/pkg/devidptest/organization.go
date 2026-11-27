@@ -65,6 +65,7 @@ func CreateOrganization(t *testing.T, ctx context.Context, q *repo.Queries, opts
 		WorkosID:    conv.StringOrNull(opts.WorkOSID),
 		ExternalID:  sql.NullString{String: "", Valid: false},
 		Domains:     nil,
+		Metadata:    nil,
 	})
 	require.NoError(t, err, "create dev-idp organization")
 	return OrganizationResult{Organization: org}

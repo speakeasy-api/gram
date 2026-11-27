@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -103,7 +104,7 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			maps.Copy(flags, tc.flags)
 
 			got := newAdminWorkOSOrganizationCreator(
-				t.Context(),
+				PushPartition(t.Context(), partition.US),
 				testenv.NewLogger(t),
 				guardian.NewDefaultPolicy(noop.NewTracerProvider()),
 				newAdminCLIContext(t, flags),
@@ -120,6 +121,30 @@ func TestNewAdminWorkOSOrganizationCreator(t *testing.T) {
 			}
 
 			require.IsType(t, (*workos.Client)(nil), got)
+		})
+	}
+}
+
+// TestWorkOSClientOptsCarriesPartition guards the wiring that marks every
+// organization a deployment creates in WorkOS: the client must be built with
+// the partition the root command parsed, not a default.
+func TestWorkOSClientOptsCarriesPartition(t *testing.T) {
+	t.Parallel()
+
+	for _, want := range partition.All() {
+		t.Run(want.String(), func(t *testing.T) {
+			t.Parallel()
+
+			c := newAdminCLIContext(t, map[string]string{
+				"environment":       "prod",
+				"idp-client-secret": "",
+				"workos-api-key":    "",
+				"workos-endpoint":   "",
+				"idp-client-id":     "",
+			})
+
+			opts := workosClientOpts(PushPartition(t.Context(), want), c)
+			require.Equal(t, want, opts.Partition)
 		})
 	}
 }

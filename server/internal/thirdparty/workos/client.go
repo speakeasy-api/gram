@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 )
 
 const workosBaseURL = "https://api.workos.com"
@@ -60,6 +61,7 @@ type Client struct {
 	apiKey      string
 	clientID    string // IDP client ID (GRAM_IDP_CLIENT_ID), needed for SSO code exchange
 	endpoint    string // base URL for raw HTTP calls; defaults to workosBaseURL
+	partition   partition.Partition
 	httpClient  *guardian.HTTPClient
 	orgs        *organizations.Client
 	orgsNoRetry *organizations.Client
@@ -80,6 +82,11 @@ type ClientOpts struct {
 	// RetryConfig overrides the retry policy of retried WorkOS calls. Nil uses
 	// [guardian.DefaultRetryConfig] with a 10 second WaitMax.
 	RetryConfig *guardian.RetryConfig
+
+	// Partition is the partition this deployment runs in. Organizations the
+	// client creates are marked with it. A client without one cannot create
+	// organizations, so tools that only read leave it empty.
+	Partition partition.Partition
 }
 
 func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpts) *Client {
@@ -118,6 +125,7 @@ func NewClient(guardianPolicy *guardian.Policy, apiKey string, opts ...ClientOpt
 		apiKey:     apiKey,
 		clientID:   opt.ClientID,
 		endpoint:   endpoint,
+		partition:  opt.Partition,
 		httpClient: httpClient,
 		orgs:       &organizations.Client{APIKey: apiKey, HTTPClient: httpClient, Endpoint: opt.Endpoint, JSONEncode: nil},
 		orgsNoRetry: &organizations.Client{APIKey: apiKey, HTTPClient: guardianPolicy.PooledClient(

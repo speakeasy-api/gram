@@ -67,7 +67,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	}
 	posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 	featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
-	workosClient, available, err := newWorkOSClient(guardianPolicy, c)
+	workosClient, available, err := newWorkOSClient(ctx, guardianPolicy, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create WorkOS client: %w", err)
 	}

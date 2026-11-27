@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/staff"
@@ -138,7 +139,7 @@ func newAdminWorkOSHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Cl
 	t.Cleanup(server.Close)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client"})
+	return workos.NewClient(policy, "test-api-key", workos.ClientOpts{Endpoint: server.URL, ClientID: "test-client", Partition: partition.US})
 }
 
 func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
