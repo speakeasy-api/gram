@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -116,11 +115,7 @@ func (a *App) slackBotToken(ctx context.Context, triggerInstanceID string) (stri
 		if err != nil {
 			return "", fmt.Errorf("load slack_app auth client: %w", err)
 		}
-		token, err := slackapi.TokenFromEnv(slackapi.TokenPreferBot, toolconfig.CIEnvFrom(creds))
-		if err != nil {
-			return "", nil
-		}
-		return token, nil
+		return toolconfig.CIEnvFrom(creds).Get("SLACK_BOT_TOKEN"), nil
 	}
 	if !instance.EnvironmentID.Valid {
 		return "", nil

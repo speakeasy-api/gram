@@ -183,6 +183,12 @@ func authClientConfigError(err error, creds AssistantSlackCredentials) error {
 	if err == nil {
 		return nil
 	}
+	msg := err.Error()
+	for _, secret := range []string{creds.BotToken, creds.UserToken, creds.Token} {
+		if secret != "" && strings.Contains(msg, secret) {
+			return oops.E(oops.CodeUnexpected, nil, "Slack request failed")
+		}
+	}
 	if missing, ok := errors.AsType[*slackapi.TokenNotConfiguredError](err); ok {
 		return oops.E(
 			oops.CodeFailedPrecondition,
@@ -193,12 +199,6 @@ func authClientConfigError(err error, creds AssistantSlackCredentials) error {
 	}
 	slackErr, ok := errors.AsType[*slackapi.Error](err)
 	if !ok {
-		msg := err.Error()
-		for _, secret := range []string{creds.BotToken, creds.UserToken, creds.Token} {
-			if secret != "" && strings.Contains(msg, secret) {
-				return oops.E(oops.CodeUnexpected, nil, "Slack request failed")
-			}
-		}
 		return err
 	}
 	if slackErr.Code == "missing_scope" {
