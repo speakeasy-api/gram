@@ -138,7 +138,8 @@ func backfillAssistantBuiltinGrants(ctx context.Context, tx pgx.Tx, auditLogger 
 	agentURN := urn.NewAgentIdentity(row.AgentID.String())
 	var added int64
 	for _, grant := range desired {
-		if hasExactPermanentGrant(existing, grant) {
+		prior, found := findExactGrant(existing, grant)
+		if found && !prior.ExpiresAt.Valid {
 			continue
 		}
 		encoded, err := json.Marshal(grant.Selector)
@@ -154,14 +155,25 @@ func backfillAssistantBuiltinGrants(ctx context.Context, tx pgx.Tx, auditLogger 
 		if err != nil {
 			return 0, fmt.Errorf("ensure builtin grant: %w", err)
 		}
+		action := audit.ActionAgentPolicyGrantCreate
+		var before *audit.AgentPolicyGrantSnapshot
+		if found {
+			action = audit.ActionAgentPolicyGrantUpdate
+			before = &audit.AgentPolicyGrantSnapshot{
+				ID:       prior.ID,
+				Scope:    prior.Scope,
+				Effect:   "allow",
+				Selector: grant.Selector,
+			}
+		}
 		if err := auditLogger.LogAgentPolicyGrant(ctx, savepoint, audit.LogAgentPolicyGrantEvent{
 			OrganizationID:   organizationID,
 			AgentURN:         agentURN,
 			Actor:            actor,
 			ActorDisplayName: displayName,
-			Action:           audit.ActionAgentPolicyGrantCreate,
+			Action:           action,
 			Name:             row.AgentName,
-			Before:           nil,
+			Before:           before,
 			After: &audit.AgentPolicyGrantSnapshot{
 				ID:       written.ID,
 				Scope:    written.Scope,
@@ -179,12 +191,12 @@ func backfillAssistantBuiltinGrants(ctx context.Context, tx pgx.Tx, auditLogger 
 	return added, nil
 }
 
-// hasExactPermanentGrant checks for an exact permanent grant row matching
-// desired's scope and selector. Wildcard grants such as mcp:connect * do not
-// match, so explicit per-built-in policy rows are still written.
-func hasExactPermanentGrant(rows []agentrepo.ListAgentPolicyGrantsRow, desired authz.Grant) bool {
+// findExactGrant looks up an existing grant row matching desired's scope and
+// selector. Wildcard grants such as mcp:connect * do not match, so explicit
+// per-built-in policy rows are still written.
+func findExactGrant(rows []agentrepo.ListAgentPolicyGrantsRow, desired authz.Grant) (agentrepo.ListAgentPolicyGrantsRow, bool) {
 	for _, row := range rows {
-		if row.Scope != string(desired.Scope) || row.ExpiresAt.Valid {
+		if row.Scope != string(desired.Scope) {
 			continue
 		}
 		stored, err := authz.SelectorFromRow(row.Selectors)
@@ -192,8 +204,9 @@ func hasExactPermanentGrant(rows []agentrepo.ListAgentPolicyGrantsRow, desired a
 			continue
 		}
 		if maps.Equal(stored, desired.Selector) {
-			return true
+			return row, true
 		}
 	}
-	return false
+	var zero agentrepo.ListAgentPolicyGrantsRow
+	return zero, false
 }

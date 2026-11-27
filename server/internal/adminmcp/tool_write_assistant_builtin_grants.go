@@ -16,7 +16,7 @@ import (
 
 const maxAssistantBuiltinGrantBackfillResults = 100
 
-const assistantBuiltinGrantsBackfillSideEffects = "Grant every live agent-backed assistant in this organization explicit permanent mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Existing grants are left intact and unbound assistants are skipped. Does not provision identities or change runtimes, agent names, or assistant configuration. The customer's audit log attributes changes to the Speakeasy team. Safe to run again."
+const assistantBuiltinGrantsBackfillSideEffects = "Grant every live agent-backed assistant in this organization explicit permanent mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Existing permanent grants are left intact; matching temporary grants are promoted to permanent, and unbound assistants are skipped. Does not provision identities or change runtimes, agent names, or assistant configuration. The customer's audit log attributes changes to the Speakeasy team. Safe to run again."
 
 // BackfillAssistantBuiltinGrantsInput selects one exact organization.
 type BackfillAssistantBuiltinGrantsInput struct {

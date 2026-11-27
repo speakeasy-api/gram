@@ -505,7 +505,8 @@ func (s *seeder) seedDeploymentAssistants(ctx context.Context) error {
 	}
 
 	// The dedicated agent starts with the grants provisioning gives it: every
-	// MCP server and skill in the assistant's project, and its own assistant.
+	// MCP server and skill in the assistant's project, an explicit mcp:connect
+	// grant on the assistants built-in toolset, and its own assistant.
 	if err := s.q.DeployInsertAgent(ctx, repo.DeployInsertAgentParams{
 		ID:             agent,
 		OrganizationID: org,

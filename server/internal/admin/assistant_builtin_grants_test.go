@@ -142,7 +142,9 @@ func TestBackfillOrganizationAssistantBuiltinGrants(t *testing.T) {
 	}
 	deleteAllBuiltinGrants(t, agents, other.id, *foreignStates[foreign].AgentID, other.project)
 
-	auditBefore, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
+	auditCreatesBefore, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
+	require.NoError(t, err)
+	auditUpdatesBefore, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantUpdate)
 	require.NoError(t, err)
 
 	run, err := svc.BackfillOrganizationAssistantBuiltinGrants(ctx, &gen.BackfillOrganizationAssistantBuiltinGrantsPayload{OrganizationID: org.id})
@@ -201,13 +203,20 @@ func TestBackfillOrganizationAssistantBuiltinGrants(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, builtinGrantIDsBySlug(t, foreignRows, other.project))
 
-	// Five new grant audit entries attributed to staff were recorded.
-	auditAfterFirst, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
+	// Four newly created grants and one promoted temporary grant are audited as
+	// staff create and update events respectively.
+	auditCreatesAfterFirst, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
 	require.NoError(t, err)
-	require.Equal(t, auditBefore+5, auditAfterFirst)
+	require.Equal(t, auditCreatesBefore+4, auditCreatesAfterFirst)
+	auditUpdatesAfterFirst, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantUpdate)
+	require.NoError(t, err)
+	require.Equal(t, auditUpdatesBefore+1, auditUpdatesAfterFirst)
 	latest, err := audittest.LatestAuditLogByActionAndSubject(t.Context(), db, audit.ActionAgentPolicyGrantCreate, states[managed].AgentID.String())
 	require.NoError(t, err)
 	require.Equal(t, "staff-subject", latest.ActorID)
+	latestUpdate, err := audittest.LatestAuditLogByActionAndSubject(t.Context(), db, audit.ActionAgentPolicyGrantUpdate, states[managed].AgentID.String())
+	require.NoError(t, err)
+	require.Equal(t, "staff-subject", latestUpdate.ActorID)
 
 	// Re-running is idempotent and writes no additional grants or audit entries.
 	again, err := svc.BackfillOrganizationAssistantBuiltinGrants(ctx, &gen.BackfillOrganizationAssistantBuiltinGrantsPayload{OrganizationID: org.id})
@@ -219,9 +228,12 @@ func TestBackfillOrganizationAssistantBuiltinGrants(t *testing.T) {
 		require.Equal(t, assistantBuiltinGrantsAlreadyGranted, res.Outcome)
 		require.Zero(t, res.GrantsAdded)
 	}
-	auditAfterSecond, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
+	auditCreatesAfterSecond, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantCreate)
 	require.NoError(t, err)
-	require.Equal(t, auditAfterFirst, auditAfterSecond)
+	require.Equal(t, auditCreatesAfterFirst, auditCreatesAfterSecond)
+	auditUpdatesAfterSecond, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentPolicyGrantUpdate)
+	require.NoError(t, err)
+	require.Equal(t, auditUpdatesAfterFirst, auditUpdatesAfterSecond)
 
 	// Missing organization returns not found.
 	_, err = svc.BackfillOrganizationAssistantBuiltinGrants(ctx, &gen.BackfillOrganizationAssistantBuiltinGrantsPayload{OrganizationID: "org_missing_" + uuid.NewString()})

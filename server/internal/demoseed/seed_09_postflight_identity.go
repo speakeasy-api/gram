@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
@@ -300,12 +301,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected 1 root binding, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDBoundAssistantRoot(ctx, repo.PostflightIDBoundAssistantRootParams{
-				OrgID:       org,
-				ProjectID:   proj,
-				AssistantID: s.det("assistant-bound"),
-				Issuer:      s.assistantIssuer,
-				JwksUri:     s.assistantIssuer + jwks.Path,
-				OwnerUserID: s.userID(demoUsers[0].handle),
+				OrgID:               org,
+				ProjectID:           proj,
+				AssistantID:         s.det("assistant-bound"),
+				Issuer:              s.assistantIssuer,
+				JwksUri:             s.assistantIssuer + jwks.Path,
+				OwnerUserID:         s.userID(demoUsers[0].handle),
+				AssistantsBuiltinID: platformtoolscore.PlatformToolsetID(platformtoolscore.AssistantsPlatformToolsetSlug).String(),
 			})
 		}, 1, "demo seed postflight: identity-bound assistant root is incoherent"},
 		// Workload sessions, and the trust configuration that labels them. A
