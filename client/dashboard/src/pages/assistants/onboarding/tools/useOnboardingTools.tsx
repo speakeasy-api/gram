@@ -1231,7 +1231,9 @@ export function buildAssistantTools(
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
+        draft.assistant?.runtimeVersion === 3
+          ? "List MCP servers registered in this project. To change agent access, direct the user to MCP servers in the assistant's Overview tab."
+          : "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {
@@ -2386,6 +2388,9 @@ export function buildAssistantTools(
 
             await ensureAssistantSlackGrants(a.agentId, authClient.id);
             await recomputeBehaviorSection(deps, a, toolUrns);
+            if (a.runtimeVersion === 3) {
+              draft.invalidateAll({ kitAgentId: a.agentId });
+            }
 
             const existingSlackTrigger = await findSlackTrigger(a.id);
 
@@ -2751,6 +2756,7 @@ type OnboardingTools = Record<
 >;
 
 export type OnboardingToolPermissions = {
+  usesProjectMCPAccess?: boolean;
   canWriteAssistant: boolean;
   canReadProject: boolean;
   canWriteProject: boolean;
@@ -2821,10 +2827,22 @@ const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
   "request_environment_secrets",
 ]);
 
+const LEGACY_MCP_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "attach_mcp_server",
+  "detach_mcp_server",
+  "attach_toolset",
+  "detach_toolset",
+  "create_toolset",
+  "add_tools_to_toolset",
+]);
+
 export function isOnboardingToolAllowed(
   tool: OnboardingToolName,
   permissions: OnboardingToolPermissions,
 ): boolean {
+  if (permissions.usesProjectMCPAccess && LEGACY_MCP_WRITE_TOOLS.has(tool)) {
+    return false;
+  }
   if (!permissions.canWriteAssistant && !ASSISTANT_READ_TOOLS.has(tool)) {
     return false;
   }
@@ -2888,6 +2906,7 @@ export function useOnboardingTools(): {
       draft,
     });
     const permissions: OnboardingToolPermissions = {
+      usesProjectMCPAccess: draft.assistant?.runtimeVersion === 3,
       canWriteAssistant,
       canReadProject,
       canWriteProject,

@@ -1757,7 +1757,14 @@ func (s *ServiceCore) CreateAssistant(
 	if err := validateReasoningEffort(effort); err != nil {
 		return assistantRecord{}, err
 	}
-	if err := validateRuntimeReasoningEffort(s.newAssistantRuntimeVersion, effort); err != nil {
+	// The Default runtime serves explicit MCP attachments directly.
+	// Kit uses backing-agent grants, so creates with attachments stay on Default.
+	hasInitialAttachments := len(toolsets) > 0 || len(mcpServers) > 0
+	runtimeVersion := s.newAssistantRuntimeVersion
+	if hasInitialAttachments && runtimeVersion == 3 {
+		runtimeVersion = 0
+	}
+	if err := validateRuntimeReasoningEffort(runtimeVersion, effort); err != nil {
 		return assistantRecord{}, err
 	}
 	if createdByUserID == "" {
@@ -1790,7 +1797,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("insert assistant: %w", err)
 	}
-	if s.newAssistantRuntimeVersion == 3 {
+	if runtimeVersion == 3 {
 		// This row is new and uncommitted: there is no conversation to migrate.
 		changed, err := queries.SetAssistantDesiredRuntimeVersion(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionParams{
 			RuntimeVersion: 3, AssistantID: created.ID, ProjectID: projectID, ExpectedRuntimeVersion: created.RuntimeVersion,
@@ -1820,12 +1827,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
-			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
-		}
-	}
-	if provisionIdentity && s.newAssistantRuntimeEligible != nil {
+	if !hasInitialAttachments && provisionIdentity && s.newAssistantRuntimeEligible != nil {
 		eligible, err := s.newAssistantRuntimeEligible(ctx, tx, record)
 		if err != nil {
 			return assistantRecord{}, fmt.Errorf("check new assistant Kit eligibility: %w", err)
@@ -1843,6 +1845,11 @@ func (s *ServiceCore) CreateAssistant(
 				return assistantRecord{}, errRuntimeSwitchConflict
 			}
 			record.RuntimeVersion = 3
+		}
+	}
+	if provisionIdentity {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, Staff: nil}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 		}
 	}
 	if err := s.auditAssistantReasoning(ctx, tx, record, nil); err != nil {
@@ -1982,27 +1989,6 @@ func (s *ServiceCore) UpdateAssistant(
 		reasoningBefore = &audit.AssistantReasoningSnapshot{ReasoningEffort: reasoningEffortFromPGText(before.ReasoningEffort)}
 	}
 
-	// Compare canonical persisted attachments inside this transaction, after
-	// normal resolution. Full-form no-op saves are safe; actual Kit connection
-	// changes must roll back until the resident runtime has been retired.
-	var kitAttachmentsBefore []assistantrepo.LoadAssistantMcpServersRow
-	checkKitAttachments := false
-	if toolsets != nil || mcpServers != nil {
-		runtimes, err := queries.ListAssistantRuntimesForSwitch(ctx, assistantrepo.ListAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("check Kit attachment edit safety: %w", err)
-		}
-		for _, runtime := range runtimes {
-			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
-		}
-		if checkKitAttachments {
-			kitAttachmentsBefore, err = assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-			if err != nil {
-				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
-			}
-		}
-	}
-
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
@@ -2062,16 +2048,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
-		}
-	}
-
-	if checkKitAttachments {
-		after, err := assistantrepo.New(tx).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
-		if err != nil {
-			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
-		}
-		if !kitAttachmentSetsEqual(kitAttachmentsBefore, after) {
-			return assistantRecord{}, fmt.Errorf("%w: retire the Kit runtime before changing MCP attachments", errAssistantValidation)
 		}
 	}
 
@@ -3382,8 +3358,9 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 
-			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
-				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable)) {
+			if (kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
+				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable))) ||
+				(runtimeRecord.RuntimeVersion == 3 && errors.Is(runErr, errKitRuntimeUnrecoverable)) {
 				// A Kit runtime that cannot serve turns is replaced, dropping its
 				// conversation. Revoke its credentials, then retire it through the
 				// unhealthy-runtime path below.
@@ -3707,7 +3684,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	var canonicalUserMessageID uuid.UUID
 	var sourceInstructions string
 	if runtime.RuntimeVersion == 3 {
-		sourceInstructions, err = ComposeInstructionsForMode("", thread, nil, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
+		sourceInstructions, err = ComposeInstructionsForMode("", thread, currentSnapshot.Skills, s.connectionLinkPrefix(), deliveryMode, platformSlugs)
 		if err != nil {
 			return nil, err
 		}
@@ -3757,15 +3734,21 @@ func (s *ServiceCore) currentRuntimeMCPServersForTurn(
 	agentBacked bool,
 	turnToken string,
 ) ([]runtimeMCPServer, MCPDeliveryMode, []string, error) {
-	serverURL := s.runtime.ServerURL()
-	if serverURL == nil {
-		return nil, MCPDeliveryPerServer, nil, nil
-	}
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return nil, MCPDeliveryPerServer, nil, fmt.Errorf("resolve platform toolsets for mcp reconcile: %w", err)
 	}
-	if runtimeVersion != 3 && agentBacked {
+	if runtimeVersion == 3 {
+		// Kit is Project-Gateway-only: mcp.json holds the single project-gateway
+		// entry and turns never pass a per-server overlay. Render turn prompts
+		// and notices in Project Gateway mode through the shared prompt seam.
+		return nil, MCPDeliveryProjectGateway, platformSlugs, nil
+	}
+	serverURL := s.runtime.ServerURL()
+	if serverURL == nil {
+		return nil, MCPDeliveryPerServer, platformSlugs, nil
+	}
+	if agentBacked {
 		elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
 		if elig.Eligible {
 			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs, nil
@@ -3933,8 +3916,36 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		UpdatedAt:       row.UpdatedAt.Time,
 		DeletedAt:       row.DeletedAt,
 	}
-	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+	// Gate on the version of the runtime actually serving the thread (not the
+	// assistant's desired version) so bootstrap and turn dispatch agree during
+	// a pending runtime switch. v2/v3 runtimes are keyed by assistant; v1
+	// runtimes are keyed by thread.
+	servingRuntimeVersion := assistant.RuntimeVersion
+	switch activeRuntime, rErr := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   thread.ProjectID,
+		AssistantID: assistant.ID,
+	}); {
+	case rErr == nil:
+		servingRuntimeVersion = activeRuntime.RuntimeVersion
+	case errors.Is(rErr, pgx.ErrNoRows):
+		switch threadRuntime, tErr := assistantrepo.New(s.db).GetActiveAssistantRuntimeByThreadID(ctx, assistantrepo.GetActiveAssistantRuntimeByThreadIDParams{
+			AssistantThreadID: thread.ID,
+			ProjectID:         thread.ProjectID,
+		}); {
+		case tErr == nil:
+			servingRuntimeVersion = threadRuntime.RuntimeVersion
+		case errors.Is(tErr, pgx.ErrNoRows):
+		default:
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, tErr, "load active thread runtime").LogError(ctx, s.logger, logAttrs...)
+		}
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, rErr, "load active assistant runtime").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	if servingRuntimeVersion != 3 {
+		if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
+			return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+		}
 	}
 	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
@@ -3969,36 +3980,12 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	// Gate on the version of the runtime actually serving the thread (not the
-	// assistant's desired version) so bootstrap and turn dispatch agree during
-	// a pending runtime switch. v2/v3 runtimes are keyed by assistant; v1
-	// runtimes are keyed by thread.
-	servingRuntimeVersion := assistant.RuntimeVersion
-	switch activeRuntime, rErr := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   thread.ProjectID,
-		AssistantID: assistant.ID,
-	}); {
-	case rErr == nil:
-		servingRuntimeVersion = activeRuntime.RuntimeVersion
-	case errors.Is(rErr, pgx.ErrNoRows):
-		switch threadRuntime, tErr := assistantrepo.New(s.db).GetActiveAssistantRuntimeByThreadID(ctx, assistantrepo.GetActiveAssistantRuntimeByThreadIDParams{
-			AssistantThreadID: thread.ID,
-			ProjectID:         thread.ProjectID,
-		}); {
-		case tErr == nil:
-			servingRuntimeVersion = threadRuntime.RuntimeVersion
-		case errors.Is(tErr, pgx.ErrNoRows):
-		default:
-			return threadBootstrap{}, oops.E(oops.CodeUnexpected, tErr, "load active thread runtime").LogError(ctx, s.logger, logAttrs...)
-		}
-	default:
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, rErr, "load active assistant runtime").LogError(ctx, s.logger, logAttrs...)
-	}
-
 	deliveryMode := MCPDeliveryPerServer
 	var mcpServers []runtimeMCPServer
-	if _, agentBacked := principalcredential.FromContext(ctx); agentBacked {
-		if rawToken := bootstrapRuntimeToken(ctx); rawToken != "" && servingRuntimeVersion != 3 {
+	if servingRuntimeVersion == 3 {
+		deliveryMode = MCPDeliveryProjectGateway
+	} else if _, agentBacked := principalcredential.FromContext(ctx); agentBacked {
+		if rawToken := bootstrapRuntimeToken(ctx); rawToken != "" {
 			elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, runtimeServerURL, rawToken, assistant.MCPServers, platformSlugs)
 			if elig.Eligible {
 				deliveryMode = MCPDeliveryProjectGateway
@@ -4006,7 +3993,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 			}
 		}
 	}
-	if !deliveryMode.IsGateway() {
+	if servingRuntimeVersion != 3 && !deliveryMode.IsGateway() {
 		// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
 		// best-effort URLs rather than aborting the whole bootstrap. The runner
 		// will discover the failure when it tries to list tools and the

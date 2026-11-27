@@ -440,6 +440,7 @@ SELECT a.id,
        a.organization_id,
        a.name,
        a.created_by_user_id,
+       a.runtime_version,
        EXISTS (
          SELECT 1
          FROM project_managed_assistants pma
@@ -461,6 +462,7 @@ type LockAssistantRow struct {
 	OrganizationID  string
 	Name            string
 	CreatedByUserID pgtype.Text
+	RuntimeVersion  int16
 	IsManaged       bool
 }
 
@@ -475,6 +477,7 @@ func (q *Queries) LockAssistant(ctx context.Context, arg LockAssistantParams) (L
 		&i.OrganizationID,
 		&i.Name,
 		&i.CreatedByUserID,
+		&i.RuntimeVersion,
 		&i.IsManaged,
 	)
 	return i, err

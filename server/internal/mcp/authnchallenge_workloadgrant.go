@@ -899,10 +899,13 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	}
 }
 
-// A gateway-bound workload session must reach at least one member. Gateway
-// entry and member authorization remain separate decisions: the endpoint grant
-// admits the gateway, while the normal member snapshot applies visibility and
-// each member's own mcp:connect authorization.
+// A stored-gateway workload session must reach at least one member. Project
+// gateways are exempt from the non-empty check so a newly provisioned agent
+// with zero project servers (or only built-in toolsets) can still exchange a
+// workload token and discover servers as grants are added. Gateway entry and
+// member authorization remain separate decisions: the endpoint grant admits
+// the gateway, while the normal member snapshot applies visibility and each
+// member's own mcp:connect authorization.
 func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []consentAuthServer, error) {
 	gateway, err := gatewayTargetFromEndpoint(endpoint)
 	if err != nil {
@@ -922,7 +925,7 @@ func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog
 	if err != nil {
 		return ctx, nil, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
 	}
-	if len(members) == 0 {
+	if len(members) == 0 && !endpoint.IsProjectGateway() {
 		return ctx, nil, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
 	}
 	servers := make([]consentAuthServer, 0, len(members))

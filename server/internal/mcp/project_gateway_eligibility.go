@@ -27,9 +27,9 @@ import (
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // ProjectGatewayEvaluatorConfig carries the dependencies needed to run
@@ -121,31 +121,29 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 		return deny("missing_inputs"), nil
 	}
 
-	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, organizationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return deny("organization_not_found"), nil
-	}
-	if err != nil {
-		return deny(""), fmt.Errorf("load organization for project gateway eligibility: %w", err)
-	}
-	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
-		ID:             projectID,
-		OrganizationID: organizationID,
+	availability, err := orggateway.ResolveProjectGateway(ctx, s.db, orggateway.ResolveProjectGatewayParams{
+		OrganizationID:          organizationID,
+		ProjectID:               projectID,
+		ServerURL:               serverURL,
+		OrgHosts:                nil,
+		Features:                s.features,
+		RequireSharedIssuerMode: false,
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return deny("project_not_found"), nil
-	}
 	if err != nil {
-		return deny(""), fmt.Errorf("load project for project gateway eligibility: %w", err)
+		return deny(""), err
 	}
-
-	rawURL := orggateway.ProjectURL(serverURL, organization.Slug, project.Slug)
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" || parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
-		return deny("non_https_gateway_url"), nil
+	if !availability.Available {
+		return deny(availability.Reason), nil
 	}
+	organization := availability.Organization
+	project := availability.Project
+	rawURL := availability.GatewayURL.String()
 
-	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.Availability)
+	// Reuse the issuer resolved by orggateway.ResolveProjectGateway.
+	resolvedAvailability := func(context.Context, usersessionsrepo.DBTX, organizations_repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
+		return availability.IssuerID, orggateway.UnavailabilityNone, nil
+	}
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, resolvedAvailability)
 	if err != nil {
 		return deny(""), err
 	}
@@ -169,13 +167,6 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	if err != nil {
 		return deny(""), err
 	}
-	machineAccess, err := s.gatewayMachineAccess(ctx, target)
-	if err != nil {
-		return deny(""), err
-	}
-	if !machineAccess {
-		return deny("machine_access_disabled"), nil
-	}
 
 	authedCtx, subject, err := s.authenticateIssuerGatePrincipalCredential(ctx, turnToken, resolved)
 	if err != nil {
@@ -188,7 +179,7 @@ func (s *Service) EvaluateProjectGatewayForTurnCredential(
 	if err != nil {
 		return deny("invalid_caller"), nil
 	}
-	decision, err := target.admits(caller, resolved.ProjectID, machineAccess)
+	decision, err := target.admits(caller, resolved.ProjectID, true)
 	if err != nil {
 		return deny(""), err
 	}

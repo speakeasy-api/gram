@@ -27,8 +27,12 @@ import (
 // its unbound root triggers bound. The caller owns the transaction; a failed
 // call must roll it back.
 //
-// A new agent starts with the project-wide ceiling from initialGrants. Users
-// refine that policy on the agent afterwards; it is never re-synchronised.
+// Default-runtime agents start with project-wide wildcard Connect; Kit agents
+// omit project-wide wildcard Connect and start with explicit Connect grants
+// only on their built-in toolsets (plus optional assistant-slack when linked),
+// with project MCP server grants managed explicitly afterwards. The persisted
+// runtime controls the initial policy for every caller, including staff
+// provisioning. Existing policies remain unchanged.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
 	actor, err := provisionActor(p)
 	if err != nil {
@@ -81,7 +85,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 	if err != nil {
 		return fmt.Errorf("list assistant slack auth clients: %w", err)
 	}
-	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.IsManaged, slackAuthClients)
+	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.IsManaged, assistant.RuntimeVersion != 3, slackAuthClients)
 	// A dedicated agent may inherit inference only within this project and
 	// only when everyone delegating it already has it: the provisioning user
 	// and the owner, or the owner alone when staff provision.
@@ -220,20 +224,22 @@ func BuiltinConnectGrants(project uuid.UUID, managed bool) []authz.Grant {
 	return grants
 }
 
-// initialGrants is the dedicated agent's starting ceiling: every MCP server
-// and skill in the assistant's project, explicit Connect grants on the
-// assistant's built-in toolsets, optional assistant-slack grants when Slack
-// auth-client triggers are already linked, plus administration of the
-// assistant itself.
-func initialGrants(project, assistant uuid.UUID, managed bool, slackAuthClients []uuid.NullUUID) []authz.Grant {
-	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+// initialGrants grants project metadata, skills, explicit Connect grants on
+// the assistant's built-in toolsets, optional assistant-slack grants when
+// Slack auth-client triggers are already linked, and administration of the
+// assistant itself. Non-Kit runtimes also bootstrap project-wide
+// wildcard Connect.
+func initialGrants(project, assistant uuid.UUID, managed, projectConnect bool, slackAuthClients []uuid.NullUUID) []authz.Grant {
+	projectMCP := authz.NewSelector(authz.ScopeMCPRead, authz.WildcardResource)
 	projectMCP[authz.SelectorKeyProjectID] = project.String()
 	grants := []authz.Grant{
-		authz.NewGrantWithSelector(authz.ScopeMCPConnect, projectMCP),
 		authz.NewGrantWithSelector(authz.ScopeMCPRead, projectMCP),
 		// Skill selectors carry no project dimension; the project ID is the
 		// resource the project-wide skill:read check names.
 		authz.NewGrant(authz.ScopeSkillRead, project.String()),
+	}
+	if projectConnect {
+		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeMCPConnect, projectMCP))
 	}
 	grants = append(grants, BuiltinConnectGrants(project, managed)...)
 	if len(slackAuthClients) > 0 {
