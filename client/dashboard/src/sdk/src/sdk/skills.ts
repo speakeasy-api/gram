@@ -11,6 +11,7 @@ import { skillsDismissSuggestion } from "../funcs/skillsDismissSuggestion.js";
 import { skillsDistribute } from "../funcs/skillsDistribute.js";
 import { skillsGet } from "../funcs/skillsGet.js";
 import { skillsGetShared } from "../funcs/skillsGetShared.js";
+import { skillsGetVersionFile } from "../funcs/skillsGetVersionFile.js";
 import { skillsLink } from "../funcs/skillsLink.js";
 import { skillsList } from "../funcs/skillsList.js";
 import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
@@ -40,6 +41,7 @@ import { SkillDistribution } from "../models/components/skilldistribution.js";
 import { SkillEditSuggestion } from "../models/components/skilleditsuggestion.js";
 import { SkillLink } from "../models/components/skilllink.js";
 import { SkillShareLink } from "../models/components/skillsharelink.js";
+import { SkillVersionFileContent } from "../models/components/skillversionfilecontent.js";
 import {
   AddSkillVersionRequest,
   AddSkillVersionSecurity,
@@ -76,6 +78,10 @@ import {
   GetSkillRequest,
   GetSkillSecurity,
 } from "../models/operations/getskill.js";
+import {
+  GetSkillVersionFileRequest,
+  GetSkillVersionFileSecurity,
+} from "../models/operations/getskillversionfile.js";
 import {
   LinkSkillRequest,
   LinkSkillSecurity,
@@ -320,6 +326,25 @@ export class Skills extends ClientSDK {
     return unwrapAsync(skillsGetShared(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * getVersionFile skills
+   *
+   * @remarks
+   * Get one supporting file of a skill version, including its bytes. The implementation requires the skills product feature and skill read scope.
+   */
+  async getVersionFile(
+    request: GetSkillVersionFileRequest,
+    security?: GetSkillVersionFileSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SkillVersionFileContent> {
+    return unwrapAsync(skillsGetVersionFile(
+      this,
+      request,
+      security,
       options,
     ));
   }

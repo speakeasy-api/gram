@@ -77,6 +77,10 @@ type Client struct {
 	// listVersions endpoint.
 	ListVersionsDoer goahttp.Doer
 
+	// GetVersionFile Doer is the HTTP client used to make requests to the
+	// getVersionFile endpoint.
+	GetVersionFileDoer goahttp.Doer
+
 	// Archive Doer is the HTTP client used to make requests to the archive
 	// endpoint.
 	ArchiveDoer goahttp.Doer
@@ -150,6 +154,7 @@ func NewClient(
 		GetDoer:                    doer,
 		ListUnknownActivationsDoer: doer,
 		ListVersionsDoer:           doer,
+		GetVersionFileDoer:         doer,
 		ArchiveDoer:                doer,
 		DistributeDoer:             doer,
 		UndistributeDoer:           doer,
@@ -547,6 +552,30 @@ func (c *Client) ListVersions() goa.Endpoint {
 		resp, err := c.ListVersionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("skills", "listVersions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetVersionFile returns an endpoint that makes HTTP requests to the skills
+// service getVersionFile server.
+func (c *Client) GetVersionFile() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetVersionFileRequest(c.encoder)
+		decodeResponse = DecodeGetVersionFileResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetVersionFileRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetVersionFileDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("skills", "getVersionFile", err)
 		}
 		return decodeResponse(resp)
 	}

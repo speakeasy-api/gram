@@ -1097,6 +1097,7 @@ CREATE TABLE IF NOT EXISTS skill_edit_suggestion_changes (
   proposed_diff TEXT NOT NULL,
   rationale TEXT NOT NULL,
   position integer NOT NULL,
+  path TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1112,6 +1113,8 @@ COMMENT ON COLUMN skill_edit_suggestion_changes.suggestion_id IS '@access: confi
 COMMENT ON COLUMN skill_edit_suggestion_changes.proposed_diff IS '@access: opaque-restricted';
 COMMENT ON COLUMN skill_edit_suggestion_changes.rationale IS '@access: opaque-restricted';
 COMMENT ON COLUMN skill_edit_suggestion_changes.position IS '@access: confidential';
+COMMENT ON COLUMN skill_edit_suggestion_changes.path IS 'Skill-relative path of the file this change edits, such as references/api.md. NULL means SKILL.md.
+@access: opaque-confidential';
 COMMENT ON COLUMN skill_edit_suggestion_changes.created_at IS '@access: confidential';
 COMMENT ON COLUMN skill_edit_suggestion_changes.updated_at IS '@access: confidential';
 

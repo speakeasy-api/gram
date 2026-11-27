@@ -53,6 +53,8 @@ Then use exactly one of these, with `confirmed: true` only after that confirmati
 
 Do not record suggested text with `add_skill_version`. That leaves the suggestion open in the queue and records no approval.
 
+Suggestions change SKILL.md only. An approved version keeps the skill's supporting files, such as `scripts/` and `references/` entries, so leave `files` out of `approve_skill_suggestion` unless the user asked to change those files. To read a supporting file while reviewing, call `get_skill_file` with a path from the version's `files`.
+
 Handle the result:
 
 - `applied`: the suggestion is closed and the new version is the skill's latest.

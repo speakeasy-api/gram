@@ -7607,6 +7607,9 @@ type SkillEditSuggestionChange struct {
 	Rationale string
 	// @access: confidential
 	Position int32
+	// Skill-relative path of the file this change edits, such as references/api.md. NULL means SKILL.md.
+	// @access: opaque-confidential
+	Path pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

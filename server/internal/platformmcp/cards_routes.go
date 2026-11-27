@@ -225,6 +225,7 @@ var textOnlyTools = map[string]string{
 	"list_skill_feedback":                  textOnlyLog,
 	"list_skill_suggestion_feedback":       textOnlyLog,
 	"list_skill_versions":                  textOnlyForModel,
+	"get_skill_file":                       textOnlyForModel,
 	"compare_skill_versions":               textOnlyForModel,
 	"get_platform_context":                 textOnlyForModel,
 	"describe_access_permissions":          textOnlyForModel,

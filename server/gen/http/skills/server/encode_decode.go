@@ -3899,6 +3899,245 @@ func EncodeListVersionsError(encoder func(context.Context, http.ResponseWriter) 
 	}
 }
 
+// EncodeGetVersionFileResponse returns an encoder for responses returned by
+// the skills getVersionFile endpoint.
+func EncodeGetVersionFileResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*types.SkillVersionFileContent)
+		enc := encoder(ctx, w)
+		body := NewGetVersionFileResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetVersionFileRequest returns a decoder for requests sent to the
+// skills getVersionFile endpoint.
+func DecodeGetVersionFileRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*skills.GetVersionFilePayload, error) {
+	return func(r *http.Request) (*skills.GetVersionFilePayload, error) {
+		var payload *skills.GetVersionFilePayload
+		var (
+			skillID          string
+			versionID        string
+			path             string
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		skillID = qp.Get("skill_id")
+		if skillID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("skill_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		versionID = qp.Get("version_id")
+		if versionID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("version_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("version_id", versionID, goa.FormatUUID))
+		path = qp.Get("path")
+		if path == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("path", "query string"))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetVersionFilePayload(skillID, versionID, path, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetVersionFileError returns an encoder for errors returned by the
+// getVersionFile skills endpoint.
+func EncodeGetVersionFileError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetVersionFileGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeArchiveResponse returns an encoder for responses returned by the
 // skills archive endpoint.
 func EncodeArchiveResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -6293,6 +6532,22 @@ func EncodeListLinksError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
+// unmarshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput builds a
+// value of type *types.SkillFileInput from a value of type
+// *SkillFileInputRequestBodyRequestBody.
+func unmarshalSkillFileInputRequestBodyRequestBodyToTypesSkillFileInput(v *SkillFileInputRequestBodyRequestBody) *types.SkillFileInput {
+	if v == nil {
+		return nil
+	}
+	res := &types.SkillFileInput{
+		Path:        *v.Path,
+		Content:     v.Content,
+		ContentType: v.ContentType,
+	}
+
+	return res
+}
+
 // marshalTypesSkillToSkillResponseBody builds a value of type
 // *SkillResponseBody from a value of type *types.Skill.
 func marshalTypesSkillToSkillResponseBody(v *types.Skill) *SkillResponseBody {
@@ -6373,6 +6628,18 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 	} else {
 		res.ValidationErrors = []*SkillValidationErrorResponseBody{}
 	}
+	if v.Files != nil {
+		res.Files = make([]*SkillFileResponseBody, len(v.Files))
+		for i, val := range v.Files {
+			if val == nil {
+				res.Files[i] = nil
+				continue
+			}
+			res.Files[i] = marshalTypesSkillFileToSkillFileResponseBody(val)
+		}
+	} else {
+		res.Files = []*SkillFileResponseBody{}
+	}
 
 	return res
 }
@@ -6385,6 +6652,19 @@ func marshalTypesSkillValidationErrorToSkillValidationErrorResponseBody(v *types
 		Code:    v.Code,
 		Field:   v.Field,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalTypesSkillFileToSkillFileResponseBody builds a value of type
+// *SkillFileResponseBody from a value of type *types.SkillFile.
+func marshalTypesSkillFileToSkillFileResponseBody(v *types.SkillFile) *SkillFileResponseBody {
+	res := &SkillFileResponseBody{
+		Path:        v.Path,
+		Sha256:      v.Sha256,
+		SizeBytes:   v.SizeBytes,
+		ContentType: v.ContentType,
 	}
 
 	return res

@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { SkillFile, SkillFile$inboundSchema } from "./skillfile.js";
 import {
   SkillValidationError,
   SkillValidationError$inboundSchema,
@@ -40,6 +41,10 @@ export type SkillVersion = {
    * The optional description from this manifest version.
    */
   description?: string | undefined;
+  /**
+   * The supporting files stored with this version besides SKILL.md, sorted by path. Fetch a file's bytes with getVersionFile.
+   */
+  files: Array<SkillFile>;
   /**
    * When this exact version was first activated.
    */
@@ -95,6 +100,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
       created_by_user_id: z.string(),
       derived_from_version_id: z.optional(z.string()),
       description: z.optional(z.string()),
+      files: z.array(SkillFile$inboundSchema),
       first_seen_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),

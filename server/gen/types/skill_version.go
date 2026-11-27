@@ -41,4 +41,7 @@ type SkillVersion struct {
 	LastSeenAt *string
 	// The number of activations attributed to this exact version.
 	SeenCount int64
+	// The supporting files stored with this version besides SKILL.md, sorted by
+	// path. Fetch a file's bytes with getVersionFile.
+	Files []*SkillFile
 }

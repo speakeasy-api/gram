@@ -58,6 +58,15 @@
     project_slug: default
     skill_id: 9e8d7c00-0000-4000-8000-000000000051
     include_content: true
+- id: skill-get-supporting-file
+  prompt: Version 9e8d7c00-0000-4000-8000-000000000061 of the release-notes skill (9e8d7c00-0000-4000-8000-000000000051) in Default lists references/STYLE.md among its files. Show me what that file says.
+  expect: [get_skill_file]
+  allow: [get_skill, list_skill_versions]
+  args:
+    project_slug: default
+    skill_id: 9e8d7c00-0000-4000-8000-000000000051
+    version_id: 9e8d7c00-0000-4000-8000-000000000061
+    path: references/STYLE.md
 - id: skill-list-versions
   prompt: How many revisions has release-notes in Default been through, and when did each one land?
   expect: [list_skill_versions]

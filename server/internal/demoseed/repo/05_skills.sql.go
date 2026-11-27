@@ -336,25 +336,29 @@ const skillsInsertRunbookV2 = `-- name: SkillsInsertRunbookV2 :exec
 INSERT INTO skill_versions (id, skill_id, content, canonical_sha256, raw_sha256,
                             description, spec_valid, created_by_user_id, created_at, promoted_at)
 SELECT $1::uuid, $2::uuid, c,
+       $3::text,
        encode(sha256(convert_to(c, 'UTF8')), 'hex'),
-       encode(sha256(convert_to(c, 'UTF8')), 'hex'),
-       'Add on-call paging step', TRUE, $3::text,
+       'Add on-call paging step', TRUE, $4::text,
        now() - interval '3 days', now() - interval '3 days'
-FROM (SELECT $4::text AS c) s
+FROM (SELECT $5::text AS c) s
 `
 
 type SkillsInsertRunbookV2Params struct {
 	ID              uuid.UUID
 	SkillID         uuid.UUID
+	CanonicalSha256 string
 	CreatedByUserID string
 	Content         string
 }
 
-// Runbook v2: the base runbook content plus an on-call paging step.
+// Runbook v2: the base runbook content plus an on-call paging step, with
+// supporting files. Its canonical_sha256 is the tree digest computed in Go,
+// since a multi-file version's identity covers its files.
 func (q *Queries) SkillsInsertRunbookV2(ctx context.Context, arg SkillsInsertRunbookV2Params) error {
 	_, err := q.db.Exec(ctx, skillsInsertRunbookV2,
 		arg.ID,
 		arg.SkillID,
+		arg.CanonicalSha256,
 		arg.CreatedByUserID,
 		arg.Content,
 	)
@@ -428,6 +432,39 @@ func (q *Queries) SkillsInsertUnknownActivations(ctx context.Context, arg Skills
 		arg.UserId2,
 		arg.UserEmail2,
 		arg.Hostname2,
+	)
+	return err
+}
+
+const skillsInsertVersionFile = `-- name: SkillsInsertVersionFile :exec
+INSERT INTO skill_version_files (skill_version_id, skill_id, project_id, path,
+                                 content, sha256, size_bytes, content_type, created_at)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text,
+        $5::bytea, $6::text, $7::bigint, $8::text,
+        now() - interval '3 days')
+`
+
+type SkillsInsertVersionFileParams struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Path           string
+	Content        []byte
+	Sha256         string
+	SizeBytes      int64
+	ContentType    string
+}
+
+func (q *Queries) SkillsInsertVersionFile(ctx context.Context, arg SkillsInsertVersionFileParams) error {
+	_, err := q.db.Exec(ctx, skillsInsertVersionFile,
+		arg.SkillVersionID,
+		arg.SkillID,
+		arg.ProjectID,
+		arg.Path,
+		arg.Content,
+		arg.Sha256,
+		arg.SizeBytes,
+		arg.ContentType,
 	)
 	return err
 }

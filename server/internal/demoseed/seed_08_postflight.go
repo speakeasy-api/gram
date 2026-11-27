@@ -489,6 +489,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
 		},
 		{
+			what:  "skill version files",
+			count: byProject(s.q.PostflightCountSkillVersionFiles),
+			fail:  postflightMustEqual(int64(len(skillRunbookV2Files)), fmt.Sprintf("expected %d skill version files, found %%d", len(skillRunbookV2Files))),
+		},
+		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountHostedToolsetDrift),
 			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),

@@ -4,6 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  SkillFileInput,
+  SkillFileInput$Outbound,
+  SkillFileInput$outboundSchema,
+} from "./skillfileinput.js";
 
 export type ApproveSkillSuggestionRequestBody = {
   /**
@@ -15,6 +20,10 @@ export type ApproveSkillSuggestionRequestBody = {
    */
   content?: string | undefined;
   /**
+   * Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total.
+   */
+  files?: Array<SkillFileInput> | undefined;
+  /**
    * The suggestion ID.
    */
   id: string;
@@ -24,6 +33,7 @@ export type ApproveSkillSuggestionRequestBody = {
 export type ApproveSkillSuggestionRequestBody$Outbound = {
   change_ids?: Array<string> | undefined;
   content?: string | undefined;
+  files?: Array<SkillFileInput$Outbound> | undefined;
   id: string;
 };
 
@@ -35,6 +45,7 @@ export const ApproveSkillSuggestionRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     changeIds: z.optional(z.array(z.string())),
     content: z.optional(z.string()),
+    files: z.optional(z.array(SkillFileInput$outboundSchema)),
     id: z.string(),
   }),
   z.transform((v) => {

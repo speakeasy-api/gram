@@ -87,6 +87,11 @@ func ListVersionsSkillsPath() string {
 	return "/rpc/skills.listVersions"
 }
 
+// GetVersionFileSkillsPath returns the URL path to the skills service getVersionFile HTTP endpoint.
+func GetVersionFileSkillsPath() string {
+	return "/rpc/skills.getVersionFile"
+}
+
 // ArchiveSkillsPath returns the URL path to the skills service archive HTTP endpoint.
 func ArchiveSkillsPath() string {
 	return "/rpc/skills.archive"

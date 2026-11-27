@@ -1147,6 +1147,75 @@ ON CONFLICT (skill_id, canonical_sha256)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSkillVersionFile :exec
+INSERT INTO skill_version_files (
+  skill_version_id,
+  skill_id,
+  project_id,
+  path,
+  content,
+  sha256,
+  size_bytes,
+  content_type
+)
+SELECT sv.id, sv.skill_id, s.project_id, @path, @content, @sha256, @size_bytes, @content_type
+FROM skill_versions sv
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND sv.id = @skill_version_id;
+
+-- name: ListSkillVersionFileMetadata :many
+-- Lists a version's supporting files without their content.
+SELECT path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+ORDER BY path;
+
+-- name: ListSkillVersionFileMetadataForVersions :many
+-- Lists the supporting files of several versions of one skill without their
+-- content.
+SELECT skill_version_id, path, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = ANY(@skill_version_ids::uuid[])
+ORDER BY skill_version_id, path;
+
+-- name: ListSkillVersionFiles :many
+-- Lists a version's supporting files with their content.
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+ORDER BY path;
+
+-- name: GetSkillVersionFile :one
+SELECT path, content, sha256, size_bytes, content_type
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
+-- name: GetSkillVersionFileUpTo :one
+-- Returns a supporting file's metadata, and its content only when the file is
+-- at most @max_content_bytes, so an oversized file is never read into memory.
+SELECT
+  path,
+  sha256,
+  size_bytes,
+  content_type,
+  (CASE WHEN size_bytes <= @max_content_bytes::bigint THEN content END)::bytea AS content
+FROM skill_version_files
+WHERE project_id = @project_id
+  AND skill_id = @skill_id
+  AND skill_version_id = @skill_version_id
+  AND path = @path;
+
 -- name: CreateSkillVersionLineage :exec
 INSERT INTO skill_version_lineages (
   skill_version_id,

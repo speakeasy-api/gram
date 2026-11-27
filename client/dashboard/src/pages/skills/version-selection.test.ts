@@ -20,6 +20,7 @@ function version(id: string): SkillVersion {
     specValid: true,
     validationErrors: [],
     seenCount: 0,
+    files: [],
   };
 }
 

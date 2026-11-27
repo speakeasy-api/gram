@@ -35,6 +35,7 @@ type Server struct {
 	Get                    http.Handler
 	ListUnknownActivations http.Handler
 	ListVersions           http.Handler
+	GetVersionFile         http.Handler
 	Archive                http.Handler
 	Distribute             http.Handler
 	Undistribute           http.Handler
@@ -90,6 +91,7 @@ func New(
 			{"Get", "GET", "/rpc/skills.get"},
 			{"ListUnknownActivations", "GET", "/rpc/skills.listUnknownActivations"},
 			{"ListVersions", "GET", "/rpc/skills.listVersions"},
+			{"GetVersionFile", "GET", "/rpc/skills.getVersionFile"},
 			{"Archive", "POST", "/rpc/skills.archive"},
 			{"Distribute", "POST", "/rpc/skills.distribute"},
 			{"Undistribute", "POST", "/rpc/skills.undistribute"},
@@ -117,6 +119,7 @@ func New(
 		Get:                    NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		ListUnknownActivations: NewListUnknownActivationsHandler(e.ListUnknownActivations, mux, decoder, encoder, errhandler, formatter),
 		ListVersions:           NewListVersionsHandler(e.ListVersions, mux, decoder, encoder, errhandler, formatter),
+		GetVersionFile:         NewGetVersionFileHandler(e.GetVersionFile, mux, decoder, encoder, errhandler, formatter),
 		Archive:                NewArchiveHandler(e.Archive, mux, decoder, encoder, errhandler, formatter),
 		Distribute:             NewDistributeHandler(e.Distribute, mux, decoder, encoder, errhandler, formatter),
 		Undistribute:           NewUndistributeHandler(e.Undistribute, mux, decoder, encoder, errhandler, formatter),
@@ -151,6 +154,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Get = m(s.Get)
 	s.ListUnknownActivations = m(s.ListUnknownActivations)
 	s.ListVersions = m(s.ListVersions)
+	s.GetVersionFile = m(s.GetVersionFile)
 	s.Archive = m(s.Archive)
 	s.Distribute = m(s.Distribute)
 	s.Undistribute = m(s.Undistribute)
@@ -184,6 +188,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetHandler(mux, h.Get)
 	MountListUnknownActivationsHandler(mux, h.ListUnknownActivations)
 	MountListVersionsHandler(mux, h.ListVersions)
+	MountGetVersionFileHandler(mux, h.GetVersionFile)
 	MountArchiveHandler(mux, h.Archive)
 	MountDistributeHandler(mux, h.Distribute)
 	MountUndistributeHandler(mux, h.Undistribute)
@@ -1026,6 +1031,59 @@ func NewListVersionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listVersions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetVersionFileHandler configures the mux to serve the "skills" service
+// "getVersionFile" endpoint.
+func MountGetVersionFileHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/skills.getVersionFile", f)
+}
+
+// NewGetVersionFileHandler creates a HTTP handler which loads the HTTP request
+// and calls the "skills" service "getVersionFile" endpoint.
+func NewGetVersionFileHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetVersionFileRequest(mux, decoder)
+		encodeResponse = EncodeGetVersionFileResponse(encoder)
+		encodeError    = EncodeGetVersionFileError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getVersionFile")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "skills")
 		payload, err := decodeRequest(r)
 		if err != nil {

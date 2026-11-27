@@ -71296,6 +71296,131 @@ paths:
       x-speakeasy-name-override: getShared
       x-speakeasy-react-hook:
         name: SharedSkill
+  /rpc/skills.getVersionFile:
+    get:
+      description: Get one supporting file of a skill version, including its bytes. The implementation requires the skills product feature and skill read scope.
+      operationId: getSkillVersionFile
+      parameters:
+        - allowEmptyValue: true
+          description: The skill ID.
+          in: query
+          name: skill_id
+          required: true
+          schema:
+            description: The skill ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The skill version ID.
+          in: query
+          name: version_id
+          required: true
+          schema:
+            description: The skill version ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The supporting file path relative to the skill root.
+          in: query
+          name: path
+          required: true
+          schema:
+            description: The supporting file path relative to the skill root.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillVersionFileContent'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getVersionFile skills
+      tags:
+        - skills
+      x-speakeasy-name-override: getVersionFile
+      x-speakeasy-react-hook:
+        name: SkillVersionFile
   /rpc/skills.link:
     post:
       description: Link a skill to exactly one MCP surface that serves it over MCP. Repeating the request for the same skill and target updates the version pin or is a no-op. Requires the skills-over-mcp rollout for the organization.
@@ -91665,6 +91790,11 @@ components:
           type: string
           description: The version the caller believes is current. When set, the write is rejected as a conflict if the skill has moved on.
           format: uuid
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFileInput'
+          description: Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit to keep the supporting files of the current version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total.
         id:
           type: string
           description: The skill ID.
@@ -93805,6 +93935,11 @@ components:
         content:
           type: string
           description: Optional edited complete SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFileInput'
+          description: Supporting files stored with the approved SKILL.md. Omit to keep the supporting files of the suggestion's base version, send an empty list to remove them all, or send the complete new set. At most 100 files, 5 MiB per file and 10 MiB in total.
         id:
           type: string
           description: The suggestion ID.
@@ -99066,6 +99201,11 @@ components:
         content:
           type: string
           description: The complete uploaded SKILL.md content. Handlers enforce a maximum size of 65,536 UTF-8 bytes.
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFileInput'
+          description: Supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries. Omit for a SKILL.md-only skill. At most 100 files, 5 MiB per file and 10 MiB in total.
       required:
         - content
     CreateSpendRuleRequestBody:
@@ -122744,6 +122884,48 @@ components:
       required:
         - bucket_start
         - feedback_count
+    SkillFile:
+      type: object
+      properties:
+        content_type:
+          type: string
+          description: The media type of the file.
+        path:
+          type: string
+          description: The slash-separated path relative to the skill root.
+        sha256:
+          type: string
+          description: The lowercase hex SHA-256 of the file bytes.
+        size_bytes:
+          type: integer
+          description: The file size in bytes.
+          format: int64
+      description: Metadata of a supporting file stored with a skill version.
+      required:
+        - path
+        - sha256
+        - size_bytes
+        - content_type
+    SkillFileInput:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The exact file bytes, base64-encoded in JSON. At most 5 MiB per file.
+          format: binary
+          maxLength: 5242880
+        content_type:
+          type: string
+          description: The media type of the file. Inferred from the path extension and content when omitted.
+        path:
+          type: string
+          description: The slash-separated path relative to the skill root, for example references/REFERENCE.md. Must be a clean relative path of at most 512 bytes and must not be SKILL.md.
+          minLength: 1
+          maxLength: 512
+      description: A supporting file of a skill directory, such as a script, reference document, or asset.
+      required:
+        - path
+        - content
     SkillInsightMetrics:
       type: object
       properties:
@@ -123016,6 +123198,11 @@ components:
         description:
           type: string
           description: The optional description from this manifest version.
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          description: The supporting files stored with this version besides SKILL.md, sorted by path. Fetch a file's bytes with getVersionFile.
         first_seen_at:
           type: string
           description: When this exact version was first activated.
@@ -123069,6 +123256,34 @@ components:
         - created_at
         - created_by_user_id
         - seen_count
+        - files
+    SkillVersionFileContent:
+      type: object
+      properties:
+        content:
+          type: string
+          description: The exact file bytes, base64-encoded in JSON.
+          format: binary
+        content_type:
+          type: string
+          description: The media type of the file.
+        path:
+          type: string
+          description: The slash-separated path relative to the skill root.
+        sha256:
+          type: string
+          description: The lowercase hex SHA-256 of the file bytes.
+        size_bytes:
+          type: integer
+          description: The file size in bytes.
+          format: int64
+      description: A supporting file of a skill version, including its bytes.
+      required:
+        - path
+        - content_type
+        - sha256
+        - size_bytes
+        - content
     SkillVersionInsight:
       type: object
       properties:

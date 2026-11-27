@@ -607,3 +607,8 @@ SELECT count(*) FROM (
   GROUP BY lower(name)
   HAVING count(*) > 1
 ) duplicates;
+
+-- name: PostflightCountSkillVersionFiles :one
+SELECT count(*)
+FROM skill_version_files
+WHERE project_id = @project_id::uuid;
