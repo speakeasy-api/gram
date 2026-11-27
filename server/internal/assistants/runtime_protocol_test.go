@@ -40,5 +40,9 @@ func TestResolveRuntimeProtocolFailsClosed(t *testing.T) {
 // processEventTurn keeps legacy authorization tests focused on turn preparation.
 // Production resolves the immutable runtime binding before claiming events.
 func (s *ServiceCore) processEventTurn(ctx context.Context, thread assistantThreadRecord, assistant assistantRecord, runtime assistantRuntimeRecord, event assistantThreadEventRecord) ([]byte, error) {
-	return s.processEventTurnWithProtocol(ctx, thread, assistant, runtime, event, s.runtime)
+	absorbed := newAbsorbedTurnEvents(event)
+	if err := s.processEventTurnWithProtocol(ctx, thread, assistant, runtime, absorbed, s.runtime); err != nil {
+		return nil, err
+	}
+	return absorbed.snapshot()[0].currentSkillSnapshot, nil
 }

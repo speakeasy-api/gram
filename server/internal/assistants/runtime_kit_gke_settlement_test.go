@@ -208,12 +208,12 @@ func TestKitCheckpointAuthenticatedGateway(t *testing.T) {
 	p := &KitRuntimeProtocol{config: KitRuntimeProtocolConfig{Endpoint: endpoint, GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)}}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	c, err := p.dial(ctx, assistantRuntimeRecord{RuntimeVersion: 3})
+	c, _, err := p.dial(ctx, assistantRuntimeRecord{RuntimeVersion: 3})
 	require.NoError(t, err)
 	defer closeKitTransport(c)
 	require.NoError(t, verifyKitCheckpointSessions(ctx, c, "/workspace", map[string]bool{"bound": true}))
 	p.config.GatewayToken = "wrong-token"
-	_, err = p.dial(ctx, assistantRuntimeRecord{RuntimeVersion: 3})
+	_, _, err = p.dial(ctx, assistantRuntimeRecord{RuntimeVersion: 3})
 	require.Error(t, err)
 }
 
