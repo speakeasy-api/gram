@@ -127,6 +127,16 @@ func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machine
 		// at a gateway grants no authority of its own.
 		return admitGateway(), nil
 	case gatewayCallerWorkload:
+		if caller.principalCredential {
+			// A project-bound principal credential derives its ceiling from
+			// live agent policy rather than naming a gateway target. Its
+			// projectScope confines it to one project, and member authorization
+			// checks each member separately against live agent and owner policy.
+			if caller.projectScope == nil {
+				return refuseGateway(gatewayRefusalProjectScopeMismatch), nil
+			}
+			return admitGateway(), nil
+		}
 		// The workload credential ceiling must authorize this gateway target.
 		check, ok := t.authorizationTarget(projectID)
 		if !ok {
