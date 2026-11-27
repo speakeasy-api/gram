@@ -364,6 +364,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	teamMemory                *TeamMemoryService
+	mcpFeedback               *MCPFeedbackReadService
 	organizationGateway       *OrganizationGatewayService
 	inboundEMATrust           *InboundEMATrustService
 	gatewaySessions           GatewaySessionManagement
@@ -419,6 +420,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		teamMemory:                nil,
+		mcpFeedback:               nil,
 		organizationGateway:       nil,
 		inboundEMATrust:           nil,
 		gatewaySessions:           nil,
@@ -547,14 +549,11 @@ func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Princ
 	if r.authz == nil || principal.OrganizationID == "" {
 		return false
 	}
-	// FindMatched asks which checks pass; Require asserts that they must. Asking
+	// Decide asks which checks pass; Require asserts that they must. Asking
 	// records the org:admin check as a filter, where Require would record every
 	// ordinary member read as a denied requirement.
-	matched, err := r.authz.FindMatched(ctx, []authz.Check{authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()})
-	if err != nil || len(matched) == 0 {
-		return false
-	}
-	return matched[0]
+	decision, err := r.authz.Decide(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
+	return err == nil && decision.AllAllowed
 }
 
 // redactPluginNames strips the human-readable plugin fields, leaving the
@@ -695,6 +694,14 @@ func (r *PostgresReader) WithTeamMemory(service *TeamMemoryService) *PostgresRea
 	return r
 }
 
+// WithMCPFeedback serves list_mcp_feedback.
+func (r *PostgresReader) WithMCPFeedback(service *MCPFeedbackReadService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.mcpFeedback = service
+	}
+	return r
+}
+
 // WithOrganizationGateway serves get_my_organization_gateway.
 func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
 	if r != nil && service.valid() {
@@ -781,12 +788,12 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 		for _, row := range rows {
 			checks = append(checks, authz.Project(authz.ProjectIDOf(row.ID)).Read())
 		}
-		allowed, err := r.authz.FindMatched(ctx, checks)
+		decisions, err := r.authz.Decide(ctx, checks...)
 		if err != nil {
 			return ListProjectsOutput{}, fmt.Errorf("filter platform mcp project page: %w", err)
 		}
 		for i, row := range rows {
-			if !allowed[i] {
+			if !decisions.Each[i].Allowed {
 				filtered = true
 				continue
 			}
@@ -921,7 +928,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
@@ -956,7 +963,7 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	}
 	mcpID, err := uuid.Parse(input.MCPID)
 	if err != nil {
-		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
+		return MCP{}, fmt.Errorf("parse mcp id: %w: %w", ErrMCPIDInvalid, err)
 	}
 	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false, "")
 }
@@ -1064,13 +1071,13 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	for _, server := range servers {
 		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Read())
 	}
-	matched, err := r.authz.FindMatched(ctx, checks)
+	decisions, err := r.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter platform mcp authorization candidates: %w", err)
 	}
 	ids := make([]uuid.UUID, 0, len(servers))
 	for i, server := range servers {
-		if matched[i] {
+		if decisions.Each[i].Allowed {
 			ids = append(ids, server.ID)
 		}
 	}

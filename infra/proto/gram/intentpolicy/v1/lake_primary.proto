@@ -1,0 +1,22 @@
+edition = "2024";
+
+package gram.intentpolicy.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1;intentpolicyv1";
+
+// LakePrimary writes intent-policy assessments as daily UTC-partitioned Parquet
+// in the lake bucket. Delivery is at least once; queries deduplicate on id (or
+// on __pubsub.message_id for transport duplicates).
+message LakePrimary {
+  option (gcp.pubsub.v1.storage_subscription) = {
+    topic: "gram.intentpolicy.v1.Assessment"
+    retention: { seconds: 345600 /* 4 days */ }
+    ack_deadline: { seconds: 60 }
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

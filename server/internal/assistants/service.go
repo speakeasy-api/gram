@@ -1455,22 +1455,23 @@ func (s *ServiceCore) readableEnvironments(ctx context.Context, projectID uuid.U
 	if unresolved {
 		checks = append(checks, authz.Environments(authz.ProjectIDOf(projectID)).Read())
 	}
-	readable, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("authorize assistant environments: %w", err)
 	}
-	canRead := idSetPredicate(readable)
+	canRead := allowedResources(checks, decisions)
 	if unresolved && !canRead(projectID) {
 		return nil, errEnvironmentBindingForbidden
 	}
 	return canRead, nil
 }
 
-// idSetPredicate reports membership in ids, ignoring any that are not UUIDs.
-func idSetPredicate(ids []string) func(uuid.UUID) bool {
-	allowed := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		if parsed, err := uuid.Parse(id); err == nil {
+// allowedResources reports whether a resource's check was allowed, ignoring
+// resource IDs that are not UUIDs.
+func allowedResources(checks []authz.Check, decisions authz.Decisions) func(uuid.UUID) bool {
+	allowed := make(map[uuid.UUID]struct{}, len(checks))
+	for i, decision := range decisions.Each {
+		if parsed, err := uuid.Parse(checks[i].ResourceID); err == nil && decision.Allowed {
 			allowed[parsed] = struct{}{}
 		}
 	}

@@ -25,12 +25,12 @@ type Check struct {
 	// representedUser binds $represented_user; only the engine sets it.
 	representedUser string
 	// probe marks a check that asks whether the caller could act on some
-	// resource matching it, for discovery. Can and Filter accept it; Require
+	// resource matching it, for discovery. Decide accepts it; Require
 	// refuses it. Set it with Probe.
 	probe bool
-	// anyOf holds the alternatives of a check built by AnyOf. Only Require and
-	// Can accept such a check, and only on its own.
-	anyOf []Check
+	// group holds the alternatives of a check built by Either. Require
+	// accepts such a check only on its own.
+	group []Check
 	// operation says what the check asks to do. Constructors set it; the
 	// matcher reads it instead of guessing from which dimensions are present.
 	operation operation
@@ -70,22 +70,21 @@ func (c Check) asConnection() Check {
 
 // Probe marks the check as a discovery question: could the caller act on
 // some resource matching it. A grant key the check leaves out matches any
-// value the grant names. Can and Filter accept a probe; Require refuses one,
+// value the grant names. Decide accepts a probe; Require refuses one,
 // because gating an action needs the concrete resource.
 func (c Check) Probe() Check {
 	c.probe = true
 	return c
 }
 
-// AnyOf requests any one of the alternatives, the way RequireAnyUnblocked
-// does: a block matching any alternative refuses the request, unless a
-// direct grant on the concrete resource outranks it, and otherwise one
-// alternative must be allowed. Use it when a project-wide grant and a grant
-// on the resource both authorize the operation, so a broad allow cannot
-// bypass a block on the actual resource.
+// Either requests any one of the alternatives. One allowed alternative is
+// enough, but a block on any alternative refuses the request, unless a direct
+// grant on the concrete resource outranks it. Example: with org admin granted
+// and server S blocked, Either(org admin, read of S) is refused.
 //
-// Only Require and Can accept the result, and only as their single check.
-func AnyOf(alternatives ...Check) Check {
+// Decide accepts the result next to other checks; Require only as its single
+// check.
+func Either(alternatives ...Check) Check {
 	var first Check
 	if len(alternatives) > 0 {
 		first = alternatives[0]
@@ -98,7 +97,7 @@ func AnyOf(alternatives ...Check) Check {
 		exact:           false,
 		representedUser: "",
 		probe:           false,
-		anyOf:           append([]Check{}, alternatives...),
+		group:           append([]Check{}, alternatives...),
 		operation:       operationDefault,
 	}
 }
@@ -219,7 +218,7 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 	dimensions := maps.Clone(selector)
 	delete(dimensions, SelectorKeyResourceKind)
 	delete(dimensions, SelectorKeyResourceID)
-	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, exact: true, representedUser: representedUser, probe: false, anyOf: nil, operation: operationDefault}
+	check := Check{Scope: scope, ResourceKind: selector[SelectorKeyResourceKind], ResourceID: selector[SelectorKeyResourceID], Dimensions: dimensions, exact: true, representedUser: representedUser, probe: false, group: nil, operation: operationDefault}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
 }
@@ -230,12 +229,12 @@ func GrantsContainSelectorFor(representedUser string, grants []Grant, scope Scop
 // matches any check), so we only need one entry per scope level.
 func (c Check) expand() []Check {
 	checks := []Check{
-		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
-		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation},
+		{Scope: ScopeRoot, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, group: nil, operation: c.operation},
+		{Scope: c.Scope, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, group: nil, operation: c.operation},
 	}
 	// Additional scopes that also satisfy this check.
 	for _, s := range scopeExpansions[c.Scope] {
-		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, anyOf: nil, operation: c.operation})
+		checks = append(checks, Check{Scope: s, ResourceKind: c.ResourceKind, ResourceID: c.ResourceID, Dimensions: c.Dimensions, exact: c.exact, representedUser: c.representedUser, probe: c.probe, group: nil, operation: c.operation})
 	}
 	// Root administers everything but uses no auth client.
 	if c.isAuthClientCheck() {

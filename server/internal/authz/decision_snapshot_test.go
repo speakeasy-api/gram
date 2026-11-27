@@ -180,5 +180,5 @@ func snapshotMCPServer(id, project string) MCPServerRef {
 }
 
 func snapshotRawCheck(scope Scope, kind, id string, dimensions map[string]string) Check {
-	return Check{Scope: scope, ResourceKind: kind, ResourceID: id, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: scope, ResourceKind: kind, ResourceID: id, Dimensions: dimensions, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 }

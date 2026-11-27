@@ -62,6 +62,8 @@ func setup(t *testing.T, provision bool) *fixture {
 	require.NoError(t, err)
 	if provision {
 		require.NoError(t, f.keys.Provisioner.EnsureUseCase(t.Context(), f.org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
+		// Writers warm the key before their transaction; Capture never calls KMS.
+		require.NoError(t, f.store.Prepare(t.Context(), f.org))
 	}
 	return f
 }
@@ -78,7 +80,10 @@ func (f *fixture) capture(t *testing.T, ids ...uuid.UUID) {
 	require.NoError(t, f.store.Capture(t.Context(), tx, f.org, f.project, ids))
 	require.NoError(t, tx.Commit(t.Context()))
 }
-func TestCaptureWithOneConnectionAndColdKeys(t *testing.T) {
+
+// Capture never calls KMS inside the caller's transaction: a cold key fails
+// the capture, and Prepare on the pool before the transaction warms it.
+func TestCaptureWithOneConnectionNeedsAWarmKey(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	first, second := uuid.New(), uuid.New()
@@ -95,12 +100,21 @@ func TestCaptureWithOneConnectionAndColdKeys(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
+	before := f.keys.KMS.Decrypts()
+	cold, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
+	require.NoError(t, err)
+	defer func() { _ = cold.Rollback(context.Background()) }()
+	require.ErrorIs(t, store.Capture(ctx, cold, f.org, f.project, []uuid.UUID{first}), orgencryption.ErrKeyNotWarm)
+	require.NoError(t, cold.Rollback(ctx))
+	require.Equal(t, before, f.keys.KMS.Decrypts(), "no KMS call inside the transaction")
+
+	require.NoError(t, store.Prepare(ctx, f.org))
+	require.Equal(t, before+1, f.keys.KMS.Decrypts())
 	tx, err := pool.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	before := f.keys.KMS.Decrypts()
 	require.NoError(t, store.Capture(ctx, tx, f.org, f.project, []uuid.UUID{first, second}))
-	require.Equal(t, before+1, f.keys.KMS.Decrypts(), "a batch reuses its transaction-local DEK")
+	require.Equal(t, before+1, f.keys.KMS.Decrypts(), "the batch uses the warm key")
 	require.NoError(t, tx.Commit(ctx))
 	opened, err := store.Load(ctx, f.org, f.project, first)
 	require.NoError(t, err)
@@ -244,6 +258,7 @@ func TestKeyFailureAndCallerRollback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), progress.Waiting)
 	require.NoError(t, f.keys.Provisioner.EnsureUseCase(t.Context(), f.org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
+	require.NoError(t, f.store.Prepare(t.Context(), f.org))
 	// A later missing ID aborts the caller's whole batch, including the first copy.
 	low := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	f.add(t, low)
@@ -409,16 +424,17 @@ func TestCaptureDoesNotInvertChatAndWrapLocks(t *testing.T) {
 	defer func() { _ = normal.Rollback(ctx) }()
 	paused, release := make(chan struct{}), make(chan struct{})
 	released := false
-	// Fresh services ensure both captures unwrap cold keys through their own
-	// caller transactions rather than observing a warmed process cache.
-	cold := func() *Store {
+	// Separate services, each warmed on the pool as writers do before their
+	// transaction, so neither capture touches a key row inside it.
+	warm := func() *Store {
 		service, err := orgencryption.NewService(testenv.NewLogger(t), f.db, gcpauth.NewIdentity(gcpauth.NewStubResolver()), f.keys.KMS.Clients, f.keys.Keys)
 		require.NoError(t, err)
 		store, err := New(f.db, service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 		require.NoError(t, err)
+		require.NoError(t, store.Prepare(ctx, f.org))
 		return store
 	}
-	ordinaryStore, compactionStore := cold(), cold()
+	ordinaryStore, compactionStore := warm(), warm()
 	intercepted := &beforeCAS{DBTX: normal, once: func() {
 		close(paused)
 		select {

@@ -63,7 +63,8 @@ func registerDataExportRouteToggleTools(reg *Registrar, service *DataExportRoute
 			dataExportPreviewCostNote + dataExportToggleScopeNote + dataExportToggleDataNote +
 			"The resume reaches the export relays within about a minute for every destination, so the first batches after it can still be dropped. " +
 			"A route cannot be resumed, and nothing is changed, when it has no destination, when its destination was deleted, or when its destination's stored configuration (endpoint, sensitive-data setting, or headers) can no longer be used; this applies even if the route is already on. The refusal names which, and the destination has to be repaired in the dashboard.",
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		// Resuming starts sending data to the customer's own OTEL endpoint.
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}, meta, resume)
 }
 

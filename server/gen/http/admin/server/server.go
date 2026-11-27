@@ -126,6 +126,9 @@ type Server struct {
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
 	BackfillMcpConnectGrants                http.Handler
+	GetSecretBackfills                      http.Handler
+	RunMarketplaceTokenBackfill             http.Handler
+	RunRunnerKeyOrganizationBackfill        http.Handler
 	GetProjectRedeployPreview               http.Handler
 	RedeployProject                         http.Handler
 	ListCustomDomains                       http.Handler
@@ -292,6 +295,9 @@ func New(
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
+			{"GetSecretBackfills", "GET", "/admin/secretBackfills.get"},
+			{"RunMarketplaceTokenBackfill", "POST", "/admin/secretBackfills.runMarketplaceTokens"},
+			{"RunRunnerKeyOrganizationBackfill", "POST", "/admin/secretBackfills.runRunnerKeyOrganizations"},
 			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
 			{"RedeployProject", "POST", "/admin/project.redeploy"},
 			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
@@ -430,6 +436,9 @@ func New(
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
+		GetSecretBackfills:                      NewGetSecretBackfillsHandler(e.GetSecretBackfills, mux, decoder, encoder, errhandler, formatter),
+		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillHandler(e.RunMarketplaceTokenBackfill, mux, decoder, encoder, errhandler, formatter),
+		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillHandler(e.RunRunnerKeyOrganizationBackfill, mux, decoder, encoder, errhandler, formatter),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
 		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
 		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
@@ -575,6 +584,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
+	s.GetSecretBackfills = m(s.GetSecretBackfills)
+	s.RunMarketplaceTokenBackfill = m(s.RunMarketplaceTokenBackfill)
+	s.RunRunnerKeyOrganizationBackfill = m(s.RunRunnerKeyOrganizationBackfill)
 	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
 	s.RedeployProject = m(s.RedeployProject)
 	s.ListCustomDomains = m(s.ListCustomDomains)
@@ -719,6 +731,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
+	MountGetSecretBackfillsHandler(mux, h.GetSecretBackfills)
+	MountRunMarketplaceTokenBackfillHandler(mux, h.RunMarketplaceTokenBackfill)
+	MountRunRunnerKeyOrganizationBackfillHandler(mux, h.RunRunnerKeyOrganizationBackfill)
 	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
 	MountRedeployProjectHandler(mux, h.RedeployProject)
 	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
@@ -6386,6 +6401,167 @@ func NewBackfillMcpConnectGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillMcpConnectGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSecretBackfillsHandler configures the mux to serve the "admin"
+// service "getSecretBackfills" endpoint.
+func MountGetSecretBackfillsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/secretBackfills.get", f)
+}
+
+// NewGetSecretBackfillsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSecretBackfills" endpoint.
+func NewGetSecretBackfillsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSecretBackfillsRequest(mux, decoder)
+		encodeResponse = EncodeGetSecretBackfillsResponse(encoder)
+		encodeError    = EncodeGetSecretBackfillsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSecretBackfills")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRunMarketplaceTokenBackfillHandler configures the mux to serve the
+// "admin" service "runMarketplaceTokenBackfill" endpoint.
+func MountRunMarketplaceTokenBackfillHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/secretBackfills.runMarketplaceTokens", f)
+}
+
+// NewRunMarketplaceTokenBackfillHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "runMarketplaceTokenBackfill"
+// endpoint.
+func NewRunMarketplaceTokenBackfillHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRunMarketplaceTokenBackfillRequest(mux, decoder)
+		encodeResponse = EncodeRunMarketplaceTokenBackfillResponse(encoder)
+		encodeError    = EncodeRunMarketplaceTokenBackfillError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "runMarketplaceTokenBackfill")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRunRunnerKeyOrganizationBackfillHandler configures the mux to serve the
+// "admin" service "runRunnerKeyOrganizationBackfill" endpoint.
+func MountRunRunnerKeyOrganizationBackfillHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/secretBackfills.runRunnerKeyOrganizations", f)
+}
+
+// NewRunRunnerKeyOrganizationBackfillHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "runRunnerKeyOrganizationBackfill" endpoint.
+func NewRunRunnerKeyOrganizationBackfillHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRunRunnerKeyOrganizationBackfillRequest(mux, decoder)
+		encodeResponse = EncodeRunRunnerKeyOrganizationBackfillResponse(encoder)
+		encodeError    = EncodeRunRunnerKeyOrganizationBackfillError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "runRunnerKeyOrganizationBackfill")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

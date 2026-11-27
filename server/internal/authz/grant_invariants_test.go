@@ -357,7 +357,9 @@ func TestGrantInvariants_PersonalConnectionsBindToRepresentedUser(t *testing.T) 
 	}
 }
 
-func TestGrantInvariants_AnyOf(t *testing.T) {
+// Either is allowed only when one alternative passes on its own, whatever the
+// order, and Can gives the same answer as Require.
+func TestGrantInvariants_Either(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
 	failures := &failureReport{t: t}
@@ -373,23 +375,19 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 				if i == j {
 					continue
 				}
-				anyAllowed := engineAllows(t, engine.RequireAny(ctx, a.check, b.check))
-				if anyAllowed != (alone[i] || alone[j]) {
-					failures.add("[%s] RequireAny(%s on %s, %s on %s) = %v, alone %v and %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, anyAllowed, alone[i], alone[j])
+				allowed := engineAllows(t, engine.Require(ctx, Either(a.check, b.check)))
+				if allowed && !alone[i] && !alone[j] {
+					failures.add("[%s] Either(%s on %s, %s on %s) is allowed, but neither alternative is on its own", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				unblocked := engineAllows(t, engine.RequireAnyUnblocked(ctx, a.check, b.check))
-				if unblocked != engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-					failures.add("[%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+				if allowed != engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
+					failures.add("[%s] Either(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				if engineAllows(t, engine.Require(ctx, AnyOf(a.check, b.check))) != unblocked {
-					failures.add("[%s] Require(AnyOf(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
-				}
-				can, err := engine.Can(ctx, AnyOf(a.check, b.check))
+				decided, err := engine.Decide(ctx, Either(a.check, b.check))
 				if err != nil {
-					t.Fatalf("Can(AnyOf) errored: %v", err)
+					t.Fatalf("Decide(Either) errored: %v", err)
 				}
-				if can != unblocked {
-					failures.add("[%s] Can(AnyOf(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
+				if decided.AllAllowed != allowed {
+					failures.add("[%s] Decide(Either(%s on %s, %s on %s)) = %v, Require = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, decided.AllAllowed, allowed)
 				}
 			}
 		}
@@ -397,7 +395,7 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 	failures.done()
 }
 
-func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
+func TestGrantInvariants_EitherRefusesEveryBlock(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
 	failures := &failureReport{t: t}
@@ -419,8 +417,8 @@ func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 					if i == j {
 						continue
 					}
-					if engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-						failures.add("[%s] plus %s still allows RequireAnyUnblocked(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
+					if engineAllows(t, engine.Require(ctx, Either(b.check, a.check))) {
+						failures.add("[%s] plus %s still allows Either(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
 					}
 				}
 			}
@@ -504,30 +502,20 @@ func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
 	}
 	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
 		ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
-		matched, err := engine.FindMatched(ctx, all)
+		batch, err := engine.Decide(ctx, all...)
 		if err != nil {
-			t.Fatalf("FindMatched errored: %v", err)
+			t.Fatalf("Decide errored: %v", err)
 		}
 		for i, c := range checks {
 			want := isAllowed(t, grants, c.check)
-			evaluated, err := engine.Evaluate(ctx, c.check)
+			alone, err := engine.Decide(ctx, c.check)
 			if err != nil {
-				t.Fatalf("Evaluate errored: %v", err)
-			}
-			can, err := engine.Can(ctx, c.check)
-			if err != nil {
-				t.Fatalf("Can errored: %v", err)
-			}
-			filtered, err := engine.Filter(ctx, []Check{c.check})
-			if err != nil {
-				t.Fatalf("Filter errored: %v", err)
+				t.Fatalf("Decide errored: %v", err)
 			}
 			answers := map[string]bool{
-				"Require":     engineAllows(t, engine.Require(ctx, c.check)),
-				"Evaluate":    evaluated,
-				"Can":         can,
-				"Filter":      len(filtered) == 1,
-				"FindMatched": matched[i],
+				"Require":         engineAllows(t, engine.Require(ctx, c.check)),
+				"Decide alone":    alone.AllAllowed,
+				"Decide in batch": batch.Each[i].Allowed,
 			}
 			for name, got := range answers {
 				if got != want {

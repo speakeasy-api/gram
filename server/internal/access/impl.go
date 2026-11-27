@@ -174,7 +174,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if ac.ProjectID != nil {
 		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authz.Require(ctx, authz.Either(checks...)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {
@@ -430,7 +430,7 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	if ac.ProjectID != nil {
 		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
-	if err := s.authz.RequireAny(ctx, checks...); err != nil {
+	if err := s.authz.Require(ctx, authz.Either(checks...)); err != nil {
 		return nil, err
 	}
 	if ac.ProjectID != nil {

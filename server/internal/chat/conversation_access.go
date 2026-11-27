@@ -34,13 +34,13 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 		}
 		checks = append(checks, authz.Chat(authz.ChatIDFrom(raw)).Read())
 	}
-	granted, err := s.authz.Filter(ctx, checks)
+	decisions, err := s.authz.Decide(ctx, checks...)
 	if err != nil {
 		return nil, fmt.Errorf("filter conversation grants: %w", err)
 	}
-	allowed := make(map[string]bool, len(granted))
-	for _, id := range granted {
-		allowed[id] = true
+	allowed := make(map[string]bool, len(checks))
+	for i, decision := range decisions.Each {
+		allowed[checks[i].ResourceID] = decision.Allowed
 	}
 	for _, raw := range ids {
 		id, err := uuid.Parse(raw)

@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/marketplacetokenbackfill"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/secretbackfills/marketplacetokenbackfill"
 )
 
 // testEncryptionKey is a throwaway 32-byte key, base64 encoded.
@@ -113,9 +113,9 @@ func TestFormatMarketplaceTokensReport(t *testing.T) {
 		Moved:                2,
 		Skipped:              3,
 		NeedsOrganizationKey: 4,
-		Counts:               marketplacetokenbackfill.Counts{Unattributed: 5, Legacy: 6, Hashed: 7},
+		Counts:               marketplacetokenbackfill.Counts{Unattributed: 5, Legacy: 6, Hashed: 7, MissingOrganization: 8},
 	}
 	require.Equal(t,
-		"mode=apply environment=dev attributed=1 moved=2 skipped=3 needs_organization_key=4 unattributed=5 legacy=6 hashed=7\n",
+		"mode=apply environment=dev attributed=1 moved=2 skipped=3 needs_organization_key=4 unattributed=5 legacy=6 hashed=7 missing_organization=8\n",
 		formatMarketplaceTokensReport("apply", "dev", report))
 }

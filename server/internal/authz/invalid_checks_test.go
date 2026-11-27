@@ -108,14 +108,10 @@ func TestInvalidCheckOnUnenforcedPathFailsInTests(t *testing.T) {
 	typo := Check{Scope: Scope("project:reed"), ResourceID: "project-one"}
 
 	require.ErrorIs(t, engine.Require(ctx, typo), ErrInvalidCheck)
-	require.ErrorIs(t, engine.RequireAny(ctx, typo), ErrInvalidCheck)
-	_, err := engine.Evaluate(ctx, typo)
+	require.ErrorIs(t, engine.Require(ctx, Either(typo, typo)), ErrInvalidCheck)
+	_, err := engine.Decide(ctx, typo)
 	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.Can(ctx, AnyOf(typo, typo))
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.Filter(ctx, []Check{typo})
-	require.ErrorIs(t, err, ErrInvalidCheck)
-	_, err = engine.FindMatched(ctx, []Check{typo})
+	_, err = engine.Decide(ctx, Either(typo, typo))
 	require.ErrorIs(t, err, ErrInvalidCheck)
 
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
@@ -285,7 +281,7 @@ func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 				"tool, no project":  {SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly},
 				"explicit mcp kind": nil,
 			} {
-				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+				check := Check{Scope: scope, ResourceKind: "", ResourceID: "server-1", Dimensions: dimensions, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}
 				if name == "explicit mcp kind" {
 					check.ResourceKind = ResourceKindMCP
 				}
@@ -298,7 +294,7 @@ func TestValidateInput_MCPChecksRequireProject(t *testing.T) {
 	require.ErrorIs(t, validateInput(mcpToolCallCheck("server-1", mcpToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})), ErrInvalidCheck)
 	require.NoError(t, validateInput(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).ToolCall("search", "")))
 	// Kinds with no required dimension are unaffected.
-	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}))
+	require.NoError(t, validateInput(Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "project-1", Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, operation: operationDefault}))
 }
 
 func TestRequiredCheckDimensions(t *testing.T) {
@@ -333,10 +329,10 @@ func TestGrantsAuthorizeRejectsWildcardResourceID(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
+func TestGroup_OnlyAsTheSingleCheckOfRequire(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	anyOf := AnyOf(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
+	group := Either(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
 
 	// A misuse is refused whether or not RBAC is enforced for the caller.
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeRoot, WildcardResource)}) {
@@ -344,47 +340,34 @@ func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 			t.Helper()
 			var shareable *oops.ShareableError
 			require.ErrorAs(t, err, &shareable, name)
-			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused AnyOf is a bad check, not a denial", name)
+			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused group is a bad check, not a denial", name)
 		}
-		requireInvalid(engine.Require(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read()))
-		requireInvalid(engine.Require(ctx, AnyOf(anyOf)))
-		_, err := engine.Evaluate(ctx, anyOf)
+		requireInvalid(engine.Require(ctx, group, Project(ProjectIDFrom("project-one")).Read()))
+		requireInvalid(engine.Require(ctx, Either(group)))
+		_, err := engine.Decide(ctx, Either(group))
 		requireInvalid(err)
-		_, err = engine.Filter(ctx, []Check{anyOf})
-		requireInvalid(err)
-		_, err = engine.FindMatched(ctx, []Check{anyOf})
-		requireInvalid(err)
-		_, err = engine.Can(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read())
-		requireInvalid(err)
-		_, err = engine.Can(ctx, AnyOf(anyOf))
-		requireInvalid(err)
-		requireInvalid(engine.Require(ctx, AnyOf()))
-		_, err = engine.Can(ctx, AnyOf())
+		requireInvalid(engine.Require(ctx, Either()))
+		_, err = engine.Decide(ctx, Either())
 		requireInvalid(err)
 	}
 }
 
-// A probe is a discovery question: Can and Filter answer it, Require refuses
-// it, alone or inside AnyOf, whether or not RBAC is enforced.
+// A probe is a discovery question: Decide answers it, Require refuses
+// it, alone or inside Either, whether or not RBAC is enforced.
 func TestProbe_RefusedByRequire(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	probe := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect().Probe()
 
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeMCPConnect, "server-1")}) {
-		can, err := engine.Can(ctx, probe)
+		decided, err := engine.Decide(ctx, probe)
 		require.NoError(t, err, name)
-		require.True(t, can, name)
-		ids, err := engine.Filter(ctx, []Check{probe})
-		require.NoError(t, err, name)
-		require.Equal(t, []string{"server-1"}, ids, name)
+		require.True(t, decided.AllAllowed, name)
 
 		for call, err := range map[string]error{
-			"require":               engine.Require(ctx, probe),
-			"require any":           engine.RequireAny(ctx, probe),
-			"require any unblocked": engine.RequireAnyUnblocked(ctx, probe),
-			"anyof alternative":     engine.Require(ctx, AnyOf(probe)),
-			"probed anyof":          engine.Require(ctx, AnyOf(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
+			"require":       engine.Require(ctx, probe),
+			"either":        engine.Require(ctx, Either(probe)),
+			"probed either": engine.Require(ctx, Either(MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Connect()).Probe()),
 		} {
 			require.ErrorIs(t, err, ErrInvalidCheck, "%s: %s", name, call)
 		}

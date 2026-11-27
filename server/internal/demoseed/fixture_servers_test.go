@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	q := testrepo.New(db)
 	for range 2 {
-		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
+		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot(), time.Time{})
 		require.NoError(t, err)
 
 		oauth, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-linear"))

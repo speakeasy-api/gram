@@ -1484,6 +1484,7 @@ var _ = Service("admin", func() {
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
+	secretBackfillMethods()
 	projectRedeployMethods()
 	customDomainMethods()
 	platformExternalCredentialMethods()

@@ -38,11 +38,11 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	for name, ctx := range map[string]context.Context{"authorizer may do the same": same, "workload acts for nobody": workload} {
 		logs.Reset()
 		require.NoError(t, engine.Require(ctx, one, two), name)
-		require.NoError(t, engine.RequireAny(ctx, one, two), name)
-		allowed, err := engine.Can(ctx, AnyOf(one, two))
+		require.NoError(t, engine.Require(ctx, Either(one, two)), name)
+		allowed, err := allAllowed(ctx, engine, Either(one, two))
 		require.NoError(t, err, name)
 		require.True(t, allowed, name)
-		ids, err := engine.Filter(ctx, []Check{one, two})
+		ids, err := allowedIDs(ctx, engine, []Check{one, two})
 		require.NoError(t, err, name)
 		require.Len(t, ids, 2, name)
 		require.Zero(t, count(), name)
@@ -61,36 +61,35 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	require.NotContains(t, logs.String(), "server-one")
 
 	logs.Reset()
-	allowed, err := engine.Can(narrowed, two)
+	allowed, err := allAllowed(narrowed, engine, two)
 	require.NoError(t, err)
 	require.True(t, allowed)
 	require.Equal(t, 1, count())
 
 	logs.Reset()
-	require.NoError(t, engine.RequireAny(narrowed, two, one))
+	require.NoError(t, engine.Require(narrowed, Either(two, one)))
 	require.Zero(t, count(), "one alternative survives the authorizer's policy")
 
 	logs.Reset()
-	require.NoError(t, engine.RequireAny(narrowed, two))
+	require.NoError(t, engine.Require(narrowed, Either(two)))
 	require.Equal(t, 1, count())
 
 	logs.Reset()
-	allowed, err = engine.Can(narrowed, AnyOf(two, one))
+	allowed, err = allAllowed(narrowed, engine, Either(two, one))
 	require.NoError(t, err)
 	require.True(t, allowed)
 	require.Zero(t, count())
 
 	logs.Reset()
-	ids, err := engine.Filter(narrowed, []Check{one, two})
+	ids, err := allowedIDs(narrowed, engine, []Check{one, two})
 	require.NoError(t, err)
 	require.Len(t, ids, 2, "the list is unchanged")
 	require.Equal(t, 1, count(), "one line per call, however many rows")
 }
 
-// A block in the authorizer's policy vetoes an AnyOf group as it would in the
-// credential's own policy, while RequireAny still passes on the alternative
-// nothing blocks. MCP tool and connect decisions made through admission are
-// reported the same way.
+// A block in the authorizer's policy refuses an Either group as it would in
+// the credential's own policy. MCP tool and connect decisions made through
+// admission are reported the same way.
 func TestAuthorizerLivePolicy_ReportsGroupVetoesAndAdmissionDecisions(t *testing.T) {
 	t.Parallel()
 
@@ -110,19 +109,15 @@ func TestAuthorizerLivePolicy_ReportsGroupVetoesAndAdmissionDecisions(t *testing
 	blocksTwo := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{connectAll, NewGrant(ScopeMCPBlockedConnect, "server-two")}})
 
 	logs.Reset()
-	allowed, err := engine.Can(blocksTwo, AnyOf(two, one))
+	allowed, err := allAllowed(blocksTwo, engine, Either(two, one))
 	require.NoError(t, err)
 	require.True(t, allowed, "the decision is unchanged")
 	require.Equal(t, 1, count(), "the authorizer's block on server two vetoes the group")
 	require.Contains(t, logs.String(), "server-two")
 
 	logs.Reset()
-	require.NoError(t, engine.Require(blocksTwo, AnyOf(two, one)))
+	require.NoError(t, engine.Require(blocksTwo, Either(two, one)))
 	require.Equal(t, 1, count(), "Require refuses a blocked alternative, so the warning does too")
-
-	logs.Reset()
-	require.NoError(t, engine.RequireAny(blocksTwo, two, one))
-	require.Zero(t, count(), "server one passes on its own")
 
 	narrowed := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{NewGrant(ScopeMCPConnect, "server-one")}})
 
@@ -163,7 +158,7 @@ func TestAuthorizerLivePolicy_ReportsTheAlternativeTheCredentialAllowed(t *testi
 	one := MCPServer(MCPServerIDFrom("server-one"), ProjectIDFrom(project)).Connect()
 	two := MCPServer(MCPServerIDFrom("server-two"), ProjectIDFrom(project)).Connect()
 
-	require.NoError(t, engine.RequireAny(ctx, one, two))
+	require.NoError(t, engine.Require(ctx, Either(one, two)))
 	require.Equal(t, 1, strings.Count(logs.String(), authorizerWouldRefuseLog))
 	require.Contains(t, logs.String(), "server-two")
 	require.NotContains(t, logs.String(), "server-one")
