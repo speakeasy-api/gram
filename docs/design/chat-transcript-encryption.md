@@ -6,11 +6,11 @@ Six `chat_messages` columns are protected fields: `content`, `content_raw`, `too
 
 - **Plaintext:** no transcript.
 - **Shadow** (`GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS`): plaintext and transcript. Reads and updates decrypt the transcript and compare it with the plaintext; a mismatch is logged by field size, never contents, and plaintext wins. `Backfill` reseals from plaintext; run it before re-adding a removed project.
-- **Encrypted:** transcript only, plaintext columns empty; a missing transcript is an error, and `Seal` never reseals an existing one. Not configurable yet.
+- **Encrypted:** transcript only, plaintext columns empty; inserts never write plaintext; a missing transcript is an error. Not configurable yet.
 
 ## Writes
 
-Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `Seal` encrypts a new message. `UpdateChatMessage` locks the row and transcript, applies the change in Go and writes every copy. A failure rolls back; a sanity-check mismatch is logged.
+Writers call `Prepare` before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `InsertChatMessages` and `UpdateChatMessage` write every copy the mode needs in one transaction. A failure rolls back; a sanity-check mismatch is logged.
 
 Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill` reseals them.
 

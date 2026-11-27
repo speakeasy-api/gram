@@ -372,3 +372,39 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: m.Params.ID, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
 	require.Equal(t, "EXAMPLE changed projection", content)
 }
+
+// In encrypted mode every insert path keeps the protected fields out of
+// chat_messages and seals them in the same transaction.
+func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, false)
+	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
+	f.writer.WithTranscripts(encrypted)
+
+	plain := f.message("EXAMPLE plain write")
+	plain.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)
+	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{plain})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	correlated := f.message("EXAMPLE correlated prompt")
+	correlated.Params.Role = "user"
+	n, err = f.writer.WriteCorrelated(t.Context(), f.projectID, correlated, "agent-prompt:v1:example")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	external := chat.ExternalMessageWrite{Params: chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: "EXAMPLE imported content", ExternalMessageID: conv.ToPGText("example-encrypted-import")}}
+	n, err = f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{external}, nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	for id, want := range map[uuid.UUID]string{plain.Params.ID: "EXAMPLE plain write", correlated.Params.ID: "EXAMPLE correlated prompt", external.Params.ID: "EXAMPLE imported content"} {
+		row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
+		require.NoError(t, err)
+		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
+		require.Empty(t, row.ToolCalls)
+		content := row.Content
+		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: id, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+		require.Equal(t, want, content, "the transcript holds what was written")
+	}
+}
