@@ -952,7 +952,13 @@ func TestKitProtocolLegacyGatewayOmitsDelivery(t *testing.T) {
 		ProjectID: key.ProjectID, ChatID: chatID,
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, messages)
+	foundAssistant := false
+	for _, m := range messages {
+		if m.Role == "assistant" && m.Content == "ok" && m.FinishReason.String == "end_turn" {
+			foundAssistant = true
+		}
+	}
+	require.True(t, foundAssistant, "legacy gateway assistant reply must be projected")
 }
 
 func TestKitProtocolInterruptRunningTurnAndSettle(t *testing.T) {

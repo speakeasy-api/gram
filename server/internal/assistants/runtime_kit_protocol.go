@@ -233,13 +233,32 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	// Set when replay shows this session already received a prompt.
 	promptedBefore := false
 	var pendingEcho *kitacp.Notification
-	// Hold at most one unknown replayed user message until session/prompt
-	// returns its authoritative messageId, so a retry after an interrupted
-	// prompt does not project a duplicate row before correlation is stored.
+	// On a resumed retry, hold at most one unknown replayed user message along
+	// with its trailing replay updates until session/prompt returns its
+	// authoritative messageId. That prevents both duplicate user rows before
+	// correlation is stored and out-of-order projection of the user vs reply.
 	var replayEcho *kitacp.Notification
 	var replayEchoID string
+	var replayTail []kitacp.Notification
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
+	flushReplayHold := func() error {
+		if replayEcho == nil {
+			return nil
+		}
+		if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
+			return err
+		}
+		for _, queued := range replayTail {
+			if _, err := p.config.Projector.Handle(work, binding, queued); err != nil {
+				return err
+			}
+		}
+		replayEcho = nil
+		replayEchoID = ""
+		replayTail = nil
+		return nil
+	}
 	projection := make(chan error, 1)
 	flush := make(chan chan error)
 	reducer := newKitTranscriptReducer()
@@ -261,10 +280,10 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			defer echoMu.Unlock()
 			if envelope.Update.Kind == "user_message" && !awaitingEcho {
 				promptedBefore = true
-				if needsResume && req.CanonicalUserMessageID != uuid.Nil {
+				if needsResume && req.EventAttempt > 1 && req.CanonicalUserMessageID != uuid.Nil {
 					if _, known := binding.UserEchoes[envelope.Update.ID]; !known && envelope.Update.ID != "" {
 						if replayEcho != nil && replayEchoID != envelope.Update.ID {
-							if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
+							if err := flushReplayHold(); err != nil {
 								return err
 							}
 						}
@@ -276,12 +295,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 						replayEchoID = envelope.Update.ID
 						return nil
 					}
-					if replayEcho != nil {
-						if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
-							return err
-						}
-						replayEcho = nil
-						replayEchoID = ""
+					if err := flushReplayHold(); err != nil {
+						return err
 					}
 				}
 			}
@@ -299,6 +314,10 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			canonical, err := reducer.Apply(n)
 			if err != nil {
 				return err
+			}
+			if replayEcho != nil {
+				replayTail = append(replayTail, canonical)
+				return nil
 			}
 			_, err = p.config.Projector.Handle(work, binding, canonical)
 			return err
@@ -383,22 +402,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	// prompt, so let session/prompt deduplicate by idempotencyKey and allow
 	// settlement/cancel to determine the true outcome.
 	if req.EventAttempt <= 1 || !needsResume {
-		stopped, err := p.cancelKitTurnBeforePrompt(work, r, req)
-		if err != nil {
+		if stopped, err := p.cancelKitTurnBeforePrompt(work, r, req); err != nil || stopped {
 			return err
-		}
-		if stopped {
-			echoMu.Lock()
-			held := replayEcho
-			replayEcho = nil
-			replayEchoID = ""
-			echoMu.Unlock()
-			if held != nil {
-				if _, err := p.config.Projector.Handle(work, binding, *held); err != nil {
-					return err
-				}
-			}
-			return nil
 		}
 	}
 	echoMu.Lock()
@@ -447,12 +452,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			}
 		}
 		awaitingEcho = false
-		if replayEcho != nil {
-			if _, err := p.config.Projector.Handle(work, binding, *replayEcho); err != nil {
-				return err
-			}
-			replayEcho = nil
-			replayEchoID = ""
+		if err := flushReplayHold(); err != nil {
+			return err
 		}
 		if pendingEcho != nil {
 			canonical, err := reducer.Apply(*pendingEcho)

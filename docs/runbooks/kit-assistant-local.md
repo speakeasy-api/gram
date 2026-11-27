@@ -196,10 +196,9 @@ results before retrying or retiring the runtime; do not stop the projector or
 use replacement resume to take control away from it. Natural completion is not
 reported as successful cancellation.
 
-Kit `v0.3.1` persists ACP message IDs and prompt idempotency keys for newly
-written v2 transcripts; older unstamped transcripts can reconstruct different
-replay IDs and remain unsafe for deduplication. Our live cold-process projection
-still needs verification.
+Kit `v0.3.1` persists ACP message IDs for newly written v2 transcripts; older
+unstamped transcripts can reconstruct different replay IDs and remain unsafe
+for deduplication. Our live cold-process projection still needs verification.
 The legacy idle-expiry path deliberately excludes Kit because it lacks an
 all-session admission fence. Do not bypass that guard with a direct container
 restart: the test needs a supported fenced lifecycle path that retains the same
@@ -228,7 +227,7 @@ automatically posted to Slack.
 
 ## Troubleshoot local setup and missing results
 
-Kit `v0.3.1` retains failed MCP initialization as an error. Repeating
+Kit (observed on `v0.2.19`) retains failed MCP initialization as an error. Repeating
 `tool_search` or touching an unchanged config file does not retry initialization:
 reload compares parsed entries. Repair transport before first discovery. For an
 isolated fixture already in this state, a deliberate server-key rename can
