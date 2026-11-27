@@ -3,10 +3,11 @@ package assistants
 import (
 	"context"
 	"errors"
-	"net/url"
+	"net/http"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -16,16 +17,26 @@ import (
 func TestReviewLocalReadinessFailureStopsStartedIncarnation(t *testing.T) {
 	t.Parallel()
 	k, engine, r, _ := kitLocalFixture(t)
-	failure := errors.New("readiness failed")
-	k.config.Ready = func(context.Context, assistantRuntimeRecord, *url.URL) error { return failure }
-	_, err := k.Ensure(t.Context(), r)
-	require.ErrorIs(t, err, failure)
-	require.False(t, engine.info.Running)
+	ensured, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = ensured.BackendMetadataJSON
+	engine.newHelper = func(t *testing.T) *fakeKitLocalInitHelper {
+		h := newFakeKitLocalInitHelper(t)
+		h.appReadyStatus = http.StatusInternalServerError
+		return h
+	}
+	threadID := uuid.New()
+	err = k.RunTurn(t.Context(), r, runTurnRequest{ThreadID: threadID})
+	require.Error(t, err)
+	name, _ := kitLocalThreadNames(r, threadID)
+	info := engine.containers[name]
+	require.NotNil(t, info)
+	require.False(t, info.Running)
 	require.Contains(t, engine.calls, "stop")
-	require.Equal(t, []string{engine.info.ID}, engine.stoppedIDs)
+	require.Equal(t, []string{info.ID}, engine.stoppedIDs)
 	require.NoError(t, k.ReapStoppedMachine(t.Context(), r))
-	require.Empty(t, engine.info.ID)
-	require.Nil(t, engine.volume)
+	require.Empty(t, engine.containers)
+	require.Empty(t, engine.volumes)
 }
 
 func TestReviewKitCallbackRejectsFailedAuthority(t *testing.T) {
@@ -49,25 +60,24 @@ func TestReviewKitCallbackRejectsFailedAuthority(t *testing.T) {
 func TestReviewKitSwitchTokenUsesLockHoldingTransaction(t *testing.T) {
 	t.Parallel()
 	core, db, key, _ := kitSessionFixture(t)
-	require.NoError(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "test-token"))
+	runtime := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID}
+	rootToken, err := core.ensureKitATEGatewayRootToken(t.Context(), runtime)
+	require.NoError(t, err)
+	require.NotEmpty(t, rootToken)
 	tx := testenv.BeginTx(t, t.Context(), db)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	q := assistantrepo.New(tx)
 	require.NoError(t, q.AcquireAssistantAdvisoryLock(t.Context(), key.AssistantID.String()))
 	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), runtimeSwitchQueriesKey{}, q), time.Second)
 	defer cancel()
-	token, err := core.LoadKitGatewayToken(ctx, key.ProjectID, key.AssistantID, key.RuntimeID)
-	require.NoError(t, err)
-	require.Equal(t, "test-token", token)
 	require.Same(t, q, runtimeSwitchQueries(ctx, db))
-	// The real local composition callback uses this control-only reader.
 	// Holding the runtime row lock ensures a pool-based authority read cannot
 	// accidentally pass the regression test by using another connection.
 	_, err = q.GetAssistantRuntimeForAdmission(ctx, assistantrepo.GetAssistantRuntimeForAdmissionParams{ID: key.RuntimeID, ProjectID: key.ProjectID})
 	require.NoError(t, err)
-	token, err = core.loadKitGatewayTokenAlreadyLocked(ctx, assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID})
+	token, err := core.loadKitGatewayTokenAlreadyLocked(ctx, runtime)
 	require.NoError(t, err)
-	require.Equal(t, "test-token", token)
+	require.Equal(t, rootToken, token)
 }
 
 func TestReviewKitInterruptLostAuthorityIsNotAcknowledged(t *testing.T) {

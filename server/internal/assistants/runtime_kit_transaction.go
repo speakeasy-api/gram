@@ -10,8 +10,10 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 )
 
+type kitLifecycleTxKey struct{}
+
 // kitLifecycleTransaction keeps the same connection and session advisory fence
-// while publishing recovery phases in successive transactions. Existing writers
+// while publishing lifecycle phases in successive transactions. Existing writers
 // use the identical transaction-lock key and therefore remain excluded across
 // commits. The explicit pgx.Tx handle stays stable for query/provisioning helpers.
 // No caller may retain a nested transaction across Publish.

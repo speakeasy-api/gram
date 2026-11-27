@@ -76,8 +76,8 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if err := validateKitATEWorkerSelector(c.WorkerSelector); err != nil {
 		return err
 	}
-	if c.nativeIdentity != nil || c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
-		return errors.New("assistant ATE rejects GKE identity, operator assertions, and local network or TLS overrides")
+	if c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
+		return errors.New("assistant ATE rejects operator assertions and local network or TLS overrides")
 	}
 	if _, err := kitATEImageDigest(c.Image); err != nil {
 		return err

@@ -1,13 +1,10 @@
 package assistants
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,8 +15,8 @@ import (
 
 func TestKitLocalAssertionDirectoryMountSupportsAtomicRotation(t *testing.T) {
 	t.Parallel()
-	spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Command: []string{"kit"}, Image: "kit:v0.2.19"}
-	args := kitLocalCreateArgs(8081, spec)
+	spec := kitLocalContainerSpec{WorkloadAssertionFile: "/operator/projection/assertion", Image: "kit:v0.2.19"}
+	args := kitLocalCreateArgs(ateInitPort, ateACPPort, spec)
 	require.Contains(t, args, "type=bind,src=/operator/projection,dst=/var/run/secrets/speakeasy/workload,readonly")
 	require.NotContains(t, strings.Join(args, " "), "src=/operator/projection/assertion")
 	require.NotContains(t, strings.Join(args, " "), "dst=/home/kit/.kit")
@@ -46,7 +43,7 @@ func TestKitLocalInspectRejectsMutableOrForeignProjection(t *testing.T) {
 	}
 	encoded, err := json.Marshal(raw)
 	require.NoError(t, err)
-	info, err := decodeKitLocalInspect(encoded, 8081)
+	info, err := decodeKitLocalInspect(encoded, ateInitPort, ateACPPort)
 	require.NoError(t, err)
 	require.Equal(t, "/operator/projection", info.AssertionDirectory)
 	require.True(t, info.AssertionReadOnly)
@@ -61,48 +58,60 @@ func TestKitLocalInspectRejectsMutableOrForeignProjection(t *testing.T) {
 		mutation(mount)
 		encoded, err = json.Marshal(raw)
 		require.NoError(t, err)
-		_, err = decodeKitLocalInspect(encoded, 8081)
+		_, err = decodeKitLocalInspect(encoded, ateInitPort, ateACPPort)
 		require.Error(t, err)
 	}
 }
 
-func TestKitLocalBootstrapArchiveNeverCopiesAssertionsOrProviderCredentials(t *testing.T) {
+func TestKitLocalBootstrapPayloadNeverCopiesAssertionsOrProviderCredentials(t *testing.T) {
 	t.Parallel()
 	b := kitTestWorkloadBootstrap()
-	archive, err := kitLocalBootstrapArchive(b)
+	raw, err := kitLocalBootstrapPayload(b, map[string]string{"SPEAKEASY_ORIGIN": "https://ai.speakeasy.com"})
 	require.NoError(t, err)
-	reader := tar.NewReader(bytes.NewReader(archive))
-	var files []string
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		require.NoError(t, err)
-		if header.Typeflag == tar.TypeDir {
-			continue
-		}
-		files = append(files, header.Name)
-		require.NotContains(t, header.Name, "assertion")
-		require.NotContains(t, header.Name, "speakeasy.json")
+	var payload kitATEBootstrapRequest
+	require.NoError(t, json.Unmarshal(raw, &payload))
+	require.Equal(t, ateInitWireVersion, payload.Version)
+	var paths []string
+	contents := map[string][]byte{}
+	for _, file := range payload.Files {
+		require.Equal(t, uint32(0o600), file.Mode)
+		paths = append(paths, file.Path)
+		contents[file.Path] = file.Content
+		require.NotContains(t, file.Path, "assertion")
+		require.NotContains(t, file.Path, "speakeasy.json")
 	}
-	require.ElementsMatch(t, []string{".kit/AGENTS.md", ".kit/config.toml", ".kit/credentials/mcp.json", ".kit/credentials/gateway-token"}, files)
+	require.ElementsMatch(t, []string{".kit/AGENTS.md", ".kit/config.toml", ".kit/credentials/mcp.json", ".kit/credentials/gateway-token"}, paths)
+	require.Equal(t, b.AgentsMD, contents[".kit/AGENTS.md"])
+	require.Equal(t, []byte(kitBootstrapConfig(b)), contents[".kit/config.toml"])
+	require.Equal(t, b.MCPJSON, contents[".kit/credentials/mcp.json"])
+	require.Equal(t, b.GatewayToken, contents[".kit/credentials/gateway-token"])
+	require.Equal(t, map[string]string{"SPEAKEASY_ORIGIN": "https://ai.speakeasy.com"}, payload.Env)
+
+	shortToken := b
+	shortToken.GatewayToken = []byte("too-short")
+	_, err = kitLocalBootstrapPayload(shortToken, nil)
+	require.Error(t, err)
+
+	egressAuth := b
+	egressAuth.EgressInjectedAuth = true
+	_, err = kitLocalBootstrapPayload(egressAuth, nil)
+	require.Error(t, err)
 }
 
 func TestKitLocalProjectionRequiresDedicatedDirectory(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
-	require.NoError(t, os.Chmod(directory, 0700))
+	require.NoError(t, os.Chmod(directory, 0o700))
 	assertion := filepath.Join(directory, "assertion")
-	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0600))
+	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0o600))
 	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
 	sibling := filepath.Join(directory, "unrelated-host-file")
-	require.NoError(t, os.WriteFile(sibling, []byte("not-for-runtime"), 0600))
+	require.NoError(t, os.WriteFile(sibling, []byte("not-for-runtime"), 0o600))
 	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "dedicated directory")
 	require.NoError(t, os.Remove(sibling))
 	// Atomic assertion replacement remains compatible with the dedicated mount.
 	next := filepath.Join(directory, "next")
-	require.NoError(t, os.WriteFile(next, []byte("rotated-test-assertion"), 0600))
+	require.NoError(t, os.WriteFile(next, []byte("rotated-test-assertion"), 0o600))
 	require.NoError(t, os.Rename(next, assertion))
 	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
 	require.NoError(t, os.Remove(assertion))
@@ -115,7 +124,7 @@ func TestKitLocalProjectionPreservesFilesystemErrors(t *testing.T) {
 	directory := t.TempDir()
 	require.ErrorIs(t, validateKitLocalProjectionDirectory(filepath.Join(directory, "missing", "assertion")), os.ErrNotExist)
 	file := filepath.Join(directory, "not-a-directory")
-	require.NoError(t, os.WriteFile(file, []byte("test"), 0600))
+	require.NoError(t, os.WriteFile(file, []byte("test"), 0o600))
 	require.ErrorContains(t, validateKitLocalProjectionDirectory(filepath.Join(file, "assertion")), "must be a directory")
 	linked := filepath.Join(directory, "linked-directory")
 	require.NoError(t, os.Symlink(t.TempDir(), linked))
@@ -126,13 +135,13 @@ func TestKitLocalProjectionRequiresPrivatePermissions(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()
 	assertion := filepath.Join(directory, "assertion")
-	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0600))
-	require.NoError(t, os.Chmod(directory, 0750))
+	require.NoError(t, os.WriteFile(assertion, []byte("test-assertion"), 0o600))
+	require.NoError(t, os.Chmod(directory, 0o750))
 	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "0700")
-	require.NoError(t, os.Chmod(directory, 0700))
-	require.NoError(t, os.Chmod(assertion, 0640))
+	require.NoError(t, os.Chmod(directory, 0o700))
+	require.NoError(t, os.Chmod(assertion, 0o640))
 	require.ErrorContains(t, validateKitLocalProjectionDirectory(assertion), "0600")
-	require.NoError(t, os.Chmod(assertion, 0600))
+	require.NoError(t, os.Chmod(assertion, 0o600))
 	require.NoError(t, validateKitLocalProjectionDirectory(assertion))
 }
 

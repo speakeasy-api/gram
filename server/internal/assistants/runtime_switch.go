@@ -197,12 +197,25 @@ func runtimeSwitchQueries(ctx context.Context, db assistantrepo.DBTX) *assistant
 // after the backend stop succeeds. Both rollback and crash recovery are safe:
 // rollback leaves no intent; a crash leaves it for the stopped-runtime janitor.
 func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime assistantRuntimeRecord) error {
-	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
-		lifecycle := s.kitGKELifecycle
-		if runtime.Backend == runtimeBackendATE {
-			lifecycle = s.kitATELifecycle
+	if isRetiredKitBackend(runtime) {
+		if s.logger != nil {
+			s.logger.WarnContext(ctx, "completing switch retirement for leftover Kit runtime referencing removed backend",
+				attr.SlogAssistantID(runtime.AssistantID.String()),
+				attr.SlogProjectID(runtime.ProjectID.String()),
+				attr.SlogAssistantRuntimeID(runtime.ID.String()),
+				attr.SlogAssistantRuntimeBackend(runtime.Backend),
+			)
 		}
-		return lifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
+		if err := s.revokeKitWorkload(ctx, s.db, runtime); err != nil && s.logger != nil {
+			s.logger.WarnContext(ctx, "revoke leftover Kit runtime workload during switch retirement failed",
+				attr.SlogAssistantRuntimeID(runtime.ID.String()),
+				attr.SlogError(err),
+			)
+		}
+		return assistantrepo.New(s.db).CompleteRuntimeSwitchRetirement(ctx, assistantrepo.CompleteRuntimeSwitchRetirementParams{ID: runtime.ID, ProjectID: runtime.ProjectID})
+	}
+	if kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend) {
+		return s.kitATELifecycle(ctx, runtime, func(ctx context.Context, locked assistantRuntimeRecord) error {
 			if locked.State != "switch_retiring" || !locked.Retired {
 				return nil
 			}
@@ -231,6 +244,7 @@ func (s *ServiceCore) finishRuntimeSwitchRetirement(ctx context.Context, runtime
 	// Stop does not construct a protocol or read a credential; it operates on
 	// the immutable backend resource while admission and switching are fenced.
 	runtime.LifecycleTx = tx
+	runtime.Retired = true
 	if err := s.runtime.Stop(ctx, runtime); err != nil {
 		return fmt.Errorf("stop retired runtime: %w", err)
 	}

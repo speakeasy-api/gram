@@ -1,35 +1,46 @@
 package assistants
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/distribution/reference"
 	"github.com/google/uuid"
 )
-
-const KitIntegrationImage = "localhost/kit-control-plane:v0.2.19"
 
 // KitWorkloadAssertionPath is an external projection, never part of persistent HOME.
 const KitWorkloadAssertionPath = "/var/run/secrets/speakeasy/workload/assertion"
 
-// KitWorkspacePath is the approved persistent gateway project root.
+// KitWorkspacePath is the approved persistent Kit project root.
 const KitWorkspacePath = "/home/kit/workspace"
-const kitFileConfig = "provider = \"speakeasy\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
-const kitEgressFileConfig = "provider = \"openrouter\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
 
-func KitGatewayCommand(port int) ([]string, []string) {
-	return []string{"/usr/local/bin/kit"}, []string{"gateway", "--listen", "0.0.0.0:" + strconv.Itoa(port), "--allow-wildcard-bind", "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath}
-}
-func validateKitGatewayCommand(command, args []string, port int) error {
-	expectedCommand, expectedArgs := KitGatewayCommand(port)
-	if !slices.Equal(command, expectedCommand) || !slices.Equal(args, expectedArgs) {
-		return fmt.Errorf("kit requires the authenticated wildcard gateway command and approved project root")
+const (
+	// kitFileConfig configures local Kit runtimes to exchange the externally
+	// projected workload assertion for Speakeasy inference tokens.
+	kitFileConfig = "provider = \"speakeasy\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
+
+	// kitEgressFileConfig configures ATE Kit runtimes for egress-injected bearer auth.
+	kitEgressFileConfig = "provider = \"openrouter\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
+)
+
+// kitExplicitImage accepts explicit non-latest tags as well as digest-pinned image references.
+func kitExplicitImage(image string) bool {
+	named, err := reference.ParseNormalizedNamed(image)
+	if err != nil {
+		return false
 	}
-	return nil
+	// A digest selects immutable content even when a mutable tag is also present.
+	if _, digested := named.(reference.Digested); digested {
+		return true
+	}
+	tag, tagged := named.(reference.Tagged)
+	return tagged && !strings.EqualFold(tag.Tag(), "latest")
 }
 
 func validateKitBootstrap(b KitLocalBootstrap) error {
@@ -37,11 +48,11 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		return err
 	}
 	if len(b.AgentsMD) == 0 || len(b.GatewayToken) == 0 {
-		return fmt.Errorf("kit requires global instructions and gateway bearer")
+		return fmt.Errorf("kit requires global instructions and ACP bearer")
 	}
 	for _, c := range b.GatewayToken {
 		if c <= 32 || c > 126 {
-			return fmt.Errorf("kit gateway bearer must be one printable ASCII token")
+			return fmt.Errorf("kit ACP bearer must be one printable ASCII token")
 		}
 	}
 	if b.Model == "" || b.Workload == nil || b.Workload.IssuerID == uuid.Nil || b.Workload.Subject == "" {
@@ -129,11 +140,40 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 	return nil
 }
 
-// DefaultKitLocalRuntimeConfig supplies the verified image and executable
-// contract. Caller must install Bootstrap, Protocol and authenticated Ready.
-func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
-	command, args := KitGatewayCommand(8081)
-	return KitLocalRuntimeConfig{WorkloadAssertionFile: "", Fence: nil, Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-project-gateway-v2", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
+// kitLocalBootstrapPayload builds the versioned kit-ate-init wire v2 payload for
+// a local thread container, delivering bootstrap files and non-secret env vars
+// over the loopback init endpoint instead of docker cp.
+func kitLocalBootstrapPayload(b KitLocalBootstrap, extraEnv map[string]string) ([]byte, error) {
+	if err := validateKitLocalBootstrap(b); err != nil {
+		return nil, err
+	}
+	if len(b.GatewayToken) < 32 || bytes.ContainsAny(b.GatewayToken, " \r\n\x00") {
+		return nil, errors.New("invalid local Kit ACP bearer token")
+	}
+	env := maps.Clone(extraEnv)
+	if env == nil {
+		env = map[string]string{}
+	}
+	payload := kitATEBootstrapRequest{
+		Version: ateInitWireVersion,
+		Dirs: []kitATEBootstrapDir{
+			{Path: ".kit", Mode: 0o700},
+			{Path: ".kit/credentials", Mode: 0o700},
+			{Path: "workspace", Mode: 0o700},
+		},
+		Files: []kitATEBootstrapFile{
+			{Path: ".kit/AGENTS.md", Mode: 0o600, Content: b.AgentsMD},
+			{Path: ".kit/config.toml", Mode: 0o600, Content: []byte(kitBootstrapConfig(b))},
+			{Path: ".kit/credentials/mcp.json", Mode: 0o600, Content: b.MCPJSON},
+			{Path: ".kit/credentials/gateway-token", Mode: 0o600, Content: b.GatewayToken},
+		},
+		Env: env,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode local Kit bootstrap payload: %w", err)
+	}
+	return raw, nil
 }
 
 // kitBootstrapConfig is the public Kit generic workload contract.
@@ -141,6 +181,8 @@ func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 // workload token-exchange block: Kit uses OpenAI-compatible bearer auth
 // (OPENROUTER_BASE_URL + placeholder OPENROUTER_API_KEY) and ATE's egress
 // gateway replaces the Authorization header with the actor's signed JWT.
+// When EgressInjectedAuth is false (local development only), Kit exchanges
+// the externally projected assertion file via RFC 7523 jwtBearer.
 func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""

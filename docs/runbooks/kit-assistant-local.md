@@ -11,8 +11,9 @@ migrate v1/v2 transcripts.
 Before starting, obtain:
 
 - A configured development checkout and a running Docker-compatible engine.
-- Kit release `v0.2.19` and image
-  `localhost/kit-control-plane:v0.2.19`.
+- A local Kit runtime image built from `agents/ate-runtime/Dockerfile`
+  (containing `kit-ate-init` and `kit` release `v0.2.19+`), tagged explicitly
+  (for example, `localhost/kit-ate-runtime:dev`).
 - A development assistant with an active agent-backed workload identity.
 - An enabled HTTPS Project Gateway with one organization-level session issuer
   in shared mode. Enable `project-gateway-machine-access` for the organization.
@@ -30,13 +31,12 @@ mise run wake
 mise run seed
 ```
 
-For an already configured worktree, use `mise run wake`. If the pinned image is
-absent, build it from the matching Kit checkout:
+For an already configured worktree, use `mise run wake`. Build the local Kit
+runtime image from this repository using the same `kit-ate-init` + `kit serve --remote-acp`
+image contract used in ATE deployments:
 
 ```sh
-cd <KIT_WORKTREE>
-KIT_IMAGE=localhost/kit-control-plane mise run docker:build -- slim --load \
-  --tag localhost/kit-control-plane:v0.2.19
+docker build -f agents/ate-runtime/Dockerfile -t localhost/kit-ate-runtime:dev .
 ```
 
 Use an explicit non-`latest` image tag or a digest. Untagged images and `:latest`
@@ -47,6 +47,29 @@ Return to the Speakeasy checkout for the following steps. Keep credentials and
 concrete tenant identifiers in ignored local configuration, never committed
 files or command output.
 
+## Architecture and resource use
+
+Local Kit uses the exact same Kit protocol path as deployed ATE runtimes:
+
+- **One container per thread**, running `/usr/local/bin/kit-ate-init` (loopback
+  `:8082`) supervising `/usr/local/bin/kit serve --remote-acp` (loopback `:8081`)
+  serving native ACP on `/acp`.
+- **Per-thread ACP bearer token** derived via HMAC-SHA256 from the runtime's
+  encrypted root secret stored in `assistant_kit_gateway_credentials`.
+- **Outbound authentication difference from deployed ATE**: deployed ATE
+  sandboxes hold no Speakeasy credentials and rely on the platform egress
+  gateway to inject bearer tokens. Local development has no egress proxy, so
+  local containers continue to use an externally projected read-only workload
+  assertion file with RFC 7523 token exchange (`provider = "speakeasy"` and
+  `workload_identity` MCP auth). Startup validation rejects the local Kit
+  backend whenever `--environment` is not `local`.
+- **Expected local resource use**: each active thread starts one lightweight
+  container plus one per-thread `/home/kit` volume (~100–250 MiB RAM while
+  running). To stay frugal when testing multiple threads locally, the periodic
+  idle sweep automatically stops idle per-thread containers after 5 minutes of
+  inactivity while preserving their volumes for fast warm restarts on the next
+  message. Retired or stopped runtimes are cleaned up by the runtime reaper.
+
 ## Configure this worktree
 
 1. Add or update these values in the existing `[env]` section of ignored
@@ -55,7 +78,7 @@ files or command output.
 
    ```toml
    GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-control-plane:v0.2.19"
+   GRAM_ASSISTANT_KIT_IMAGE = "localhost/kit-ate-runtime:dev"
    GRAM_ASSISTANT_KIT_NETWORK = "<ISOLATED_NETWORK>"
    GRAM_ASSISTANT_RUNTIME_LOCAL_CA_FILE = "<ABSOLUTE_CA_BUNDLE_PATH>"
    GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER = "<EXTERNAL_ISSUER_URL>"
@@ -104,9 +127,10 @@ files or command output.
    The assertion directory is mounted read-only so atomic token replacement remains
    visible. Each cold startup requires a new external
    subject: previously admitted subjects cannot authorize a new generation.
-   Local development uses the
-   same workload exchange as GKE; there is no secret-authentication fallback.
-   Keep the projected file outside the workspace and snapshot roots. The owner
+   Local development uses RFC 7523 workload token exchange (deployed ATE
+   environments inject bearer credentials at the platform egress instead); there
+   is no secret-authentication fallback.
+   Keep the projected file outside the workspace root. The owner
    and agent must have explicit inference permission for the project.
 
 3. Apply the configuration to both services:

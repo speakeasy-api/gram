@@ -91,8 +91,8 @@ func Dial(ctx context.Context, endpoint, token string, hc *guardian.HTTPClient, 
 		confidential, ok := hc.Transport.(interface{ ConfidentialOrigin(*url.URL) bool })
 		secureOrigin = ok && confidential.ConfidentialOrigin(u)
 	}
-	if !secureOrigin || u.Host == "" || (u.Path != "/acp" && u.Path != "/acp/v2") || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.User != nil || u.Opaque != "" || strings.ContainsAny(endpoint, "?#") {
-		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp or /acp/v2 URL")
+	if !secureOrigin || u.Host == "" || u.Path != "/acp" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.User != nil || u.Opaque != "" || strings.ContainsAny(endpoint, "?#") {
+		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp URL")
 	}
 	if token == "" || strings.ContainsAny(token, "\r\n") {
 		return nil, nil, errors.New("invalid ACP bearer credential")

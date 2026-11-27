@@ -154,39 +154,46 @@ func TestKitSessionCannotAliasAnotherThread(t *testing.T) {
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 }
 
-func TestKitGatewayTokenEncryptedRestartRotationAndRetirement(t *testing.T) {
+func TestKitACPRootTokenEncryptedRestartAndRetirement(t *testing.T) {
 	t.Parallel()
 	core, conn, key, _ := kitSessionFixture(t)
-	const token = "synthetic-gateway-test-token"
-	_, err := core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	_, err := core.loadKitGatewayTokenAlreadyLocked(t.Context(), r)
 	require.ErrorIs(t, err, ErrKitGatewayTokenNotFound)
-	require.NoError(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, token))
+	token, err := core.ensureKitATEGatewayRootToken(t.Context(), r)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
 	queries := assistantrepo.New(conn)
 	ciphertext, err := queries.LoadKitGatewayCredential(t.Context(), assistantrepo.LoadKitGatewayCredentialParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeID: key.RuntimeID})
 	require.NoError(t, err)
 	require.NotContains(t, ciphertext, token)
 	require.NoError(t, queries.SetAssistantRuntimeStateForTest(t.Context(), assistantrepo.SetAssistantRuntimeStateForTestParams{ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, State: runtimeStateStopped, UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
 	restarted := &ServiceCore{db: conn, encryptionClient: core.encryptionClient}
-	loaded, err := restarted.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	loaded, err := restarted.loadKitGatewayTokenAlreadyLocked(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, token, loaded)
-	require.NoError(t, restarted.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "rotated-test-token"))
-	loaded, err = core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	// Repeated write-once initialization preserves the persisted winner.
+	same, err := restarted.ensureKitATEGatewayRootToken(t.Context(), r)
 	require.NoError(t, err)
-	require.Equal(t, "rotated-test-token", loaded)
-	_, err = core.LoadKitGatewayToken(t.Context(), uuid.New(), key.AssistantID, key.RuntimeID)
+	require.Equal(t, token, same)
+	wrongProject := r
+	wrongProject.ProjectID = uuid.New()
+	_, err = core.loadKitGatewayTokenAlreadyLocked(t.Context(), wrongProject)
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 	require.NoError(t, queries.RetireAssistantRuntimesForSwitch(t.Context(), assistantrepo.RetireAssistantRuntimesForSwitchParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID}))
-	loaded, err = core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	loaded, err = core.loadKitGatewayTokenAlreadyLocked(t.Context(), r)
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 	require.Empty(t, loaded)
-	require.ErrorIs(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "late-token"), ErrKitRuntimeBinding)
+	_, err = core.ensureKitATEGatewayRootToken(t.Context(), r)
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 }
 
 func TestKitGatewayCredentialRejectsCiphertextFromAnotherAuthority(t *testing.T) {
 	t.Parallel()
 	core, conn, key, _ := kitSessionFixture(t)
-	require.NoError(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "synthetic-token"))
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	_, err := core.ensureKitATEGatewayRootToken(t.Context(), r)
+	require.NoError(t, err)
 	queries := assistantrepo.New(conn)
 	encrypted, err := queries.LoadKitGatewayCredential(t.Context(), assistantrepo.LoadKitGatewayCredentialParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeID: key.RuntimeID})
 	require.NoError(t, err)
@@ -194,9 +201,10 @@ func TestKitGatewayCredentialRejectsCiphertextFromAnotherAuthority(t *testing.T)
 	require.NoError(t, queries.ReserveAssistantRuntimeV2(t.Context(), assistantrepo.ReserveAssistantRuntimeV2Params{ProjectID: key.ProjectID, AssistantID: key.AssistantID, AssistantThreadID: key.ThreadID, Backend: runtimeBackendLocal, State: runtimeStateActive}))
 	next, err := queries.GetAssistantRuntimeV2(t.Context(), assistantrepo.GetAssistantRuntimeV2Params{ProjectID: key.ProjectID, AssistantID: key.AssistantID})
 	require.NoError(t, err)
-	_, err = queries.StoreKitGatewayCredential(t.Context(), assistantrepo.StoreKitGatewayCredentialParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeID: next.ID, TokenCiphertext: encrypted})
+	_, err = queries.StoreKitGatewayCredentialIfAbsent(t.Context(), assistantrepo.StoreKitGatewayCredentialIfAbsentParams{ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeID: next.ID, TokenCiphertext: encrypted})
 	require.NoError(t, err)
-	token, err := core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, next.ID)
+	nextRecord := assistantRuntimeRecord{ID: next.ID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
+	token, err := core.loadKitGatewayTokenAlreadyLocked(t.Context(), nextRecord)
 	require.ErrorIs(t, err, errKitGatewayCredential)
 	require.Empty(t, token)
 }
@@ -217,19 +225,22 @@ func TestKitSessionRejectsLegacyRuntimeEvenWithDesiredKit(t *testing.T) {
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 	_, err = core.StoreKitRuntimeSession(t.Context(), key, "must-not-bind-legacy")
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
-	require.ErrorIs(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "test-token"), ErrKitRuntimeBinding)
+	_, err = core.ensureKitATEGatewayRootToken(t.Context(), assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 2})
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 }
 
 func TestKitSessionRejectsDeletedRuntime(t *testing.T) {
 	t.Parallel()
 	core, conn, key, _ := kitSessionFixture(t)
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
 	_, err := core.StoreKitRuntimeSession(t.Context(), key, "session-to-retire")
 	require.NoError(t, err)
-	require.NoError(t, core.StoreKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, "test-token"))
+	_, err = core.ensureKitATEGatewayRootToken(t.Context(), r)
+	require.NoError(t, err)
 	require.NoError(t, assistantrepo.New(conn).MarkAssistantRuntimeReaped(t.Context(), assistantrepo.MarkAssistantRuntimeReapedParams{ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, ReapedState: runtimeStateReaped}))
 	_, _, err = core.LoadKitRuntimeSession(t.Context(), key)
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
-	token, err := core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	token, err := core.loadKitGatewayTokenAlreadyLocked(t.Context(), r)
 	require.ErrorIs(t, err, ErrKitRuntimeBinding)
 	require.Empty(t, token)
 }
@@ -237,12 +248,13 @@ func TestKitSessionRejectsDeletedRuntime(t *testing.T) {
 func TestKitGatewayConcurrentProvisioningUsesPersistedWinner(t *testing.T) {
 	t.Parallel()
 	core, _, key, _ := kitSessionFixture(t)
+	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
 	tokens := make([]string, 2)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
-	for i, candidate := range []string{"candidate-one", "candidate-two"} {
+	for i := range 2 {
 		wg.Go(func() {
-			tokens[i], errs[i] = core.EnsureKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID, candidate)
+			tokens[i], errs[i] = core.ensureKitATEGatewayRootToken(t.Context(), r)
 		})
 	}
 	wg.Wait()
@@ -250,7 +262,7 @@ func TestKitGatewayConcurrentProvisioningUsesPersistedWinner(t *testing.T) {
 	require.NoError(t, errs[1])
 	require.NotEmpty(t, tokens[0])
 	require.Equal(t, tokens[0], tokens[1])
-	loaded, err := core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
+	loaded, err := core.loadKitGatewayTokenAlreadyLocked(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, tokens[0], loaded)
 }

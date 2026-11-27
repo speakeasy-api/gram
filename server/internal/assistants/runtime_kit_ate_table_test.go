@@ -75,7 +75,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 	origin, err := url.Parse("https://ai.speakeasy.com")
 	require.NoError(t, err)
 	localCfg.Environment = "production"
-	localCfg.nativeIdentity = nil
 	localCfg.Origin = origin
 	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
 	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"
@@ -424,7 +423,6 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 	origin, err := url.Parse("https://ai.speakeasy.com")
 	require.NoError(t, err)
 	localCfg.Environment = "production"
-	localCfg.nativeIdentity = nil
 	localCfg.Origin = origin
 	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
 	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"

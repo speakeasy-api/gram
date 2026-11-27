@@ -2,7 +2,6 @@ package assistants
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -16,8 +15,10 @@ import (
 var (
 	ErrKitRuntimeBinding         = errors.New("kit runtime authority or session binding is unavailable")
 	ErrKitRuntimeSessionConflict = errors.New("kit session is already bound to another thread")
-	ErrKitGatewayTokenNotFound   = errors.New("kit gateway credential is not stored")
-	errKitGatewayCredential      = errors.New("kit gateway credential is unavailable")
+	ErrKitGatewayTokenNotFound   = errors.New("kit ACP root credential is not stored")
+	errKitGatewayCredential      = errors.New("kit ACP root credential is unavailable")
+	errKitRuntimeUnrecoverable   = errors.New("kit runtime cannot recover")
+	errKitRetiredBackend         = errors.New("kit runtime references a retired backend")
 )
 
 // RuntimeID is the authority generation, not a backend process identifier.
@@ -182,136 +183,4 @@ type kitGatewayTokenEnvelope struct {
 	AssistantID uuid.UUID `json:"assistant_id"`
 	RuntimeID   uuid.UUID `json:"runtime_id"`
 	Token       string    `json:"token"`
-}
-
-// StoreKitGatewayToken intentionally replaces the credential when the caller
-// explicitly rotates it. Never place the token in backend_metadata_json or logs.
-func (s *ServiceCore) StoreKitGatewayToken(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, token string) error {
-	if token == "" || s.encryptionClient == nil {
-		return errKitGatewayCredential
-	}
-	tx, queries, err := s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	plaintext, err := json.Marshal(kitGatewayTokenEnvelope{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID, Token: token})
-	if err != nil {
-		return errKitGatewayCredential
-	}
-	encrypted, err := s.encryptionClient.Encrypt(plaintext)
-	if err != nil {
-		return errKitGatewayCredential
-	}
-	count, err := queries.StoreKitGatewayCredential(ctx, assistantrepo.StoreKitGatewayCredentialParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID, TokenCiphertext: encrypted})
-	if err != nil {
-		return errKitGatewayCredential
-	}
-	if count != 1 {
-		return ErrKitRuntimeBinding
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit Kit gateway credential: %w", err)
-	}
-	return nil
-}
-
-// LoadKitGatewayToken is trusted internal access. Validate and lock the current
-// runtime authority before reading ciphertext or attempting decryption. A
-// stopped process may reconnect for lifecycle control while its row remains live; an ended,
-// deleted, superseded, cross-project, or non-Kit authority cannot decrypt it.
-func (s *ServiceCore) LoadKitGatewayToken(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID) (string, error) {
-	queries, inSwitch := ctx.Value(runtimeSwitchQueriesKey{}).(*assistantrepo.Queries)
-	var tx pgx.Tx
-	if !inSwitch {
-		var err error
-		tx, queries, err = s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
-		if err != nil {
-			return "", err
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
-	} else {
-		// The switch owns the advisory lock and transaction. Reuse it rather
-		// than deadlocking on a second connection and the same advisory lock.
-		if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID}); err != nil {
-			return "", ErrKitRuntimeBinding
-		}
-	}
-	ciphertext, err := queries.LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrKitGatewayTokenNotFound
-	}
-	if err != nil || s.encryptionClient == nil {
-		return "", errKitGatewayCredential
-	}
-	plaintext, err := s.encryptionClient.Decrypt(ciphertext)
-	if err != nil {
-		return "", errKitGatewayCredential
-	}
-	var envelope kitGatewayTokenEnvelope
-	if err := json.Unmarshal([]byte(plaintext), &envelope); err != nil {
-		return "", errKitGatewayCredential
-	}
-	if envelope.ProjectID != projectID || envelope.AssistantID != assistantID || envelope.RuntimeID != runtimeID || envelope.Token == "" {
-		return "", errKitGatewayCredential
-	}
-	if tx != nil {
-		if err := tx.Commit(ctx); err != nil {
-			return "", fmt.Errorf("commit Kit gateway credential read: %w", err)
-		}
-	}
-	return envelope.Token, nil
-}
-
-// EnsureKitGatewayToken is the provisioning path: concurrent startup attempts
-// converge on the stored winner rather than rotating each other's gateway
-// credentials. Persist and use its returned token before launching the gateway.
-// StoreKitGatewayToken remains the explicit rotation operation.
-func (s *ServiceCore) EnsureKitGatewayToken(ctx context.Context, projectID, assistantID, runtimeID uuid.UUID, candidate string) (string, error) {
-	tx, queries, err := s.beginKitRuntimeControlTransaction(ctx, projectID, assistantID, runtimeID)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if s.encryptionClient == nil {
-		return "", errKitGatewayCredential
-	}
-	ciphertext, err := queries.LoadKitGatewayCredential(ctx, assistantrepo.LoadKitGatewayCredentialParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		if candidate == "" {
-			return "", errKitGatewayCredential
-		}
-		plaintext, encodeErr := json.Marshal(kitGatewayTokenEnvelope{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID, Token: candidate})
-		if encodeErr != nil {
-			return "", errKitGatewayCredential
-		}
-		ciphertext, err = s.encryptionClient.Encrypt(plaintext)
-		if err != nil {
-			return "", errKitGatewayCredential
-		}
-		count, storeErr := queries.StoreKitGatewayCredential(ctx, assistantrepo.StoreKitGatewayCredentialParams{ProjectID: projectID, AssistantID: assistantID, RuntimeID: runtimeID, TokenCiphertext: ciphertext})
-		if storeErr != nil {
-			return "", errKitGatewayCredential
-		}
-		if count != 1 {
-			return "", ErrKitRuntimeBinding
-		}
-	} else if err != nil {
-		return "", errKitGatewayCredential
-	}
-	plaintext, err := s.encryptionClient.Decrypt(ciphertext)
-	if err != nil {
-		return "", errKitGatewayCredential
-	}
-	var envelope kitGatewayTokenEnvelope
-	if err := json.Unmarshal([]byte(plaintext), &envelope); err != nil {
-		return "", errKitGatewayCredential
-	}
-	if envelope.ProjectID != projectID || envelope.AssistantID != assistantID || envelope.RuntimeID != runtimeID || envelope.Token == "" {
-		return "", errKitGatewayCredential
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit Kit gateway provisioning credential: %w", err)
-	}
-	return envelope.Token, nil
 }

@@ -124,7 +124,7 @@ func validateKitATEWorkerSelector(labels map[string]string) error {
 // from an explicit digest-pinned OCI image reference, ignoring any mutable tag
 // component (for example "<repo>:sha-<commit>@sha256:<digest>").
 func kitATEImageDigest(ref string) (string, error) {
-	if !kitGKEExplicitImage(ref) {
+	if !kitExplicitImage(ref) {
 		return "", errors.New("ATE image must be an explicit digest-pinned reference")
 	}
 	_, digest, ok := strings.Cut(ref, "@")

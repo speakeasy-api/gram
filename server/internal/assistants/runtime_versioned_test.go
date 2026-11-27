@@ -2,13 +2,6 @@ package assistants
 
 import (
 	"context"
-	"errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	ktesting "k8s.io/client-go/testing"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -65,45 +58,17 @@ func TestVersionedRuntimeNeverFallsBackForUnconfiguredKit(t *testing.T) {
 	require.Zero(t, legacy.stopCount)
 }
 
-func TestVersionedRuntimeSwitchProductionKit(t *testing.T) {
+func TestVersionedRuntimeClassifiesRetiredKitGKEBackend(t *testing.T) {
 	t.Parallel()
-	k, provisionClient, row, _ := kitGKEBackendFixture(t)
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{kitClaimGVR: "SandboxClaimList"})
-	k.config.GKE.Dynamic = client
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(ktesting.Action) (bool, runtime.Object, error) {
-		return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview", "status": map[string]any{"allowed": true}}}, nil
-	})
-	// Exercise the concrete backend's control-plane readiness without creating a
-	// guest. The fake API supplies the same namespaced list response as GKE.
-	client.PrependReactor("list", "sandboxclaims", func(ktesting.Action) (bool, runtime.Object, error) {
-		return true, &unstructured.UnstructuredList{}, nil
-	})
-	backend := &versionedRuntimeBackend{legacy: &stubRuntimeBackend{name: runtimeBackendGKE}, kit: k}
-	assistant := assistantRecord{ID: row.AssistantID, ProjectID: row.ProjectID}
-	ready, err := backend.PrepareRuntimeSwitch(t.Context(), assistant, nil, 3)
-	require.NoError(t, err)
-	require.True(t, ready.DestinationReady)
-	require.True(t, ready.Settled)
-	ready.Release()
-	k.config.GKE.Dynamic = provisionClient
-	result, err := k.Ensure(t.Context(), row)
-	require.NoError(t, err)
-	row.BackendMetadataJSON = result.BackendMetadataJSON
-	row.State = runtimeStateActive
-	ready, err = backend.PrepareRuntimeSwitch(t.Context(), assistant, []assistantRuntimeRecord{row}, 2)
-	require.NoError(t, err)
-	require.True(t, ready.Settled)
-	ready.Release()
-	ready.Release()
-	k.config.Protocol = func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
-		return &kitGKEBackendProtocol{settled: false}, nil
-	}
-	_, err = backend.PrepareRuntimeSwitch(t.Context(), assistant, []assistantRuntimeRecord{row}, 2)
-	require.ErrorIs(t, err, errRuntimeSwitchBusy)
-	k.config.GKE.Dynamic = client
-	client.PrependReactor("list", "sandboxclaims", func(ktesting.Action) (bool, runtime.Object, error) {
-		return true, nil, errors.New("control plane unavailable")
-	})
-	_, err = backend.PrepareRuntimeSwitch(t.Context(), assistant, nil, 3)
-	require.ErrorIs(t, err, errRuntimeSwitchUnavailable)
+	legacy := &stubRuntimeBackend{name: runtimeBackendGKE}
+	kit := &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}}
+	backend := &versionedRuntimeBackend{legacy: legacy, kit: kit}
+	record := testRuntimeRecord(runtimeBackendGKE)
+	record.RuntimeVersion = 3
+	_, err := backend.Ensure(t.Context(), record)
+	require.ErrorIs(t, err, errKitRetiredBackend)
+	require.ErrorIs(t, backend.RunTurn(t.Context(), record, runTurnRequest{}), errKitRetiredBackend)
+	require.ErrorIs(t, backend.Reap(t.Context(), record), errKitRetiredBackend)
+	require.Zero(t, legacy.runTurnCount)
+	require.Zero(t, kit.runTurnCount)
 }

@@ -23,6 +23,8 @@ import (
 	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -31,27 +33,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func enableTestOrganizationGateway(t *testing.T, db *pgxpool.Pool, orgID string) {
+	t.Helper()
+	q := productfeaturesrepo.New(db)
+	setting := productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	}
+	_, err := q.EnableFeature(t.Context(), setting)
+	require.NoError(t, err)
+	_, err = q.DeleteFeature(t.Context(), productfeaturesrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+}
+
 func TestKitWorkloadSubjectGeneration(t *testing.T) {
 	t.Parallel()
 	r := assistantRuntimeRecord{ID: uuid.New()}
-	c := nativeKitWorkloadTestConfig(KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants"})
+	c := KitLocalCompositionConfig{
+		Environment: "production",
+		ateIdentity: &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
+	}
 	subject, sa, err := kitWorkloadSubject(r, c, "gateway-one")
 	require.NoError(t, err)
-	require.LessOrEqual(t, len(sa), 63)
-	require.Regexp(t, `^kit-[a-f0-9]{32}-[a-f0-9]{16}$`, sa)
-	require.Equal(t, c.nativeIdentity.subject("assistants", sa), subject)
-	again, _, err := kitWorkloadSubject(r, c, "gateway-one")
-	require.NoError(t, err)
-	require.Equal(t, subject, again)
-	rotated, _, err := kitWorkloadSubject(r, c, "gateway-two")
-	require.NoError(t, err)
-	require.NotEqual(t, subject, rotated)
-	r.ID = uuid.New()
-	other, _, err := kitWorkloadSubject(r, c, "gateway-one")
-	require.NoError(t, err)
-	require.NotEqual(t, subject, other)
+	require.Equal(t, "actor/prod-space/actor-one", subject)
+	require.Empty(t, sa)
 	_, _, err = kitWorkloadSubject(r, c, "")
 	require.Error(t, err)
+	c.ateIdentity = nil
+	_, _, err = kitWorkloadSubject(r, c, "gateway-one")
+	require.Error(t, err, "non-local environment without ATE identity must fail closed")
 	c.Environment, c.WorkloadSubject = "local", "local-exact-subject"
 	subject, sa, err = kitWorkloadSubject(r, c, "gateway-one")
 	require.NoError(t, err)
@@ -141,8 +151,15 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	_, err = fixtures.SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{OrganizationID: "org-test", IssuerID: issuer, AuthorizationServerMode: "shared"})
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
-	c := KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", MCPUserSessionIssuerID: issuer}
-	return core, db, r, resolved, nativeKitWorkloadTestConfig(c), grant.ID
+	c := KitLocalCompositionConfig{
+		Environment:            "production",
+		WorkloadIssuerURL:      "https://ate-issuer.example.com",
+		WorkloadJWKSURL:        "https://ate-issuer.example.com/jwks",
+		WorkloadIssuerBaseURL:  "https://auth.example.com",
+		MCPUserSessionIssuerID: issuer,
+		ateIdentity:            &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
+	}
+	return core, db, r, resolved, c, grant.ID
 }
 
 func kitWorkloadMetadata(t *testing.T, r assistantRuntimeRecord, binding *KitWorkloadBinding) assistantRuntimeRecord {
@@ -161,8 +178,10 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.NotEmpty(t, baseline, "canonical root admission exists before runtime provisioning")
 	first, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
-	require.Contains(t, first.Audience, c.MCPUserSessionIssuerID.String(), "organization-scoped shared issuer is supported")
-	second, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-two")
+	require.Empty(t, first.Audience, "ATE egress-injected workload omits token-exchange broker audience")
+	c2 := c
+	c2.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	second, err := core.provisionKitWorkload(t.Context(), r, c2, identity, "generation-two")
 	require.NoError(t, err)
 	require.Equal(t, first.IssuerID, second.IssuerID)
 	require.NotEqual(t, first.Subject, second.Subject)
@@ -266,6 +285,7 @@ func TestKitWorkloadDBClosesLegacySecurityAdmit(t *testing.T) {
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	c.ateIdentity = nil
 	c.Environment, c.WorkloadSubject = "local", "local-generation-one"
 	first, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
@@ -401,7 +421,9 @@ func TestKitWorkloadDBDifferentAssistantsShareIssuerNotSubjects(t *testing.T) {
 
 	first, err := core.provisionKitWorkload(t.Context(), firstRuntime, config, firstIdentity, "shared-generation")
 	require.NoError(t, err)
-	second, err := core.provisionKitWorkload(t.Context(), secondRuntime, config, secondIdentity, "shared-generation")
+	secondConfig := config
+	secondConfig.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	second, err := core.provisionKitWorkload(t.Context(), secondRuntime, secondConfig, secondIdentity, "shared-generation")
 	require.NoError(t, err)
 	require.Equal(t, first.IssuerID, second.IssuerID)
 	require.NotEqual(t, first.Subject, second.Subject)
@@ -416,6 +438,7 @@ func TestKitWorkloadDBDifferentAssistantsShareIssuerNotSubjects(t *testing.T) {
 		require.Equal(t, binding.Identity.AgentID, assignments[0].AgentID)
 	}
 
+	config.ateIdentity = nil
 	config.Environment, config.WorkloadSubject = "local", "local-first-assistant-generation"
 	local, err := core.provisionKitWorkload(t.Context(), firstRuntime, config, firstIdentity, "local-generation-one")
 	require.NoError(t, err)
@@ -462,6 +485,7 @@ func TestKitWorkloadDBConcurrentCrossProjectLocalSubject(t *testing.T) {
 	secondIdentity := resolved
 	require.NotEqual(t, firstIdentity.AgentID, secondIdentity.AgentID)
 	secondRuntime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
+	config.ateIdentity = nil
 	config.Environment, config.WorkloadSubject = "local", "cross-project-shared-subject"
 	type result struct {
 		binding *KitWorkloadBinding
@@ -541,9 +565,8 @@ func TestKitWorkloadDBRetiredFenceAfterIdentityTombstone(t *testing.T) {
 			admitted, err := workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
 			require.NoError(t, err)
 			require.True(t, admitted, "retirement and identity tombstoning must not make the withdrawal regression vacuous")
-			// Exercise persisted metadata fallback, without an active identity resolver.
-			r.BackendMetadataJSON = nil
-			require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r))
+			// Exercise revocation without an active identity resolver after tombstoning.
+			require.NoError(t, core.revokeKitWorkload(t.Context(), db, r))
 			require.NoError(t, q.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: r.ProjectID, RuntimeID: r.ID, BackendMetadataJson: []byte("{}")}))
 			admitted, err = workloadidentity.IsAdmitted(t.Context(), db, workloadidentity.AdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, WorkloadIssuerID: binding.IssuerID, Subject: binding.Subject})
 			require.NoError(t, err)
@@ -567,28 +590,6 @@ func TestKitRuntimeIdentityRejectsOwnerReassignmentLatch(t *testing.T) {
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }
 
-func testKitGKEIdentityConfig() KitGKEIdentityConfig {
-	return KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"}
-}
-func nativeKitWorkloadTestConfig(c KitLocalCompositionConfig) KitLocalCompositionConfig {
-	return kitGKENativeIssuerConfig(KitGKECompositionConfig{KitLocalCompositionConfig: c, KitGKEIdentityConfig: testKitGKEIdentityConfig()}).KitLocalCompositionConfig
-}
-
-func TestKitNativeIdentityDerivation(t *testing.T) {
-	t.Parallel()
-	c := testKitGKEIdentityConfig()
-	require.NoError(t, c.Validate())
-	require.Equal(t, "agents.global.org-987654321.system.id.goog", c.trustDomain())
-	require.Equal(t, "https://sts.googleapis.com/v1/organizations/987654321/locations/global/workloadIdentityPools/agents.global.org-987654321.system.id.goog", c.issuer())
-	require.Equal(t, "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/assistants/sa/kit-generation", c.subject("assistants", "kit-generation"))
-	configured := nativeKitWorkloadTestConfig(KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", WorkloadIssuerURL: "https://untrusted.example", WorkloadJWKSURL: "https://untrusted.example/keys"})
-	require.Equal(t, c.issuer(), configured.WorkloadIssuerURL)
-	require.Equal(t, c.issuer()+"/openid/jwks", configured.WorkloadJWKSURL)
-	configured.WorkloadIssuerURL = "https://accounts.google.com"
-	_, _, err := kitWorkloadSubject(assistantRuntimeRecord{ID: uuid.New()}, configured, "generation")
-	require.ErrorIs(t, err, ErrKitRuntimeBinding)
-}
-
 func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
@@ -603,7 +604,9 @@ func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
 	require.NoError(t, err)
 	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.ErrorContains(t, err, "cannot be reused", "deleted admissions under a deleted issuer still fence old assertions")
-	second, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-two")
+	c2 := c
+	c2.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	second, err := core.provisionKitWorkload(t.Context(), r, c2, identity, "generation-two")
 	require.NoError(t, err)
 	require.NotEqual(t, first.IssuerID, second.IssuerID)
 }

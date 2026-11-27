@@ -22,12 +22,7 @@ import (
 
 func TestTransport(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"/acp/v2", "/acp"} {
-		t.Run(path, func(t *testing.T) {
-			t.Parallel()
-			testTransport(t, path, false)
-		})
-	}
+	testTransport(t, "/acp", false)
 }
 
 func testTransport(t *testing.T, path string, tunnel bool) {
@@ -210,7 +205,7 @@ func TestRedirectAndSanitizedErrors(t *testing.T) {
 		_, _ = fmt.Fprint(w, "test-secret")
 	}))
 	defer origin.Close()
-	_, _, err := Dial(context.Background(), origin.URL+"/acp/v2", "test-secret", testHTTPClient(t), struct{}{})
+	_, _, err := Dial(context.Background(), origin.URL+"/acp", "test-secret", testHTTPClient(t), struct{}{})
 	if err == nil || strings.Contains(err.Error(), "test-secret") || leaked.Load() {
 		t.Fatalf("unsafe redirect/error: %v", err)
 	}
@@ -404,7 +399,7 @@ func TestTransportFailurePreservesSanitizedCause(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	endpoint := "http://" + listener.Addr().String() + "/acp/v2"
+	endpoint := "http://" + listener.Addr().String() + "/acp"
 	if err := listener.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +456,7 @@ func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			client, _, err := Dial(ctx, server.URL+"/acp/v2", "fixture-token", testHTTPClient(t), struct{}{})
+			client, _, err := Dial(ctx, server.URL+"/acp", "fixture-token", testHTTPClient(t), struct{}{})
 			if err == nil || client != nil {
 				t.Fatal("failed stream attachment accepted")
 			}
@@ -481,7 +476,7 @@ func TestDialClosesConnectionWhenStreamAttachFails(t *testing.T) {
 func TestTransportRejectsNonExactEndpoints(t *testing.T) {
 	t.Parallel()
 	for _, endpoint := range []string{
-		"http://example.com/acp", "http://example.com/acp/v2",
+		"http://example.com/acp", "http://example.com/acp/v2", "https://example.com/acp/v2", "http://localhost/acp/v2",
 		"http://192.0.2.1/acp", "http://[2001:db8::1]/acp",
 		"http://example.com/", "http://example.com/acp/", "http://example.com/acp/v2/",
 		"http://example.com/acp?", "http://example.com/acp?x=1", "http://example.com/acp#",

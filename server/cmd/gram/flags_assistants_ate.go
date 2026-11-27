@@ -19,7 +19,7 @@ import (
 func assistantATERuntimeFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{Name: "assistant-ate-enabled", EnvVars: []string{"GRAM_ASSISTANT_ATE_ENABLED"}, Usage: "Enable the ATE Kit assistant runtime backend; never enabled by default."},
-		&cli.StringFlag{Name: "assistant-ate-image", EnvVars: []string{"GRAM_ASSISTANT_ATE_IMAGE"}, Usage: "Digest-pinned OCI image for ATE Kit actors (separate from the Kit GKE image)."},
+		&cli.StringFlag{Name: "assistant-ate-image", EnvVars: []string{"GRAM_ASSISTANT_ATE_IMAGE"}, Usage: "Digest-pinned OCI image for ATE Kit actors."},
 		&cli.StringFlag{Name: "assistant-ate-worker-selector", EnvVars: []string{"GRAM_ASSISTANT_ATE_WORKER_SELECTOR"}, Usage: "Comma-separated key=value worker selector labels for ATE ActorTemplates (e.g. workload-type=ate-assistants)."},
 		&cli.StringFlag{Name: "assistant-ate-issuer-url", EnvVars: []string{"GRAM_ASSISTANT_ATE_ISSUER_URL"}, Usage: "Public HTTPS ATE actor JWT issuer URL (matches ate-api-server ACTOR_JWT_ISSUER)."},
 		&cli.StringFlag{Name: "assistant-ate-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_ATE_JWKS_URL"}, Usage: "Optional explicit HTTPS JWKS URL for ATE actor JWTs; defaults to <assistant-ate-issuer-url>/openid/v1/jwks."},
@@ -72,7 +72,6 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 			OrgHosts:               orgHosts,
 			AllowInsecureInference: false,
 			MCPUserSessionIssuerID: uuid.Nil,
-			WorkloadNamespace:      "",
 			Environment:            c.String("environment"),
 			Image:                  c.String("assistant-ate-image"),
 			Origin:                 nil,

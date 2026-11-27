@@ -2,13 +2,11 @@ package assistants
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func TestKitReasoningBootstrap(t *testing.T) {
@@ -24,16 +22,17 @@ func TestKitReasoningBootstrap(t *testing.T) {
 				expected = "medium"
 			}
 			require.Contains(t, kitBootstrapConfig(b), fmt.Sprintf("\nreasoning_effort = %q\n[inference_providers.speakeasy]", expected))
-			in := kitGKEInput()
-			in.ReasoningEffort = effort
-			objects, err := RenderKitGKEProvision(in)
+			raw, err := kitLocalBootstrapPayload(b, map[string]string{"SPEAKEASY_ORIGIN": "https://ai.speakeasy.com"})
 			require.NoError(t, err)
-			data, found, err := unstructured.NestedStringMap(objects.Secret.Object, "data")
-			require.NoError(t, err)
-			require.True(t, found)
-			config, err := base64.StdEncoding.DecodeString(data["config.toml"])
-			require.NoError(t, err)
-			require.Contains(t, string(config), fmt.Sprintf("\nreasoning_effort = %q\n[inference_providers.speakeasy]", expected))
+			var payload kitATEBootstrapRequest
+			require.NoError(t, json.Unmarshal(raw, &payload))
+			var configTOML string
+			for _, f := range payload.Files {
+				if f.Path == ".kit/config.toml" {
+					configTOML = string(f.Content)
+				}
+			}
+			require.Contains(t, configTOML, fmt.Sprintf("\nreasoning_effort = %q\n[inference_providers.speakeasy]", expected))
 		})
 	}
 	for _, effort := range []string{"none", "default", "invalid", "HIGH"} {
@@ -43,9 +42,7 @@ func TestKitReasoningBootstrap(t *testing.T) {
 			b.ReasoningEffort = effort
 			require.ErrorContains(t, validateKitBootstrap(b), "does not support reasoning effort")
 			require.Empty(t, kitBootstrapConfig(b))
-			in := kitGKEInput()
-			in.ReasoningEffort = effort
-			_, err := RenderKitGKEProvision(in)
+			_, err := kitLocalBootstrapPayload(b, nil)
 			require.ErrorContains(t, err, "does not support reasoning effort")
 		})
 	}

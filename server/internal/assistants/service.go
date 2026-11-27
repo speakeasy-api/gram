@@ -2458,6 +2458,14 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 			continue
 		}
 
+		if isRetiredKitBackend(record) {
+			result.Skipped++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+
 		recycled, err := s.runtime.RecycleImage(ctx, record)
 		switch {
 		case err != nil:
@@ -2521,7 +2529,20 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 // starting/active sibling. Returns true on success (including idempotent
 // no-op when the machine was already gone).
 func (s *ServiceCore) reapStoppedRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
-	if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
+	if isRetiredKitBackend(record) {
+		s.logger.WarnContext(ctx, "retiring leftover stopped Kit runtime referencing removed backend",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+		)
+		if err := s.revokeKitWorkload(ctx, s.db, record); err != nil {
+			s.logger.WarnContext(ctx, "revoke leftover stopped Kit runtime workload failed",
+				attr.SlogAssistantRuntimeID(record.ID.String()),
+				attr.SlogError(err),
+			)
+		}
+	} else if err := s.runtime.ReapStoppedMachine(ctx, record); err != nil {
 		s.logger.WarnContext(ctx, "reap stopped runtime machine failed",
 			attr.SlogAssistantID(record.AssistantID.String()),
 			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
@@ -2561,7 +2582,20 @@ func (s *ServiceCore) RuntimeImageRef() string {
 // the resource was already gone). Errors are logged here so callers can
 // keep the loop simple.
 func (s *ServiceCore) reapRuntimeRow(ctx context.Context, record assistantRuntimeRecord) bool {
-	if err := s.runtime.Reap(ctx, record); err != nil {
+	if isRetiredKitBackend(record) {
+		s.logger.WarnContext(ctx, "retiring leftover Kit runtime referencing removed backend",
+			attr.SlogAssistantID(record.AssistantID.String()),
+			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogAssistantRuntimeBackend(record.Backend),
+		)
+		if err := s.revokeKitWorkload(ctx, s.db, record); err != nil {
+			s.logger.WarnContext(ctx, "revoke leftover Kit runtime workload failed",
+				attr.SlogAssistantRuntimeID(record.ID.String()),
+				attr.SlogError(err),
+			)
+		}
+	} else if err := s.runtime.Reap(ctx, record); err != nil {
 		s.logger.WarnContext(ctx, "reap runtime backend failed",
 			attr.SlogAssistantID(record.AssistantID.String()),
 			attr.SlogAssistantThreadID(record.AssistantThreadID.String()),
@@ -3257,6 +3291,19 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
+	if isRetiredKitBackend(runtimeRecord) {
+		s.retireLeftoverKitRuntime(ctx, runtimeRecord)
+		return ProcessThreadEventsResult{
+			AssistantID:         assistant.ID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      assistant.WarmTTLSeconds,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: false,
+		}, nil
+	}
+
 	protocol, err := boundRuntimeProtocol(s.runtime, runtimeRecord)
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
@@ -3277,13 +3324,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
-	ensureCtx := ctx
-	if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
-		ensureCtx = context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(progressCtx context.Context, raw []byte) error {
-			return s.updateRuntimeEnsureResult(progressCtx, &runtimeRecord, RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw})
-		}))
-	}
-	ensureResult, err := s.runtime.Ensure(ensureCtx, runtimeRecord)
+	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
 	if err != nil {
 		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !errors.Is(err, errKitRuntimeUnrecoverable) {
 			// A retryable failure keeps the Kit session owner; only an
@@ -3317,7 +3358,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		return ProcessThreadEventsResult{}, err
 	}
 
-	if runtimeRecord.State == runtimeStateStarting || (kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !runtimeRecord.WarmUntil.Valid) {
+	if runtimeRecord.State == runtimeStateStarting || (runtimeRecord.RuntimeVersion == 3 && !runtimeRecord.WarmUntil.Valid) {
 		if err := s.setRuntimeActive(ctx, thread.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
 			return ProcessThreadEventsResult{}, err
 		}

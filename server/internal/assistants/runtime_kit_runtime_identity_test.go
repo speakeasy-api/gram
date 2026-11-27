@@ -21,6 +21,9 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, config, _ := kitWorkloadDBFixture(t)
 	core.encryptionClient = testenv.NewEncryptionClient(t)
+	config.ateIdentity = nil
+	config.Environment = "local"
+	config.WorkloadSubject = "local-root-subject-1"
 	config.Origin = core.serverURL
 	// Two additional roots, alongside the normally provisioned dashboard root.
 	for i := range 2 {
@@ -44,19 +47,21 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.NoError(t, q.UpsertAssistantChat(t.Context(), assistantrepo.UpsertAssistantChatParams{ChatID: chatID, ProjectID: r.ProjectID, OrganizationID: identity.OrganizationID}))
 	thread, err := q.UpsertAssistantThread(t.Context(), assistantrepo.UpsertAssistantThreadParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID, CorrelationID: uuid.NewString(), ChatID: chatID, SourceKind: sourceKindSlack, SourceRefJson: []byte("{}")})
 	require.NoError(t, err)
-	require.NoError(t, q.CreateAssistantRuntime(t.Context(), assistantrepo.CreateAssistantRuntimeParams{ID: r.ID, AssistantThreadID: thread, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Backend: runtimeBackendGKE, BackendMetadataJson: []byte("{}"), State: "starting", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
+	require.NoError(t, q.CreateAssistantRuntime(t.Context(), assistantrepo.CreateAssistantRuntimeParams{ID: r.ID, AssistantThreadID: thread, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Backend: runtimeBackendLocal, BackendMetadataJson: []byte("{}"), State: "starting", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
 	require.NoError(t, q.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{ProjectID: r.ProjectID, RuntimeID: r.ID, RuntimeVersion: 3, Metadata: []byte("{}")}))
 
-	bootstrap := func() KitLocalBootstrap {
+	bootstrap := func(subject string) KitLocalBootstrap {
 		t.Helper()
+		cfg := config
+		cfg.WorkloadSubject = subject
 		tx := testenv.BeginTx(t, t.Context(), db)
 		r.LifecycleTx = tx
-		b, err := core.kitCompositionBootstrap(t.Context(), r, config)
+		b, err := core.kitCompositionBootstrap(t.Context(), r, cfg)
 		require.NoError(t, err)
 		require.NoError(t, tx.Commit(t.Context()))
 		r.LifecycleTx = nil
 		require.Equal(t, identity, b.Workload.Identity)
-		require.NotEmpty(t, b.Workload.ServiceAccount)
+		require.Equal(t, subject, b.Workload.Subject)
 		require.True(t, b.Workload.MCPProjectGateway)
 
 		var document struct {
@@ -89,7 +94,7 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		return b
 	}
 
-	first := bootstrap()
+	first := bootstrap("local-root-subject-1")
 
 	// Withdrawing a root revokes that event, not the assistant's runtime identity.
 	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
@@ -106,7 +111,7 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.ErrorIs(t, core.identities.Validate(t.Context(), db, *event.Identity), assistantidentity.ErrInvalidIdentity)
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
 
-	second := bootstrap()
+	second := bootstrap("local-root-subject-2")
 	require.NotEqual(t, first.Workload.Subject, second.Workload.Subject)
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, first.Workload)))
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity))
