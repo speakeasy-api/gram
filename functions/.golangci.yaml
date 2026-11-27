@@ -143,3 +143,4 @@ linters:
         - "github.com/speakeasy-api/gram/functions/internal/svc.Fault("
         - "github.com/speakeasy-api/gram/functions/internal/svc.NewPermanentError("
         - "github.com/speakeasy-api/gram/functions/internal/svc.NewTemporaryError("
+        - "github.com/speakeasy-api/gram/functions/internal/svc.NewTimeoutError("

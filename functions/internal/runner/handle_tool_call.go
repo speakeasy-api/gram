@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -52,6 +51,10 @@ type CallToolPayload struct {
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 	Meta        *ToolCallMeta     `json:"_meta,omitempty"`
+	// TimeoutSeconds is how long the invocation may run. Zero means the
+	// runner default; values above the runner's ceiling are capped. It never
+	// reaches the entrypoint.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 // ToolCallMeta describes the caller of one tool call, keyed the way MCP keys
@@ -86,6 +89,9 @@ type callRequest struct {
 	// requestType tells the entrypoint which handler to call: "tool" or
 	// "resource".
 	requestType string
+
+	// timeout bounds the subprocess's run time.
+	timeout time.Duration
 }
 
 func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req callRequest, w http.ResponseWriter) error {
@@ -98,7 +104,7 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to remove tool call fifo", func() error { return cleanup() })
 
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, 5*time.Minute)
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, req.timeout)
 	defer timeoutCancel()
 
 	var logwg sync.WaitGroup
@@ -166,15 +172,15 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	// Using syscall.O_NONBLOCK is not a good idea because the sub-process
 	// might not open the FIFO for writing by the time this process attempts
 	// to read from the pipe. This can result in an io.UnexpectedEOF error.
-	pipech := make(chan *os.File, 1)
-	errch := make(chan error, 1)
-	go func() {
-		resultReader, err := os.OpenFile(filepath.Clean(fifoPath), os.O_RDONLY, os.ModeNamedPipe)
-		if err != nil {
-			errch <- err
-			return
+	pipech, errch := openFIFOReader(fifoPath)
+	// Every return before the reader is handed over leaves it blocked in open
+	// for good, because the subprocess never opens the FIFO. This runs before
+	// the deferred cleanup removes the FIFO.
+	readerHandedOver := false
+	defer func() {
+		if !readerHandedOver {
+			_ = releaseFIFOReader(fifoPath, pipech, errch)
 		}
-		pipech <- resultReader
 	}()
 
 	var pipe *os.File
@@ -185,6 +191,9 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusRequestTimeout,
 		)
 	case err := <-waitch:
+		if terr := timeoutError(ctx, timeoutCtx, req.timeout); terr != nil {
+			return terr
+		}
 		if err == nil {
 			return svc.NewPermanentError(
 				fmt.Errorf("sub-process exited before opening response pipe"),
@@ -196,17 +205,22 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 			http.StatusInternalServerError,
 		)
 	case err := <-errch:
+		readerHandedOver = true
 		return svc.Fault(
 			fmt.Errorf("open pipe (ro): %w", err),
 			http.StatusInternalServerError,
 		)
 	case f := <-pipech:
+		readerHandedOver = true
 		pipe = f
 		defer o11y.LogDefer(ctx, logger, "failed to close tool call pipe", func() error { return pipe.Close() })
 	}
 
 	response, err := http.ReadResponse(bufio.NewReader(pipe), nil)
 	if err != nil {
+		if terr := timeoutError(ctx, timeoutCtx, req.timeout); terr != nil {
+			return terr
+		}
 		return svc.NewPermanentError(
 			fmt.Errorf("read response: %w", err),
 			http.StatusInternalServerError,
@@ -275,6 +289,12 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 		attr.SlogInFlight(int(s.inFlight.Load())),
 	)
 
+	// The status line is already sent, so a timeout here can only be logged:
+	// the caller sees a cut-off body.
+	if timeoutError(ctx, timeoutCtx, req.timeout) != nil {
+		completionLogger.ErrorContext(ctx, "sub-process exceeded its time limit after it started responding", attr.SlogError(err))
+	}
+
 	var exitErr *exec.ExitError
 	switch {
 	case errors.As(err, &exitErr):
@@ -308,6 +328,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 
 	reqCopy := payload
 	reqCopy.Environment = nil
+	reqCopy.TimeoutSeconds = 0
 	request, err := json.Marshal(reqCopy)
 	if err != nil {
 		return svc.NewPermanentError(
@@ -327,6 +348,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 		request:     request,
 		environment: payload.Environment,
 		requestType: "tool",
+		timeout:     executionTimeout(payload.TimeoutSeconds),
 	}, w)
 }
 

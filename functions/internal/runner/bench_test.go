@@ -83,10 +83,11 @@ func benchToolRequest(tb testing.TB) callRequest {
 	tb.Helper()
 
 	request, err := json.Marshal(CallToolPayload{
-		ToolName:    "bench_tool",
-		Input:       json.RawMessage(`{"hello":"world"}`),
-		Environment: nil,
-		Meta:        nil,
+		ToolName:       "bench_tool",
+		Input:          json.RawMessage(`{"hello":"world"}`),
+		Environment:    nil,
+		Meta:           nil,
+		TimeoutSeconds: 0,
 	})
 	if err != nil {
 		tb.Fatalf("marshal request: %v", err)
@@ -96,6 +97,7 @@ func benchToolRequest(tb testing.TB) callRequest {
 		request:     request,
 		environment: map[string]string{"GRAM_USER_EMAIL": "bench@example.com"},
 		requestType: "tool",
+		timeout:     defaultExecutionTimeout,
 	}
 }
 

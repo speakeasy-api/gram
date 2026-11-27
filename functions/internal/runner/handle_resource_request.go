@@ -16,6 +16,10 @@ type CallResourcePayload struct {
 	URI         string            `json:"uri"`
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
+	// TimeoutSeconds is how long the invocation may run. Zero means the
+	// runner default; values above the runner's ceiling are capped. It never
+	// reaches the entrypoint.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 func (s *Service) handleResourceRequest(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +56,7 @@ func (s *Service) getResource(ctx context.Context, logger *slog.Logger, payload 
 
 	reqCopy := payload
 	reqCopy.Environment = nil
+	reqCopy.TimeoutSeconds = 0
 	request, err := json.Marshal(reqCopy)
 	if err != nil {
 		return svc.NewPermanentError(
@@ -71,5 +76,6 @@ func (s *Service) getResource(ctx context.Context, logger *slog.Logger, payload 
 		request:     request,
 		environment: payload.Environment,
 		requestType: "resource",
+		timeout:     executionTimeout(payload.TimeoutSeconds),
 	}, w)
 }
