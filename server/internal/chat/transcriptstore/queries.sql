@@ -120,3 +120,11 @@ FROM chat_messages m
 CROSS JOIN unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
 WHERE m.id = @message_id AND m.project_id = @project_id::uuid
 ON CONFLICT (message_id, tool_call_id) DO NOTHING;
+
+-- name: GetProjectOrganization :one
+-- The organization a project belongs to, with the slug the transcript feature
+-- flag is targeted by.
+SELECT p.organization_id, o.slug AS organization_slug
+FROM projects p
+JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.id = @project_id;

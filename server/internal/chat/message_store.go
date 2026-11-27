@@ -157,18 +157,15 @@ func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcr
 // PrepareTranscripts loads the project's transcript key into the process
 // cache before a write transaction opens, so sealing inside it makes no KMS
 // call while it holds the transaction. Every caller that seals calls it before
-// it begins the transaction. A project without encrypted transcripts needs no
-// query. An error means sealing would fail too: the caller returns it in place
-// of sealing, and a write that turns out to seal nothing still succeeds.
+// it begins the transaction. An error means sealing would fail too: the
+// caller returns it in place of sealing, and a write that turns out to seal
+// nothing still succeeds.
 func (w *ChatMessageWriter) PrepareTranscripts(ctx context.Context, projectID uuid.UUID) error {
-	if w == nil || !w.transcripts.Enabled(projectID) {
+	if w == nil {
 		return nil
 	}
-	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
-	if err != nil {
-		return fmt.Errorf("get project organization id: %w", err)
-	}
-	return w.prepareTranscripts(ctx, organizationID, projectID)
+	//nolint:wrapcheck // PrepareProject already wraps with the transcript context.
+	return w.transcripts.PrepareProject(ctx, projectID)
 }
 
 func (w *ChatMessageWriter) prepareTranscripts(ctx context.Context, organizationID string, projectID uuid.UUID) error {

@@ -105,17 +105,17 @@ func TestTranscriptsGateByProject(t *testing.T) {
 	f.add(t, id)
 
 	var none *Transcripts
-	require.False(t, none.Enabled(f.project))
+	require.False(t, none.Enabled(t.Context(), f.project))
 	require.NoError(t, none.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 
 	other := NewTranscripts(f.store, uuid.New())
-	require.False(t, other.Enabled(f.project))
+	require.False(t, other.Enabled(t.Context(), f.project))
 	require.NoError(t, other.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 	_, err := fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
 	require.Error(t, err, "a project off the list captures nothing")
 
 	enabled := NewTranscripts(f.store, f.project)
-	require.True(t, enabled.Enabled(f.project))
+	require.True(t, enabled.Enabled(t.Context(), f.project))
 	require.NoError(t, enabled.Seal(t.Context(), f.db, f.org, f.project, []uuid.UUID{id}))
 	_, err = fixturerepo.New(f.db).MessageMetadata(t.Context(), id)
 	require.NoError(t, err)
@@ -343,7 +343,7 @@ func TestUpdateMessageStartsFromTheTranscriptOrThePlaintext(t *testing.T) {
 func TestNewTranscriptsNeedsAStoreForListedProjects(t *testing.T) {
 	t.Parallel()
 	require.Panics(t, func() { NewTranscripts(nil, uuid.New()) })
-	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(uuid.New())) })
+	require.NotPanics(t, func() { require.False(t, NewTranscripts(nil).Enabled(t.Context(), uuid.New())) })
 }
 
 // In encrypted mode the transcript is the only copy of the body: updates start
@@ -355,8 +355,8 @@ func TestEncryptedMode(t *testing.T) {
 	f := setup(t, true)
 	ctx := t.Context()
 	encrypted := NewTranscripts(f.store).WithEncryptedProjects(f.project)
-	require.Equal(t, ModeEncrypted, encrypted.Mode(f.project))
-	require.True(t, encrypted.Enabled(f.project))
+	require.Equal(t, ModeEncrypted, encrypted.Mode(t.Context(), f.project))
+	require.True(t, encrypted.Enabled(t.Context(), f.project))
 	fixtures := fixturerepo.New(f.db)
 	open := func(id uuid.UUID) (openRow, error) {
 		t.Helper()
@@ -441,9 +441,9 @@ func TestModes(t *testing.T) {
 	f := setup(t, false)
 	shadow, other := uuid.New(), uuid.New()
 	transcripts := NewTranscripts(f.store, shadow)
-	require.Equal(t, ModeShadow, transcripts.Mode(shadow))
-	require.Equal(t, ModePlaintext, transcripts.Mode(other))
+	require.Equal(t, ModeShadow, transcripts.Mode(t.Context(), shadow))
+	require.Equal(t, ModePlaintext, transcripts.Mode(t.Context(), other))
 	var none *Transcripts
-	require.Equal(t, ModePlaintext, none.Mode(shadow))
+	require.Equal(t, ModePlaintext, none.Mode(t.Context(), shadow))
 	require.Panics(t, func() { NewTranscripts(nil).WithEncryptedProjects(shadow) })
 }

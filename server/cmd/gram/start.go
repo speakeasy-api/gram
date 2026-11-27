@@ -1220,7 +1220,7 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, logger, tracerProvider, meterProvider)
+			transcripts, err := configureTranscripts(ctx, c, db, chatWriter, orgEncryption, featureFlags, logger, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}

@@ -249,6 +249,18 @@ const (
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
 
+	// FlagChatTranscriptShadow puts every project of an organization in chat
+	// transcript shadow mode: messages keep their plaintext columns and also
+	// get an encrypted transcript, and reads open the transcript. Evaluated
+	// server-side, with local evaluation only, by transcriptstore.Transcripts
+	// and nowhere else; distinct ID is the organization ID and the groups are
+	// OrgProjectGroups(orgSlug, ""), so target it by the PostHog organization
+	// group (org slug). Projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS
+	// are in shadow mode whatever it says. Fails closed to plaintext: off,
+	// missing, undecided or failing, nothing is sealed or opened. Removed once
+	// transcripts are on for every organization.
+	FlagChatTranscriptShadow Flag = "chat-transcript-shadow"
+
 	// FlagMCPOverviewSummaryTable lets eligible tool-calls-only overviews read
 	// mcp_tool_call_summaries; turn on after its backfill. Server-side, by
 	// organization or project slug group; off or failing reads telemetry_logs.
