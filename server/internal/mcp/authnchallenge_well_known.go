@@ -365,7 +365,10 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
 	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
-		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
+		if OnAuthenticationHost(ctx) {
+			return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
+		}
+		return s.serveMCPHostIssuerMetadata(w, r, endpoint, baseURL)
 	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
 	if err != nil {
@@ -395,6 +398,43 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, s.authorizationServerMetadata(ctx, urls, endpoint.CIMDAdmissionModeRaw, grantTypes, grantProfiles))
+}
+
+// serveMCPHostIssuerMetadata serves, on the MCP host, the RFC 8414 document of
+// an endpoint whose issuer announces the authentication host, under the issuer
+// the MCP host announced before the issuer opted in: the endpoint's root on the
+// MCP host. Clients that signed in before then recorded that issuer, and
+// rediscover it to refresh, so without this document they cannot refresh or
+// tell that they must sign in again. RFC 8414 §3.3 requires the document's
+// issuer to match the URL it was retrieved from, so it is the MCP host root.
+// Its token and revocation endpoints are on the MCP host because only there
+// do client assertions signed for that issuer authenticate. Registration is
+// served there too, and authorization moves the browser to the authentication
+// host.
+//
+// It advertises only the authorization code and refresh token grants. The
+// assertion grants (JWT bearer, ID-JAG and client credentials) check their
+// audience against the authentication host issuer, so a client signing for
+// this document's issuer would be refused.
+//
+// An authorization a client starts from this document finishes on the
+// authentication host, whose authorization response carries the authentication
+// host issuer. A client enforcing RFC 9207 refuses that response as a mix-up,
+// so such a client can refresh through this document but cannot sign in again
+// through it. The authorization endpoint is still advertised because common
+// MCP clients refuse a document without one, which would leave them unable to
+// refresh at all.
+func (s *Service) serveMCPHostIssuerMetadata(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, baseURL string) error {
+	ctx := r.Context()
+	urls, err := endpoint.AuthorizationServerURLs(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
+	}
+	grantTypes := []string{
+		oauthwire.GrantTypeAuthorizationCode,
+		oauthwire.GrantTypeRefreshToken,
+	}
+	return writeJSONMetadata(ctx, w, r, s.logger, s.authorizationServerMetadata(ctx, urls, endpoint.CIMDAdmissionModeRaw, grantTypes, nil))
 }
 
 // authorizationServerMetadata builds an RFC 8414 metadata document for an

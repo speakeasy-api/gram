@@ -28,8 +28,10 @@ import (
 // serves also serves on the MCP host, and the same handlers run with the
 // resource still derived from the MCP host. Such an issuer announces the
 // authentication host as its issuer whichever host a request arrives on, so
-// the issuer a client recorded stays the issuer it sees. For any other issuer
-// those routes serve nothing.
+// the issuer a client recorded stays the issuer it sees. The one exception is
+// the metadata document on the MCP host, which names the issuer the MCP host
+// announced before the issuer opted in, for clients that recorded that one.
+// For any other issuer those routes serve nothing.
 //
 // A shared authorization server whose issuer is on the authentication host is
 // served there alone, browser sign-in included. A shared authorization server
@@ -257,7 +259,8 @@ func (s *Service) issuerURL(endpoint *ResolvedMcpEndpoint, resourceBaseURL strin
 // arrivedAtAuthorizationServer reports whether the request arrived on the
 // host the endpoint's issuer names. RFC 8414 §3.3 requires the issuer in a
 // metadata document to match the URL it was retrieved from, so the document
-// is served on that host alone, and a browser flow starts there.
+// naming that issuer is served on that host alone, and a browser flow starts
+// there.
 func (s *Service) arrivedAtAuthorizationServer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) bool {
 	arrivedAt := resourceBaseURL
 	if baseURL, ok := authenticationHostBaseURL(ctx); ok {
@@ -269,8 +272,14 @@ func (s *Service) arrivedAtAuthorizationServer(ctx context.Context, endpoint *Re
 // requestAuthorizationServerURLs is AuthorizationServerURLs for the host the
 // request arrived on. Issuer is the endpoint's issuer; Token and Revoke name
 // the host the request was sent to. That keeps an assertion's accepted
-// audiences an exact pair for the addressed endpoint: the issuer, or the URL
-// the request was sent to.
+// audiences exact for the addressed endpoint: the issuer, or the URL the
+// request was sent to.
+//
+// A request on the MCP host for an endpoint whose issuer announces the
+// authentication host also carries the endpoint's root on the MCP host as
+// IssuerAlias. That is the issuer the MCP host announced before the issuer
+// opted in, and still announces to clients that rediscover it, so a client
+// holding that metadata signs its assertions for it.
 //
 // A shared authorization server is served only on its issuer's host, so its
 // own URLs are already the addressed ones.
@@ -292,6 +301,9 @@ func (s *Service) requestAuthorizationServerURLs(ctx context.Context, endpoint *
 	}
 	urls.Token = addressed.Token
 	urls.Revoke = addressed.Revoke
+	if addressed.Issuer != urls.Issuer {
+		urls.IssuerAlias = addressed.Issuer
+	}
 	return urls, nil
 }
 
