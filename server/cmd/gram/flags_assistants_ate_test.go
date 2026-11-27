@@ -101,12 +101,58 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 		})
 	})
 
-	t.Run("enabled ATE in production passes composition root config check when all flags set", func(t *testing.T) {
+	t.Run("enabled ATE rejects missing assistant-ate-image even when assistant-kit-image is set", func(t *testing.T) {
 		t.Parallel()
 		c := kitCLIContext(t, map[string]string{
 			"environment":                     "production",
 			"assistant-ate-enabled":           "true",
-			"assistant-kit-image":             "ghcr.io/speakeasy-api/kit-ate@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"assistant-kit-image":             "ghcr.io/speakeasy-api/kit@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"assistant-ate-worker-selector":   "workload-type=ate-assistants",
+			"assistant-kit-workload-issuer":   "https://ate.example.com",
+			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
+			"assistant-ate-api-address":       "127.0.0.1:1",
+			"assistant-ate-router-address":    "127.0.0.1:2",
+			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
+			"assistant-ate-client-cert-file":  "/nonexistent/cert.pem",
+			"assistant-ate-client-key-file":   "/nonexistent/key.pem",
+			"assistant-ate-audience-jwt-file": "/nonexistent/token",
+			"assistant-ate-atespace":          "prod-assistants",
+			"assistant-ate-template":          "kit-v1",
+		})
+		require.Panics(t, func() {
+			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+		})
+	})
+
+	t.Run("enabled ATE rejects missing or invalid assistant-ate-worker-selector", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                     "production",
+			"assistant-ate-enabled":           "true",
+			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"assistant-kit-workload-issuer":   "https://ate.example.com",
+			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
+			"assistant-ate-api-address":       "127.0.0.1:1",
+			"assistant-ate-router-address":    "127.0.0.1:2",
+			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
+			"assistant-ate-client-cert-file":  "/nonexistent/cert.pem",
+			"assistant-ate-client-key-file":   "/nonexistent/key.pem",
+			"assistant-ate-audience-jwt-file": "/nonexistent/token",
+			"assistant-ate-atespace":          "prod-assistants",
+			"assistant-ate-template":          "kit-v1",
+		})
+		require.Panics(t, func() {
+			_ = installKitLocalRuntimeFromCLI(testenv.NewLogger(t), c, &assistants.ServiceCore{}, nil, nil, redis.NewClient(&redis.Options{Addr: "127.0.0.1:0"}), serverURL)
+		})
+	})
+
+	t.Run("enabled ATE in production passes composition root config check when all flags set without assistant-kit-image", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                     "production",
+			"assistant-ate-enabled":           "true",
+			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-0123456789abcdef0123456789abcdef01234567@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"assistant-ate-worker-selector":   "workload-type=ate-assistants,tier=prod",
 			"assistant-kit-workload-issuer":   "https://ate.example.com",
 			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
 			"assistant-ate-api-address":       "127.0.0.1:1",
