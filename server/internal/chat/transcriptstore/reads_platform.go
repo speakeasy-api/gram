@@ -52,7 +52,7 @@ func (t *Transcripts) SearchPlatformChatMessages(ctx context.Context, db DBTX, p
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
+		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (t *Transcripts) ReadPlatformChatMessages(ctx context.Context, db DBTX, par
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
+		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
 	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Conte
 	joined := make([]joinedRow, len(rows))
 	for i := range rows {
 		r := &rows[i]
-		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
 	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
 		return nil, err

@@ -353,7 +353,7 @@ func (t *Transcripts) listSearchMatchWindows(ctx context.Context, db DBTX, s Cha
 	for i := range windowed {
 		rows[i] = ListSearchWindowedMessagesRow(windowed[i])
 		r := &rows[i]
-		joined[i] = joinedRow{body: ProtectedFieldRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
+		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: &r.ToolOutcomeNotes, ToolCallSummaries: &r.ToolCallSummaries, StorageError: &r.StorageError}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
 	if err := t.openJoined(ctx, db, s.ProjectID, joined); err != nil {
 		return nil, err

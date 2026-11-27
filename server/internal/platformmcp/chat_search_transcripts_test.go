@@ -36,10 +36,10 @@ func shadowChatSearch(t *testing.T) (chatSearchFixture, []uuid.UUID) {
 	store, err := transcriptstore.New(f.db, keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.NoError(t, store.Prepare(t.Context(), f.principal.OrganizationID), "writers load the key before the transaction")
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
+	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: ResealChatMessages runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, store.Capture(t.Context(), tx, f.principal.OrganizationID, f.project.ID, ids))
+	require.NoError(t, store.ResealChatMessages(t.Context(), tx, f.principal.OrganizationID, f.project.ID, ids))
 	require.NoError(t, tx.Commit(t.Context()))
 	f.service.WithTranscripts(transcriptstore.NewTranscripts(store, f.project.ID))
 	return f, ids

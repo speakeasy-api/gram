@@ -69,7 +69,7 @@ func sealTranscripts(t *testing.T, ti *chatTestInstance, store *transcriptstore.
 	tx, err := ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: Capture runs inside the caller's message transaction; message rows come from generated seed queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, store.Capture(t.Context(), tx, ti.orgID, ti.projectID, messageIDs))
+	require.NoError(t, store.ResealChatMessages(t.Context(), tx, ti.orgID, ti.projectID, messageIDs))
 	require.NoError(t, tx.Commit(t.Context()))
 }
 
