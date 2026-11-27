@@ -1388,7 +1388,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1440,7 +1440,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1490,7 +1490,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1520,7 +1520,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1553,7 +1553,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageFieldRefs); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)

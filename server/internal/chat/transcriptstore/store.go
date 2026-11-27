@@ -244,7 +244,7 @@ func updateChatMessage(ctx context.Context, db repo.DBTX, store *Store, encrypte
 			return false, err
 		}
 	}
-	before := withProtectedFields(chatrepo.ChatMessage(row.ChatMessage), fields)
+	before := WithProtectedFields(chatrepo.ChatMessage(row.ChatMessage), fields)
 	after := cloneRow(before)
 	if err := apply(&after); err != nil {
 		return false, fmt.Errorf("apply message change: %w", err)
@@ -269,7 +269,7 @@ func updateChatMessage(ctx context.Context, db repo.DBTX, store *Store, encrypte
 		if err != nil {
 			return false, err
 		}
-		after = withProtectedFields(after, emptyProtectedFields)
+		after = WithProtectedFields(after, emptyProtectedFields)
 	}
 	written, err := q.WriteChatMessage(ctx, writeParams(projectID, after))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -314,17 +314,6 @@ func canonical(ctx context.Context, q *repo.Queries, fields transcriptcrypto.Pro
 // emptyProtectedFields is what the plaintext columns hold in encrypted mode: content is
 // NOT NULL, so it is the empty string; every other field is NULL.
 var emptyProtectedFields = transcriptcrypto.ProtectedFields{Content: "", ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}
-
-// withProtectedFields returns the row with its six protected fields set from fields.
-func withProtectedFields(m chatrepo.ChatMessage, fields transcriptcrypto.ProtectedFields) chatrepo.ChatMessage {
-	m.Content = fields.Content
-	m.ContentRaw = fields.ContentRaw
-	m.ToolCalls = fields.ToolCalls
-	m.ToolOutcomeNotes = optionalText(fields.ToolOutcomeNotes)
-	m.ToolCallSummaries = fields.ToolCallSummaries
-	m.StorageError = optionalText(fields.StorageError)
-	return m
-}
 
 // cloneRow copies the row so apply cannot change the original through a shared
 // slice.
@@ -621,22 +610,39 @@ func (s *Store) Load(ctx context.Context, organizationID string, projectID, mess
 
 // LoadMany opens the transcripts of a page of messages with one codec backed by the
 // process's committed data key cache: a warm cache needs no KMS call, and a
-// cold one unwraps the organization's key once for the page. A message with no
-// transcript, or only a legacy one with source_hash, is left out of the result,
-// and the caller serves its plaintext.
-// A transcript that disagrees with its plaintext row is logged and left out
-// too, so the caller serves plaintext; one that cannot be decrypted fails the
-// whole page. Duplicate IDs are opened once.
+// cold one unwraps the organization's key once for the page. Only messages
+// whose transcript opened and agrees with the plaintext row are in the result;
+// the caller serves plaintext for the rest. A transcript that cannot be
+// decrypted fails the whole page. Duplicate IDs are opened once.
 func (s *Store) LoadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) (map[uuid.UUID]transcriptcrypto.ProtectedFields, error) {
-	return s.open(ctx, organizationID, projectID, messageIDs, false)
+	opened, err := s.open(ctx, organizationID, projectID, messageIDs, false)
+	if err != nil {
+		return nil, err
+	}
+	served := make(map[uuid.UUID]transcriptcrypto.ProtectedFields, len(opened))
+	for id, o := range opened {
+		if o.outcome == outcomeSuccess {
+			served[id] = o.fields
+		}
+	}
+	return served, nil
 }
 
-// open is LoadMany for either mode. In encrypted mode the plaintext row is
-// empty, so a transcript is served without comparison, and a message without a
-// current transcript fails the page with ErrMissingTranscript.
-func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]transcriptcrypto.ProtectedFields, error) {
+// opening is what a read serves for one message, and why: the decrypted
+// transcript (success), or the plaintext row when the message has no
+// transcript (plaintext_fallback) or its transcript disagrees (stale).
+type opening struct {
+	fields  transcriptcrypto.ProtectedFields
+	outcome outcome
+}
+
+// open is LoadMany for either mode, with one opening for every requested
+// message in the project. In encrypted mode the plaintext row is empty, so a
+// transcript is served without comparison, and a message without a current
+// transcript fails the page with ErrMissingTranscript.
+func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]opening, error) {
 	if len(messageIDs) == 0 {
-		return map[uuid.UUID]transcriptcrypto.ProtectedFields{}, nil
+		return map[uuid.UUID]opening{}, nil
 	}
 
 	ctx, span := s.tracer.Start(ctx, "transcriptstore.LoadMany", trace.WithAttributes(
@@ -647,7 +653,7 @@ func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.
 	defer span.End()
 
 	start := time.Now()
-	opened, stale, err := s.loadMany(ctx, organizationID, projectID, messageIDs, encrypted)
+	opened, err := s.loadMany(ctx, organizationID, projectID, messageIDs, encrypted)
 	result := classify(err)
 	s.metrics.read.recordDuration(ctx, projectID, time.Since(start), result)
 
@@ -660,34 +666,31 @@ func (s *Store) open(ctx context.Context, organizationID string, projectID uuid.
 	}
 
 	// Count per requested ID, so a duplicated ID is counted the same way each
-	// time. A disagreeing transcript is left out of opened too, so it is
-	// served from plaintext, but counted as stale rather than as a fallback.
-	missing, staleCount := 0, 0
+	// time. A message outside the project has no opening and counts as a
+	// fallback, since the caller keeps its own row.
+	counts := make(map[outcome]int, 3)
 	for _, id := range messageIDs {
-		if _, ok := opened[id]; ok {
-			continue
+		o, ok := opened[id]
+		if !ok {
+			o.outcome = outcomePlaintextFallback
 		}
-		if _, ok := stale[id]; ok {
-			staleCount++
-			continue
-		}
-		missing++
+		counts[o.outcome]++
 	}
-	s.metrics.read.recordMessages(ctx, projectID, len(messageIDs)-missing-staleCount, outcomeSuccess)
-	s.metrics.read.recordMessages(ctx, projectID, missing, outcomePlaintextFallback)
-	s.metrics.read.recordMessages(ctx, projectID, staleCount, outcomeStale)
-	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(missing))
+	for _, result := range []outcome{outcomeSuccess, outcomePlaintextFallback, outcomeStale} {
+		s.metrics.read.recordMessages(ctx, projectID, counts[result], result)
+	}
+	span.SetAttributes(attr.TranscriptShadowPlaintextFallbackCount(counts[outcomePlaintextFallback]))
 	return opened, nil
 }
 
-func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]transcriptcrypto.ProtectedFields, map[uuid.UUID]struct{}, error) {
+func (s *Store) loadMany(ctx context.Context, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID, encrypted bool) (map[uuid.UUID]opening, error) {
 	if organizationID == "" || projectID == uuid.Nil {
-		return nil, nil, ErrInvalid
+		return nil, ErrInvalid
 	}
 	wanted := make(map[uuid.UUID]struct{}, len(messageIDs))
 	for _, id := range messageIDs {
 		if id == uuid.Nil {
-			return nil, nil, ErrInvalid
+			return nil, ErrInvalid
 		}
 		wanted[id] = struct{}{}
 	}
@@ -698,34 +701,46 @@ func (s *Store) loadMany(ctx context.Context, organizationID string, projectID u
 
 	rows, err := repo.New(s.db).LoadMany(ctx, repo.LoadManyParams{MessageIds: ids, ProjectID: project(projectID), OrganizationID: organizationID})
 	if err != nil {
-		return nil, nil, safe(err)
+		return nil, safe(err)
 	}
+	// In encrypted mode every message must have a current transcript, so a
+	// message outside the project fails the page as well.
 	if encrypted && len(rows) != len(ids) {
-		return nil, nil, ErrMissingTranscript
+		return nil, ErrMissingTranscript
 	}
-	if len(rows) == 0 {
-		return map[uuid.UUID]transcriptcrypto.ProtectedFields{}, nil, nil
-	}
-
 	codec, err := transcriptcrypto.New(s.service, organizationID)
 	if err != nil {
-		return nil, nil, safe(err)
+		return nil, safe(err)
 	}
-	opened := make(map[uuid.UUID]transcriptcrypto.ProtectedFields, len(rows))
-	stale := map[uuid.UUID]struct{}{}
+	opened := make(map[uuid.UUID]opening, len(rows))
 	for _, row := range rows {
-		msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
+		o, err := s.openRow(ctx, codec, projectID, row, encrypted)
 		if err != nil {
-			return nil, nil, safe(err)
+			return nil, err
 		}
-		source := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
-		if !encrypted && !s.agrees(ctx, "read", projectID, row.ID, msg, source) {
-			stale[row.ID] = struct{}{}
-			continue
-		}
-		opened[row.ID] = msg
+		opened[row.ID] = o
 	}
-	return opened, stale, nil
+	return opened, nil
+}
+
+// openRow decides what one message serves. In shadow mode the plaintext row
+// is the source of truth while both copies exist.
+func (s *Store) openRow(ctx context.Context, codec *transcriptcrypto.Codec, projectID uuid.UUID, row repo.LoadManyRow, encrypted bool) (opening, error) {
+	plain := message(row.Content, row.ContentRaw, row.ToolCalls, row.ToolOutcomeNotes, row.ToolCallSummaries, row.StorageError)
+	if row.Ciphertext == "" && encrypted {
+		return opening{}, ErrMissingTranscript
+	}
+	if row.Ciphertext == "" {
+		return opening{fields: plain, outcome: outcomePlaintextFallback}, nil
+	}
+	msg, err := codec.Decrypt(ctx, transcriptcrypto.Identity{ProjectID: projectID, ChatID: row.ChatID, MessageID: row.ID}, row.Ciphertext)
+	if err != nil {
+		return opening{}, safe(err)
+	}
+	if !encrypted && !s.agrees(ctx, "read", projectID, row.ID, msg, plain) {
+		return opening{fields: plain, outcome: outcomeStale}, nil
+	}
+	return opening{fields: msg, outcome: outcomeSuccess}, nil
 }
 
 // agrees compares a decrypted transcript with its plaintext row, the same way

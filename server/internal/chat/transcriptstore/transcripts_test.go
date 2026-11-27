@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -140,8 +141,11 @@ type openRow struct {
 	storageError pgtype.Text
 }
 
-func openRowBody(r *openRow) ProtectedFieldRefs {
-	return ProtectedFieldRefs{MessageID: r.id, Content: &r.content, ContentRaw: &r.contentRaw, ToolCalls: &r.toolCalls, ToolOutcomeNotes: &r.notes, ToolCallSummaries: &r.summaries, StorageError: &r.storageError}
+func openRowBody(r *openRow) OpenTarget {
+	return OpenTarget{MessageID: r.id, Set: func(f transcriptcrypto.ProtectedFields) {
+		r.content, r.contentRaw, r.toolCalls, r.summaries = f.Content, f.ContentRaw, f.ToolCalls, f.ToolCallSummaries
+		r.notes, r.storageError = optionalText(f.ToolOutcomeNotes), optionalText(f.StorageError)
+	}}
 }
 
 // plaintextRow is a loaded row whose six body fields all hold placeholder
@@ -174,7 +178,8 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	require.Equal(t, pgtype.Text{String: "example note", Valid: true}, opened.notes)
 	require.JSONEq(t, `{"example":"summary"}`, string(opened.summaries))
 	require.Equal(t, pgtype.Text{String: "example error", Valid: true}, opened.storageError, "all six fields come from the copy")
-	require.Equal(t, plaintextRow(unsealed), rows[1], "a message with no transcript keeps its plaintext")
+	require.Equal(t, "sensitive example", rows[1].content, "a message with no transcript is served its stored plaintext")
+	require.False(t, rows[1].storageError.Valid, "every field comes from the stored row")
 
 	off := []openRow{plaintextRow(sealed)}
 	require.NoError(t, OpenRows(t.Context(), NewTranscripts(f.store), f.org, f.project, off, openRowBody))
@@ -185,7 +190,7 @@ func TestOpenRowsServesTranscriptsAndFallsBackToPlaintext(t *testing.T) {
 	stale := []openRow{plaintextRow(sealed)}
 	stale[0].content = "changed"
 	require.NoError(t, OpenRows(t.Context(), transcripts, f.org, f.project, stale, openRowBody))
-	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the plaintext is kept")
+	require.Equal(t, "changed", stale[0].content, "a disagreeing transcript is logged and the stored plaintext is served")
 }
 
 func TestToolCallIDsStayWithTheirProject(t *testing.T) {

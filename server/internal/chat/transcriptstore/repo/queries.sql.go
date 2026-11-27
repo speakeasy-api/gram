@@ -221,13 +221,14 @@ func (q *Queries) Load(ctx context.Context, arg LoadParams) (LoadRow, error) {
 
 const loadMany = `-- name: LoadMany :many
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
+       COALESCE(t.ciphertext, '')::text AS ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+  AND t.organization_id = p.organization_id AND t.source_hash IS NULL
 WHERE m.id = ANY($1::uuid[]) AND m.project_id = $2 AND p.organization_id = $3
-  AND t.source_hash IS NULL
 `
 
 type LoadManyParams struct {
@@ -248,7 +249,9 @@ type LoadManyRow struct {
 	Ciphertext        string
 }
 
-// Legacy transcripts that still carry source_hash read as missing, as in Load.
+// Every message in the project, with its current transcript or an empty
+// ciphertext when it has none. Legacy transcripts that still carry
+// source_hash read as missing, as in Load.
 func (q *Queries) LoadMany(ctx context.Context, arg LoadManyParams) ([]LoadManyRow, error) {
 	rows, err := q.db.Query(ctx, loadMany, arg.MessageIds, arg.ProjectID, arg.OrganizationID)
 	if err != nil {

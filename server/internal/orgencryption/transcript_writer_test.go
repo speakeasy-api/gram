@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -377,7 +378,7 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
 	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
 	content := row.Content
-	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: m.Params.ID, Content: &content, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+	require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: m.Params.ID, Set: func(f transcriptcrypto.ProtectedFields) { content = f.Content }}}))
 	require.Equal(t, "EXAMPLE changed projection", content)
 }
 
@@ -417,7 +418,7 @@ func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
 		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
 		require.Empty(t, row.ToolCalls)
 		content, toolCalls := row.Content, row.ToolCalls
-		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.ProtectedFieldRefs{{MessageID: id, Content: &content, ContentRaw: nil, ToolCalls: &toolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}}))
+		require.NoError(t, encrypted.Open(t.Context(), f.orgID, f.projectID, []transcriptstore.OpenTarget{{MessageID: id, Set: func(f transcriptcrypto.ProtectedFields) { content, toolCalls = f.Content, f.ToolCalls }}}))
 		require.Equal(t, want.content, content, "the transcript holds what was written")
 		if want.toolCalls == "" {
 			require.Empty(t, toolCalls)
