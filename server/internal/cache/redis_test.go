@@ -94,12 +94,19 @@ type listEntry struct {
 	Value string
 }
 
-// commandRecorder records the name of every command a client sends, with the
-// commands of a pipeline or transaction recorded one by one. The connection
-// handshake (HELLO, CLIENT SETINFO) is not recorded.
+// recordedCommand is one command a client sent and whether Redis ran it.
+type recordedCommand struct {
+	name string
+	args []any
+	ok   bool
+}
+
+// commandRecorder records every command a client sends and its outcome, with
+// the commands of a pipeline or transaction recorded one by one. The
+// connection handshake (HELLO, CLIENT SETINFO) is not recorded.
 type commandRecorder struct {
-	mu    sync.Mutex
-	names []string
+	mu       sync.Mutex
+	commands []recordedCommand
 }
 
 func (h *commandRecorder) DialHook(next redis.DialHook) redis.DialHook {
@@ -108,33 +115,35 @@ func (h *commandRecorder) DialHook(next redis.DialHook) redis.DialHook {
 
 func (h *commandRecorder) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	return func(ctx context.Context, cmd redis.Cmder) error {
-		h.record(cmd)
-		return next(ctx, cmd)
+		err := next(ctx, cmd)
+		h.record(cmd, err)
+		return err
 	}
 }
 
 func (h *commandRecorder) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
 	return func(ctx context.Context, cmds []redis.Cmder) error {
+		err := next(ctx, cmds)
 		for _, cmd := range cmds {
-			h.record(cmd)
+			h.record(cmd, cmd.Err())
 		}
-		return next(ctx, cmds)
+		return err
 	}
 }
 
-func (h *commandRecorder) record(cmd redis.Cmder) {
+func (h *commandRecorder) record(cmd redis.Cmder, err error) {
 	if cmd.Name() == "hello" || cmd.Name() == "client" {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.names = append(h.names, cmd.Name())
+	h.commands = append(h.commands, recordedCommand{name: cmd.Name(), args: cmd.Args(), ok: err == nil})
 }
 
-func (h *commandRecorder) sent() []string {
+func (h *commandRecorder) sent() []recordedCommand {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return append([]string(nil), h.names...)
+	return append([]recordedCommand(nil), h.commands...)
 }
 
 func newListAppendAdapter(t *testing.T) (*cache.RedisCacheAdapter, *miniredis.Miniredis, *commandRecorder) {
@@ -142,7 +151,7 @@ func newListAppendAdapter(t *testing.T) (*cache.RedisCacheAdapter, *miniredis.Mi
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	recorder := &commandRecorder{mu: sync.Mutex{}, names: nil}
+	recorder := &commandRecorder{mu: sync.Mutex{}, commands: nil}
 	client.AddHook(recorder)
 	return cache.NewRedisCacheAdapter(client), mr, recorder
 }
@@ -155,11 +164,22 @@ func TestListAppendSetsExpiryInTheSameCommand(t *testing.T) {
 	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "first"}, time.Hour))
 
 	require.Equal(t, time.Hour, mr.TTL("list"), "a new list gets its expiry")
-	sent := recorder.sent()
-	require.NotEmpty(t, sent)
-	for _, name := range sent {
-		require.Contains(t, []string{"evalsha", "eval"}, name, "the append and its expiry go to Redis as one script")
+	// Script.Run tries EVALSHA first and falls back to EVAL when the script is
+	// not loaded yet, so one or two commands are sent, but exactly one runs: a
+	// script over the list with both the value and the expiry.
+	var ran []recordedCommand
+	for _, cmd := range recorder.sent() {
+		require.Contains(t, []string{"evalsha", "eval"}, cmd.name, "the append and its expiry go to Redis as one script")
+		if cmd.ok {
+			ran = append(ran, cmd)
+		}
 	}
+	require.Len(t, ran, 1, "exactly one script runs")
+	// EVAL script|sha numkeys key value ttl
+	require.Len(t, ran[0].args, 6)
+	require.Equal(t, 1, ran[0].args[2])
+	require.Equal(t, "list", ran[0].args[3])
+	require.Equal(t, time.Hour.Milliseconds(), ran[0].args[5], "the expiry travels with the append")
 
 	var got []listEntry
 	require.NoError(t, adapter.ListRange(t.Context(), "list", 0, -1, &got))

@@ -178,20 +178,27 @@ func (u *Uncached) ToolCatalog(ctx context.Context, mcpServerID, projectID strin
 	return resolved.catalog(), nil
 }
 
-// RecordMissingTools is [Cache.RecordMissingTools], except that a committed
-// write whose cached view could not be evicted is logged rather than returned:
-// this view reads Postgres, so it already sees the write, and a stale cached
-// view is evicted by the next cached write or expires after its TTL.
+// RecordMissingTools is [Cache.RecordMissingTools], except that it returns once
+// the write has committed and evicts the cached view in the background: this
+// view reads Postgres, so it already sees the write, and a slow or unreachable
+// cache must not delay a sign-in step. A failed eviction is logged; the stale
+// cached view is evicted by the next cached write or expires after its TTL.
 func (u *Uncached) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []ToolRecord) error {
-	err := u.cache.RecordMissingTools(ctx, organizationID, mcpServerID, projectID, tools)
-	if errors.Is(err, errCatalogNotEvicted) {
-		u.cache.logger.WarnContext(ctx, "recorded missing tools but could not evict the cached catalog",
-			attr.SlogError(err),
-			attr.SlogMcpServerID(mcpServerID),
-		)
-		return nil
+	evict, projectUUID, serverUUID, err := u.cache.writeMissingTools(ctx, organizationID, mcpServerID, projectID, tools)
+	if err != nil || !evict {
+		return err
 	}
-	return err
+
+	evictCtx := context.WithoutCancel(ctx)
+	go func() {
+		if err := u.cache.invalidateAfterWrite(evictCtx, projectUUID, serverUUID); err != nil {
+			u.cache.logger.WarnContext(evictCtx, "recorded missing tools but could not evict the cached catalog",
+				attr.SlogError(err),
+				attr.SlogMcpServerID(mcpServerID),
+			)
+		}
+	}()
+	return nil
 }
 
 // resolveByID parses the ids and resolves the server's tools with resolve.
@@ -227,13 +234,25 @@ func (s serverTools) catalog() map[string]string {
 // an entry. An error means the catalog can't be relied on
 // to reflect these tools, so callers enforcing access must fail closed.
 func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []ToolRecord) error {
-	serverUUID, err := uuid.Parse(mcpServerID)
-	if err != nil {
-		return fmt.Errorf("parse mcp server id: %w", err)
+	evict, projectUUID, serverUUID, err := c.writeMissingTools(ctx, organizationID, mcpServerID, projectID, tools)
+	if err != nil || !evict {
+		return err
 	}
-	projectUUID, err := uuid.Parse(projectID)
+	return c.invalidateAfterWrite(ctx, projectUUID, serverUUID)
+}
+
+// writeMissingTools is RecordMissingTools without the eviction. evict reports
+// whether the server's cached catalog must be evicted: after a committed
+// write, or when every tool already had an entry and the caller's view is
+// stale.
+func (c *Cache) writeMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []ToolRecord) (evict bool, projectUUID, serverUUID uuid.UUID, err error) {
+	serverUUID, err = uuid.Parse(mcpServerID)
 	if err != nil {
-		return fmt.Errorf("parse project id: %w", err)
+		return false, uuid.Nil, uuid.Nil, fmt.Errorf("parse mcp server id: %w", err)
+	}
+	projectUUID, err = uuid.Parse(projectID)
+	if err != nil {
+		return false, uuid.Nil, uuid.Nil, fmt.Errorf("parse project id: %w", err)
 	}
 
 	normalized := make([]ToolRecord, 0, len(tools))
@@ -244,35 +263,35 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		}
 	}
 	if len(normalized) == 0 {
-		return nil
+		return false, projectUUID, serverUUID, nil
 	}
 
 	payload, err := json.Marshal(normalized)
 	if err != nil {
-		return fmt.Errorf("encode tool records: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("encode tool records: %w", err)
 	}
 
 	dbtx, err := c.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin tool catalog write: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("begin tool catalog write: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
 
 	if err := txRepo.LockMCPServerToolMetadataWrite(ctx, mcpServerID); err != nil {
-		return fmt.Errorf("lock tool catalog: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("lock tool catalog: %w", err)
 	}
 
 	server, err := txRepo.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: serverUUID, ProjectID: projectUUID})
 	if err != nil {
-		return fmt.Errorf("get mcp server: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("get mcp server: %w", err)
 	}
 
 	listParams := repo.ListMCPServerToolMetadataParams{McpServerID: serverUUID, ProjectID: projectUUID, IncludeDeleted: false}
 	before, err := txRepo.ListMCPServerToolMetadata(ctx, listParams)
 	if err != nil {
-		return fmt.Errorf("list tool catalog before write: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("list tool catalog before write: %w", err)
 	}
 
 	inserted, err := txRepo.AddMissingMCPServerToolMetadata(ctx, repo.AddMissingMCPServerToolMetadataParams{
@@ -281,18 +300,18 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		Tools:       payload,
 	})
 	if err != nil {
-		return fmt.Errorf("add missing tools: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("add missing tools: %w", err)
 	}
 	if len(inserted) == 0 {
 		// A caller only records tools it read as missing, so the entries already
 		// exist and its view is stale: another request may have committed them
 		// and failed to evict. Evict here or every retry would read the same view.
-		return c.invalidateAfterWrite(ctx, projectUUID, serverUUID)
+		return true, projectUUID, serverUUID, nil
 	}
 
 	after, err := txRepo.ListMCPServerToolMetadata(ctx, listParams)
 	if err != nil {
-		return fmt.Errorf("list tool catalog after write: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("list tool catalog after write: %w", err)
 	}
 
 	// Audit stamps an authenticated agent over the event's actor, but this write
@@ -315,14 +334,14 @@ func (c *Cache) RecordMissingTools(ctx context.Context, organizationID, mcpServe
 		ToolMetadataSnapshotBefore: mv.BuildToolMetadataListView(before),
 		ToolMetadataSnapshotAfter:  mv.BuildToolMetadataListView(after),
 	}); err != nil {
-		return fmt.Errorf("log tool catalog update: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("log tool catalog update: %w", err)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit tool catalog write: %w", err)
+		return false, projectUUID, serverUUID, fmt.Errorf("commit tool catalog write: %w", err)
 	}
 
-	return c.invalidateAfterWrite(ctx, projectUUID, serverUUID)
+	return true, projectUUID, serverUUID, nil
 }
 
 // invalidateAfterWrite evicts a server's cached catalog, detached from ctx: the
