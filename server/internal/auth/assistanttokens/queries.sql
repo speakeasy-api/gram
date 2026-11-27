@@ -25,10 +25,22 @@ WHERE s.runtime_id = @runtime_id AND s.project_id = @project_id AND s.assistant_
   AND r.runtime_version = 3 AND a.runtime_version = 3
   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
   AND NOT t.deleted AND NOT c.deleted
-  AND r.backend_metadata_json->'workload' = @workload_binding::jsonb;
+  AND (
+    r.backend_metadata_json->'workload' = @workload_binding::jsonb
+    OR EXISTS (
+      SELECT 1
+      FROM assistant_ate_actors act
+      WHERE act.runtime_id = r.id
+        AND act.project_id = r.project_id
+        AND act.assistant_id = r.assistant_id
+        AND act.assistant_thread_id = s.assistant_thread_id
+        AND NOT act.deleted
+        AND act.workload_binding_json = @workload_binding::jsonb
+    )
+  );
 
 -- name: ListKitWorkloadBindings :many
--- The workload subject is unique to one runtime generation, not a guest claim.
+-- The workload subject is unique to one runtime generation (or ATE thread actor), not a guest claim.
 SELECT r.id AS runtime_id, r.assistant_id, r.backend_metadata_json,
   (r.runtime_version = 3 AND a.runtime_version = 3
    AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
@@ -37,4 +49,17 @@ FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.project_id = @project_id AND a.organization_id = @organization_id
   AND r.backend_metadata_json->'workload'->>'issuer_id' = @issuer_id::text
-  AND r.backend_metadata_json->'workload'->>'subject' = @subject::text;
+  AND r.backend_metadata_json->'workload'->>'subject' = @subject::text
+UNION ALL
+SELECT r.id AS runtime_id, r.assistant_id,
+  jsonb_build_object('workload', act.workload_binding_json) AS backend_metadata_json,
+  (r.runtime_version = 3 AND a.runtime_version = 3
+   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
+   AND NOT a.deleted AND a.status = 'active'
+   AND NOT act.deleted)::boolean AS active
+FROM assistant_ate_actors act
+JOIN assistant_runtimes r ON r.id = act.runtime_id AND r.project_id = act.project_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE act.project_id = @project_id AND act.organization_id = @organization_id
+  AND act.workload_binding_json->>'issuer_id' = @issuer_id::text
+  AND act.workload_binding_json->>'subject' = @subject::text;

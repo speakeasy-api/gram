@@ -19,6 +19,7 @@ const KitWorkloadAssertionPath = "/var/run/secrets/speakeasy/workload/assertion"
 // KitWorkspacePath is the approved persistent gateway project root.
 const KitWorkspacePath = "/home/kit/workspace"
 const kitFileConfig = "provider = \"speakeasy\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
+const kitEgressFileConfig = "provider = \"openrouter\"\ncredential_store = \"file\"\ncredential_dir = \"/home/kit/.kit/credentials\"\nmcp_config = \"/home/kit/.kit/credentials/mcp.json\"\n"
 
 func KitGatewayCommand(port int) ([]string, []string) {
 	return []string{"/usr/local/bin/kit"}, []string{"gateway", "--listen", "0.0.0.0:" + strconv.Itoa(port), "--allow-wildcard-bind", "--credential-file", "/home/kit/.kit/credentials/gateway-token", "--project", KitWorkspacePath}
@@ -50,13 +51,19 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		if b.AssertionFile != "" {
 			return fmt.Errorf("egress-injected kit bootstrap must not specify an assertion file")
 		}
-	} else if !strings.HasPrefix(b.AssertionFile, "/") {
-		return fmt.Errorf("kit requires explicit model and workload assertion binding")
-	}
-	for _, raw := range []string{b.InferenceEndpoint, b.Workload.Audience} {
-		u, err := url.Parse(raw)
+		u, err := url.Parse(b.InferenceEndpoint)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("kit requires explicit HTTPS workload endpoints")
+			return fmt.Errorf("kit requires explicit HTTPS inference endpoint")
+		}
+	} else {
+		if !strings.HasPrefix(b.AssertionFile, "/") {
+			return fmt.Errorf("kit requires explicit model and workload assertion binding")
+		}
+		for _, raw := range []string{b.InferenceEndpoint, b.Workload.Audience} {
+			u, err := url.Parse(raw)
+			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+				return fmt.Errorf("kit requires explicit HTTPS workload endpoints")
+			}
 		}
 	}
 	var mcp struct {
@@ -99,6 +106,10 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			if server.Auth != nil {
 				return fmt.Errorf("egress-injected kit MCP must not configure in-sandbox workload auth")
 			}
+			authHeader := strings.TrimSpace(server.Headers["Authorization"])
+			if !strings.HasPrefix(authHeader, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer ")) == "" {
+				return fmt.Errorf("egress-injected kit MCP requires a placeholder Authorization Bearer header")
+			}
 		} else {
 			if server.Auth == nil || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 				return fmt.Errorf("kit MCP requires the bound generic workload assertion")
@@ -125,9 +136,11 @@ func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 	return KitLocalRuntimeConfig{WorkloadAssertionFile: "", Fence: nil, Network: "", Environment: "local", Image: KitIntegrationImage, Command: command, Args: args, GuestPort: 8081, ServerURL: origin, CompatibilityGeneration: "kit-project-gateway-v2", HomeOwnedByRuntimeUser: true, Env: nil, ExtraCACertFile: "", Bootstrap: nil, Protocol: nil, Ready: nil}
 }
 
-// kitBootstrapConfig is the public Kit v0.2.19 generic workload contract.
-// When EgressInjectedAuth is true, the sandbox holds no assertion file and
-// relies on ATE's egress gateway to inject the actor JWT on outbound calls.
+// kitBootstrapConfig is the public Kit generic workload contract.
+// When EgressInjectedAuth is true, the sandbox holds no assertion file or
+// workload token-exchange block: Kit uses OpenAI-compatible bearer auth
+// (OPENROUTER_BASE_URL + placeholder OPENROUTER_API_KEY) and ATE's egress
+// gateway replaces the Authorization header with the actor's signed JWT.
 func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""
@@ -136,11 +149,11 @@ func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if err != nil {
 		return ""
 	}
+	if b.EgressInjectedAuth {
+		return kitEgressFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n"
+	}
 	base := kitFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n" +
 		"[inference_providers.speakeasy]\nendpoint = " + strconv.Quote(b.InferenceEndpoint) + "\n"
-	if b.EgressInjectedAuth {
-		return base
-	}
 	return base +
 		"[inference_providers.speakeasy.workload]\ntokenFile = " + strconv.Quote(b.AssertionFile) + "\nendpointMode = \"explicit\"\ngrant = \"jwtBearer\"\ntokenEndpoint = " + strconv.Quote(b.Workload.Audience+"/token") + "\nresource = \"urn:speakeasy:inference\"\n" +
 		"[inference_providers.speakeasy.workload.extensions]\nproject_id = " + strconv.Quote(b.Workload.Identity.ProjectID.String()) + "\n"

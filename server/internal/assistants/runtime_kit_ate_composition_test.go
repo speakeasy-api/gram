@@ -31,21 +31,25 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 	require.Contains(t, string(gkeMCP), KitWorkloadAssertionPath)
 	require.Contains(t, string(gkeMCP), `"workload_identity"`)
 
-	ateMCP, err := kitProjectGatewayMCPJSON(resource, nil, nil)
+	ateMCP, err := kitProjectGatewayMCPJSON(resource, map[string]string{"Authorization": "Bearer " + kitATEEgressAuthPlaceholder}, nil)
 	require.NoError(t, err)
 	require.NotContains(t, string(ateMCP), KitWorkloadAssertionPath)
 	require.NotContains(t, string(ateMCP), "tokenFile")
 	require.NotContains(t, string(ateMCP), "workload_identity")
 	require.Contains(t, string(ateMCP), resource.String())
 	require.Contains(t, string(ateMCP), `"`+kitProjectGatewayServerName+`"`)
+	require.Contains(t, string(ateMCP), "Bearer "+kitATEEgressAuthPlaceholder)
 
+	// Egress-injected ATE bootstrap does not require token-exchange broker Audience.
+	ateBinding := *binding
+	ateBinding.Audience = ""
 	bootstrap := KitLocalBootstrap{
 		Model:              "openai/gpt-4.1-mini",
 		ReasoningEffort:    "medium",
-		Workload:           binding,
+		Workload:           &ateBinding,
 		AssertionFile:      "",
 		EgressInjectedAuth: true,
-		InferenceEndpoint:  "https://ai.speakeasy.com/chat/completions",
+		InferenceEndpoint:  "https://api.speakeasy.test/projects/" + binding.Identity.ProjectID.String() + "/chat/completions",
 		AgentsMD:           []byte("# Assistant\n"),
 		MCPJSON:            ateMCP,
 		GatewayToken:       []byte(strings.Repeat("a", 43)),
@@ -53,14 +57,21 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 	require.NoError(t, validateKitBootstrap(bootstrap))
 
 	cfg := kitBootstrapConfig(bootstrap)
-	require.Contains(t, cfg, `endpoint = "https://ai.speakeasy.com/chat/completions"`)
+	require.Contains(t, cfg, `provider = "openrouter"`)
 	require.NotContains(t, cfg, "tokenFile")
 	require.NotContains(t, cfg, "jwtBearer")
+	require.NotContains(t, cfg, "[inference_providers.speakeasy.workload]")
 
-	// Egress-injected bootstrap must reject any assertion file path.
+	// Egress-injected bootstrap must reject any assertion file path or missing placeholder bearer header.
 	bad := bootstrap
 	bad.AssertionFile = "/var/run/speakeasy/workload/assertion"
 	require.Error(t, validateKitBootstrap(bad))
+
+	noAuthMCP, err := kitProjectGatewayMCPJSON(resource, nil, nil)
+	require.NoError(t, err)
+	badNoHeader := bootstrap
+	badNoHeader.MCPJSON = noAuthMCP
+	require.Error(t, validateKitBootstrap(badNoHeader))
 }
 
 func TestKitATEStoredWorkloadRecoveryValidation(t *testing.T) {

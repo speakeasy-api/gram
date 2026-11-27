@@ -106,7 +106,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		Atespace:                  atespace,
 		Template:                  template,
 		WorkerSelector:            testKitATEWorkerSelector,
-		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
 	var protoMu sync.Mutex
@@ -120,7 +119,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		WorkerSelector:  testKitATEWorkerSelector,
 		ServerURL:       core.serverURL,
 		Client:          client,
-		EgressHosts:     []string{"ai.speakeasy.com"},
 		Bootstrap:       core.kitATECompositionBootstrap(compCfg),
 		Token:           core.kitATEToken,
 		Lifecycle:       core.kitATELifecycle,
@@ -457,7 +455,6 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		Atespace:                  atespace,
 		Template:                  template,
 		WorkerSelector:            testKitATEWorkerSelector,
-		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -469,7 +466,6 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		WorkerSelector:     testKitATEWorkerSelector,
 		ServerURL:          core.serverURL,
 		Client:             client,
-		EgressHosts:        []string{"ai.speakeasy.com"},
 		Bootstrap:          core.kitATECompositionBootstrap(compCfg),
 		Token:              core.kitATEToken,
 		Lifecycle:          core.kitATELifecycle,

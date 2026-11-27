@@ -91,6 +91,10 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 			{Path: "conf/app.toml", Mode: 0o600, Content: []byte("model = 'test'\n")},
 			{Path: "conf/secret.token", Mode: 0o600, Content: []byte(strings.Repeat("x", 43))},
 		},
+		Env: map[string]string{
+			"APP_ENDPOINT": "https://api.example.test/v1",
+			"APP_TOKEN":    "placeholder-value",
+		},
 	})
 	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
 
@@ -99,6 +103,7 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	default:
 		t.Fatal("workload was not launched after bootstrap")
 	}
+	require.ElementsMatch(t, []string{"APP_ENDPOINT=https://api.example.test/v1", "APP_TOKEN=placeholder-value"}, s.childEnv())
 
 	// Write-once: subsequent bootstrap attempts are rejected.
 	require.Equal(t, http.StatusConflict, post("/bootstrap", payload).Code)
@@ -117,9 +122,11 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "1", rec.Header().Get(wireVersionHeader))
 
-	// Resuming from a durable rootfs snapshot launches immediately without /bootstrap.
+	// Resuming from a durable rootfs snapshot launches immediately without /bootstrap
+	// and restores the persisted bootstrap environment variables.
 	restored, err := newInitializer(cfg)
 	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"APP_ENDPOINT=https://api.example.test/v1", "APP_TOKEN=placeholder-value"}, restored.childEnv())
 	select {
 	case <-restored.launch:
 	default:
@@ -140,6 +147,10 @@ func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T)
 		{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}},
 		{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}},
 		{Version: wireVersion, Files: []bootstrapFile{{Path: defaultMarkerRelPath, Mode: 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: defaultEnvRelPath, Mode: 0o600, Content: []byte("x")}}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"": "v"}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"A=B": "v"}},
+		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"K": "bad\x00val"}},
 		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}},
 		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}},
 		{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}},

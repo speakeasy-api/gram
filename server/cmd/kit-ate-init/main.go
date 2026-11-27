@@ -35,11 +35,18 @@ const (
 	// write-once bootstrap across rootfs snapshot resumes.
 	defaultMarkerRelPath = ".ate-initialized"
 
+	// defaultEnvRelPath stores persisted bootstrap process environment variables
+	// alongside the initialization marker so resumed actors inherit them.
+	defaultEnvRelPath = ".ate-env.json"
+
 	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
 	maxBootstrapBytes = 2 << 20 // 2 MiB
 
-	// maxBootstrapEntries bounds the number of directories or files in one bootstrap payload.
+	// maxBootstrapEntries bounds the number of directories, files, or env entries in one bootstrap payload.
 	maxBootstrapEntries = 64
+
+	// maxEnvValueBytes bounds a single bootstrapped environment variable value.
+	maxEnvValueBytes = 4 << 10 // 4 KiB
 )
 
 type bootstrapDir struct {
@@ -54,9 +61,10 @@ type bootstrapFile struct {
 }
 
 type bootstrapPayload struct {
-	Version int             `json:"version"`
-	Dirs    []bootstrapDir  `json:"dirs"`
-	Files   []bootstrapFile `json:"files"`
+	Version int               `json:"version"`
+	Dirs    []bootstrapDir    `json:"dirs"`
+	Files   []bootstrapFile   `json:"files"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type statusResponse struct {
@@ -77,12 +85,27 @@ type initializer struct {
 	rootDir   string
 	probeAddr string
 	markerRel string
+	envRel    string
 
 	mu       sync.Mutex
 	started  bool
 	launched bool
 	draining bool
+	env      map[string]string
 	launch   chan struct{}
+}
+
+func (s *initializer) childEnv() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.env) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(s.env))
+	for k, v := range s.env {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
 
 func (s *initializer) signalLaunchLocked() {
@@ -256,6 +279,23 @@ func atomicWriteUnderRoot(rootDir, rel string, data []byte, mode os.FileMode) er
 	return nil
 }
 
+func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
+	if len(env) > maxBootstrapEntries {
+		return nil, errors.New("too many bootstrap environment variables")
+	}
+	if len(env) == 0 {
+		return nil, nil
+	}
+	clean := make(map[string]string, len(env))
+	for k, v := range env {
+		if k == "" || len(k) > 128 || strings.ContainsAny(k, "=\x00\r\n") || len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
+			return nil, errors.New("invalid bootstrap environment entry")
+		}
+		clean[k] = v
+	}
+	return clean, nil
+}
+
 func (s *initializer) install(body []byte) error {
 	var payload bootstrapPayload
 	dec := json.NewDecoder(strings.NewReader(string(body)))
@@ -272,6 +312,10 @@ func (s *initializer) install(body []byte) error {
 	if len(payload.Dirs) > maxBootstrapEntries || len(payload.Files) == 0 || len(payload.Files) > maxBootstrapEntries {
 		return errors.New("invalid bootstrap entry count")
 	}
+	cleanEnv, err := validateBootstrapEnv(payload.Env)
+	if err != nil {
+		return err
+	}
 
 	type cleanDir struct {
 		rel  string
@@ -287,7 +331,7 @@ func (s *initializer) install(body []byte) error {
 	dirs := make([]cleanDir, 0, len(payload.Dirs))
 	for _, d := range payload.Dirs {
 		rel, err := validateRelativePath(d.Path)
-		if err != nil || rel == s.markerRel {
+		if err != nil || rel == s.markerRel || rel == s.envRel {
 			return errors.New("invalid bootstrap directory path")
 		}
 		if _, dup := seenDirs[rel]; dup {
@@ -309,7 +353,7 @@ func (s *initializer) install(body []byte) error {
 	totalBytes := 0
 	for _, f := range payload.Files {
 		rel, err := validateRelativePath(f.Path)
-		if err != nil || rel == s.markerRel {
+		if err != nil || rel == s.markerRel || rel == s.envRel {
 			return errors.New("invalid bootstrap file path")
 		}
 		if _, dup := seenFiles[rel]; dup {
@@ -343,6 +387,16 @@ func (s *initializer) install(body []byte) error {
 			return err
 		}
 	}
+	if len(cleanEnv) > 0 {
+		rawEnv, err := json.Marshal(cleanEnv)
+		if err != nil {
+			return fmt.Errorf("encode bootstrap environment: %w", err)
+		}
+		if err := atomicWriteUnderRoot(s.rootDir, s.envRel, rawEnv, 0o600); err != nil {
+			return err
+		}
+		s.env = cleanEnv
+	}
 	return atomicWriteUnderRoot(s.rootDir, s.markerRel, []byte("1"), 0o600)
 }
 
@@ -362,15 +416,30 @@ func newInitializer(cfg config) (*initializer, error) {
 		rootDir:   filepath.Clean(cfg.rootDir),
 		probeAddr: cfg.probeAddr,
 		markerRel: markerRel,
+		envRel:    defaultEnvRelPath,
 		mu:        sync.Mutex{},
 		started:   false,
 		launched:  false,
 		draining:  false,
+		env:       nil,
 		launch:    make(chan struct{}),
 	}
 	if _, err := os.Stat(filepath.Join(state.rootDir, state.markerRel)); err == nil {
-		// Resuming from a durable rootfs snapshot: bootstrap files are already on
-		// disk, so launch the workload immediately without waiting for POST /bootstrap.
+		// Resuming from a durable rootfs snapshot: bootstrap files and any
+		// persisted environment are already on disk, so launch immediately.
+		if rawEnv, envErr := os.ReadFile(filepath.Join(state.rootDir, state.envRel)); envErr == nil {
+			var persisted map[string]string
+			if err := json.Unmarshal(rawEnv, &persisted); err != nil {
+				return nil, fmt.Errorf("decode persisted bootstrap environment: %w", err)
+			}
+			cleanEnv, err := validateBootstrapEnv(persisted)
+			if err != nil {
+				return nil, fmt.Errorf("validate persisted bootstrap environment: %w", err)
+			}
+			state.env = cleanEnv
+		} else if !errors.Is(envErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("read persisted bootstrap environment: %w", envErr)
+		}
 		state.started = true
 		state.signalLaunchLocked()
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -436,6 +505,13 @@ func run(ctx context.Context, cfg config, listener net.Listener, termCh <-chan o
 	}
 
 	command := childFactory(ctx)
+	if extraEnv := state.childEnv(); len(extraEnv) > 0 {
+		if len(command.Env) == 0 {
+			command.Env = append(os.Environ(), extraEnv...)
+		} else {
+			command.Env = append(command.Env, extraEnv...)
+		}
+	}
 	go func() { errs <- command.Run() }()
 	select {
 	case err := <-errs:

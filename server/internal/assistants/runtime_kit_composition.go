@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,11 @@ import (
 // Kit's mcp.json. Both project MCP servers and built-in Speakeasy toolsets are
 // served through this Project Gateway entry according to the agent's grants.
 const kitProjectGatewayServerName = "project-gateway"
+
+// kitATEEgressAuthPlaceholder is a fixed non-secret bearer placeholder sent by
+// Kit on ATE actors so ATE's egress gateway sees an Authorization header and
+// replaces it with the minted actor JWT for Speakeasy endpoints.
+const kitATEEgressAuthPlaceholder = "ate-egress-injected-placeholder"
 
 // KitLocalCompositionConfig composes runtime-owned workload authentication.
 // Inference and MCP never borrow a human token or an API key.
@@ -274,7 +280,11 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	workload.MCPProjectGateway = true
 	var mcpJSON []byte
 	if c.ateIdentity != nil {
-		mcpJSON, err = kitProjectGatewayMCPJSON(gatewayURL, nil, nil)
+		mcpJSON, err = kitProjectGatewayMCPJSON(
+			gatewayURL,
+			map[string]string{"Authorization": "Bearer " + kitATEEgressAuthPlaceholder},
+			nil,
+		)
 	} else {
 		mcpJSON, err = kitCompositionMCP(gatewayURL, workload)
 	}
@@ -295,8 +305,15 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	instructions := []byte(renderKitAgentsMD(baseInstructions))
 	egressInjected := c.ateIdentity != nil
 	assertionFile := KitWorkloadAssertionPath
+	inferenceEndpoint := ""
 	if egressInjected {
 		assertionFile = ""
+		if s.serverURL == nil {
+			return zero, errors.New("ATE inference requires deployment server URL")
+		}
+		inferenceEndpoint = strings.TrimRight(s.serverURL.String(), "/") + "/projects/" + r.ProjectID.String() + "/chat/completions"
+	} else {
+		inferenceEndpoint = c.Origin.String() + "/chat/completions"
 	}
 	bootstrap := KitLocalBootstrap{
 		Model:              assistant.Model,
@@ -307,7 +324,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		Workload:           workload,
 		AssertionFile:      assertionFile,
 		EgressInjectedAuth: egressInjected,
-		InferenceEndpoint:  c.Origin.String() + "/chat/completions",
+		InferenceEndpoint:  inferenceEndpoint,
 	}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err

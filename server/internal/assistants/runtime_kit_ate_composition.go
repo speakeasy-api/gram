@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,9 +22,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -58,9 +55,6 @@ type KitATECompositionConfig struct {
 
 	// WorkerSelector holds the label selector applied to created ActorTemplates.
 	WorkerSelector map[string]string
-
-	// EgressHosts lists operator-approved extra DNS hostnames for actor egress.
-	EgressHosts []string
 }
 
 type kitATEWorkloadIdentity struct {
@@ -88,7 +82,16 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if _, err := kitATEImageDigest(c.Image); err != nil {
 		return err
 	}
-	return validateKitComposition(c.KitLocalCompositionConfig)
+	for _, raw := range []string{c.WorkloadIssuerURL, c.WorkloadJWKSURL} {
+		u, err := url.Parse(raw)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("assistant ATE requires explicit HTTPS actor JWT issuer and JWKS URLs")
+		}
+	}
+	if c.TurnStream == nil {
+		return errors.New("assistant ATE requires a turn stream")
+	}
+	return nil
 }
 
 // InstallKitATERuntime installs only the version-3 dispatch branch. The backend
@@ -97,8 +100,8 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	if err := validateKitATEComposition(c); err != nil {
 		return err
 	}
-	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("ATE requires guarded HTTP, transcript, inference, and encrypted gateway credential services")
+	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil || s.serverURL == nil {
+		return errors.New("ATE requires guarded HTTP, transcript, inference, server URL, and encrypted gateway credential services")
 	}
 	if err := s.validateKitATEBrokerKeys(ctx, c.WorkloadJWKSURL); err != nil {
 		return err
@@ -117,7 +120,6 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		WorkerSelector:     c.WorkerSelector,
 		ServerURL:          s.serverURL,
 		Client:             client,
-		EgressHosts:        append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
 		Bootstrap:          s.kitATECompositionBootstrap(c),
 		Token:              s.kitATEToken,
 		Protocol:           s.kitATEProtocolFactory(c),
@@ -304,25 +306,6 @@ func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r ass
 		if assignment.AgentID != identity.AgentID {
 			return ErrKitRuntimeBinding
 		}
-	}
-
-	shared, err := usersessionsrepo.New(r.LifecycleTx).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
-	if err != nil {
-		return fmt.Errorf("load recovered ATE broker issuer: %w", err)
-	}
-	if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
-		return ErrKitRuntimeBinding
-	}
-	audience, err := (authserver.Hosts{
-		ServerURL:                 s.serverURL.String(),
-		AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL,
-		PlatformHosts:             nil,
-	}).SharedIssuerURL(shared.UserSessionIssuer)
-	if err != nil {
-		return fmt.Errorf("resolve recovered ATE broker audience: %w", err)
-	}
-	if b.Audience != audience {
-		return ErrKitRuntimeBinding
 	}
 	return nil
 }
