@@ -25,15 +25,19 @@ vi.mock("@gram/client/react-query/switchScopes", () => ({
 }));
 
 /** Signs in a member of <ORG_A> and <ORG_B> with activeOrganizationId active. */
-function mockMemberSession(activeOrganizationId: string) {
+function mockMemberSession(
+  activeOrganizationId: string,
+  overrides: { email?: string; organizationOverride?: boolean } = {},
+) {
   mocks.useSessionData.mockReturnValue({
     status: "success",
     session: {
       session: "<SESSION>",
       activeOrganizationId,
+      organizationOverride: overrides.organizationOverride ?? false,
       organizations: [{ id: "<ORG_A>" }, { id: "<ORG_B>" }],
       organization: { projects: [] },
-      user: { email: "" },
+      user: { email: overrides.email ?? "" },
       refetch: mocks.refetch,
     },
   });
@@ -209,6 +213,27 @@ describe("CliCallback", () => {
     render(<CliCallback {...linkForOrgB} organizationId="<ORG_C>" />);
 
     expect(await screen.findByText(/not a member of/)).toBeTruthy();
+    expect(mocks.switchScopes).not.toHaveBeenCalled();
+    expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+
+  it("names the signed-in account when refusing another organization", async () => {
+    mockMemberSession("<ORG_A>", { email: "person@example.com" });
+    render(<CliCallback {...linkForOrgB} organizationId="<ORG_C>" />);
+
+    expect(
+      await screen.findByText(
+        /signed-in account \(person@example\.com\) is not a member of/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("tells a support session to exit support access instead of switching accounts", async () => {
+    mockMemberSession("<ORG_A>", { organizationOverride: true });
+    render(<CliCallback {...linkForOrgB} organizationId="<ORG_C>" />);
+
+    expect(await screen.findByText(/Exit support access/)).toBeTruthy();
+    expect(screen.queryByText(/not a member of/)).toBeNull();
     expect(mocks.switchScopes).not.toHaveBeenCalled();
     expect(mocks.createKey).not.toHaveBeenCalled();
   });

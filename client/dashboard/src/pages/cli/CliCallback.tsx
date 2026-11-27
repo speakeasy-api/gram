@@ -102,7 +102,12 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
       // Renders while the switch is in flight still carry the old session.
       if (hasSwitchedOrganization.current) return;
       if (!session.organizations.some((org) => org.id === organizationId)) {
-        setError(errWrongOrganization);
+        setError(
+          wrongOrganizationError(
+            session.user.email,
+            Boolean(session.organizationOverride),
+          ),
+        );
         return;
       }
 
@@ -237,8 +242,25 @@ function generateHooksKeyName(): string {
 
 const errInvalidCallback =
   "Callback URL must use HTTP or HTTPS on localhost or 127.0.0.1";
-const errWrongOrganization =
-  "This connection link belongs to an organization this account is not a member of. Sign in with an account in that organization, then retry the connection.";
+
+/**
+ * wrongOrganizationError explains why a connection link for another
+ * organization was refused. A support session lists only the organization it
+ * was opened for, so a member of the link's organization is refused too: tell
+ * them to end the support session rather than to sign in with another account.
+ * Otherwise name the signed-in account, since the usual cause is a browser
+ * signed in to a different account than the one the plugin was installed for.
+ */
+function wrongOrganizationError(
+  email: string | undefined,
+  inSupportSession: boolean,
+): string {
+  if (inSupportSession) {
+    return "This browser is in a support session, which can only connect devices to the organization it was opened for. Exit support access in the dashboard, then retry the connection.";
+  }
+  const account = email ? `the signed-in account (${email})` : "this account";
+  return `This connection link belongs to an organization that ${account} is not a member of. Sign in with an account in that organization, then retry the connection.`;
+}
 const errSwitchFailed =
   "Could not switch to the organization this connection link belongs to. Switch to it in the dashboard, then retry the connection.";
 const PREFERRED_PROJECT_KEY = "preferredProject";
