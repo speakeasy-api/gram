@@ -8,14 +8,17 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -24,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -56,6 +60,72 @@ func newTestPrincipalCredentials(t *testing.T, db *pgxpool.Pool) *principalcrede
 	signer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
 	require.NoError(t, err)
 	return principalcredential.New(signer, db)
+}
+
+func newTurnReadyTokens(t *testing.T, db *pgxpool.Pool) *assistanttokens.Manager {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	engine := authz.NewEngine(
+		testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil,
+		authz.EngineOpts{
+			AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
+			AdmitWorkloadSession:     runtimepolicy.AdmitWorkloadSession,
+		},
+	)
+	return assistanttokens.New("test-jwt-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+}
+
+func insertTurnReadyAssistantFixture(t *testing.T, conn *pgxpool.Pool) (projectID, assistantID, chatID, threadID uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	seedIdentityMembers(t, conn)
+
+	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Project",
+		Slug:           "project",
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+	seedProjectRead(t, conn, "user-1", proj.ID)
+
+	assistant, err := newProvisioningCore(t, conn).CreateAssistant(ctx, "org-test", proj.ID, "user-1", "Assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+
+	chatID = uuid.New()
+	err = assistantsrepo.New(conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      proj.ID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	threadID, err = assistantsrepo.New(conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     proj.ID,
+		CorrelationID: "corr-1",
+		ChatID:        chatID,
+		SourceKind:    sourceKindSlack,
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	_, err = assistantsrepo.New(conn).InsertAssistantThreadEvent(ctx, assistantsrepo.InsertAssistantThreadEventParams{
+		AssistantThreadID:     threadID,
+		AssistantID:           assistant.ID,
+		ProjectID:             proj.ID,
+		TriggerInstanceID:     uuid.NullUUID{Valid: false},
+		EventID:               "evt-1",
+		CorrelationID:         "corr-1",
+		Status:                eventStatusPending,
+		NormalizedPayloadJson: []byte(`{"text":"hello"}`),
+		SourcePayloadJson:     []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	return proj.ID, assistant.ID, chatID, threadID
 }
 
 func seedMCPConnect(t *testing.T, db *pgxpool.Pool, user string, project uuid.UUID) {
@@ -98,8 +168,6 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 		require.NoError(t, err)
 		token := *dispatched.Load()
 		require.True(t, assistanttokens.IsRuntimeCredential("Bearer "+token))
-		_, err = manager.Validate(token)
-		require.Error(t, err, "principal credentials never pass as legacy runtime tokens")
 		return token
 	}
 
@@ -192,24 +260,18 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	}
 }
 
-func TestUnmigratedAssistantDispatchKeepsOriginalToken(t *testing.T) {
+func TestUnconfiguredAssistantTurnFailsWithoutDispatch(t *testing.T) {
 	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "execution_legacy_token")
+	db, err := assistantsInfra.CloneTestDatabase(t, "execution_unconfigured_assistant")
 	require.NoError(t, err)
 	project, id, _, _ := insertAssistantFixture(t, db)
-	thread := seedThreadWithEvent(t, db, id, "legacy-token", "legacy-token", eventStatusPending)
+	thread := seedThreadWithEvent(t, db, id, "unconfigured-turn", "unconfigured-turn", eventStatusPending)
 	core := newProvisioningCore(t, db)
 	assistant, err := core.getAssistantForDispatch(t.Context(), id)
 	require.NoError(t, err)
-	manager := assistanttokens.New("legacy-test-secret", db, nil, nil, nil)
-	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
 	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
-	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "legacy-token", NormalizedPayloadJSON: []byte(`{}`)})
-	require.NoError(t, err)
-	require.False(t, assistanttokens.IsRuntimeCredential(*dispatched.Load()))
-	claims, err := manager.Validate(*dispatched.Load())
-	require.NoError(t, err)
-	require.Equal(t, assistant.CreatedByUserID, claims.UserID)
-	require.Equal(t, assistantRuntimeTokenTTL, claims.ExpiresAt.Sub(claims.IssuedAt.Time))
+	_, err = core.processEventTurn(t.Context(), assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: id, SourceKind: sourceKindCron}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "unconfigured-turn", NormalizedPayloadJSON: []byte(`{}`)})
+	require.ErrorIs(t, err, ErrTurnIdentity)
+	require.Nil(t, dispatched.Load(), "a turn without an agent identity must fail before dispatching to the runtime")
 }

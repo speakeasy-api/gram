@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -652,12 +651,7 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
@@ -665,7 +659,7 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
 		path:            "/platform/mcp/" + platformtools.PlatformMCPReadToolsetSlug,
-		authorization:   "Bearer " + mintAssistantToken(t, ti, authCtx, managedID),
+		authorization:   "Bearer " + mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID),
 		supported:       mcpversions.SupportedPlatformToolset(),
 		assignsSessions: false,
 	})

@@ -16,7 +16,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -34,7 +33,7 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_self_heal_first")
 	require.NoError(t, err)
 
-	projectID, assistantID, chatID, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, chatID, threadID := insertTurnReadyAssistantFixture(t, conn)
 
 	ctx := t.Context()
 	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
@@ -103,7 +102,7 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	corruption := fmt.Errorf("%w: execute gke turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendGKE,
@@ -192,7 +191,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_self_heal_skip")
 	require.NoError(t, err)
 
-	projectID, assistantID, chatID, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, chatID, threadID := insertTurnReadyAssistantFixture(t, conn)
 
 	ctx := t.Context()
 
@@ -228,7 +227,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	corruption := fmt.Errorf("%w: provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendGKE,

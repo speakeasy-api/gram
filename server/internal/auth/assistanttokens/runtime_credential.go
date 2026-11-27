@@ -34,7 +34,7 @@ func RuntimeChatID(ctx context.Context) (uuid.UUID, bool) {
 }
 
 // IsRuntimeCredential reports whether an Authorization header carries a
-// principal credential rather than a legacy assistant runtime token.
+// principal credential.
 func IsRuntimeCredential(header string) bool {
 	return principalcredential.IsToken(bearerToken(header))
 }
@@ -69,12 +69,11 @@ func (m *Manager) MintTurnCredential(ctx context.Context, credential principalcr
 
 // AuthorizeRuntime authorizes runner calls that serve the assistant itself:
 // bootstrap, compaction persistence, MCP OAuth flow creation, model inference
-// and the platform toolset. A principal credential is authenticated as its
-// principal and bound to the thread it was minted for; any other token goes
-// through Authorize.
+// and the platform toolset. Only principal credentials bound to an active
+// assistant thread are accepted.
 func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.Context, *Claims, error) {
-	if !IsRuntimeCredential(header) {
-		return m.Authorize(ctx, header)
+	if !IsRuntimeCredential(header) || m.credentials == nil {
+		return ctx, nil, oops.E(oops.CodeUnauthorized, nil, "invalid runtime credential")
 	}
 	raw := bearerToken(header)
 	authed, err := m.credentials.Authenticate(ctx, raw)
@@ -84,12 +83,15 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	if err != nil {
 		return ctx, nil, fmt.Errorf("authenticate runtime credential: %w", err)
 	}
+	if m.runtimeBindings == nil {
+		return ctx, nil, oops.E(oops.CodeUnauthorized, nil, "runtime credential is not bound to an assistant thread")
+	}
 	credential, _ := principalcredential.FromContext(authed)
 	var binding RuntimeBinding
 	if err := m.runtimeBindings.Get(ctx, runtimeBindingKey(credential.ID), &binding); err != nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "runtime credential is not bound to an assistant thread")
 	}
-	if binding.OrganizationID != credential.Credential.OrganizationID || binding.ProjectID != credential.Credential.ProjectID {
+	if binding.OrganizationID != credential.Credential.OrganizationID || binding.ProjectID != credential.Credential.ProjectID || binding.AssistantID == uuid.Nil || binding.ThreadID == uuid.Nil {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	lifecycle, err := m.tokens.GetAssistantTokenRevocation(ctx, tokenrepo.GetAssistantTokenRevocationParams{ProjectID: binding.ProjectID, AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})

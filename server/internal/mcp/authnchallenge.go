@@ -1107,11 +1107,11 @@ type issuerGateAuthentication struct {
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
 // the toolset-keyed and mcp_server-keyed MCP runtime
-// paths. It validates the bearer token as a user-session JWT and falls back
-// to an assistant-runtime JWT scoped to the endpoint's project or an admitted
-// agent principal API key scoped to the endpoint's tenant. Upstream
-// remote-session credentials are deliberately resolved by a separate step so
-// hosted tool calls can evaluate kill switches first.
+// paths. It validates the bearer token as a user-session JWT, an admitted
+// principal credential, or an admitted agent principal API key scoped to the
+// endpoint's tenant. Upstream remote-session credentials are deliberately
+// resolved by a separate step so hosted tool calls can evaluate kill switches
+// first.
 //
 // On success it returns the stamped request context, the authenticated subject
 // needed for deferred credential resolution, and the caller's tool selection.
@@ -1157,7 +1157,6 @@ func (s *Service) authenticateIssuerGate(
 	// The organization-wide gateway serves the organization's users and refuses
 	// machine credentials. Other endpoints continue through their own admission.
 	organizationWideGateway := endpoint.IsOrganizationWideGateway()
-	anyOrganizationGateway := endpoint.IsOrganizationGateway()
 	switch {
 	case principalcredential.IsToken(authToken) && !organizationWideGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
@@ -1167,22 +1166,6 @@ func (s *Service) authenticateIssuerGate(
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if subject == nil && !anyOrganizationGateway {
-		// Accept an assistant-runtime JWT, but only when the assistant
-		// belongs to the endpoint's project — otherwise a token minted
-		// in project A could resolve a remote_session linked under
-		// the same user in project B.
-		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
-			ssubj := urn.NewUserSubject(claims.UserID)
-			// The subject reads as a user so downstream session plumbing
-			// works, but the credential was an assistant-runtime token: its
-			// provenance stays KindAssistant and must never be treated as an
-			// authoritative acting user.
-			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
-		} else if oops.IsInfrastructureFailure(aerr) {
-			valErr = aerr
-		}
-	}
 	if subject == nil && !organizationWideGateway && strings.HasPrefix(authToken, "gram_") {
 		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
 		var denied *oops.ShareableError

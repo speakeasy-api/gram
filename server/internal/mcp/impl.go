@@ -2194,23 +2194,21 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 }
 
 // authenticateToken authenticates the caller using the supplied token across
-// several strategies (assistant tokens, gram OAuth via oauthResourceID, API
-// keys, chat sessions). oauthResourceID is consumed only when isOAuthCapable
-// is true — today that path is exercised only by toolset-backed flows so
-// the resource is a toolset id; remote-backend callers pass false and the
-// id is decorative.
+// several strategies (principal credentials, API keys, chat sessions).
+// oauthResourceID is consumed only when isOAuthCapable is true — today that
+// path is exercised only by toolset-backed flows so the resource is a toolset
+// id; remote-backend callers pass false and the id is decorative.
 //
 // Principal credentials are authenticated and admitted as their agent or
 // workload principal, like agent API keys.
 //
 // Each successful strategy stamps its mcpidentity provenance here, at the
-// point of credential validation: assistant tokens are KindAssistant, API
-// keys (either scope) are KindAPIKey, and chat-session tokens are
-// KindChatSession. None of these credentials proves an acting Speakeasy user, so
-// none stamps KindUserSession — even though every strategy populates an
-// AuthContext whose user-shaped fields exist for attribution only. A token
-// rejected by every strategy leaves the context unstamped, so downstream
-// checkpoints classify the request as unattributed.
+// point of credential validation: API keys (either scope) are KindAPIKey, and
+// chat-session tokens are KindChatSession. None of these credentials proves an
+// acting Speakeasy user, so none stamps KindUserSession — even though every
+// strategy populates an AuthContext whose user-shaped fields exist for
+// attribution only. A token rejected by every strategy leaves the context
+// unstamped, so downstream checkpoints classify the request as unattributed.
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -2218,10 +2216,6 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	if principalcredential.IsToken(token) {
 		return s.authenticatePrincipalCredential(ctx, token)
-	}
-
-	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
-		return s.identityValidator.StampAssistant(authorizedCtx), nil
 	}
 
 	var err error

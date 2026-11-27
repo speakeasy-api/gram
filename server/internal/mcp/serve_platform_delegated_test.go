@@ -52,7 +52,14 @@ func managedAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextv
 // runs with: the agent acting for the context's user, bound to a new thread.
 func mintAgentTurnCredential(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID, agentID uuid.UUID) string {
 	t.Helper()
+	token, _ := mintAgentTurnCredentialWithThread(t, ti, authCtx, assistantID, agentID)
+	return token
+}
 
+func mintAgentTurnCredentialWithThread(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID, agentID uuid.UUID) (string, uuid.UUID) {
+	t.Helper()
+
+	grantProjectRead(t, ti, authCtx)
 	queries := assistantsrepo.New(ti.conn)
 	chatID := uuid.New()
 	require.NoError(t, queries.UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
@@ -86,7 +93,7 @@ func mintAgentTurnCredential(t *testing.T, ti *testInstance, authCtx *contextval
 		ChatID:         chatID,
 	})
 	require.NoError(t, err)
-	return token
+	return token, threadID
 }
 
 func grantProjectRead(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
@@ -266,27 +273,4 @@ func TestServePlatformToolset_AgentTurnWithholdsLogReadToolsWithoutDelegatorLogR
 
 	called, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, platformToolCallBody(t, "query_mcp_traces"), token)
 	require.True(t, err != nil || called.Code >= http.StatusBadRequest || jsonRPCError(called.Body.Bytes()), "a withheld tool must not be callable: %s", called.Body.String())
-}
-
-func TestServePlatformToolset_LegacyTurnOffersLogReadToolsByUserGrants(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	managedID, _ := managedAssistantWithAgent(t, ti, authCtx)
-	token := mintAssistantToken(t, ti, authCtx, managedID)
-
-	listed, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
-	require.NotContains(t, listed.Body.String(), `"query_mcp_traces"`)
-
-	grantProjectLogRead(t, ti, authCtx)
-	listed, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
-	require.Contains(t, listed.Body.String(), `"query_mcp_traces"`)
 }

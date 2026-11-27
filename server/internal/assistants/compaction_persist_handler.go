@@ -63,10 +63,8 @@ func (s *Service) handleRecordCompactedGeneration(w http.ResponseWriter, r *http
 		return oops.E(oops.CodeBadRequest, err, "invalid thread_id")
 	}
 
-	// Per-thread token (ThreadID claim populated) may only persist its own
-	// thread's compaction; assistant-only tokens (ThreadID zero) still flow
-	// through.
-	if principal.ThreadID != uuid.Nil && principal.ThreadID != threadID {
+	// A thread-bound turn credential may only persist its own thread's compaction.
+	if principal.ThreadID == uuid.Nil || principal.ThreadID != threadID {
 		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
 	}
 

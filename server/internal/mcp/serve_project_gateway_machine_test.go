@@ -96,7 +96,7 @@ func TestServeProjectGateway_AgentMachineAccess(t *testing.T) {
 	_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, anonymousToken, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 
-	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
+	assistantToken := mintForgedAssistantRuntimeJWT(t, authCtx, createAssistant(t, ti, authCtx, "Project gateway"))
 	_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, assistantToken, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 

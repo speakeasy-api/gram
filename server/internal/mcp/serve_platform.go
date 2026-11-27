@@ -98,8 +98,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		})
 	} else {
 		authedCtx, workloadPlatform, err = s.authorizeWorkloadPlatform(ctx, token, platformtools.PlatformToolsetURL(s.serverURL, slug))
-		if !workloadPlatform {
-			authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		if !workloadPlatform && err == nil {
+			err = oops.C(oops.CodeUnauthorized)
 		}
 	}
 	if err != nil {

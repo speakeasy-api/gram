@@ -140,7 +140,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid thread_id")
 	}
-	if principal.ThreadID != uuid.Nil && principal.ThreadID != threadID {
+	if principal.ThreadID == uuid.Nil || principal.ThreadID != threadID {
 		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
 	}
 

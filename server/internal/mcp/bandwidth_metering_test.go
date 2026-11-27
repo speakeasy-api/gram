@@ -15,7 +15,6 @@ import (
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -86,12 +85,8 @@ func TestMCPBandwidthAttributionForAuthorizedPlatformToolset(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Bandwidth managed assistant")
-	require.NoError(t, assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	}))
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	body := toolsListBody()
 	slug := platformtools.PlatformMCPReadToolsetSlug
 	requestPath := "/platform/mcp/" + slug

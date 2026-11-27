@@ -19,7 +19,7 @@ import (
 type State string
 
 const (
-	// NeverConfigured assistants keep the legacy owner-scoped behaviour.
+	// NeverConfigured means the assistant has no configured agent identity.
 	NeverConfigured State = "NEVER_CONFIGURED"
 
 	// Active assistants point at a dedicated agent that is currently usable.

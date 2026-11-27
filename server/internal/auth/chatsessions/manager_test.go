@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -147,4 +148,43 @@ func TestManagerAuthorize_LegacyAPIKeyTokenKeepsExplicitProfile(t *testing.T) {
 	actor, ok := contextvalues.AuthenticatedActor(authorizedCtx)
 	require.True(t, ok)
 	require.Equal(t, "user:"+claims.UserID, actor.String())
+}
+
+func TestManagerValidateToken_RejectsForeignIssuerAndMissingJTI(t *testing.T) {
+	t.Parallel()
+
+	mgr, _ := newTestManager(t)
+	now := time.Now()
+	for _, tc := range []struct {
+		name   string
+		claims jwt.MapClaims
+	}{
+		{
+			name: "non-empty issuer",
+			claims: jwt.MapClaims{
+				"iss":        "gram-assistants",
+				"jti":        uuid.NewString(),
+				"org_id":     "org-123",
+				"project_id": uuid.NewString(),
+				"exp":        now.Add(time.Hour).Unix(),
+			},
+		},
+		{
+			name: "missing jti",
+			claims: jwt.MapClaims{
+				"org_id":     "org-123",
+				"project_id": uuid.NewString(),
+				"exp":        now.Add(time.Hour).Unix(),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			raw, err := jwt.NewWithClaims(jwt.SigningMethodHS256, tc.claims).SignedString([]byte("test-jwt-secret"))
+			require.NoError(t, err)
+			_, invalid, err := mgr.ValidateToken(t.Context(), raw)
+			require.Error(t, err)
+			require.True(t, invalid)
+		})
+	}
 }
