@@ -72,6 +72,12 @@ func TestIsVendorBundleCommand(t *testing.T) {
 		},
 		{name: "login shell wrapper without exec", command: "bash -lc /Applications/Codex.app/Contents/Resources/bin/server --stdio", want: true},
 		{name: "env prefix", command: "env MODE=stdio /Applications/Codex.app/Contents/Resources/bin/server", want: true},
+		{
+			name:    "shell wrapper redacted server side",
+			command: "/bin/sh -c export API_TOKEN=<redacted> exec /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl",
+			want:    true,
+		},
+		{name: "env prefix redacted server side", command: "env API_KEY=<redacted> /Applications/Codex.app/Contents/Resources/bin/server --token=<redacted>", want: true},
 
 		{name: "user npx server", command: "npx -y @acme/mcp-server", want: false},
 		{name: "system node running a vendor script", command: "node /Applications/ChatGPT.app/Contents/Resources/cua-repl.mjs", want: false},

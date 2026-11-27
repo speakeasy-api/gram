@@ -29,6 +29,16 @@ var vendorBundleRoots = []string{
 // "Codex Computer Use.app" directory.
 const codexComputerUseExecutable = "./Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient"
 
+const (
+	// redactedPlaceholder is the mask server-side command redaction writes
+	// in place of a secret value.
+	redactedPlaceholder = "<redacted>"
+
+	// relayMaskPlaceholder is the mask the hook relay writes in place of a
+	// secret value.
+	relayMaskPlaceholder = "***"
+)
+
 // codexBundledPluginCacheSegment is the directory Codex installs its own
 // bundled plugins into, under whichever Codex home the user runs.
 const codexBundledPluginCacheSegment = "/.codex/plugins/cache/openai-bundled/"
@@ -63,6 +73,10 @@ var shellControlPattern = regexp.MustCompile("[;&|`<>\n]|\\$\\(")
 // that could run a second command, or a path that climbs out with ".." is not
 // a vendor bundle.
 func IsVendorBundleCommand(command string) bool {
+	// A command stored as the MCP match was redacted server side, which
+	// writes "<redacted>" where the relay writes "***". Both are masks, not
+	// shell redirections, so they are read the same way.
+	command = strings.ReplaceAll(command, redactedPlaceholder, relayMaskPlaceholder)
 	executable, ok := commandExecutable(command)
 	if !ok {
 		return false
