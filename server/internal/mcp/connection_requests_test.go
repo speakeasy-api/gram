@@ -634,7 +634,7 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	// Billing's stub persists by organization ID on disk, unlike the isolated
 	// test databases. Give this cap fixture its own organization and project.
 	orgID := "org-" + uuid.NewString()
-	org, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Usage fixture", Slug: orgID})
+	org, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{ID: orgID, Name: "Usage fixture", Slug: orgID, Whitelisted: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{OrganizationID: org.ID, Name: "Usage fixture", Slug: "usage-fixture"})
 	require.NoError(t, err)
