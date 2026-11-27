@@ -22,7 +22,7 @@ import (
 
 const (
 	// wireVersion is the version of the HTTP contract between the server and this init helper.
-	wireVersion = 1
+	wireVersion = 2
 
 	// wireVersionHeader advertises wireVersion on every helper HTTP response so a
 	// mismatched runtime image fails fast and clearly.
@@ -410,6 +410,9 @@ func newInitializer(cfg config) (*initializer, error) {
 	markerRel, err := validateRelativePath(cfg.marker)
 	if err != nil {
 		return nil, fmt.Errorf("invalid marker path: %w", err)
+	}
+	if markerRel == defaultEnvRelPath {
+		return nil, fmt.Errorf("marker path must not collide with %s", defaultEnvRelPath)
 	}
 
 	state := &initializer{

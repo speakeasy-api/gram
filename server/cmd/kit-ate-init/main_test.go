@@ -72,7 +72,7 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	// Legacy assertion path does not exist.
 	w := post("/assertion", []byte("jwt.fixture"))
 	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Equal(t, "1", w.Header().Get(wireVersionHeader))
+	require.Equal(t, strconv.Itoa(wireVersion), w.Header().Get(wireVersionHeader))
 
 	// Unsupported wire version is rejected.
 	badVersion := testPayloadJSON(t, bootstrapPayload{
@@ -120,7 +120,7 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "1", rec.Header().Get(wireVersionHeader))
+	require.Equal(t, strconv.Itoa(wireVersion), rec.Header().Get(wireVersionHeader))
 
 	// Resuming from a durable rootfs snapshot launches immediately without /bootstrap
 	// and restores the persisted bootstrap environment variables.
@@ -143,20 +143,37 @@ func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T)
 	s, err := newInitializer(testConfigForRoot(rootDir, "127.0.0.1:8081"))
 	require.NoError(t, err)
 
-	for _, bad := range []bootstrapPayload{
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: defaultMarkerRelPath, Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: defaultEnvRelPath, Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"": "v"}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"A=B": "v"}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"K": "bad\x00val"}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}},
-	} {
-		require.Error(t, s.install(testPayloadJSON(t, bad)))
+	cases := []struct {
+		name    string
+		payload bootstrapPayload
+	}{
+		{name: "parent traversal file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}}},
+		{name: "absolute file path", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}}},
+		{name: "reserved marker file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: defaultMarkerRelPath, Mode: 0o600, Content: []byte("x")}}}},
+		{name: "reserved env file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: defaultEnvRelPath, Mode: 0o600, Content: []byte("x")}}}},
+		{name: "empty env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"": "v"}}},
+		{name: "env key with equals", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"A=B": "v"}}},
+		{name: "env value with NUL byte", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"K": "bad\x00val"}}},
+		{name: "duplicate file path", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}}},
+		{name: "setuid file mode", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}}},
+		{name: "parent traversal dir", payload: bootstrapPayload{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}}},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sub, subErr := newInitializer(testConfigForRoot(t.TempDir(), "127.0.0.1:8081"))
+			require.NoError(t, subErr)
+			require.Error(t, sub.install(testPayloadJSON(t, tc.payload)))
+		})
+	}
+
+	t.Run("marker collides with env file", func(t *testing.T) {
+		t.Parallel()
+		cfg := testConfigForRoot(t.TempDir(), "127.0.0.1:8081")
+		cfg.marker = defaultEnvRelPath
+		_, initErr := newInitializer(cfg)
+		require.Error(t, initErr)
+	})
 
 	outside := t.TempDir()
 	require.NoError(t, os.Symlink(outside, filepath.Join(rootDir, "conf")))
@@ -199,7 +216,7 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, "1", resp.Header.Get(wireVersionHeader))
+		require.Equal(t, strconv.Itoa(wireVersion), resp.Header.Get(wireVersionHeader))
 		var out statusResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 		return out

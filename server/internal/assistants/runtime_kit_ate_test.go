@@ -1523,7 +1523,7 @@ func TestKitATEInitVersionMismatchFailsClearly(t *testing.T) {
 		Model:           "openai/gpt-4.1-mini",
 		ReasoningEffort: "medium",
 	})
-	require.ErrorContains(t, err, `ATE init helper version mismatch: got "99", want "1"`)
+	require.ErrorContains(t, err, fmt.Sprintf(`ATE init helper version mismatch: got "99", want "%d"`, ateInitWireVersion))
 }
 
 func TestBuildKitATEEgressPolicyRules(t *testing.T) {

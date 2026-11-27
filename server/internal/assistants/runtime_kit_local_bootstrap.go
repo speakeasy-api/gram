@@ -107,8 +107,8 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 				return fmt.Errorf("egress-injected kit MCP must not configure in-sandbox workload auth")
 			}
 			authHeader := strings.TrimSpace(server.Headers["Authorization"])
-			if !strings.HasPrefix(authHeader, "Bearer ") || strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer ")) == "" {
-				return fmt.Errorf("egress-injected kit MCP requires a placeholder Authorization Bearer header")
+			if authHeader != "Bearer "+kitATEEgressAuthPlaceholder {
+				return fmt.Errorf("egress-injected kit MCP requires the fixed placeholder Authorization Bearer header")
 			}
 		} else {
 			if server.Auth == nil || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {

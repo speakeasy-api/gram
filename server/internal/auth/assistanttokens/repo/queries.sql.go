@@ -141,7 +141,13 @@ WHERE r.project_id = $1 AND a.organization_id = $2
   AND r.backend_metadata_json->'workload'->>'subject' = $4::text
 UNION ALL
 SELECT r.id AS runtime_id, r.assistant_id,
-  jsonb_build_object('workload', act.workload_binding_json) AS backend_metadata_json,
+  jsonb_build_object(
+    'runtime_id', r.id,
+    'assistant_id', r.assistant_id,
+    'project_id', r.project_id,
+    'runtime_version', r.runtime_version,
+    'workload', act.workload_binding_json
+  ) AS backend_metadata_json,
   (r.runtime_version = 3 AND a.runtime_version = 3
    AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
    AND NOT a.deleted AND a.status = 'active'

@@ -57,7 +57,7 @@ const (
 	ateDrainSuspendTimeout = 3 * time.Minute
 
 	// ateInitWireVersion is the expected X-ATE-Init-Version header and bootstrap payload version.
-	ateInitWireVersion = 1
+	ateInitWireVersion = 2
 
 	// ateInitVersionHeader carries the init helper wire contract version on every response.
 	ateInitVersionHeader = "X-ATE-Init-Version"
@@ -145,12 +145,13 @@ type KitATERuntimeBackend struct {
 }
 
 type kitATEMetadata struct {
-	RuntimeID   uuid.UUID `json:"runtime_id"`
-	AssistantID uuid.UUID `json:"assistant_id"`
-	ProjectID   uuid.UUID `json:"project_id"`
-	ImageDigest string    `json:"image_digest"`
-	Atespace    string    `json:"atespace"`
-	Template    string    `json:"template"`
+	RuntimeID         uuid.UUID `json:"runtime_id"`
+	AssistantID       uuid.UUID `json:"assistant_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	ImageDigest       string    `json:"image_digest"`
+	Atespace          string    `json:"atespace"`
+	Template          string    `json:"template"`
+	LegacyEgressHosts []string  `json:"egress_hosts,omitempty"`
 }
 
 var _ RuntimeBackend = (*KitATERuntimeBackend)(nil)
@@ -218,15 +219,16 @@ func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadat
 	}
 	if kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		return kitATEMetadata{
-			RuntimeID:   r.ID,
-			AssistantID: r.AssistantID,
-			ProjectID:   r.ProjectID,
-			ImageDigest: k.imageDigest,
-			Atespace:    k.config.Atespace,
-			Template:    k.config.Template,
+			RuntimeID:         r.ID,
+			AssistantID:       r.AssistantID,
+			ProjectID:         r.ProjectID,
+			ImageDigest:       k.imageDigest,
+			Atespace:          k.config.Atespace,
+			Template:          k.config.Template,
+			LegacyEgressHosts: nil,
 		}, nil
 	}
-	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || !ateImageDigestPattern.MatchString(m.ImageDigest) {
+	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || !ateImageDigestPattern.MatchString(m.ImageDigest) || len(m.LegacyEgressHosts) > 0 {
 		return m, ErrKitRuntimeBinding
 	}
 	return m, nil
