@@ -1,9 +1,13 @@
 package otel
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -105,4 +109,36 @@ func TestTransformHandlersDropDisabledOrganizations(t *testing.T) {
 	}).Build(), gcp.MessageMetadata{})
 	require.NoError(t, err)
 	metricPub.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+type failingDB struct{}
+
+func (failingDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errors.New("database unavailable")
+}
+
+func (failingDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("database unavailable")
+}
+
+func (failingDB) QueryRow(context.Context, string, ...any) pgx.Row { return failingRow{} }
+
+type failingRow struct{}
+
+func (failingRow) Scan(...any) error { return errors.New("database unavailable") }
+
+func TestLogTransformHandlerRedeliversWhenOrganizationLookupFails(t *testing.T) {
+	t.Parallel()
+
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, failingDB{}, cache.NoopCache)
+	err := handler.Handle(t.Context(), (&otelv1.InboundLogRecord_builder{
+		RecordId: new("record-id"),
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+			OrganizationId: new(disabledOrgID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+	}).Build(), gcp.MessageMetadata{})
+	require.Error(t, err, "a failed lookup must nack so the record is redelivered")
+	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
 }
