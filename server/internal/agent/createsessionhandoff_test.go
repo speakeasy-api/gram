@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -264,7 +265,7 @@ func TestServeSessionHandoff_DisabledOrganization(t *testing.T) {
 	require.NoError(t, err)
 	token := res.URL[strings.LastIndex(res.URL, "/")+1:]
 
-	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", ti.orgID)
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, token).Code)
 
@@ -273,7 +274,7 @@ func TestServeSessionHandoff_DisabledOrganization(t *testing.T) {
 	require.False(t, link.ConsumedAt.Valid, "a refused read must not burn the link")
 	require.NotEmpty(t, link.BlobUrl)
 
-	_, err = ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = NULL WHERE id = $1", ti.orgID)
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	served := serveHandoff(t, ti, token)
 	require.Equal(t, http.StatusOK, served.Code)
