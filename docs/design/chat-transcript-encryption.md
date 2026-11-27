@@ -78,7 +78,12 @@ The project's mode decides the copies:
 - Shadow: the body is read from the decrypted transcript, then written to the
   plaintext row and the transcript. A missing, legacy or disagreeing transcript
   is logged as an error and the update starts from the plaintext row, which
-  stays the source of truth while both copies exist.
+  stays the source of truth while both copies exist. After the write, a sanity
+  check decrypts the stored transcript and compares it with the stored
+  plaintext row. Every check is counted in
+  `chat.transcript_shadow.update.checks` by outcome (`success`,
+  `missing_transcript`, `hydrate_mismatch`, `sanity_mismatch`), and a mismatch
+  is logged with each differing field's size and nullness, never its contents.
 - Encrypted (not available yet): the transcript only.
 
 Each write also refreshes the metadata and tool-call IDs. A failure at any step

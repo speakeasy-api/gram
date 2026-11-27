@@ -111,7 +111,14 @@ func (t *Transcripts) UpdateBody(ctx context.Context, db repo.DBTX, organization
 	case ModeEncrypted:
 		return false, fmt.Errorf("update chat message body: %w", ErrUnsupported)
 	}
-	changed, err := updateBody(ctx, db, store, organizationID, projectID, chatID, messageID, apply)
+	if store == nil {
+		changed, err := updateBody(ctx, db, nil, organizationID, projectID, chatID, messageID, apply)
+		if err != nil {
+			return false, fmt.Errorf("update chat message body: %w", err)
+		}
+		return changed, nil
+	}
+	changed, err := store.UpdateBody(ctx, db, organizationID, projectID, chatID, messageID, apply)
 	if err != nil {
 		return false, fmt.Errorf("update chat message body: %w", err)
 	}

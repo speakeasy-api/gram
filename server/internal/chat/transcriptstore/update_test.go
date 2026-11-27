@@ -10,9 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 var errInjected = errors.New("injected failure")
@@ -135,4 +139,82 @@ func TestBodyChangeCommittedWithoutItsTranscript(t *testing.T) {
 		require.Equal(t, 1, page.Count)
 		require.JSONEq(t, `{"example":"new summary"}`, f.summaries(t, id))
 	})
+}
+
+// staleCiphertext replaces the ciphertext the Capture upsert writes with an
+// older valid one for the same message, so the stored transcript no longer
+// matches the plaintext row the update just wrote.
+type staleCiphertext struct {
+	repo.DBTX
+	ciphertext string
+}
+
+func (d *staleCiphertext) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(sql, "-- name: Capture ") {
+		args[3] = d.ciphertext
+	}
+	tag, err := d.DBTX.Exec(ctx, sql, args...) //nolint:glint // notestingrawsql: transparently intercept the generated upsert to store a stale transcript.
+	return tag, safe(err)
+}
+
+// Every shadow-mode update counts its consistency checks: success when both
+// copies agreed before and after, otherwise the check that failed. These are
+// the numbers that show how well shadow mode keeps the copies in step.
+func TestUpdateBodyCountsConsistencyChecks(t *testing.T) {
+	t.Parallel()
+	f := setup(t, true)
+	ctx := t.Context()
+	reader := sdkmetric.NewManualReader()
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	require.NoError(t, err)
+	f.store = store
+	transcripts := NewTranscripts(store, f.project)
+	update := func(db repo.DBTX, id uuid.UUID, notes string) {
+		t.Helper()
+		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		if db == nil {
+			db = tx
+		}
+		if wrapped, ok := db.(*staleCiphertext); ok {
+			wrapped.DBTX = tx
+		}
+		_, err = transcripts.UpdateBody(ctx, db, f.org, f.project, f.chat, id, setNotes(notes))
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit(ctx))
+	}
+
+	current := uuid.New()
+	f.add(t, current)
+	f.capture(t, current)
+	update(nil, current, "success")
+
+	missing := uuid.New()
+	f.add(t, missing)
+	update(nil, missing, "missing")
+
+	disagreeing := uuid.New()
+	f.add(t, disagreeing)
+	f.capture(t, disagreeing)
+	_, err = fixturerepo.New(f.db).ChangeContent(ctx, disagreeing, project(f.project))
+	require.NoError(t, err)
+	update(nil, disagreeing, "disagreeing")
+
+	insane := uuid.New()
+	f.add(t, insane)
+	f.capture(t, insane)
+	old, err := fixturerepo.New(f.db).Ciphertext(ctx, insane, f.project, f.org)
+	require.NoError(t, err)
+	update(&staleCiphertext{DBTX: nil, ciphertext: old}, insane, "insane")
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &collected))
+	require.Equal(t, map[string]int64{
+		"success":            1,
+		"missing_transcript": 1,
+		"hydrate_mismatch":   1,
+		"sanity_mismatch":    1,
+	}, countsByOutcome(t, collected, meterUpdateChecks))
+	require.Equal(t, map[string]int64{"success": 4}, countsByOutcome(t, collected, meterUpdateMessages))
 }
