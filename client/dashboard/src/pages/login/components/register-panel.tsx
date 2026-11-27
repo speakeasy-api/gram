@@ -63,7 +63,7 @@ export function RegisterPanel({
 
     onError: (error) => {
       if (error instanceof GramError && error.statusCode === 409) {
-        window.location.replace("/");
+        window.location.replace(safeSameOriginUrl(redirectTo) ?? "/");
       }
     },
   });
