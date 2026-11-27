@@ -119,7 +119,7 @@ func (g *Guard) Mode() GuardMode {
 // ops client, and the counter raises the alarm.
 func (g *Guard) Check(ctx context.Context, role Role, command, key string) error {
 	c := Classify(key)
-	if c.Control || (c.Classified && c.Role == role) {
+	if c.Classified && c.Role == role {
 		return nil
 	}
 

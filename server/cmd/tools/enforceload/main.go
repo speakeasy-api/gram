@@ -302,8 +302,6 @@ func runReplyPoint(
 	defer cancel()
 	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
-		SwitchRole:   "",
-		Standalone:   false,
 		ReplicaID:    "load-" + uuid.NewString(),
 		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,
@@ -431,8 +429,6 @@ func runPauseProbe(
 	drainGate := make(chan struct{})
 	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
-		SwitchRole:   "",
-		Standalone:   false,
 		ReplicaID:    "load-pause-" + uuid.NewString(),
 		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    drainGate,
@@ -700,8 +696,6 @@ func runFullPoint(
 	defer cancel()
 	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
-		SwitchRole:   "",
-		Standalone:   false,
 		ReplicaID:    "load-full-" + uuid.NewString(),
 		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,

@@ -82,24 +82,6 @@ func TestDirectoryRolesConnectionSafety(t *testing.T) {
 	}
 }
 
-// A direct Redis URL is the instance the command writes to, so an Auth move
-// to that instance counts as finished.
-func TestDirectoryRolesComparesAuthMoveWithTheRedisURL(t *testing.T) {
-	t.Parallel()
-	env := map[string]string{
-		"GRAM_REDIS_AUTH_NEXT_ADDR": "127.0.0.1:6400",
-		"GRAM_REDIS_CACHE_ADDR":     "127.0.0.1:6379",
-	}
-	getenv := func(key string) string { return env[key] }
-
-	options, err := supportRedisOptions(t.Context(), getenv, "", "127.0.0.1:6379", "redis://127.0.0.1:6400")
-	require.NoError(t, err)
-	require.Equal(t, "127.0.0.1:6400", options.Addr)
-
-	_, err = supportRedisOptions(t.Context(), getenv, "", "127.0.0.1:6379", "redis://127.0.0.1:6379")
-	require.EqualError(t, err, "finish the Auth Redis move before running directory roles")
-}
-
 func TestDirectoryRolesRequiresCredentials(t *testing.T) {
 	t.Parallel()
 	inventory := `{"organization_id":"example-org","workos_organization_id":"example-workos-org","default_role_slug":"member","assignments":[]}`

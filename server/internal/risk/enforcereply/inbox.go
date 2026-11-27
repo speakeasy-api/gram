@@ -76,13 +76,6 @@ type Config struct {
 	// RedisOptions are copied before reply-inbox settings are applied.
 	RedisOptions redis.Options
 
-	// SwitchRole names the role of the instance switch the client that
-	// RedisOptions came from follows; empty finds it by address.
-	SwitchRole string
-
-	// Standalone selects a client with no switch binding.
-	Standalone bool
-
 	// ReplicaID identifies the process in reply URNs and Redis inbox keys.
 	ReplicaID string
 
@@ -137,8 +130,6 @@ func New(
 ) (*Inbox, error) {
 	inbox, err := redisinbox.New(ctx, logger, tracerProvider, meterProvider, redisinbox.Config[*riskv1.EnforcementReply]{
 		RedisOptions: cfg.RedisOptions,
-		SwitchRole:   cfg.SwitchRole,
-		Standalone:   cfg.Standalone,
 		ReplicaID:    cfg.ReplicaID,
 		PollInterval: cfg.PollInterval,
 		URNNamespace: urnNamespace,

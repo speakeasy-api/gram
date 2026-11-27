@@ -16,7 +16,6 @@ func TestUnclassifiedKeyCheckRecordsOnlyUndeclaredFamilies(t *testing.T) {
 
 	check.record(redis.NewStringCmd(ctx, "get", "sessions:v2:sid:"))
 	check.record(redis.NewStringCmd(ctx, "set", "toolset:a:b:1:", "v"))
-	check.record(redis.NewStringCmd(ctx, "get", "gram:redis-switch:hold"))
 	check.record(redis.NewStringCmd(ctx, "set", TestRedisKeyPrefix+"anything", "v"))
 	check.record(redis.NewStringCmd(ctx, "ping"))
 	require.Empty(t, check.heads())

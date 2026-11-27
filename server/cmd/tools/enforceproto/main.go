@@ -74,8 +74,6 @@ func run() error {
 
 	inbox, err := enforcereply.New(ctx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
-		SwitchRole:   "",
-		Standalone:   false,
 		ReplicaID:    "",
 		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,

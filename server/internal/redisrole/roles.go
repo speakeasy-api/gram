@@ -52,11 +52,6 @@ const UnclassifiedPrefix = "unclassified"
 // undeclared family growing without bound would fill it.
 const unclassifiedRole = RoleOps
 
-// controlPrefix precedes the instance switch's own keys (its state and hold
-// keys). Every role's current instance carries them, so they belong to no
-// single role and the guard lets them through on every client.
-const controlPrefix = "gram:redis-switch:"
-
 // Family is one key family of the manifest.
 type Family struct {
 	// Prefix is the start of every key of the family. It ends in ":" so that
@@ -262,18 +257,10 @@ type Classification struct {
 
 	// Classified reports whether a family matched.
 	Classified bool
-
-	// Control reports a key of the instance switch, which belongs to every
-	// role.
-	Control bool
 }
 
 // Classify looks key up in the manifest. The longest matching prefix wins.
 func Classify(key string) Classification {
-	if strings.HasPrefix(key, controlPrefix) {
-		return Classification{Role: unclassifiedRole, Prefix: controlPrefix, Classified: true, Control: true}
-	}
-
 	best := -1
 	for i, family := range manifest {
 		if !strings.HasPrefix(key, family.Prefix) {
@@ -284,9 +271,9 @@ func Classify(key string) Classification {
 		}
 	}
 	if best < 0 {
-		return Classification{Role: unclassifiedRole, Prefix: UnclassifiedPrefix, Classified: false, Control: false}
+		return Classification{Role: unclassifiedRole, Prefix: UnclassifiedPrefix, Classified: false}
 	}
-	return Classification{Role: manifest[best].Role, Prefix: manifest[best].Prefix, Classified: true, Control: false}
+	return Classification{Role: manifest[best].Role, Prefix: manifest[best].Prefix, Classified: true}
 }
 
 // Of reports the role of key and the declared prefix it matched. An

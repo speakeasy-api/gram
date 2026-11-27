@@ -1,7 +1,7 @@
 // Package redisconn describes how to reach one Redis or Valkey instance: its
 // address, how it authenticates a connection, and whether the connection is
-// encrypted. The server, the tunnel gateway, the instance switch and the
-// command-line tools share it, so every client of an instance connects the
+// encrypted. The server, the tunnel gateway and the command-line tools share
+// it, so every client of an instance connects the
 // same way.
 //
 // An endpoint authenticates with nothing, a static password, or a Google
