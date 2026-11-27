@@ -9,12 +9,14 @@ const state = vi.hoisted(() => ({
   tab: "overview",
   assistantId: "assistant" as string | null,
   canWrite: true,
+  runtimeVersion: 2,
   setReasoningEffort: vi.fn(),
 }));
 beforeEach(() => {
   state.tab = "overview";
   state.assistantId = "assistant";
   state.canWrite = true;
+  state.runtimeVersion = 2;
   state.setReasoningEffort.mockReset();
 });
 
@@ -57,6 +59,8 @@ vi.mock("./useAssistantDraft", async () => {
           id: "assistant",
           name: "Example assistant",
           instructions: "",
+          agentId: "agent",
+          runtimeVersion: state.runtimeVersion,
         },
       };
     },
@@ -72,7 +76,12 @@ vi.mock("./AssistantOverviewSettings", () => ({
   AssistantOverviewSettings: () => null,
 }));
 vi.mock("./AssistantMCPServersSection", () => ({
-  AssistantMCPServersSection: () => null,
+  AssistantMCPServersSection: () => <div>Attachment editor</div>,
+}));
+vi.mock("./AssistantKitMCPAccess", () => ({
+  AssistantKitMCPAccess: ({ agentId }: { agentId: string }) => (
+    <div>Access editor for {agentId}</div>
+  ),
 }));
 vi.mock("./AssistantSkillsSection", () => ({
   AssistantSkillsSection: () => null,
@@ -143,4 +152,17 @@ it("disables the onboarding selector without write permission", () => {
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);
+});
+
+it("shows the attachment editor for the Default runtime", () => {
+  renderPanel();
+  expect(screen.queryByText("Access editor for agent")).toBeNull();
+  expect(screen.getByText("Attachment editor")).toBeTruthy();
+});
+
+it("uses the backing agent's MCP access editor for the Kit runtime", () => {
+  state.runtimeVersion = 3;
+  renderPanel();
+  expect(screen.queryByText("Attachment editor")).toBeNull();
+  expect(screen.getByText("Access editor for agent")).toBeTruthy();
 });

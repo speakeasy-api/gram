@@ -400,7 +400,7 @@ func (q *Queries) ListExactAdmissions(ctx context.Context, arg ListExactAdmissio
 
 const lockAssistant = `-- name: LockAssistant :one
 
-SELECT id, organization_id, name, created_by_user_id
+SELECT id, organization_id, name, created_by_user_id, runtime_version
 FROM assistants
 WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
 FOR UPDATE
@@ -416,6 +416,7 @@ type LockAssistantRow struct {
 	OrganizationID  string
 	Name            string
 	CreatedByUserID pgtype.Text
+	RuntimeVersion  int16
 }
 
 // Bindings are pointers only: assistant -> dedicated agent, and root trigger ->
@@ -429,6 +430,7 @@ func (q *Queries) LockAssistant(ctx context.Context, arg LockAssistantParams) (L
 		&i.OrganizationID,
 		&i.Name,
 		&i.CreatedByUserID,
+		&i.RuntimeVersion,
 	)
 	return i, err
 }

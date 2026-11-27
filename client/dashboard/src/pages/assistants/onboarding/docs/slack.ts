@@ -107,3 +107,15 @@ If for some reason the webhook URL isn't returned at step 1 (e.g. trigger creati
 - **\`xoxp-\` is for user tokens, \`xoxb-\` for bot.** Don't confuse them in the secrets form.
 `,
 };
+
+export const KIT_SLACK_DOCS: IntegrationDoc = {
+  ...SLACK_DOCS,
+  body: `# Connect Slack to a Kit assistant
+1. Use \`propose_slack_setup\` to show the user which Slack tool capabilities and events to enable. The tool creates a dedicated private project MCP server for the selected tools and grants the backing agent direct Connect access. It configures the Slack trigger unless the user explicitly chooses no events. Do not reuse an existing server or broad agent grants to install Slack tools.
+2. Use \`add_environment_keys\` to declare the credentials for this setup: SLACK_SIGNING_SECRET if a trigger is configured, and SLACK_BOT_TOKEN (xoxb-) and SLACK_USER_TOKEN (xoxp-) for the selected Slack tools.
+3. Unless the bot token is already populated (check \`list_environments\`), show \`show_slack_app_guide\` with the returned webhook URL if present. Wait for the user to finish installing before proceeding.
+4. Use \`request_environment_secrets\`. Ask for the signing secret first if a trigger is configured, then the bot and user tokens. Never accept these in chat.
+5. If a trigger is configured, ask the user to send a test message in Slack in a conversation covered by the chosen reply mode. Setup chat does not have the Kit runtime's tools. If no trigger is configured, ask the user to test the selected actions from an assistant turn instead.
+6. Offer to narrow incoming events using \`update_trigger\` if the user wants. Keep the existing filter and ask the user for any channel or member IDs needed to narrow it. Describe filters in plain English.
+`,
+};

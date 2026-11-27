@@ -1,23 +1,24 @@
 package assistants
 
 import (
+	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"strings"
-
-	"encoding/json"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
@@ -25,7 +26,11 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	core, db, r, identity, config, _ := kitWorkloadDBFixture(t)
 	core.encryptionClient = testenv.NewEncryptionClient(t)
 	config.Origin = core.serverURL
-	config.PersistedMCP = true
+	setting := featuresrepo.EnableFeatureParams{OrganizationID: identity.OrganizationID, FeatureName: string(productfeatures.FeatureOrganizationGatewayDisabled)}
+	_, err := featuresrepo.New(db).EnableFeature(t.Context(), setting)
+	require.NoError(t, err)
+	_, err = featuresrepo.New(db).DeleteFeature(t.Context(), featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
 	// Two additional roots, alongside the normally provisioned dashboard root.
 	for i := range 2 {
 		tx := testenv.BeginTx(t, t.Context(), db)
@@ -78,14 +83,22 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		// targets when no automatic context is available.
 		var document struct {
 			Servers map[string]struct {
-				URL  string `json:"url"`
-				Auth struct {
+				URL     string            `json:"url"`
+				Headers map[string]string `json:"headers"`
+				Auth    struct {
 					Resource   string            `json:"resource"`
 					Extensions map[string]string `json:"extensions"`
 				} `json:"auth"`
 			} `json:"mcpServers"`
 		}
 		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
+		require.True(t, b.Workload.MCPProjectGateway)
+		require.Len(t, document.Servers, 2, "only the project gateway and built-ins are configured")
+		gateway, ok := document.Servers["project-gateway"]
+		require.True(t, ok)
+		require.Contains(t, gateway.URL, "/mcp/gateway/")
+		require.Equal(t, gateway.URL, gateway.Auth.Resource)
+		require.Empty(t, gateway.Headers)
 		builtin, ok := document.Servers["builtin-assistants"]
 		require.True(t, ok)
 		require.Equal(t, "https://api.example/platform/mcp/assistants", builtin.URL)
@@ -94,25 +107,7 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
 		return b
 	}
-	assertEnvironment := func(b KitLocalBootstrap, expected string) {
-		t.Helper()
-		var document struct {
-			Servers map[string]struct {
-				Headers map[string]string `json:"headers"`
-			} `json:"mcpServers"`
-		}
-		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
-		found := false
-		for name, server := range document.Servers {
-			if strings.HasPrefix(name, "attached-") {
-				require.Equal(t, expected, server.Headers["Gram-Environment"])
-				found = true
-			}
-		}
-		require.True(t, found)
-	}
 	first := bootstrap()
-	assertEnvironment(first, "selected-env")
 
 	// Withdrawing a root revokes that event, not the assistant's runtime identity.
 	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
@@ -129,14 +124,12 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.ErrorIs(t, core.identities.Validate(t.Context(), db, *event.Identity), assistantidentity.ErrInvalidIdentity)
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
 	second := bootstrap()
-	assertEnvironment(second, "selected-env")
 	require.NotEqual(t, first.Workload.Subject, second.Workload.Subject)
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, first.Workload)))
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity))
 	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID}})
 	require.NoError(t, err)
-	assertEnvironment(bootstrap(), "default-env")
 	plain, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Plain tools", Slug: "plain-tools"})
 	require.NoError(t, err)
 	createCanonicalWrapper(t, db, plain, "plain-tools-endpoint", "private")
@@ -144,7 +137,7 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
 	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: plain.ID}})
 	require.NoError(t, err)
-	assertEnvironment(bootstrap(), "")
+	require.JSONEq(t, string(first.MCPJSON), string(bootstrap().MCPJSON), "attachment edits do not change Kit configuration")
 	// Replacement selecting the same agent is still a different authority.
 	iq := identityrepo.New(db)
 	require.NoError(t, iq.TombstoneAssistantBinding(t.Context(), identityrepo.TombstoneAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))

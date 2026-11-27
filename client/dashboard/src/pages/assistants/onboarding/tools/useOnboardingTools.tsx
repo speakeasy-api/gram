@@ -22,6 +22,7 @@ import {
   SLACK_REPLY_MODES,
   type SlackReplyMode,
 } from "../slackCapabilities";
+import { provisionKitSlackAccess } from "./kitSlackAccess";
 import { SLACK_TOOL_URN_PREFIX } from "../slackManifest";
 import {
   ProposeNameComponent,
@@ -1213,7 +1214,9 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
+        draft.assistant?.runtimeVersion === 3
+          ? "List MCP servers registered in this project. To change agent access, direct the user to MCP servers in the assistant’s Overview tab."
+          : "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {
@@ -2037,7 +2040,10 @@ function buildAssistantTools(deps: ToolDeps) {
       }),
       execute: async (args) => {
         const { slug } = args as ReadDocsArgs;
-        const doc = getIntegrationDoc(slug);
+        const doc = getIntegrationDoc(
+          slug,
+          draft.assistant?.runtimeVersion === 3,
+        );
         if (!doc) {
           return errResult(`No doc found for slug "${slug}"`, {
             available: listIntegrationDocs().map((d) => d.slug),
@@ -2178,7 +2184,9 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "Show the Slack setup card. The user picks which Slack capabilities the assistant has, when it replies, and any extra Slack events that wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger unless skip_slack_events is set. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected capabilities derived from the user's stated goal. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
+        draft.assistant?.runtimeVersion === 3
+          ? "Show the Slack setup card to choose tool capabilities and when the assistant replies. On submit, selected capabilities get a dedicated private project MCP server with a direct Connect grant for the backing agent. Saves the Slack trigger unless skip_slack_events is set. Wait for the result before declaring credentials, showing the install card, or collecting secrets."
+          : "Show the Slack setup card. The user picks which Slack capabilities the assistant has, when it replies, and any extra Slack events that wake it up. On submit, this tool creates a dedicated per-assistant Slack toolset with only the chosen tools (never reuse a catalog toolset), attaches it to the assistant's shared env, and creates a slack trigger unless skip_slack_events is set. Returns the webhook_url to pass into show_slack_app_guide. Never call this tool in the same turn as show_slack_app_guide or request_environment_secrets — propose_slack_setup first, wait for it to resolve, then continue with declare-keys → install card → secrets card in subsequent turns. Pass plausible preselected capabilities derived from the user's stated goal. If the result is an error about a toolset-name collision, propose a more distinctive name in chat (or ask the user), then re-call with the chosen name in toolset_name.",
       parameters: z.object({
         preselected_capabilities: z
           .array(capabilitySlugEnum)
@@ -2225,9 +2233,17 @@ function buildAssistantTools(deps: ToolDeps) {
           ),
         );
         const conflict = preflight?.toolsets.find(
-          (t) => t.name === desiredToolsetName && !attachedSlugsPre.has(t.slug),
+          (t) =>
+            t.name === desiredToolsetName &&
+            (draft.assistant?.runtimeVersion === 3 ||
+              !attachedSlugsPre.has(t.slug)),
         );
         if (conflict) {
+          if (draft.assistant?.runtimeVersion === 3) {
+            return errResult(
+              `A toolset named "${desiredToolsetName}" already exists. If this assistant already has Slack tools, manage the existing MCP server and its agent access in Overview instead of provisioning a replacement. For a new connection, ask the user to choose a different name.`,
+            );
+          }
           return errResult(
             `Toolset name "${desiredToolsetName}" is already taken by another toolset in this project. Ask the user for a more distinctive name (or propose one, e.g. derived from what this assistant does), then re-call propose_slack_setup with toolset_name=<chosen-name>. Do not render the card until you've picked a name.`,
             { collided_name: desiredToolsetName },
@@ -2264,6 +2280,7 @@ function buildAssistantTools(deps: ToolDeps) {
         const replyMode = userInput.reply_mode;
 
         return serialize(async () => {
+          let kitAgentId: string | undefined;
           try {
             const a = await ensureAssistant(deps, {}, live.id);
             trackLive(a);
@@ -2271,67 +2288,84 @@ function buildAssistantTools(deps: ToolDeps) {
             const notes: string[] = [];
             if (envResult.note) notes.push(envResult.note);
 
-            const [existingToolsets, allAssistants] = await Promise.all([
-              sdk.toolsets.list().catch(() => null),
-              sdk.assistants.list().catch(() => null),
-            ]);
-            const attachedSlugs = new Set(a.toolsets.map((t) => t.toolsetSlug));
-            const sharedSlugs = new Set<string>();
-            for (const other of allAssistants?.assistants ?? []) {
-              if (other.id === a.id) continue;
-              for (const ref of other.toolsets ?? []) {
-                sharedSlugs.add(ref.toolsetSlug);
-              }
-            }
-            const existingSlackToolset = existingToolsets?.toolsets.find(
-              (t) =>
-                attachedSlugs.has(t.slug) &&
-                !sharedSlugs.has(t.slug) &&
-                t.tools.some((tool) =>
-                  tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
-                ),
-            );
-
+            const isKit = a.runtimeVersion === 3;
             let toolsetSlug: string | undefined;
-            if (toolUrns.length > 0) {
-              const upserted = existingSlackToolset
-                ? await sdk.toolsets.updateBySlug({
-                    slug: existingSlackToolset.slug,
-                    updateToolsetRequestBody: { toolUrns },
-                  })
-                : await sdk.toolsets.create({
-                    createToolsetRequestBody: {
-                      name: desiredToolsetName,
-                      description: `Slack capabilities for ${a.name}.`,
-                      toolUrns,
-                      defaultEnvironmentSlug: envResult.env.slug,
-                    },
-                  });
-              toolsetSlug = upserted.slug;
-              const next = a.toolsets
-                .filter((t) => t.toolsetSlug !== upserted.slug)
-                .concat([
-                  {
-                    toolsetSlug: upserted.slug,
-                    environmentSlug: envResult.env.slug,
-                  },
-                ]);
-              const updated = await sdk.assistants.update({
-                updateAssistantForm: { id: a.id, toolsets: next },
-              });
-              draft.setAssistant(updated);
-              trackLive(updated);
-              await recomputeBehaviorSection(deps, updated);
-            } else if (existingSlackToolset) {
-              const next = a.toolsets.filter(
-                (t) => t.toolsetSlug !== existingSlackToolset.slug,
+            let mcpServerSlug: string | undefined;
+            if (isKit) {
+              if (toolUrns.length > 0) {
+                kitAgentId = a.agentId;
+                mcpServerSlug = await provisionKitSlackAccess(sdk, {
+                  agentId: a.agentId,
+                  assistantName: a.name,
+                  name: desiredToolsetName,
+                  toolUrns,
+                  environment: envResult.env,
+                });
+              }
+            } else {
+              const [existingToolsets, allAssistants] = await Promise.all([
+                sdk.toolsets.list().catch(() => null),
+                sdk.assistants.list().catch(() => null),
+              ]);
+              const attachedSlugs = new Set(
+                a.toolsets.map((t) => t.toolsetSlug),
               );
-              const updated = await sdk.assistants.update({
-                updateAssistantForm: { id: a.id, toolsets: next },
-              });
-              draft.setAssistant(updated);
-              trackLive(updated);
-              await recomputeBehaviorSection(deps, updated);
+              const sharedSlugs = new Set<string>();
+              for (const other of allAssistants?.assistants ?? []) {
+                if (other.id === a.id) continue;
+                for (const ref of other.toolsets ?? []) {
+                  sharedSlugs.add(ref.toolsetSlug);
+                }
+              }
+              const existingSlackToolset = existingToolsets?.toolsets.find(
+                (t) =>
+                  attachedSlugs.has(t.slug) &&
+                  !sharedSlugs.has(t.slug) &&
+                  t.tools.some((tool) =>
+                    tool.toolUrn?.startsWith(SLACK_TOOL_URN_PREFIX),
+                  ),
+              );
+
+              if (toolUrns.length > 0) {
+                const upserted = existingSlackToolset
+                  ? await sdk.toolsets.updateBySlug({
+                      slug: existingSlackToolset.slug,
+                      updateToolsetRequestBody: { toolUrns },
+                    })
+                  : await sdk.toolsets.create({
+                      createToolsetRequestBody: {
+                        name: desiredToolsetName,
+                        description: `Slack capabilities for ${a.name}.`,
+                        toolUrns,
+                        defaultEnvironmentSlug: envResult.env.slug,
+                      },
+                    });
+                toolsetSlug = upserted.slug;
+                const next = a.toolsets
+                  .filter((t) => t.toolsetSlug !== upserted.slug)
+                  .concat([
+                    {
+                      toolsetSlug: upserted.slug,
+                      environmentSlug: envResult.env.slug,
+                    },
+                  ]);
+                const updated = await sdk.assistants.update({
+                  updateAssistantForm: { id: a.id, toolsets: next },
+                });
+                draft.setAssistant(updated);
+                trackLive(updated);
+                await recomputeBehaviorSection(deps, updated);
+              } else if (existingSlackToolset) {
+                const next = a.toolsets.filter(
+                  (t) => t.toolsetSlug !== existingSlackToolset.slug,
+                );
+                const updated = await sdk.assistants.update({
+                  updateAssistantForm: { id: a.id, toolsets: next },
+                });
+                draft.setAssistant(updated);
+                trackLive(updated);
+                await recomputeBehaviorSection(deps, updated);
+              }
             }
 
             const existingSlackTrigger = await findSlackTrigger(a.id);
@@ -2378,16 +2412,21 @@ function buildAssistantTools(deps: ToolDeps) {
 
             return okResult({
               toolset_slug: toolsetSlug,
+              mcp_server_slug: mcpServerSlug,
               trigger_id: triggerId,
               webhook_url: webhookUrl,
               environment_slug: envResult.env.slug,
               ...(notes.length > 0 ? { notes } : {}),
-              note: "Per-assistant Slack toolset attached. Next: declare the credentials this combination needs with add_environment_keys (include SLACK_SIGNING_SECRET only when a slack trigger was created here), then show_slack_app_guide (pass the webhook_url from this result), then request_environment_secrets in Slack-UI order. After the self-handshake, offer in plain English to narrow which events fire — translate the user's answer into a trigger filter via update_trigger; never mention CEL.",
+              note: isKit
+                ? "Slack setup saved. Declare the credentials this combination needs, show the installation guide, and collect the credentials using the secrets card. Include SLACK_SIGNING_SECRET only when a trigger was configured. After credentials are saved, ask the user to test from Slack if a trigger is configured; setup chat does not use the Kit runtime’s MCP tools."
+                : "Per-assistant Slack toolset attached. Next: declare the credentials this combination needs with add_environment_keys (include SLACK_SIGNING_SECRET only when a slack trigger was created here), then show_slack_app_guide (pass the webhook_url from this result), then request_environment_secrets in Slack-UI order. After the self-handshake, offer in plain English to narrow which events fire — translate the user's answer into a trigger filter via update_trigger; never mention CEL.",
             });
           } catch (e) {
             return errResult(
               e instanceof Error ? e.message : "slack setup failed",
             );
+          } finally {
+            draft.invalidateAll({ kitAgentId });
           }
         });
       },
@@ -2471,6 +2510,7 @@ type OnboardingTools = ReturnType<typeof buildAssistantTools>;
 export type OnboardingToolName = keyof OnboardingTools;
 
 export type OnboardingToolPermissions = {
+  usesProjectMCPAccess?: boolean;
   canWriteAssistant: boolean;
   canReadProject: boolean;
   canWriteProject: boolean;
@@ -2544,10 +2584,22 @@ const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
   "propose_slack_setup",
 ]);
 
+const LEGACY_MCP_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "attach_mcp_server",
+  "detach_mcp_server",
+  "attach_toolset",
+  "detach_toolset",
+  "create_toolset",
+  "add_tools_to_toolset",
+]);
+
 export function isOnboardingToolAllowed(
   tool: OnboardingToolName,
   permissions: OnboardingToolPermissions,
 ): boolean {
+  if (permissions.usesProjectMCPAccess && LEGACY_MCP_WRITE_TOOLS.has(tool)) {
+    return false;
+  }
   if (!permissions.canWriteAssistant && !ASSISTANT_READ_TOOLS.has(tool)) {
     return false;
   }
@@ -2604,6 +2656,7 @@ export function useOnboardingTools(): {
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
     const permissions: OnboardingToolPermissions = {
+      usesProjectMCPAccess: draft.assistant?.runtimeVersion === 3,
       canWriteAssistant,
       canReadProject,
       canWriteProject,

@@ -71,6 +71,11 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 
 func seedOrganizationGateway(t *testing.T, ctx context.Context, ti *testInstance) organizationGatewayFixture {
 	t.Helper()
+	return seedOrganizationGatewayWithOpenMemberVisibility(t, ctx, ti, mcpservers.VisibilityPublic)
+}
+
+func seedOrganizationGatewayWithOpenMemberVisibility(t *testing.T, ctx context.Context, ti *testInstance, visibility string) organizationGatewayFixture {
+	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -85,7 +90,7 @@ func seedOrganizationGateway(t *testing.T, ctx context.Context, ti *testInstance
 	publicSlug := "openmember-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "granted member", grantedSlug, 0, mcpservers.VisibilityPrivate)
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "denied member", deniedSlug, 1, mcpservers.VisibilityPrivate)
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "public member", publicSlug, 2, mcpservers.VisibilityPublic)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "public member", publicSlug, 2, visibility)
 
 	userID := seedConsentMember(t, ctx, ti, authCtx.ActiveOrganizationID)
 	subject := urn.NewUserSubject(userID)

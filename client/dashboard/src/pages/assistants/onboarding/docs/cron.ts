@@ -30,6 +30,6 @@ If the user gives a local time, ask the timezone and convert to UTC.
 
 ## Cron has no payload
 
-The trigger only signals "now". Any work — fetching messages, summarizing, posting — must be in the assistant's instructions and toolset. For a Slack-driven summary the assistant needs both a cron trigger and Slack tools; declare \`SLACK_BOT_TOKEN\` via \`add_environment_keys\` + \`request_environment_secrets\`. See \`docs("slack")\` for the credential setup.
+The trigger only signals "now". Any work — fetching messages, summarizing, posting — must be in the assistant’s instructions and the tools it can access. For a scheduled Slack summary the assistant needs both a cron trigger and Slack tools. Follow \`read_docs("slack")\` for tool access and credential setup.
 `,
 };

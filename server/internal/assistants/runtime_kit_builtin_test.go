@@ -33,8 +33,7 @@ func TestKitBuiltinConnectionsUseSeparateResourceBoundWorkloadTokens(t *testing.
 	bootstrap := kitTestWorkloadBootstrap()
 	slugs := []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug}
 	connections := kitBuiltinMCPConnections(base, bootstrap.Workload.Identity.ProjectID, slugs)
-	config := KitLocalCompositionConfig{mcpConnections: connections}
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	bootstrap.MCPJSON, err = kitCompositionMCP(connections, bootstrap.Workload)
 	require.NoError(t, err)
 	require.NoError(t, validateKitBootstrap(bootstrap))
 	var parsed struct {
@@ -62,24 +61,24 @@ func TestKitBuiltinConnectionsUseSeparateResourceBoundWorkloadTokens(t *testing.
 	require.NotContains(t, string(bootstrap.MCPJSON), string(bootstrap.GatewayToken))
 	// A different project in deployment-provided exchange parameters is not a
 	// valid bootstrap for this workload identity.
-	config.mcpConnections[0].ProjectID = uuid.New()
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	connections[0].ProjectID = uuid.New()
+	bootstrap.MCPJSON, err = kitCompositionMCP(connections, bootstrap.Workload)
 	require.NoError(t, err)
 	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
 	// Dropping the project binding from a built-in is not a valid bootstrap.
-	config.mcpConnections[0].ProjectID = uuid.Nil
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	connections[0].ProjectID = uuid.Nil
+	bootstrap.MCPJSON, err = kitCompositionMCP(connections, bootstrap.Workload)
 	require.NoError(t, err)
 	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
-	// Attached connections bind their project through the endpoint instead.
-	attached, err := url.Parse("https://api.example/mcp/attached")
+	// The gateway binds its project through the resource URL instead.
+	gateway, err := url.Parse("https://api.example/mcp/gateway/test-org/projects/test-project")
 	require.NoError(t, err)
-	config.mcpConnections = []kitMCPConnection{{Name: "attached-server", Resource: attached, Environment: ""}}
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	connections = []kitMCPConnection{{Name: "project-gateway", Resource: gateway}}
+	bootstrap.MCPJSON, err = kitCompositionMCP(connections, bootstrap.Workload)
 	require.NoError(t, err)
 	require.NoError(t, validateKitBootstrap(bootstrap))
-	config.mcpConnections[0].ProjectID = bootstrap.Workload.Identity.ProjectID
-	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	connections[0].ProjectID = bootstrap.Workload.Identity.ProjectID
+	bootstrap.MCPJSON, err = kitCompositionMCP(connections, bootstrap.Workload)
 	require.NoError(t, err)
 	require.ErrorContains(t, validateKitBootstrap(bootstrap), "must not carry extensions")
 }

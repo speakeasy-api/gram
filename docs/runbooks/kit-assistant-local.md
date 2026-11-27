@@ -1,7 +1,7 @@
 # Run Kit assistants locally
 
 Use this guide to configure a local Speakeasy assistant to run inference and
-access an attached MCP resource through Kit. It covers the opt-in local runtime
+access project MCP servers through the Project Gateway. It covers the opt-in local runtime
 (`runtime_version=3`), not production deployment or migration of legacy chat
 history. Runtime selection does not migrate v1/v2 transcripts.
 
@@ -12,10 +12,9 @@ Before starting, obtain:
 - A configured development checkout and a running Docker-compatible engine.
 - Kit release `v0.2.19` and image
   `localhost/kit-control-plane:v0.2.19`.
-- A development assistant with an active agent-backed workload identity and one
-  attached, issuer-gated HTTPS `/mcp/<slug>` resource.
-- The resource's persisted user-session issuer UUID and advertised OAuth issuer.
-  These must identify the same issuer; an unrelated UUID will not work.
+- A development assistant with an active agent-backed workload identity.
+- An enabled HTTPS Project Gateway with one organization-level session issuer
+  in shared mode. Enable `project-gateway-machine-access` for the organization.
 
 Built-in Platform MCP toolsets use resource-bound workload authentication in
 this local composition. Do not substitute a human token or an inference bearer.
@@ -48,8 +47,8 @@ files or command output.
 ## Configure this worktree
 
 1. Add or update these values in the existing `[env]` section of ignored
-   `mise.local.toml`. Replace the placeholders with the development resource
-   and issuer from the prerequisites.
+   `mise.local.toml`. Replace the placeholders with your local network and
+   workload issuer configuration.
 
    ```toml
    GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
@@ -60,9 +59,6 @@ files or command output.
    GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL = "<EXTERNAL_JWKS_URL>"
    GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT = "<EXACT_SUBJECT>"
    GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE = "<ABSOLUTE_DEDICATED_DIRECTORY>/assertion"
-   GRAM_ASSISTANT_KIT_MCP_RESOURCE = "https://<RESOURCE_HOST>/mcp/<SLUG>"
-   GRAM_ASSISTANT_KIT_MCP_ISSUER = "https://<EXPECTED_OAUTH_ISSUER>"
-   GRAM_ASSISTANT_KIT_MCP_ISSUER_ID = "<PERSISTED_ISSUER_UUID>"
    ```
 
 2. Configure an isolated container network with a TLS relay whose network-local
@@ -127,38 +123,26 @@ Kit does not import earlier transcript. A new Kit session in a conversation with
 earlier assistant turns receives a notice in its first prompt that earlier
 messages are unavailable, then answers the current message.
 
-## Update MCP configuration without removing other servers
+## Assign project MCP servers
 
-Before using `_kit/session/update_mcp`, verify that the runtime image supports
-its approved additive-upsert contract. The image pin in this guide is unchanged;
-it is not evidence that this API has been verified in that image.
+In the assistant's **Overview → MCP servers** section, check a server to grant
+its backing agent direct Connect access. Unchecking removes that direct grant;
+the access summary shows whether other rules still allow or block access.
+Upstream credentials are configured separately. Test with a private server so
+public access doesn't mask the grant change.
 
-- Supply initial servers during session creation or cold restore.
-- Through the assistant adapter, omit `mcpServers` on a resident reconnect to
-  retain the resident configuration. Explicit lists, including `[]`, are rejected;
-  reconnect cannot reconcile the desired server set.
-- Use `_kit/session/update_mcp` to add a new client-owned server name or update
-  only an existing client-owned name. Omitted names are retained, and `[]` is a
-  no-op. Host/plugin name collisions are rejected and built-ins are protected.
-
-For example, updating `inventory` does not remove an already configured
-`tickets` server. Do not use omission or an empty list to revoke access: this
-contract has neither implicit removal nor a removal API. If revocation requires
-removal, fail closed, report the unsupported operation, and block affected work
-until supported credential revocation and safe retirement can complete. Do not
-claim revocation succeeded while leaving access usable or use replacement resume
-as a cancellation workaround.
-
-See the [MCP configuration lifecycle contract](../design/kit-assistant-adapter.md#mcp-configuration-lifecycle)
-for adapter behavior at creation, reconnect, and update boundaries.
+Kit connects to the Project Gateway. The gateway checks the agent's current
+access on each discovery request and tool call, so changing a grant doesn't
+require a runtime restart or a new chat. A runtime started with the old
+per-server configuration must be retired before using the new configuration.
 
 ## Validate inference, tool access, and the transcript
 
 A model turn consumes inference quota and may invoke tools. Use a disposable
 conversation and approve the test before submitting it. Choose a read-only task
-appropriate for the attached resource, for example:
+appropriate for the assigned server, for example:
 
-> Discover the tools available from the attached workload MCP server. Report
+> Use the Project Gateway to discover tools from the assigned MCP server. Report
 > which read-only capabilities are available. Do not change any resource.
 
 Check the following results:
@@ -169,9 +153,9 @@ Check the following results:
    Provision the saved model explicitly and retain authoritative model-allowlist
    enforcement on completion. A model menu or session creation does not prove
    authenticated inference.
-2. Kit discovers the attached MCP resource through its native discovery path.
-   The resource authenticates with an agent-only machine session, not a human
-   credential. An authenticated status alone does not prove that tool listing
+2. Kit discovers the assigned MCP server through the Project Gateway.
+   The gateway authenticates the assistant's workload and authorizes the
+   backing agent. An authenticated status alone does not prove that tool listing
    or invocation succeeded.
 3. The canonical chat contains the user message, assistant text, assistant
    tool-call records, and the corresponding tool results. Inspect the saved chat,
@@ -236,15 +220,15 @@ original config, keep URL and credentials unchanged, and check that no tool
 references depend on the old name. This is fixture recovery, not proof of MCP
 credential revocation or a general retry API.
 
-| Symptom                                                                             | Likely cause                                                                             | Remedy                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worktree MCP registration fails during setup                                        | Missing or incorrect server URL                                                          | Run `mise run git:workmcp --server-url 'https://<WORKTREE_SERVER_HOST>:<PORT>'` with this worktree's HTTPS server URL, not its dashboard URL; rerun the failed setup step.                                                        |
-| Inference cannot reach the server or TLS validation fails                           | Container-unreachable origin or missing development CA                                   | Correct the runtime server origin and CA file. Keep MCP resource and issuer URLs HTTPS.                                                                                                                                           |
-| `/chat/models` returns `502` with `model catalog unavailable`                       | Upstream discovery failed, or the composed chat client does not expose catalog discovery | Check the upstream error and ensure the server includes catalog delegation through the agentic chat wrapper. Do not substitute a fabricated model catalog.                                                                        |
-| MCP authentication fails                                                            | Resource, OAuth issuer, persisted issuer UUID, or workload identity do not agree         | Recheck the configured attached resource and issuer, then use supported provisioning to issue machine credentials. Do not paste a human token or inference bearer.                                                                |
-| MCP is authenticated but discovery reports `subscriptions/listen: Method not found` | Optional subscription capability handling bug in AgentKit 0.11.2                         | Treat subscription/discovery failure separately from authentication. Use a runtime build with corrected optional-capability handling before accepting discovery as healthy; changing credentials does not fix the missing method. |
-| Tool results appear, but saved assistant text or tool calls are missing             | Adapter treats live chunks as transient or treats every tool update as only a result     | Use the chunk-reducing and tool-call-projecting adapter. Recover the resident journal through the guarded projector; do not send another prompt merely to repair saved output.                                                    |
-| Runtime startup reports saved metadata does not match authority                     | Empty reservation metadata is mishandled, or saved metadata belongs to another runtime   | Use the adapter that recognizes the empty reservation sentinel. Investigate nonempty authority mismatches; never clear saved metadata to force reuse.                                                                             |
+| Symptom                                                                             | Likely cause                                                                                                             | Remedy                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Worktree MCP registration fails during setup                                        | Missing or incorrect server URL                                                                                          | Run `mise run git:workmcp --server-url 'https://<WORKTREE_SERVER_HOST>:<PORT>'` with this worktree's HTTPS server URL, not its dashboard URL; rerun the failed setup step.                                                                                                                                               |
+| Inference cannot reach the server or TLS validation fails                           | Container-unreachable origin or missing development CA                                                                   | Correct the runtime server origin and CA file. Keep MCP resource and issuer URLs HTTPS.                                                                                                                                                                                                                                  |
+| `/chat/models` returns `502` with `model catalog unavailable`                       | Upstream discovery failed, or the composed chat client does not expose catalog discovery                                 | Check the upstream error and ensure the server includes catalog delegation through the agentic chat wrapper. Do not substitute a fabricated model catalog.                                                                                                                                                               |
+| MCP authentication fails                                                            | Gateway availability, its shared session issuer, the machine-access flag, or the projected workload assertion is invalid | Check that the Project Gateway is enabled and reachable over HTTPS, its organization session issuer is in shared mode, machine access is enabled for the organization, and the current assertion matches the admitted workload identity. Then check effective Connect access for the backing agent on the member server. |
+| MCP is authenticated but discovery reports `subscriptions/listen: Method not found` | Optional subscription capability handling bug in AgentKit 0.11.2                                                         | Treat subscription/discovery failure separately from authentication. Use a runtime build with corrected optional-capability handling before accepting discovery as healthy; changing credentials does not fix the missing method.                                                                                        |
+| Tool results appear, but saved assistant text or tool calls are missing             | Adapter treats live chunks as transient or treats every tool update as only a result                                     | Use the chunk-reducing and tool-call-projecting adapter. Recover the resident journal through the guarded projector; do not send another prompt merely to repair saved output.                                                                                                                                           |
+| Runtime startup reports saved metadata does not match authority                     | Empty reservation metadata is mishandled, or saved metadata belongs to another runtime                                   | Use the adapter that recognizes the empty reservation sentinel. Investigate nonempty authority mismatches; never clear saved metadata to force reuse.                                                                                                                                                                    |
 
 ## Startup files and authority
 

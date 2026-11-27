@@ -7,14 +7,16 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -135,10 +137,9 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	// The deployment opts in only assistants whose persisted attachment can use
-	// this machine-auth composition. Other assistants keep the legacy default.
+	// Projects without a served gateway keep the legacy default.
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
-		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
+		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
 	return nil
 }
@@ -219,100 +220,62 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
-// kitGKEAssistantEligible reads the attachment written by creation, rather than
-// trusting request flags or selecting Kit globally before attachments exist.
-func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, c KitLocalCompositionConfig) (bool, error) {
-	resource, issuerID, err := s.kitPersistedMCP(ctx, tx, assistant)
+// kitAssistantEligible retains the legacy default where the project gateway
+// is not served. Tool assignments do not affect runtime selection.
+func (s *ServiceCore) kitAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, hosts *orghost.Resolver) (bool, error) {
+	if s.featureFlags == nil {
+		return false, nil
+	}
+	enabled, err := s.featureFlags.IsFlagEnabledLocal(ctx, feature.FlagProjectGatewayMachineAccess, assistant.OrganizationID, nil, nil)
+	if err != nil {
+		return false, fmt.Errorf("evaluate project gateway machine access: %w", err)
+	}
+	if !enabled {
+		return false, nil
+	}
+	_, _, err = s.kitProjectGateway(ctx, tx, assistant, hosts)
 	if errors.Is(err, errKitMCPIneligible) {
 		return false, nil
 	}
-	if err != nil {
-		return false, err
-	}
-	if !c.PersistedMCP && (c.MCPResource == nil || resource == nil || c.MCPResource.String() != resource.String() || c.MCPUserSessionIssuerID != issuerID) {
-		return false, nil
-	}
-	return true, nil
+	return err == nil, err
 }
 
-var errKitMCPIneligible = errors.New("assistant has no supported persisted machine MCP attachment")
+var errKitMCPIneligible = errors.New("assistant project gateway is unavailable")
 
-// All connections share the projected assertion audience. Other issuer domains
-// require a separate projected assertion and are deliberately not configured.
-func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) ([]kitMCPConnection, uuid.UUID, error) {
-	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
+func (s *ServiceCore) kitProjectGateway(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord, hosts *orghost.Resolver) (kitMCPConnection, uuid.UUID, error) {
+	var zero kitMCPConnection
+	org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, assistant.OrganizationID)
 	if err != nil {
-		return nil, uuid.Nil, fmt.Errorf("load persisted assistant MCP servers: %w", err)
+		return zero, uuid.Nil, fmt.Errorf("load Kit gateway organization: %w", err)
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].McpServerID.String() < rows[j].McpServerID.String() })
-	connections := []kitMCPConnection{}
-	seen := map[uuid.UUID]bool{}
-	issuerID := uuid.Nil
-	for _, row := range rows {
-		if row.Visibility == "disabled" || seen[row.McpServerID] || row.EndpointSlug == "" {
-			continue
-		}
-		seen[row.McpServerID] = true
-		server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: row.McpServerID, ProjectID: assistant.ProjectID})
-		if err != nil {
-			return nil, uuid.Nil, fmt.Errorf("get persisted assistant MCP server: %w", err)
-		}
-		if !server.UserSessionIssuerID.Valid {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a shared issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
-			continue
-		}
-		issuer, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, server.UserSessionIssuerID.UUID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a live shared issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
-			continue
-		}
-		if err != nil {
-			return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
-		}
-		if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
-			continue
-		}
-		selected := assistantMCPServerRow{ServerSlug: row.ServerSlug, EnvironmentID: row.EnvironmentID, ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, EndpointIsDomainRoot: row.EndpointIsDomainRoot, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
-		if s.serverURL == nil {
-			return nil, uuid.Nil, errKitMCPIneligible
-		}
-		resource := selected.endpointURL(s.serverURL)
-		if resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.RawQuery != "" || resource.Fragment != "" {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an invalid HTTPS destination", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
-			continue
-		}
-		if issuerID == uuid.Nil {
-			issuerID = server.UserSessionIssuerID.UUID
-		}
-		if issuerID != server.UserSessionIssuerID.UUID {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with another assertion audience", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
-			continue
-		}
-		connections = append(connections, kitMCPConnection{Name: "attached-" + row.McpServerID.String(), Resource: resource, Environment: assistantMCPEnvironment(selected)})
-	}
-	if issuerID == uuid.Nil {
-		// A shared issuer is also an inference token endpoint. Unsupported MCP
-		// attachments must not make an otherwise authorized inference runtime fail.
-		issuers, err := usersessionsrepo.New(db).ListSharedUserSessionIssuersInOrganization(ctx, usersessionsrepo.ListSharedUserSessionIssuersInOrganizationParams{OrganizationID: assistant.OrganizationID, ProjectID: uuid.NullUUID{UUID: assistant.ProjectID, Valid: true}})
-		if err != nil {
-			return nil, uuid.Nil, fmt.Errorf("find Kit inference issuer: %w", err)
-		}
-		if len(issuers) == 0 {
-			return nil, uuid.Nil, errKitMCPIneligible
-		}
-		issuerID = issuers[0].UserSessionIssuer.ID
-	}
-	return connections, issuerID, nil
-}
-
-func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) (*url.URL, uuid.UUID, error) {
-	connections, issuerID, err := s.kitPersistedMCPConnections(ctx, db, assistant)
+	issuerID, unavailable, err := orggateway.Availability(ctx, db, org)
 	if err != nil {
-		return nil, uuid.Nil, err
+		return zero, uuid.Nil, fmt.Errorf("resolve Kit project gateway: %w", err)
 	}
-	if len(connections) == 0 {
-		return nil, issuerID, nil
+	if unavailable != orggateway.UnavailabilityNone {
+		return zero, uuid.Nil, fmt.Errorf("%w: %s", errKitMCPIneligible, unavailable)
 	}
-	return connections[0].Resource, issuerID, nil
+	issuer, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, issuerID)
+	if err != nil {
+		return zero, uuid.Nil, fmt.Errorf("load Kit project gateway issuer: %w", err)
+	}
+	if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) {
+		return zero, uuid.Nil, fmt.Errorf("%w: gateway issuer must use shared mode", errKitMCPIneligible)
+	}
+	project, err := projectsrepo.New(db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: assistant.ProjectID, OrganizationID: org.ID})
+	if err != nil {
+		return zero, uuid.Nil, fmt.Errorf("load Kit gateway project: %w", err)
+	}
+	baseURL := s.serverURL
+	if hosts != nil {
+		baseURL = hosts.ServerURL(org.DefaultHost)
+	}
+	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" {
+		return zero, uuid.Nil, fmt.Errorf("%w: gateway requires HTTPS", errKitMCPIneligible)
+	}
+	resource, err := url.Parse(orggateway.ProjectURL(baseURL, org.Slug, project.Slug))
+	if err != nil {
+		return zero, uuid.Nil, fmt.Errorf("parse Kit project gateway resource: %w", err)
+	}
+	return kitMCPConnection{Name: "project-gateway", Resource: resource}, issuerID, nil
 }

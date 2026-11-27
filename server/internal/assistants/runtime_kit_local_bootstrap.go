@@ -82,14 +82,14 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
 		}
-		// Built-in tokens are minted per project; attached servers bind their
-		// project through the endpoint and take no extensions.
+		// Built-in tokens name the project explicitly. The project gateway
+		// binds its project through its resource URL.
 		if strings.HasPrefix(name, "builtin-") {
 			if len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String() {
 				return fmt.Errorf("kit built-in MCP connections must name the workload project")
 			}
 		} else if len(server.Auth.Extensions) != 0 {
-			return fmt.Errorf("kit attached MCP connections must not carry extensions")
+			return fmt.Errorf("kit project gateway and direct MCP resources must not carry extensions")
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {

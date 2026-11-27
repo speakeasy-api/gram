@@ -84,3 +84,40 @@ describe("isOnboardingToolAllowed", () => {
     expect(isOnboardingToolAllowed("propose_slack_setup", admin)).toBe(true);
   });
 });
+
+it("reserves MCP mutations for the Slack setup workflow for Kit assistants", () => {
+  const permissions = {
+    canWriteAssistant: true,
+    canReadProject: true,
+    canWriteProject: true,
+    canReadMCP: true,
+    canWriteMCP: true,
+    canReadSkills: true,
+    canWriteEnvironment: true,
+  };
+  for (const tool of [
+    "attach_mcp_server",
+    "detach_mcp_server",
+    "attach_toolset",
+    "detach_toolset",
+    "create_toolset",
+    "add_tools_to_toolset",
+  ] as const) {
+    expect(isOnboardingToolAllowed(tool, permissions)).toBe(true);
+    expect(
+      isOnboardingToolAllowed(tool, {
+        ...permissions,
+        usesProjectMCPAccess: true,
+      }),
+    ).toBe(false);
+  }
+  const kit = { ...permissions, usesProjectMCPAccess: true };
+  expect(isOnboardingToolAllowed("list_mcp_servers", kit)).toBe(true);
+  expect(isOnboardingToolAllowed("propose_slack_setup", kit)).toBe(true);
+  expect(
+    isOnboardingToolAllowed("propose_slack_setup", {
+      ...kit,
+      canWriteMCP: false,
+    }),
+  ).toBe(false);
+});

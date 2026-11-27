@@ -3,7 +3,7 @@
 -- through the ordinary agent and workload identity surfaces.
 
 -- name: LockAssistant :one
-SELECT id, organization_id, name, created_by_user_id
+SELECT id, organization_id, name, created_by_user_id, runtime_version
 FROM assistants
 WHERE project_id = @project_id AND id = @assistant_id AND deleted IS FALSE
 FOR UPDATE;

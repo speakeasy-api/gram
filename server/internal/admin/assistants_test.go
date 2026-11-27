@@ -14,6 +14,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -146,6 +147,44 @@ func TestMigrateOrganizationAssistantIdentities(t *testing.T) {
 	otherStates, err := assistantidentity.States(t.Context(), db, other.project, []uuid.UUID{untouched})
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, otherStates[untouched].State, "another organization is untouched")
+}
+
+func TestMigrateOrganizationAssistantIdentitiesPreservesKitConnectPolicy(t *testing.T) {
+	t.Parallel()
+	svc, db := newAssistantMigrationService(t)
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{SessionID: "staff-session", OIDCSubject: "staff-subject", Email: "staff@example.invalid", Name: "Staff Member", HD: testAdminHD})
+	org := newAssistantMigrationOrg(t, db, "assistant-identity-kit-policy")
+	owner := org.member(true)
+	legacy := org.legacyAssistant("Legacy", owner)
+	kit := org.legacyAssistant("Kit", owner)
+	require.NoError(t, assistantrepo.New(db).SetAssistantDesiredRuntimeVersionForTest(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: org.project, AssistantID: kit, RuntimeVersion: 3}))
+	res, err := svc.MigrateOrganizationAssistantIdentities(ctx, &gen.MigrateOrganizationAssistantIdentitiesPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), res.Migrated)
+	states, err := assistantidentity.States(ctx, db, org.project, []uuid.UUID{legacy, kit})
+	require.NoError(t, err)
+	for _, id := range []uuid.UUID{legacy, kit} {
+		grants, err := agentrepo.New(db).ListAgentPolicyGrants(ctx, agentrepo.ListAgentPolicyGrantsParams{OrganizationID: org.id, AgentID: *states[id].AgentID})
+		require.NoError(t, err)
+		mcpSelectors := make(map[authz.Scope]authz.Selector)
+		for _, grant := range grants {
+			scope := authz.Scope(grant.Scope)
+			if scope != authz.ScopeMCPRead && scope != authz.ScopeMCPConnect {
+				continue
+			}
+			selector, err := authz.SelectorFromRow(grant.Selectors)
+			require.NoError(t, err)
+			mcpSelectors[scope] = selector
+		}
+		projectMCP := authz.NewSelector(authz.ScopeMCPRead, authz.WildcardResource)
+		projectMCP[authz.SelectorKeyProjectID] = org.project.String()
+		expected := make(map[authz.Scope]authz.Selector)
+		expected[authz.ScopeMCPRead] = projectMCP
+		if id == legacy {
+			expected[authz.ScopeMCPConnect] = projectMCP
+		}
+		require.Equal(t, expected, mcpSelectors)
+	}
 }
 
 func TestMigrateOrganizationAssistantIdentitiesUnavailableWithoutIssuer(t *testing.T) {
