@@ -54,11 +54,11 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	if err != nil {
 		return none, err
 	}
-	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
+	if orgEncryption.Service == nil || (writer != nil && orgEncryption.Provisioner == nil) {
 		return none, fmt.Errorf("chat transcript shadow mode requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow mode requires database and writer")
+	if db == nil {
+		return none, fmt.Errorf("chat transcript shadow mode requires a database")
 	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
@@ -82,15 +82,64 @@ func configureTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool,
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript store: %w", err)
 	}
+	// Only a process that captures shadows provisions keys. A reader opens
+	// shadows that a capturing process already sealed, so it never mints a
+	// config or data key.
 	for _, org := range organizations {
+		if writer == nil {
+			break
+		}
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return none, fmt.Errorf("provision chat transcript encryption: %w", err)
 		}
 	}
 	transcripts := transcriptstore.NewTranscripts(store, projectIDs...)
+	// A process that only reads chat messages has no writer to wire, and
+	// seals nothing, so it needs no warm key either.
+	if writer == nil {
+		return transcripts, nil
+	}
 	writer.WithTranscripts(transcripts)
 	// Sealing runs inside write transactions: keep the transcript key warm so
 	// a request does not wait for KMS each time the cached key expires.
 	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
+	return transcripts, nil
+}
+
+// configureReaderTranscripts is for a process that reads chat messages but
+// never writes them (streams). With organization encryption it opens shadows
+// like any other reader, without provisioning keys. Without it, it falls back to read-only Transcripts,
+// which report every read for a listed project.
+func configureReaderTranscripts(ctx context.Context, c *cli.Context, db *pgxpool.Pool, orgEncryption orgEncryptionDeps, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	if orgEncryption.Service == nil {
+		return configureReadOnlyTranscripts(c, logger, meterProvider)
+	}
+	return configureTranscripts(ctx, c, db, nil, orgEncryption, logger, tracerProvider, meterProvider)
+}
+
+// configureReadOnlyTranscripts is for a process that reads chat messages but
+// does not configure the shadow store. It knows which projects keep shadows,
+// so a read for one of them is reported (error log and
+// chat.transcript_shadow.plaintext_reads) instead of silently serving
+// plaintext, and fails outright in local development. It returns nil when no
+// project keeps shadows.
+func configureReadOnlyTranscripts(c *cli.Context, logger *slog.Logger, meterProvider metric.MeterProvider) (*transcriptstore.Transcripts, error) {
+	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
+	if len(values) == 0 {
+		// An explicitly supplied blank must not silently disable reporting.
+		if c.IsSet(chatTranscriptShadowProjectIDsFlag) {
+			return nil, fmt.Errorf("chat transcript shadow requires explicit nonempty project UUIDs")
+		}
+		return nil, nil
+	}
+	projectIDs, err := parseTranscriptShadowProjectIDs(values)
+	if err != nil {
+		return nil, err
+	}
+	strict := c.String("environment") == "local"
+	transcripts, err := transcriptstore.NewReadOnlyTranscripts(projectIDs...).WithPlaintextGuard(logger, meterProvider, strict)
+	if err != nil {
+		return nil, fmt.Errorf("configure read-only chat transcripts: %w", err)
+	}
 	return transcripts, nil
 }

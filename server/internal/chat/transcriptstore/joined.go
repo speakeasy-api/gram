@@ -39,8 +39,14 @@ type joinedRow struct {
 // plaintext row is logged, counted as stale, and the plaintext is served; a
 // shadow that fails authentication fails the read. In encrypted mode the
 // shadow is served without comparison, and a missing one fails the read.
-func (t *Transcripts) openJoined(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, rows []joinedRow) error {
-	if len(rows) == 0 || !t.Enabled(projectID) {
+func (t *Transcripts) openJoined(ctx context.Context, db plainrepo.DBTX, projectID uuid.UUID, reader string, rows []joinedRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	if err := t.checkOpenable(ctx, projectID, reader); err != nil {
+		return err
+	}
+	if !t.Enabled(projectID) {
 		return nil
 	}
 	s := t.store

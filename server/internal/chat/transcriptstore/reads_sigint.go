@@ -30,7 +30,7 @@ func (t *Transcripts) LoadEvaluationMessages(ctx context.Context, db DBTX, param
 		r := &rows[i]
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "LoadEvaluationMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -61,7 +61,7 @@ func (t *Transcripts) LoadEvaluationHistory(ctx context.Context, db DBTX, params
 		}
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: shape}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "LoadEvaluationHistory", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil

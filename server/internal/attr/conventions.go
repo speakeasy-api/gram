@@ -1242,6 +1242,10 @@ const (
 	// one encrypted transcript read that had no transcript and were served from
 	// plaintext.
 	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
+	// TranscriptShadowReaderKey names the transcript store read that served
+	// or would have served plaintext for a project that keeps encrypted
+	// shadows.
+	TranscriptShadowReaderKey = attribute.Key("gram.transcript_shadow.reader")
 	// TranscriptShadowMismatchKey lists the body fields on which an encrypted
 	// transcript and its plaintext row differ, by size and nullness only.
 	TranscriptShadowMismatchKey = attribute.Key("gram.transcript_shadow.mismatch")
@@ -4734,6 +4738,12 @@ func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
 	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
 }
 
+func TranscriptShadowReader(v string) attribute.KeyValue {
+	return TranscriptShadowReaderKey.String(v)
+}
+func SlogTranscriptShadowReader(v string) slog.Attr {
+	return slog.String(string(TranscriptShadowReaderKey), v)
+}
 func SlogTranscriptShadowMismatch(v any) slog.Attr {
 	return slog.Any(string(TranscriptShadowMismatchKey), v)
 }

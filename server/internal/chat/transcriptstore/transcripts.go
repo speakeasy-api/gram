@@ -27,6 +27,10 @@ type Transcripts struct {
 	// organizations caches each listed project's organization, which opening
 	// a shadow needs and most readers do not have at hand.
 	organizations *sync.Map
+
+	// guard reports a read for a listed project that this process cannot
+	// open, because it has no store. See plaintext_guard.go.
+	guard *plaintextGuard
 }
 
 // NewTranscripts encrypts transcripts for the listed projects only. An empty list
@@ -41,7 +45,7 @@ func NewTranscripts(store *Store, projectIDs ...uuid.UUID) *Transcripts {
 	for _, projectID := range projectIDs {
 		projects[projectID] = struct{}{}
 	}
-	return &Transcripts{store: store, projects: projects, encrypted: map[uuid.UUID]struct{}{}, organizations: &sync.Map{}}
+	return &Transcripts{store: store, projects: projects, encrypted: map[uuid.UUID]struct{}{}, organizations: &sync.Map{}, guard: nil}
 }
 
 // WithEncryptedProjects puts projects in encrypted mode: the transcript is the
@@ -205,8 +209,16 @@ func (t *Transcripts) open(ctx context.Context, organizationID string, projectID
 // the fallback and failure rules. targetOf maps a
 // row to its target.
 func OpenChatMessages[T any](ctx context.Context, t *Transcripts, organizationID string, projectID uuid.UUID, rows []T, targetOf func(*T) OpenTarget) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	// A listed project this process cannot open goes through the plaintext
+	// guard.
+	if err := t.checkOpenable(ctx, projectID, "OpenChatMessages"); err != nil {
+		return err
+	}
 	// Plaintext reads build no targets.
-	if len(rows) == 0 || !t.Enabled(projectID) {
+	if !t.Enabled(projectID) {
 		return nil
 	}
 	targets := make([]OpenTarget, len(rows))

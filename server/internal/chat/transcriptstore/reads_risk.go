@@ -55,7 +55,7 @@ func (t *Transcripts) GetMessageContentBatch(ctx context.Context, db DBTX, proje
 			joined = append(joined, joinedRow{body: bodyRefs{MessageID: r.RecentUntrustedContentID, Content: &r.RecentUntrustedContent, ContentRaw: nil, ToolCalls: nil, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.RecentShadowCiphertext, current: r.RecentShadowCurrent, shape: capContent(riskContextRunes)})
 		}
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "GetMessageContentBatch", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -71,7 +71,7 @@ func (t *Transcripts) GetChatMessageForUnmask(ctx context.Context, db DBTX, proj
 		return GetChatMessageForUnmaskRow{}, fmt.Errorf("get chat message for unmask: %w", err)
 	}
 	joined := []joinedRow{{body: bodyRefs{MessageID: row.ID, Content: &row.Content, ContentRaw: nil, ToolCalls: &row.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: row.ChatID, ciphertext: row.ShadowCiphertext, current: row.ShadowCurrent, shape: nil}}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "GetChatMessageForUnmask", joined); err != nil {
 		// Never hand back the plaintext that failed the check.
 		return GetChatMessageForUnmaskRow{}, err
 	}
@@ -118,7 +118,7 @@ func (t *Transcripts) GetJudgeMessageWindow(ctx context.Context, db DBTX, p Judg
 		r := &rows[i]
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, p.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, p.ProjectID, "GetJudgeMessageWindow", joined); err != nil {
 		return nil, err
 	}
 	out := make([]JudgeWindowMessage, len(rows))

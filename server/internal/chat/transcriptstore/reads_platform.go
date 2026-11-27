@@ -54,7 +54,7 @@ func (t *Transcripts) SearchPlatformChatMessages(ctx context.Context, db DBTX, p
 		r := &rows[i]
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "SearchPlatformChatMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -79,7 +79,7 @@ func (t *Transcripts) ReadPlatformChatMessages(ctx context.Context, db DBTX, par
 		r := &rows[i]
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: &r.ContentRaw, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: r.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: platformShape(platformOversized{content: r.ContentOversized, toolCalls: r.ToolCallsOversized, contentRaw: r.ContentRawOversized})}
 	}
-	if err := t.openJoined(ctx, db, params.ProjectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, params.ProjectID, "ReadPlatformChatMessages", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
@@ -110,7 +110,7 @@ func (t *Transcripts) ListOwnedChatTranscriptMessagesForRecall(ctx context.Conte
 		r := &rows[i]
 		joined[i] = joinedRow{body: bodyRefs{MessageID: r.ID, Content: &r.Content, ContentRaw: nil, ToolCalls: &r.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: nil}, chatID: params.ChatID, ciphertext: r.ShadowCiphertext, current: r.ShadowCurrent, shape: nil}
 	}
-	if err := t.openJoined(ctx, db, projectID, joined); err != nil {
+	if err := t.openJoined(ctx, db, projectID, "ListOwnedChatTranscriptMessagesForRecall", joined); err != nil {
 		return nil, err
 	}
 	return rows, nil
