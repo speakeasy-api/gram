@@ -600,6 +600,13 @@ func sharedApp(eps []mcpconnectionattempts.FailingPerson) App {
 	return App{Family: first.ClientFamily, Version: first.ClientVersion}
 }
 
+// SameAs reports whether q is p as another read grouped it: the same id from the same episodes and
+// evidence, so everything a list shows of it agrees. People failing on its scope outside it may differ.
+func (p Problem) SameAs(q Problem) bool {
+	return p.ID == q.ID && p.People == q.People && p.OtherAppsWorked == q.OtherAppsWorked &&
+		slices.EqualFunc(p.Episodes, q.Episodes, func(a, b mcpconnectionattempts.FailingPerson) bool { return compareEpisodes(a, b) == 0 })
+}
+
 func problemID(organizationID string, scope Scope, w way) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{organizationID, string(scope.Kind), scope.Key, string(w.part), string(w.who)}, "\x00")))
 	return hex.EncodeToString(sum[:16])
@@ -626,5 +633,18 @@ func compareEpisodes(a, b mcpconnectionattempts.FailingPerson) int {
 		cmp.Compare(a.Failures, b.Failures),
 		cmp.Compare(a.ProjectID.String(), b.ProjectID.String()),
 		a.ServerLastAnsweredAt.Compare(b.ServerLastAnsweredAt),
+		slices.Compare(a.Issuers, b.Issuers),
+		compareBool(a.Unrecorded, b.Unrecorded),
 	)
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	default:
+		return -1
+	}
 }

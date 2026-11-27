@@ -1522,6 +1522,7 @@ func EncodeListSuspectedProblemsRequest(encoder func(*http.Request) goahttp.Enco
 // by the mcpConnectionHealth listSuspectedProblems endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeListSuspectedProblemsResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1563,6 +1564,20 @@ func DecodeListSuspectedProblemsResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewListSuspectedProblemsResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListSuspectedProblemsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listSuspectedProblems", err)
+			}
+			err = ValidateListSuspectedProblemsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listSuspectedProblems", err)
+			}
+			return nil, NewListSuspectedProblemsUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body ListSuspectedProblemsUnauthorizedResponseBody
@@ -1765,6 +1780,7 @@ func EncodeGetSuspectedProblemRequest(encoder func(*http.Request) goahttp.Encode
 // by the mcpConnectionHealth getSuspectedProblem endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeGetSuspectedProblemResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1806,6 +1822,20 @@ func DecodeGetSuspectedProblemResponse(decoder func(*http.Response) goahttp.Deco
 			}
 			res := NewGetSuspectedProblemResultOK(&body)
 			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetSuspectedProblemUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "getSuspectedProblem", err)
+			}
+			err = ValidateGetSuspectedProblemUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "getSuspectedProblem", err)
+			}
+			return nil, NewGetSuspectedProblemUnavailable(&body)
 		case http.StatusUnauthorized:
 			var (
 				body GetSuspectedProblemUnauthorizedResponseBody
@@ -1956,6 +1986,265 @@ func DecodeGetSuspectedProblemResponse(decoder func(*http.Response) goahttp.Deco
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("mcpConnectionHealth", "getSuspectedProblem", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListProjectSuspectedProblemsRequest instantiates a HTTP request object
+// with method and path set to call the "mcpConnectionHealth" service
+// "listProjectSuspectedProblems" endpoint
+func (c *Client) BuildListProjectSuspectedProblemsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListProjectSuspectedProblemsMcpConnectionHealthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpConnectionHealth", "listProjectSuspectedProblems", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListProjectSuspectedProblemsRequest returns an encoder for requests
+// sent to the mcpConnectionHealth listProjectSuspectedProblems server.
+func EncodeListProjectSuspectedProblemsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpconnectionhealth.ListProjectSuspectedProblemsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpConnectionHealth", "listProjectSuspectedProblems", "*mcpconnectionhealth.ListProjectSuspectedProblemsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewListProjectSuspectedProblemsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+		}
+		return nil
+	}
+}
+
+// DecodeListProjectSuspectedProblemsResponse returns a decoder for responses
+// returned by the mcpConnectionHealth listProjectSuspectedProblems endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListProjectSuspectedProblemsResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListProjectSuspectedProblemsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListProjectSuspectedProblemsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			res := NewListProjectSuspectedProblemsResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListProjectSuspectedProblemsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListProjectSuspectedProblemsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListProjectSuspectedProblemsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListProjectSuspectedProblemsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListProjectSuspectedProblemsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListProjectSuspectedProblemsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListProjectSuspectedProblemsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListProjectSuspectedProblemsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListProjectSuspectedProblemsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+				}
+				err = ValidateListProjectSuspectedProblemsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+				}
+				return nil, NewListProjectSuspectedProblemsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListProjectSuspectedProblemsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+				}
+				err = ValidateListProjectSuspectedProblemsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+				}
+				return nil, NewListProjectSuspectedProblemsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpConnectionHealth", "listProjectSuspectedProblems", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListProjectSuspectedProblemsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			err = ValidateListProjectSuspectedProblemsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpConnectionHealth", "listProjectSuspectedProblems", err)
+			}
+			return nil, NewListProjectSuspectedProblemsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpConnectionHealth", "listProjectSuspectedProblems", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -2719,6 +3008,51 @@ func unmarshalSuspectedProblemServerResponseBodyToMcpconnectionhealthSuspectedPr
 	res.Server = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Server)
 	if v.Member != nil {
 		res.Member = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Member)
+	}
+
+	return res
+}
+
+// unmarshalProjectSuspectedProblemResponseBodyToMcpconnectionhealthProjectSuspectedProblem
+// builds a value of type *mcpconnectionhealth.ProjectSuspectedProblem from a
+// value of type *ProjectSuspectedProblemResponseBody.
+func unmarshalProjectSuspectedProblemResponseBodyToMcpconnectionhealthProjectSuspectedProblem(v *ProjectSuspectedProblemResponseBody) *mcpconnectionhealth.ProjectSuspectedProblem {
+	res := &mcpconnectionhealth.ProjectSuspectedProblem{
+		UserSessionIssuerID: v.UserSessionIssuerID,
+		ID:                  *v.ID,
+		Rule:                mcpconnectionhealth.SuspectedProblemRule(*v.Rule),
+		Part:                mcpconnectionhealth.SuspectedProblemPart(*v.Part),
+		Since:               *v.Since,
+		LastFailedAt:        *v.LastFailedAt,
+		PeopleCount:         *v.PeopleCount,
+		PeopleOnServerCount: v.PeopleOnServerCount,
+		Headline:            *v.Headline,
+		Fact:                *v.Fact,
+	}
+	if v.WhoFixes != nil {
+		whoFixes := mcpconnectionhealth.SuspectedProblemWhoFixes(*v.WhoFixes)
+		res.WhoFixes = &whoFixes
+	}
+	if v.Server != nil {
+		res.Server = unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink(v.Server)
+	}
+	res.Scope = unmarshalSuspectedProblemScopeResponseBodyToMcpconnectionhealthSuspectedProblemScope(v.Scope)
+	res.Filters = unmarshalSuspectedProblemFiltersResponseBodyToMcpconnectionhealthSuspectedProblemFilters(v.Filters)
+
+	return res
+}
+
+// unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink
+// builds a value of type *mcpconnectionhealth.SuspectedProblemServerLink from
+// a value of type *SuspectedProblemServerLinkResponseBody.
+func unmarshalSuspectedProblemServerLinkResponseBodyToMcpconnectionhealthSuspectedProblemServerLink(v *SuspectedProblemServerLinkResponseBody) *mcpconnectionhealth.SuspectedProblemServerLink {
+	if v == nil {
+		return nil
+	}
+	res := &mcpconnectionhealth.SuspectedProblemServerLink{
+		ID:   *v.ID,
+		Slug: v.Slug,
+		Name: v.Name,
 	}
 
 	return res

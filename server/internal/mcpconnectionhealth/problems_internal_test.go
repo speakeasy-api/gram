@@ -352,7 +352,7 @@ func TestCapProblems_KeepsTheFirstHundred(t *testing.T) {
 	for i := range all {
 		all[i].ID = strconv.Itoa(i)
 	}
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Len(t, shown, maxProblems)
 	require.Equal(t, int64(maxProblems+1), total)
 	require.Equal(t, "0", shown[0].ID, "the most people first stay")
@@ -368,7 +368,7 @@ func TestCapProblems_PutsWhatEachPersonFixesLast(t *testing.T) {
 		{ID: "speakeasy-1", WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 1},
 		{ID: "unknown-1", WhoFixes: mcpconnectionattempts.WhoNobody, People: 1},
 	}
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Equal(t, int64(6), total)
 	ids := make([]string, len(shown))
 	for i, p := range shown {
@@ -384,7 +384,7 @@ func TestCapProblems_CapsAfterOrdering(t *testing.T) {
 		all[i].ID, all[i].WhoFixes = strconv.Itoa(i), mcpconnectionattempts.WhoPerson
 	}
 	all[maxProblems].WhoFixes = mcpconnectionattempts.WhoAdmin
-	shown, total := capProblems(all)
+	shown, total := capProblems(all, maxProblems)
 	require.Len(t, shown, maxProblems)
 	require.Equal(t, int64(maxProblems+1), total)
 	require.Equal(t, strconv.Itoa(maxProblems), shown[0].ID, "an admin's problem past the cap is listed first")
@@ -399,18 +399,59 @@ func TestWhoFixesOf_NamesEveryParty(t *testing.T) {
 	}
 }
 
-func TestPastDeadline_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
+func TestAnswerProblems_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
 	t.Parallel()
 	s := &Service{logger: testenv.NewLogger(t)}
 	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancel()
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, s.pastDeadline(expired, fmt.Errorf("read: %w", context.DeadlineExceeded)), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, fmt.Errorf("read: %w", context.DeadlineExceeded)), &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.ErrorAs(t, s.pastDeadline(expired, oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code, "any read past the budget")
-	require.ErrorAs(t, s.pastDeadline(expired, oops.C(oops.CodeForbidden)), &shareable)
+	require.ErrorAs(t, s.answerProblems(expired, oops.C(oops.CodeForbidden)), &shareable)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.ErrorAs(t, s.pastDeadline(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.ErrorAs(t, s.answerProblems(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code, "inside the budget nothing changes")
+}
+
+// Only a suspected problems request answers a timeout or a read over its limits as unavailable; other methods answer as before.
+func TestUnexpected_MapsTimeoutsOnlyInAProblemsRequest(t *testing.T) {
+	t.Parallel()
+	tooLarge := fmt.Errorf("read: %w", mcpconnectionattempts.ErrReadTooLarge)
+	for _, tc := range []struct {
+		name     string
+		problems bool
+		expired  bool
+		err      error
+		code     oops.Code
+	}{
+		{"another method past its deadline", false, true, errors.New("stalled"), oops.CodeUnexpected},
+		{"a problems request past its budget", true, true, errors.New("stalled"), oops.CodeUnavailable},
+		{"a problems read over its limits", true, false, tooLarge, oops.CodeUnavailable},
+		{"anything else in a problems request", true, false, errors.New("broken"), oops.CodeUnexpected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Service{logger: testenv.NewLogger(t), problemsDeadline: time.Minute}
+			if tc.expired {
+				s.problemsDeadline = -time.Second
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), s.problemsDeadline)
+			if tc.problems {
+				ctx, cancel = s.problemsContext(t.Context())
+			}
+			t.Cleanup(cancel)
+			err := s.unexpected(ctx, tc.err, "load server names")
+			if tc.problems {
+				err = s.answerProblems(ctx, err)
+			}
+			var shareable *oops.ShareableError
+			require.ErrorAs(t, err, &shareable)
+			require.Equal(t, tc.code, shareable.Code)
+			if tc.code == oops.CodeUnexpected {
+				require.Contains(t, shareable.Error(), "load server names")
+			}
+		})
+	}
 }

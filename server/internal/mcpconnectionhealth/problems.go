@@ -67,8 +67,7 @@ type listed struct {
 	problems       []problems.Problem
 }
 
-// readProblems groups the provider's failures in the project, attributed as Connection
-// Logs attributes them, then keeps those on serverID when set. Callers without log:read get none.
+// readProblems groups the provider's failures in the project, then keeps those on serverID when set.
 func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, serverID *string, now time.Time) (listed, error) {
 	var out listed
 	if serverID != nil {
@@ -93,24 +92,22 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
 		return out, err
 	}
-
-	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
-	recordedSince, err := s.logsOnSince(ctx, c)
+	recordedSince, err := s.logsOnSince(ctx, c.organizationID)
 	if err != nil {
 		return out, err
 	}
-	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, problems.ReadScope{
+	all, err := s.groupProblems(ctx, problems.ReadScope{
 		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false,
-		IssuerID: issuer.ID, IssuerServerIDs: out.issuerServers,
+		IssuerID: out.issuerID, IssuerServerIDs: out.issuerServers,
 	}, recordedSince, now)
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
 		out.loggingEnabled = false
 		return out, nil
 	case err != nil:
-		return out, oops.E(oops.CodeUnexpected, err, "read suspected problems").LogError(ctx, s.logger)
+		return out, err
 	}
-	for _, p := range all {
+	for _, p := range all.Problems {
 		if out.serverID == "" || peopleOn(p, out.serverID) > 0 {
 			out.problems = append(out.problems, p)
 		}
@@ -118,29 +115,62 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	return out, nil
 }
 
+// groupProblems reads the scope's suspected problems counted from recordedSince, or mcpconnectionattempts.ErrLogsOff.
+func (s *Service) groupProblems(ctx context.Context, scope problems.ReadScope, recordedSince, now time.Time) (problems.Grouped, error) {
+	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, scope, recordedSince, now)
+	switch {
+	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
+		return all, err //nolint:wrapcheck // the callers' sentinel
+	case err != nil:
+		return all, s.unexpected(ctx, err, "read suspected problems")
+	}
+	return all, nil
+}
+
 // logsOnSince is when the organization's logs were last turned on, zero when no row says so; nothing is recorded while they are off.
-func (s *Service) logsOnSince(ctx context.Context, c caller) (time.Time, error) {
-	at, err := repo.New(s.db).GetLogsOnSince(ctx, repo.GetLogsOnSinceParams{OrganizationID: c.organizationID, FeatureName: string(productfeatures.FeatureLogs)})
+func (s *Service) logsOnSince(ctx context.Context, organizationID string) (time.Time, error) {
+	at, err := repo.New(s.db).GetLogsOnSince(ctx, repo.GetLogsOnSinceParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return time.Time{}, nil
 	case err != nil:
-		return time.Time{}, oops.E(oops.CodeUnexpected, err, "read when logs were turned on").LogError(ctx, s.logger)
+		return time.Time{}, s.unexpected(ctx, err, "read when logs were turned on")
 	}
 	return at.Time, nil
 }
 
-// pastDeadline turns any failure after the request's budget ran out into temporarily
-// unavailable. Refusals keep their own code.
-func (s *Service) pastDeadline(ctx context.Context, err error) error {
-	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return err
+const problemsUnavailable = "suspected problems took too long to read, try again in a minute"
+
+type problemsRequestKey struct{}
+
+// problemsContext bounds a suspected problems request and marks it, so its timeouts and read limits are answered by answerProblems.
+func (s *Service) problemsContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(ctx, s.problemsDeadline)
+	return context.WithValue(ctx, problemsRequestKey{}, true), cancel
+}
+
+// unexpected logs an unexpected failure. In a suspected problems request a timeout or a read over its limits is left unlogged for answerProblems.
+func (s *Service) unexpected(ctx context.Context, err error, message string) error {
+	if ctx.Value(problemsRequestKey{}) != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, mcpconnectionattempts.ErrReadTooLarge)) {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, s.logger)
+}
+
+// answerProblems turns a suspected problems failure past the budget, or a read over its limits,
+// into temporarily unavailable with one warning. Refusals, and unavailable answers, keep their code.
+func (s *Service) answerProblems(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
 	}
 	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) && slices.Contains([]oops.Code{oops.CodeUnauthorized, oops.CodeForbidden, oops.CodeNotFound, oops.CodeBadRequest}, shareable.Code) {
+	if errors.As(err, &shareable) && slices.Contains([]oops.Code{oops.CodeUnauthorized, oops.CodeForbidden, oops.CodeNotFound, oops.CodeBadRequest, oops.CodeUnavailable}, shareable.Code) {
 		return err
 	}
-	return oops.E(oops.CodeUnavailable, err, "suspected problems took too long to read, try again in a minute").LogWarn(ctx, s.logger)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, mcpconnectionattempts.ErrReadTooLarge) {
+		return oops.E(oops.CodeUnavailable, err, problemsUnavailable).LogWarn(ctx, s.logger)
+	}
+	return err
 }
 
 // peopleOn counts the problem's people failing on a server, gateway member or toolset.
@@ -155,9 +185,9 @@ func peopleOn(p problems.Problem, serverID string) int {
 }
 
 func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSuspectedProblemsPayload) (res *gen.ListSuspectedProblemsResult, err error) {
-	ctx, cancel := context.WithTimeout(ctx, s.problemsDeadline)
+	ctx, cancel := s.problemsContext(ctx)
 	defer cancel()
-	defer func() { err = s.pastDeadline(ctx, err) }()
+	defer func() { err = s.answerProblems(ctx, err) }()
 	c, err := s.beginLogs(ctx)
 	if err != nil {
 		return nil, err
@@ -170,7 +200,7 @@ func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSu
 	if payload.Part != nil {
 		l.problems = slices.DeleteFunc(l.problems, func(p problems.Problem) bool { return partOf(p.Part) != *payload.Part })
 	}
-	l.problems, result.ProblemsTotal = capProblems(l.problems)
+	l.problems, result.ProblemsTotal = capProblems(l.problems, maxProblems)
 	if len(l.problems) == 0 {
 		return result, nil
 	}
@@ -190,9 +220,9 @@ func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSu
 }
 
 func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspectedProblemPayload) (res *gen.GetSuspectedProblemResult, err error) {
-	ctx, cancel := context.WithTimeout(ctx, s.problemsDeadline)
+	ctx, cancel := s.problemsContext(ctx)
 	defer cancel()
-	defer func() { err = s.pastDeadline(ctx, err) }()
+	defer func() { err = s.answerProblems(ctx, err) }()
 	c, err := s.beginLogs(ctx)
 	if err != nil {
 		return nil, err
@@ -261,7 +291,7 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count suspected problem attempts").LogError(ctx, s.logger)
+		return nil, s.unexpected(ctx, err, "count suspected problem attempts")
 	}
 
 	result.Found = true
@@ -269,12 +299,12 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	return result, nil
 }
 
-// capProblems lists what each person fixes last, keeps the first maxProblems and counts them all.
-func capProblems(ps []problems.Problem) ([]problems.Problem, int64) {
+// capProblems lists what each person fixes last, keeps the first limit and counts them all.
+func capProblems(ps []problems.Problem, limit int) ([]problems.Problem, int64) {
 	slices.SortStableFunc(ps, func(a, b problems.Problem) int {
 		return cmp.Compare(personFixes(a), personFixes(b))
 	})
-	return ps[:min(len(ps), maxProblems)], int64(len(ps))
+	return ps[:min(len(ps), limit)], int64(len(ps))
 }
 
 func personFixes(p problems.Problem) int {

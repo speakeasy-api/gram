@@ -456,3 +456,42 @@ func BuildGetSuspectedProblemPayload(mcpConnectionHealthGetSuspectedProblemBody 
 
 	return v, nil
 }
+
+// BuildListProjectSuspectedProblemsPayload builds the payload for the
+// mcpConnectionHealth listProjectSuspectedProblems endpoint from CLI flags.
+func BuildListProjectSuspectedProblemsPayload(mcpConnectionHealthListProjectSuspectedProblemsBody string, mcpConnectionHealthListProjectSuspectedProblemsSessionToken string, mcpConnectionHealthListProjectSuspectedProblemsApikeyToken string, mcpConnectionHealthListProjectSuspectedProblemsProjectSlugInput string) (*mcpconnectionhealth.ListProjectSuspectedProblemsPayload, error) {
+	var err error
+	var body ListProjectSuspectedProblemsRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpConnectionHealthListProjectSuspectedProblemsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"limit\": 2\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpConnectionHealthListProjectSuspectedProblemsSessionToken != "" {
+			sessionToken = &mcpConnectionHealthListProjectSuspectedProblemsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpConnectionHealthListProjectSuspectedProblemsApikeyToken != "" {
+			apikeyToken = &mcpConnectionHealthListProjectSuspectedProblemsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpConnectionHealthListProjectSuspectedProblemsProjectSlugInput != "" {
+			projectSlugInput = &mcpConnectionHealthListProjectSuspectedProblemsProjectSlugInput
+		}
+	}
+	v := &mcpconnectionhealth.ListProjectSuspectedProblemsPayload{
+		Limit: body.Limit,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

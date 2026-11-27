@@ -76,6 +76,12 @@ type Episode struct {
 	// LastWorkedAt is when the broken part last worked before the run, zero when it was
 	// not seen working in the time read.
 	LastWorkedAt time.Time
+
+	// Issuers are the MCP sign-ins recorded on the run's failures, sorted.
+	Issuers []string
+
+	// Unrecorded reports a failure in the run that records no MCP sign-in.
+	Unrecorded bool
 }
 
 // MaxEpisodeApps bounds the apps an episode keeps.
@@ -210,11 +216,11 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowF
 	if err != nil {
 		return nil, err
 	}
-	rows, err := ch.Query(failingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+EventsTable+
-		` WHERE organization_id = ? AND `+where+` AND event_time <= fromUnixTimestamp64Nano(?) GROUP BY organization_id, attempt_id HAVING subject != ''`+episodeHaving+`)`,
+	rows, err := ch.Query(episodeReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+EventsTable+
+		` WHERE organization_id = ? AND `+where+` AND event_time <= fromUnixTimestamp64Nano(?) GROUP BY organization_id, attempt_id HAVING subject != ''`+episodeHaving+`)`+failingReadSQL,
 		append(append([]any{organizationID}, args...), now.UnixNano())...)
 	if err != nil {
-		return nil, fmt.Errorf("query episode attempts: %w", err)
+		return nil, readFailed("query episode attempts", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
@@ -231,7 +237,7 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowF
 		out = append(out, a)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read episode attempt rows: %w", err)
+		return nil, readFailed("read episode attempt rows", err)
 	}
 	return out, nil
 }
@@ -529,6 +535,7 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 			OpenedAt: latest.end.At, LastFailureAt: latest.end.At, Failures: 0, LastWorkedAt: worked,
 			Apps:      []EpisodeApp{{Key: a.AppKey, Family: a.ClientFamily, Version: a.ClientVersion}},
 			AppsTotal: 1,
+			Issuers:   nil, Unrecorded: false,
 		}
 		apps := map[EpisodeApp]bool{e.Apps[0]: true}
 		opening := latest
@@ -539,6 +546,12 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 				continue
 			}
 			e.Failures += f.a.Weight
+			e.Unrecorded = e.Unrecorded || len(f.a.Issuers) == 0
+			for _, issuer := range f.a.Issuers {
+				if !slices.Contains(e.Issuers, issuer) {
+					e.Issuers = append(e.Issuers, issuer)
+				}
+			}
 			if app := (EpisodeApp{Key: f.a.AppKey, Family: f.a.ClientFamily, Version: f.a.ClientVersion}); !apps[app] {
 				apps[app] = true
 				e.AppsTotal++
@@ -551,6 +564,7 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 			}
 		}
 		e.OpenedAt, e.OpeningReason = opening.end.At, opening.end.Reason
+		slices.Sort(e.Issuers)
 		episodes = append(episodes, e)
 	}
 	return episodes

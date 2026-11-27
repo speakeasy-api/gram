@@ -34,17 +34,47 @@ type ReadScope struct {
 	IssuerServerIDs []string
 }
 
+// Grouped is a read's suspected problems and what they were grouped from.
+type Grouped struct {
+	// Problems are the suspected problems.
+	Problems []Problem
+
+	organizationID string
+	episodes       []mcpconnectionattempts.FailingPerson
+	upstreams      map[string]Upstream
+	served         []mcpconnectionattempts.ServedByFamily
+	now            time.Time
+}
+
+// Episodes are the episodes the problems were grouped from.
+func (g Grouped) Episodes() []mcpconnectionattempts.FailingPerson { return g.episodes }
+
+// Within groups only the episodes keep accepts, with the same served and upstream evidence.
+func (g Grouped) Within(keep func(mcpconnectionattempts.FailingPerson) bool) []Problem {
+	var kept []mcpconnectionattempts.FailingPerson
+	for _, e := range g.episodes {
+		if keep(e) {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return Group(g.organizationID, kept, g.upstreams, g.served, g.now)
+}
+
 // Read returns the suspected problems of the scope at now, or mcpconnectionattempts.ErrLogsOff.
 // Episodes count from recordedSince at the earliest; app-version problems need served rows.
 // Callers pass recordedSince no earlier than when the organization's logs were last turned back on.
-func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), scope ReadScope, recordedSince, now time.Time) ([]Problem, error) {
+func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), scope ReadScope, recordedSince, now time.Time) (Grouped, error) {
+	var none Grouped
 	switch {
 	case scope.OrganizationID == "":
-		return nil, errors.New("suspected problems need an organization")
+		return none, errors.New("suspected problems need an organization")
 	case scope.ProjectID == uuid.Nil && !scope.WholeOrganization:
-		return nil, errors.New("suspected problems need a project")
+		return none, errors.New("suspected problems need a project")
 	case scope.ProjectID != uuid.Nil && scope.WholeOrganization:
-		return nil, errors.New("suspected problems need a project or the whole organization, not both")
+		return none, errors.New("suspected problems need a project or the whole organization, not both")
 	}
 	organizationID := scope.OrganizationID
 	triedSince := now.Add(-triedWithin)
@@ -61,11 +91,11 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 		TriedSince:      triedSince,
 	}, now)
 	if err != nil {
-		return nil, fmt.Errorf("read failing now: %w", err)
+		return none, fmt.Errorf("read failing now: %w", err)
 	}
 	episodes = sinceRecording(episodes, triedSince, recordedSince, now)
 	if len(episodes) == 0 {
-		return nil, nil
+		return none, nil
 	}
 
 	var upstreams map[string]Upstream
@@ -85,9 +115,12 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 		return nil
 	})
 	if err := eg.Wait(); err != nil {
-		return nil, fmt.Errorf("read suspected problem inputs: %w", err)
+		return none, fmt.Errorf("read suspected problem inputs: %w", err)
 	}
-	return Group(organizationID, episodes, upstreams, served, now), nil
+	return Grouped{
+		Problems:       Group(organizationID, episodes, upstreams, served, now),
+		organizationID: organizationID, episodes: episodes, upstreams: upstreams, served: served, now: now,
+	}, nil
 }
 
 // sinceRecording drops episodes last failing before triedSince or still in grace, counting from recordedSince.

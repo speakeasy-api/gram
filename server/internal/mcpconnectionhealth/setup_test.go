@@ -52,12 +52,14 @@ type testInstance struct {
 	ch      driver.Conn
 	flags   *targetedFlag
 	logsOn  *atomic.Bool
-	org     string
-	project uuid.UUID
-	userID  string
-	issuer  uuid.UUID
-	server  uuid.UUID
-	now     time.Time
+	// logsOffAfter, when set, turns logs off after that many checks.
+	logsOffAfter *atomic.Int32
+	org          string
+	project      uuid.UUID
+	userID       string
+	issuer       uuid.UUID
+	server       uuid.UUID
+	now          time.Time
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -82,9 +84,15 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	flags.targetOrganizations(authCtx.OrganizationSlug)
 	logsOn := &atomic.Bool{}
 	logsOn.Store(true)
+	logsOffAfter, logsChecks := &atomic.Int32{}, &atomic.Int32{}
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	service := mcpconnectionhealth.NewService(logger, tracerProvider, conn, ch, sessionManager, authzEngine, flags,
-		func(context.Context, string) (bool, error) { return logsOn.Load(), nil })
+		func(context.Context, string) (bool, error) {
+			if after := logsOffAfter.Load(); after > 0 && logsChecks.Add(1) > after {
+				return false, nil
+			}
+			return logsOn.Load(), nil
+		})
 
 	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
@@ -104,17 +112,18 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	return ctx, &testInstance{
-		service: service,
-		conn:    conn,
-		ch:      ch,
-		flags:   flags,
-		logsOn:  logsOn,
-		org:     authCtx.ActiveOrganizationID,
-		project: *authCtx.ProjectID,
-		userID:  authCtx.UserID,
-		issuer:  issuer.ID,
-		server:  server.ID,
-		now:     time.Now().UTC(),
+		service:      service,
+		conn:         conn,
+		ch:           ch,
+		flags:        flags,
+		logsOn:       logsOn,
+		logsOffAfter: logsOffAfter,
+		org:          authCtx.ActiveOrganizationID,
+		project:      *authCtx.ProjectID,
+		userID:       authCtx.UserID,
+		issuer:       issuer.ID,
+		server:       server.ID,
+		now:          time.Now().UTC(),
 	}
 }
 

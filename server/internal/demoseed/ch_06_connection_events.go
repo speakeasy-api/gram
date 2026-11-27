@@ -145,7 +145,8 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			}
 			switch ending.step {
 			case mcpconnectionattempts.StepProviderRefresh:
-				opts = append(opts, mcpconnectionattempts.Provider(demoConnectionProvider))
+				// A refresh records the saved connection's service connection and MCP sign-in, as production does.
+				opts = append(opts, s.savedConnectionRefresh()...)
 			case mcpconnectionattempts.StepInboundToken:
 				opts = append(opts, mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken))
 			}
@@ -160,7 +161,25 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			rows = append(rows, row)
 		}
 	}
-	return rows, nil
+	// The sweep refreshed the saved connection a minute before seeding, so no daily failed refresh is still failing at any seed time.
+	sweep := s.now.Add(-time.Minute)
+	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(s.det("connection-request-sweep"), sweep, mcpconnectionattempts.ProviderSessionScope(s.orgID(), s.projectID(), mcpconnectionattempts.AppBackground)),
+		mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed, true, sweep,
+		append(s.savedConnectionRefresh(), mcpconnectionattempts.Subject(&subject))...)
+	if err != nil {
+		return nil, fmt.Errorf("build connection request sweep: %w", err)
+	}
+	row.TraceID = md5Hex(s.name("connection-request-sweep"))
+	return append(rows, row), nil
+}
+
+// savedConnectionRefresh is what a refresh of the saved Linear connection records.
+func (s *seeder) savedConnectionRefresh() []mcpconnectionattempts.Option {
+	return []mcpconnectionattempts.Option{
+		mcpconnectionattempts.Provider(demoConnectionProvider),
+		mcpconnectionattempts.RemoteSessionClient(s.det("remote-identity-client-linear")),
+		mcpconnectionattempts.UserSessionIssuer(s.det("issuer-linear")),
+	}
 }
 
 // connectionRequestServed is an answered request a minute after the person's latest

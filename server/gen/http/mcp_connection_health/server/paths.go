@@ -46,3 +46,8 @@ func ListSuspectedProblemsMcpConnectionHealthPath() string {
 func GetSuspectedProblemMcpConnectionHealthPath() string {
 	return "/rpc/mcpConnectionHealth.getSuspectedProblem"
 }
+
+// ListProjectSuspectedProblemsMcpConnectionHealthPath returns the URL path to the mcpConnectionHealth service listProjectSuspectedProblems HTTP endpoint.
+func ListProjectSuspectedProblemsMcpConnectionHealthPath() string {
+	return "/rpc/mcpConnectionHealth.listProjectSuspectedProblems"
+}

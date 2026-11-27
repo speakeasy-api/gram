@@ -14,8 +14,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Read MCP connection attempts, sign-in activity and sessions for one MCP
-// authentication provider in a project.
+// Read MCP connection attempts, sign-in activity, sessions and suspected
+// problems for one MCP sign-in in a project, and a project's suspected
+// problems across its MCP sign-ins.
 type Service interface {
 	// List connection attempts for a provider, newest first. Repeats of the same
 	// failure fold into one row.
@@ -42,6 +43,11 @@ type Service interface {
 	// Get one suspected problem of a provider by id. Not found once it has
 	// cleared, or without log:read.
 	GetSuspectedProblem(context.Context, *GetSuspectedProblemPayload) (res *GetSuspectedProblemResult, err error)
+	// List the project's suspected problems across all its MCP sign-ins, grouped
+	// and counted from this project's failures only, in the same order as one MCP
+	// sign-in's list. A problem names an MCP sign-in, and an MCP server, only when
+	// that page lists the same problem. Empty without log:read.
+	ListProjectSuspectedProblems(context.Context, *ListProjectSuspectedProblemsPayload) (res *ListProjectSuspectedProblemsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -64,7 +70,7 @@ const ServiceName = "mcpConnectionHealth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients", "listSuspectedProblems", "getSuspectedProblem"}
+var MethodNames = [9]string{"listAttempts", "getAttemptCounts", "getAttempt", "getSignInSummary", "getSessionActivity", "listDeniedClients", "listSuspectedProblems", "getSuspectedProblem", "listProjectSuspectedProblems"}
 
 type ConnectionApp struct {
 	// Client family, empty when the app is not on the list.
@@ -450,6 +456,29 @@ type ListDeniedClientsPayload struct {
 	To string
 }
 
+// ListProjectSuspectedProblemsPayload is the payload type of the
+// mcpConnectionHealth service listProjectSuspectedProblems method.
+type ListProjectSuspectedProblemsPayload struct {
+	// Return at most this many problems, default 100.
+	Limit            *int
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListProjectSuspectedProblemsResult is the result type of the
+// mcpConnectionHealth service listProjectSuspectedProblems method.
+type ListProjectSuspectedProblemsResult struct {
+	// False when the organization has logging off. Nothing else is returned then.
+	LoggingEnabled bool
+	ViewerScope    ConnectionViewerScope
+	// Problems each person fixes themselves come last; most people first within
+	// each group.
+	Problems []*ProjectSuspectedProblem
+	// Problems before the limit.
+	ProblemsTotal int64
+}
+
 // ListSuspectedProblemsPayload is the payload type of the mcpConnectionHealth
 // service listSuspectedProblems method.
 type ListSuspectedProblemsPayload struct {
@@ -475,6 +504,35 @@ type ListSuspectedProblemsResult struct {
 	Problems []*SuspectedProblem
 	// Problems before the cap.
 	ProblemsTotal int64
+}
+
+type ProjectSuspectedProblem struct {
+	// The MCP sign-in whose list has this problem: set only when every failure in
+	// it belongs to that one MCP sign-in, so its Overview or Connection Logs show
+	// the same problem.
+	UserSessionIssuerID *string
+	// The MCP server whose Sessions tab lists this problem: set only when every
+	// failure in it was on that one MCP server, reached directly, and it is on the
+	// MCP sign-in above.
+	Server *SuspectedProblemServerLink
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
+	ID       string
+	Rule     SuspectedProblemRule
+	Part     SuspectedProblemPart
+	WhoFixes *SuspectedProblemWhoFixes
+	Scope    *SuspectedProblemScope
+	// When its earliest failure ended.
+	Since        string
+	LastFailedAt string
+	PeopleCount  int64
+	// People failing on the server asked for. Only with server_id.
+	PeopleOnServerCount *int64
+	// Who cannot do what, in plain words.
+	Headline string
+	// What the data establishes about it, in plain words.
+	Fact    string
+	Filters *SuspectedProblemFilters
 }
 
 type SuspectedProblem struct {
@@ -623,6 +681,15 @@ type SuspectedProblemServer struct {
 	Attempts int64
 }
 
+// An MCP server whose Sessions tab lists the problem.
+type SuspectedProblemServerLink struct {
+	ID string
+	// Missing when the MCP server has none.
+	Slug *string
+	// Missing when the MCP server has no name or slug.
+	Name *string
+}
+
 // Who has to fix it, unknown when that is not known.
 type SuspectedProblemWhoFixes string
 
@@ -674,4 +741,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }

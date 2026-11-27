@@ -18,15 +18,16 @@ import (
 
 // Server lists the mcpConnectionHealth service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListAttempts          http.Handler
-	GetAttemptCounts      http.Handler
-	GetAttempt            http.Handler
-	GetSignInSummary      http.Handler
-	GetSessionActivity    http.Handler
-	ListDeniedClients     http.Handler
-	ListSuspectedProblems http.Handler
-	GetSuspectedProblem   http.Handler
+	Mounts                       []*MountPoint
+	ListAttempts                 http.Handler
+	GetAttemptCounts             http.Handler
+	GetAttempt                   http.Handler
+	GetSignInSummary             http.Handler
+	GetSessionActivity           http.Handler
+	ListDeniedClients            http.Handler
+	ListSuspectedProblems        http.Handler
+	GetSuspectedProblem          http.Handler
+	ListProjectSuspectedProblems http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,15 +65,17 @@ func New(
 			{"ListDeniedClients", "POST", "/rpc/mcpConnectionHealth.listDeniedClients"},
 			{"ListSuspectedProblems", "POST", "/rpc/mcpConnectionHealth.listSuspectedProblems"},
 			{"GetSuspectedProblem", "POST", "/rpc/mcpConnectionHealth.getSuspectedProblem"},
+			{"ListProjectSuspectedProblems", "POST", "/rpc/mcpConnectionHealth.listProjectSuspectedProblems"},
 		},
-		ListAttempts:          NewListAttemptsHandler(e.ListAttempts, mux, decoder, encoder, errhandler, formatter),
-		GetAttemptCounts:      NewGetAttemptCountsHandler(e.GetAttemptCounts, mux, decoder, encoder, errhandler, formatter),
-		GetAttempt:            NewGetAttemptHandler(e.GetAttempt, mux, decoder, encoder, errhandler, formatter),
-		GetSignInSummary:      NewGetSignInSummaryHandler(e.GetSignInSummary, mux, decoder, encoder, errhandler, formatter),
-		GetSessionActivity:    NewGetSessionActivityHandler(e.GetSessionActivity, mux, decoder, encoder, errhandler, formatter),
-		ListDeniedClients:     NewListDeniedClientsHandler(e.ListDeniedClients, mux, decoder, encoder, errhandler, formatter),
-		ListSuspectedProblems: NewListSuspectedProblemsHandler(e.ListSuspectedProblems, mux, decoder, encoder, errhandler, formatter),
-		GetSuspectedProblem:   NewGetSuspectedProblemHandler(e.GetSuspectedProblem, mux, decoder, encoder, errhandler, formatter),
+		ListAttempts:                 NewListAttemptsHandler(e.ListAttempts, mux, decoder, encoder, errhandler, formatter),
+		GetAttemptCounts:             NewGetAttemptCountsHandler(e.GetAttemptCounts, mux, decoder, encoder, errhandler, formatter),
+		GetAttempt:                   NewGetAttemptHandler(e.GetAttempt, mux, decoder, encoder, errhandler, formatter),
+		GetSignInSummary:             NewGetSignInSummaryHandler(e.GetSignInSummary, mux, decoder, encoder, errhandler, formatter),
+		GetSessionActivity:           NewGetSessionActivityHandler(e.GetSessionActivity, mux, decoder, encoder, errhandler, formatter),
+		ListDeniedClients:            NewListDeniedClientsHandler(e.ListDeniedClients, mux, decoder, encoder, errhandler, formatter),
+		ListSuspectedProblems:        NewListSuspectedProblemsHandler(e.ListSuspectedProblems, mux, decoder, encoder, errhandler, formatter),
+		GetSuspectedProblem:          NewGetSuspectedProblemHandler(e.GetSuspectedProblem, mux, decoder, encoder, errhandler, formatter),
+		ListProjectSuspectedProblems: NewListProjectSuspectedProblemsHandler(e.ListProjectSuspectedProblems, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -89,6 +92,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListDeniedClients = m(s.ListDeniedClients)
 	s.ListSuspectedProblems = m(s.ListSuspectedProblems)
 	s.GetSuspectedProblem = m(s.GetSuspectedProblem)
+	s.ListProjectSuspectedProblems = m(s.ListProjectSuspectedProblems)
 }
 
 // MethodNames returns the methods served.
@@ -104,6 +108,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListDeniedClientsHandler(mux, h.ListDeniedClients)
 	MountListSuspectedProblemsHandler(mux, h.ListSuspectedProblems)
 	MountGetSuspectedProblemHandler(mux, h.GetSuspectedProblem)
+	MountListProjectSuspectedProblemsHandler(mux, h.ListProjectSuspectedProblems)
 }
 
 // Mount configures the mux to serve the mcpConnectionHealth endpoints.
@@ -518,6 +523,60 @@ func NewGetSuspectedProblemHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSuspectedProblem")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpConnectionHealth")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListProjectSuspectedProblemsHandler configures the mux to serve the
+// "mcpConnectionHealth" service "listProjectSuspectedProblems" endpoint.
+func MountListProjectSuspectedProblemsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpConnectionHealth.listProjectSuspectedProblems", f)
+}
+
+// NewListProjectSuspectedProblemsHandler creates a HTTP handler which loads
+// the HTTP request and calls the "mcpConnectionHealth" service
+// "listProjectSuspectedProblems" endpoint.
+func NewListProjectSuspectedProblemsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListProjectSuspectedProblemsRequest(mux, decoder)
+		encodeResponse = EncodeListProjectSuspectedProblemsResponse(encoder)
+		encodeError    = EncodeListProjectSuspectedProblemsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listProjectSuspectedProblems")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpConnectionHealth")
 		payload, err := decodeRequest(r)
 		if err != nil {

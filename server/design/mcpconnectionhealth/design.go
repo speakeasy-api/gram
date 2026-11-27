@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var Outcome = Type("ConnectionOutcome", String, func() {
@@ -32,7 +33,7 @@ var ViewerScope = Type("ConnectionViewerScope", String, func() {
 })
 
 var _ = Service("mcpConnectionHealth", func() {
-	Description("Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.")
+	Description("Read MCP connection attempts, sign-in activity, sessions and suspected problems for one MCP sign-in in a project, and a project's suspected problems across its MCP sign-ins.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -182,6 +183,11 @@ var _ = Service("mcpConnectionHealth", func() {
 
 	Method("listSuspectedProblems", func() {
 		Description("List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
 				Format(FormatUUID)
@@ -202,6 +208,9 @@ var _ = Service("mcpConnectionHealth", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "listMcpSuspectedProblems")
 		Meta("openapi:extension:x-speakeasy-name-override", "listSuspectedProblems")
@@ -210,6 +219,11 @@ var _ = Service("mcpConnectionHealth", func() {
 
 	Method("getSuspectedProblem", func() {
 		Description("Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
 				Format(FormatUUID)
@@ -230,10 +244,45 @@ var _ = Service("mcpConnectionHealth", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
 		})
 		Meta("openapi:operationId", "getMcpSuspectedProblem")
 		Meta("openapi:extension:x-speakeasy-name-override", "getSuspectedProblem")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpSuspectedProblem"}`)
+	})
+
+	Method("listProjectSuspectedProblems", func() {
+		Description("List the project's suspected problems across all its MCP sign-ins, grouped and counted from this project's failures only, in the same order as one MCP sign-in's list. A problem names an MCP sign-in, and an MCP server, only when that page lists the same problem. Empty without log:read.")
+		// The suspected problem reads answer 503 when a read runs out of time or is over its limits.
+		Error(string(oops.CodeUnavailable), func() {
+			Description(oops.CodeUnavailable.UserMessage())
+			Fault()
+		})
+		Payload(func() {
+			Attribute("limit", Int, "Return at most this many problems, default 100.", func() {
+				Minimum(1)
+				Maximum(100)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(ListProjectSuspectedProblemsResult)
+		HTTP(func() {
+			POST("/rpc/mcpConnectionHealth.listProjectSuspectedProblems")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+				ContentType("application/json")
+			})
+		})
+		Meta("openapi:operationId", "listMcpProjectSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listProjectSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpProjectSuspectedProblems"}`)
 	})
 })
 
@@ -558,6 +607,29 @@ var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
 	loggingEnabled()
 	Attribute("problems", ArrayOf(Problem), "At most 100. Problems each person fixes themselves come last; most people first within each group.")
 	Attribute("problems_total", Int64, "Problems before the cap.")
+	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
+})
+
+var ProblemServerLink = Type("SuspectedProblemServerLink", func() {
+	Description("An MCP server whose Sessions tab lists the problem.")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("slug", String, "Missing when the MCP server has none.")
+	Attribute("name", String, "Missing when the MCP server has no name or slug.")
+	Required("id")
+})
+
+var ProjectProblem = Type("ProjectSuspectedProblem", func() {
+	Extend(Problem)
+	Attribute("user_session_issuer_id", String, "The MCP sign-in whose list has this problem: set only when every failure in it belongs to that one MCP sign-in, so its Overview or Connection Logs show the same problem.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("server", ProblemServerLink, "The MCP server whose Sessions tab lists this problem: set only when every failure in it was on that one MCP server, reached directly, and it is on the MCP sign-in above.")
+})
+
+var ListProjectSuspectedProblemsResult = Type("ListProjectSuspectedProblemsResult", func() {
+	loggingEnabled()
+	Attribute("problems", ArrayOf(ProjectProblem), "Problems each person fixes themselves come last; most people first within each group.")
+	Attribute("problems_total", Int64, "Problems before the limit.")
 	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })
 
