@@ -35,9 +35,13 @@ func (m *Manager) BindKitSession(ctx context.Context, providerID uuid.UUID) (con
 	if err != nil {
 		return ctx, fmt.Errorf("resolve Kit inference session: %w", err)
 	}
+	boundPrincipal, hasBoundPrincipal := contextvalues.GetAssistantPrincipal(ctx)
 	for _, binding := range bindings {
 		if kitProviderSessionID(binding.AcpSessionID) != providerID {
 			continue
+		}
+		if hasBoundPrincipal && (binding.ThreadID != boundPrincipal.ThreadID || identity.AssistantID != boundPrincipal.AssistantID) {
+			return ctx, oops.C(oops.CodeForbidden)
 		}
 		ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: identity.AssistantID, ThreadID: binding.ThreadID})
 		return context.WithValue(ctx, runtimeChatKey{}, binding.ChatID), nil

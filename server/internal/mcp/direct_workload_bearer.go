@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -16,16 +18,19 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 const (
@@ -62,14 +67,61 @@ var errDirectWorkloadUnavailable = errors.New("direct workload bearer verificati
 // was refused by the issuer or device-key lookup rate limiter.
 var errDirectWorkloadRateLimited = errors.New("direct workload bearer rate limited")
 
+// ErrWorkloadAuthorizerRejected marks a permanent authentication or binding
+// refusal from a WorkloadAuthorizerResolver (for example a retired workload
+// actor, missing or mismatched verified claims, or an unrecorded initiator).
+// Stage-2 admission maps it to 401 Unauthorized and never falls back to
+// userless workload authority.
+var ErrWorkloadAuthorizerRejected = errors.New("workload authorizer rejected")
+
+// WorkloadAuthorizerRequest carries the cryptographically verified workload
+// identity and verified JWT claims for a direct-bearer request. It never
+// contains caller-supplied headers, query parameters, or request body fields.
+type WorkloadAuthorizerRequest struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	IssuerID       uuid.UUID
+	Subject        string
+	Claims         map[string]json.RawMessage
+}
+
+// WorkloadAuthorizerResolution describes whether a direct-bearer workload
+// request must act on behalf of a server-resolved human authorizer (and
+// optional canonical assistant thread binding).
+type WorkloadAuthorizerResolution struct {
+	// Bound is true when the workload must be admitted as its assigned agent
+	// acting for AuthorizerUserID (4-way intersection: agent-safe ceiling ∩
+	// agent grants ∩ owner access ∩ authorizer access). When false, the
+	// workload keeps its userless workload authority.
+	Bound            bool
+	AuthorizerUserID string
+	AssistantID      uuid.UUID
+	ThreadID         uuid.UUID
+	ChatID           uuid.UUID
+}
+
+// WorkloadAuthorizerResolver optionally resolves a per-request human authorizer
+// for a verified direct-bearer workload JWT. Invoked fresh in Stage 2 on every
+// request (never cached in Stage 1).
+type WorkloadAuthorizerResolver interface {
+	ResolveWorkloadAuthorizer(ctx context.Context, req WorkloadAuthorizerRequest) (WorkloadAuthorizerResolution, error)
+}
+
+// SetWorkloadAuthorizerResolver configures the Stage-2 direct-bearer workload
+// authorizer resolver on s. Called during service composition before serving.
+func (s *Service) SetWorkloadAuthorizerResolver(resolver WorkloadAuthorizerResolver) {
+	s.workloadAuthorizer = resolver
+}
+
 // verifiedDirectWorkload is the verified Stage-1 outcome of a direct-bearer
 // workload JWT: the trusted issuer row, exact admitted external subject, token
-// expiration, and token digest identifier.
+// expiration, token digest identifier, and immutable verified JWT claims.
 type verifiedDirectWorkload struct {
 	issuerID  uuid.UUID
 	subject   string
 	expiresAt time.Time
 	tokenID   string
+	claims    map[string]json.RawMessage
 }
 
 type directWorkloadCacheKey struct {
@@ -137,7 +189,11 @@ func (c *directWorkloadCache) get(key directWorkloadCacheKey) (verifiedDirectWor
 		c.entries.Remove(key)
 		return zero, false
 	}
-	return entry.verified, true
+	verified := entry.verified
+	if len(verified.claims) > 0 {
+		verified.claims = maps.Clone(verified.claims)
+	}
+	return verified, true
 }
 
 func (c *directWorkloadCache) put(key directWorkloadCacheKey, verified verifiedDirectWorkload) {
@@ -289,20 +345,30 @@ func (s *Service) authenticateDirectWorkloadBearer(
 		return verifiedDirectWorkload{}, refuseWorkloadGrant("assertion_subject_invalid", err)
 	}
 
+	var rawClaims map[string]json.RawMessage
+	if err := token.UnsafeClaimsWithoutVerification(&rawClaims); err != nil {
+		return verifiedDirectWorkload{}, refuseWorkloadGrant(string(workload.ReasonMalformed), err)
+	}
+
 	verified := verifiedDirectWorkload{
 		issuerID:  issuer.ID,
 		subject:   claims.Subject,
 		expiresAt: result.ExpiresAt,
 		tokenID:   base64.RawURLEncoding.EncodeToString(tokenHash[:]),
+		claims:    rawClaims,
 	}
 	s.directWorkloadCache.put(cacheKey, verified)
+	if len(verified.claims) > 0 {
+		verified.claims = maps.Clone(verified.claims)
+	}
 	return verified, nil
 }
 
 // admitDirectWorkload runs Stage-2 live workload authorization (agent
-// assignment, lifecycle, owner eligibility, and live R/A/O policy loading) for
-// a verified direct-bearer workload JWT, yielding the same actor and auth
-// context shape as a jwt-bearer exchanged workload session.
+// assignment, lifecycle, owner eligibility, optional per-request authorizer
+// resolution, and live policy loading) for a verified direct-bearer workload
+// JWT. Stage-2 is never cached: user removal, deactivation, or grant
+// revocation takes effect immediately on the next request.
 func (s *Service) admitDirectWorkload(
 	ctx context.Context,
 	organizationID string,
@@ -319,12 +385,129 @@ func (s *Service) admitDirectWorkload(
 	}
 	authCtx.ProjectSlug = projectSlug
 
+	if s.workloadAuthorizer != nil {
+		resolution, err := s.workloadAuthorizer.ResolveWorkloadAuthorizer(ctx, WorkloadAuthorizerRequest{
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+			IssuerID:       verified.issuerID,
+			Subject:        verified.subject,
+			Claims:         verified.claims,
+		})
+		if err != nil {
+			if errors.Is(err, ErrWorkloadAuthorizerRejected) {
+				return ctx, urn.SessionSubject{}, fmt.Errorf("%w: %w", errCredentialRejected, err)
+			}
+			return ctx, urn.SessionSubject{}, fmt.Errorf("%w: resolve workload authorizer: %w", errWorkloadSessionAdmissionLoad, err)
+		}
+		if resolution.AssistantID != uuid.Nil && resolution.ThreadID != uuid.Nil {
+			ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+				AssistantID: resolution.AssistantID,
+				ThreadID:    resolution.ThreadID,
+			})
+			if resolution.ChatID != uuid.Nil {
+				ctx = assistanttokens.WithRuntimeChatID(ctx, resolution.ChatID)
+			}
+		}
+		if resolution.Bound {
+			if resolution.AuthorizerUserID == "" {
+				return ctx, urn.SessionSubject{}, fmt.Errorf("%w: resolved workload authorizer is empty", errCredentialRejected)
+			}
+			return s.admitDirectWorkloadForAuthorizer(ctx, authCtx, organizationID, projectID, verified, resolution.AuthorizerUserID)
+		}
+	}
+
 	ctx = contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(verified.issuerID, verified.subject))
 	ctx, err = s.admitWorkloadSession(ctx, organizationID, subject, credential)
 	if err != nil {
 		return ctx, urn.SessionSubject{}, err
 	}
 	return ctx, subject, nil
+}
+
+// admitDirectWorkloadForAuthorizer admits a direct-bearer workload as its
+// live assigned agent acting on behalf of authorizerUserID, reusing the exact
+// Default-runtime principal-credential path:
+//   - live organization active check,
+//   - live authorizer org-membership and project-read check,
+//   - live agent, owner, and authorizer admission via authz.PrepareContext
+//     (4-way intersection: agent-safe ceiling ∩ agent ∩ owner ∩ authorizer).
+//
+// Any failure rejects the request without ever falling back to userless
+// workload authority.
+func (s *Service) admitDirectWorkloadForAuthorizer(
+	ctx context.Context,
+	authCtx *contextvalues.AuthContext,
+	organizationID string,
+	projectID uuid.UUID,
+	verified verifiedDirectWorkload,
+	authorizerUserID string,
+) (context.Context, urn.SessionSubject, error) {
+	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, s.db, workloadidentity.AssignmentParams{
+		OrganizationID:   organizationID,
+		WorkloadIssuerID: verified.issuerID,
+		Subject:          verified.subject,
+	})
+	if err != nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: resolve workload assigned agent: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	if !assigned || agentID == uuid.Nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: workload has no assigned agent", errCredentialRejected)
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: load workload organization: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	if org.DisabledAt.Valid {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: organization is disabled", errCredentialRejected)
+	}
+
+	principals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, s.db, organizationID, authorizerUserID)
+	if err != nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: resolve workload authorizer eligibility: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	if !eligible {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: initiating user is not an eligible organization member", errCredentialRejected)
+	}
+	authorizerGrants, err := authz.LoadGrants(ctx, s.db, organizationID, principals)
+	if err != nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: load workload authorizer grants: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	canReadProject, err := authz.GrantsAuthorize(authorizerGrants, authz.Project(authz.ProjectIDOf(projectID)).Read())
+	if err != nil {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: check workload authorizer project access: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	if !canReadProject {
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: initiating user cannot access this project", errCredentialRejected)
+	}
+
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String())
+	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, agentPrincipal, contextvalues.PrincipalCredential{
+		AuthorizerUserID:         authorizerUserID,
+		DelegatedGrants:          nil,
+		DelegatedGrantsVersion:   0,
+		DerivesPolicyAtAdmission: true,
+	})
+	ctx = principalcredential.WithAuthenticated(ctx, principalcredential.Authenticated{
+		ID: "workload-bearer:" + verified.tokenID,
+		Credential: principalcredential.Credential{
+			OrganizationID:            organizationID,
+			ProjectID:                 projectID,
+			Principal:                 agentPrincipal,
+			AuthorizerUserID:          authorizerUserID,
+			SelectionProfileVersionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+	})
+	ctx = contextvalues.WithVerifiedWorkloadPrincipal(ctx, urn.NewWorkloadPrincipal(verified.issuerID, verified.subject))
+
+	ctx, err = s.authz.PrepareContext(ctx)
+	if err != nil {
+		if isCredentialDenial(err) {
+			return ctx, urn.SessionSubject{}, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		}
+		return ctx, urn.SessionSubject{}, fmt.Errorf("%w: prepare user-bound workload authorization: %w", errWorkloadSessionAdmissionLoad, err)
+	}
+	return ctx, urn.NewAgentSubject(agentID), nil
 }
 
 // authenticateIssuerGateDirectWorkload authenticates a direct-bearer workload
@@ -378,6 +561,18 @@ func (s *Service) authenticateIssuerGateDirectWorkload(
 	newCtx, subject, err := s.admitDirectWorkload(ctx, endpoint.OrganizationID, endpoint.ProjectID, nil, verified, credential)
 	if err != nil {
 		return ctx, nil, err
+	}
+	if subject.Kind == urn.SessionSubjectKindAgent {
+		newCtx, err = s.requireAgentSessionAuthorization(newCtx, endpoint)
+		if err != nil {
+			return ctx, nil, markCredentialDenial(err)
+		}
+		agentID, ok := contextvalues.EffectiveAgentID(newCtx)
+		if !ok {
+			return ctx, nil, fmt.Errorf("%w: user-bound workload admission has no effective agent", errCredentialRejected)
+		}
+		newCtx = s.identityValidator.StampDirectWorkload(newCtx, agentID, verified.expiresAt)
+		return newCtx, &subject, nil
 	}
 	newCtx, err = s.requireWorkloadSessionAuthorization(newCtx, endpoint, workloadSessionReachResource)
 	if err != nil {
@@ -448,7 +643,14 @@ func (s *Service) authorizeDirectWorkloadInference(
 
 	ctx, _, err = s.admitDirectWorkload(ctx, project.OrganizationID, project.ID, &project.Slug, verified, credential)
 	if err != nil {
-		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+		switch {
+		case errors.Is(err, errCredentialRejected):
+			return ctx, true, oops.E(oops.CodeUnauthorized, err, "invalid inference credential")
+		case errors.Is(err, errWorkloadSessionAdmissionLoad):
+			return ctx, true, oops.E(oops.CodeUnavailable, err, "inference credential validation unavailable")
+		default:
+			return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
+		}
 	}
 	if err := s.authz.Require(ctx, authz.InferenceExecuteCheck(project.ID.String())); err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)

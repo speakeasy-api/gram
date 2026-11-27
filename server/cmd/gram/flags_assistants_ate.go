@@ -1,11 +1,14 @@
 package gram
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
 
@@ -13,8 +16,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
+
+type ateWorkloadAuthorizerAdapter struct {
+	resolver *assistants.ATEWorkloadAuthorizer
+}
+
+func newATEWorkloadAuthorizerAdapter(db *pgxpool.Pool) mcp.WorkloadAuthorizerResolver {
+	return &ateWorkloadAuthorizerAdapter{resolver: assistants.NewATEWorkloadAuthorizer(db)}
+}
+
+func (a *ateWorkloadAuthorizerAdapter) ResolveWorkloadAuthorizer(ctx context.Context, req mcp.WorkloadAuthorizerRequest) (mcp.WorkloadAuthorizerResolution, error) {
+	res, err := a.resolver.Resolve(ctx, assistants.ATEWorkloadAuthorizerRequest{
+		OrganizationID: req.OrganizationID,
+		ProjectID:      req.ProjectID,
+		IssuerID:       req.IssuerID,
+		Subject:        req.Subject,
+		Claims:         req.Claims,
+	})
+	if err != nil {
+		if errors.Is(err, assistants.ErrATEWorkloadAuthorizerRejected) {
+			return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("%w: %w", mcp.ErrWorkloadAuthorizerRejected, err)
+		}
+		return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("resolve ATE workload authorizer: %w", err)
+	}
+	return mcp.WorkloadAuthorizerResolution{
+		Bound:            res.Bound,
+		AuthorizerUserID: res.AuthorizerUserID,
+		AssistantID:      res.AssistantID,
+		ThreadID:         res.ThreadID,
+		ChatID:           res.ChatID,
+	}, nil
+}
 
 func assistantATERuntimeFlags() []cli.Flag {
 	return []cli.Flag{

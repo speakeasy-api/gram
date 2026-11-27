@@ -36,6 +36,16 @@ func RuntimeChatID(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
+// WithRuntimeChatID binds the canonical control-plane chat ID resolved from a
+// verified thread identity so downstream gateway and inference handlers reject
+// mismatched caller-supplied chat headers.
+func WithRuntimeChatID(ctx context.Context, chatID uuid.UUID) context.Context {
+	if chatID == uuid.Nil {
+		return ctx
+	}
+	return context.WithValue(ctx, runtimeChatKey{}, chatID)
+}
+
 // IsRuntimeCredential reports whether an Authorization header carries a
 // principal credential rather than a legacy assistant runtime token.
 func IsRuntimeCredential(header string) bool {

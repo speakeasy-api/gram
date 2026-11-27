@@ -22,10 +22,18 @@ type inferenceWorkloadContextKey struct{}
 func (m *Manager) AuthorizeKitWorkload(ctx context.Context) (context.Context, error) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
-	if !ok || ac == nil || ac.ProjectID == nil || !hasActor || actor.Type != urn.PrincipalTypeWorkload {
+	if !ok || ac == nil || ac.ProjectID == nil || !hasActor {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	issuerID, subject, err := actor.Workload()
+	workloadPrincipal := actor
+	if workloadPrincipal.Type != urn.PrincipalTypeWorkload {
+		var hasWorkload bool
+		workloadPrincipal, hasWorkload = contextvalues.VerifiedWorkloadPrincipal(ctx)
+		if !hasWorkload || workloadPrincipal.Type != urn.PrincipalTypeWorkload {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+	}
+	issuerID, subject, err := workloadPrincipal.Workload()
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}

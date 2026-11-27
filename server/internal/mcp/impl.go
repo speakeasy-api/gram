@@ -217,6 +217,10 @@ type Service struct {
 	// directWorkloadCache memoizes Stage-1 direct-bearer workload verification
 	// across repeated MCP and inference requests within a short TTL.
 	directWorkloadCache *directWorkloadCache
+	// workloadAuthorizer optionally resolves a per-request human authorizer
+	// (and thread binding) from verified direct-bearer workload JWT claims in
+	// Stage 2 (never cached in Stage 1).
+	workloadAuthorizer WorkloadAuthorizerResolver
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
@@ -691,6 +695,7 @@ func NewService(aiCatalog *aivendors.Store,
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		directWorkloadCache:       newDirectWorkloadCache(time.Now),
+		workloadAuthorizer:        nil,
 		idJAGValidator:            idJAGValidator,
 		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),

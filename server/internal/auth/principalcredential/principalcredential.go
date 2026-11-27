@@ -198,6 +198,13 @@ func FromContext(ctx context.Context) (Authenticated, bool) {
 	return a, ok
 }
 
+// WithAuthenticated attaches a server-constructed principal credential
+// authentication (for example a direct-bearer workload admitted to act as its
+// assigned agent on behalf of a server-resolved authorizing user) to ctx.
+func WithAuthenticated(ctx context.Context, authenticated Authenticated) context.Context {
+	return context.WithValue(ctx, authenticatedKey{}, authenticated)
+}
+
 // Authenticate verifies raw and returns a context authenticated as its
 // principal: the principal credential profile and actor an agent API key
 // produces, scoped to the credential's project. The organization must not be
