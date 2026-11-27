@@ -18,6 +18,13 @@ import (
 // or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
+const (
+	// InstrumentMCPGatewayAdmission counts completed gateway admission decisions.
+	InstrumentMCPGatewayAdmission = "mcp.gateway.admission"
+	// InstrumentMCPAgentGatewayRequest counts authenticated legacy agent gateway requests.
+	InstrumentMCPAgentGatewayRequest = "mcp.agent_gateway.request"
+)
+
 // InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
 // ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
 // reach the jwt-bearer grant handler are counted, plus a shared token
@@ -137,7 +144,9 @@ type Metrics struct {
 	// the URL is built from the resolved endpoint's path rather than the raw
 	// request URL so an unauthenticated caller cannot mint series through the
 	// query string.
-	mcpRequestRejectedCounter metric.Int64Counter
+	mcpRequestRejectedCounter     metric.Int64Counter
+	mcpGatewayAdmissionCounter    metric.Int64Counter
+	mcpAgentGatewayRequestCounter metric.Int64Counter
 
 	// upstreamIssuerParityCounter counts comparisons of a server's column
 	// upstream issuer against the one its client associations give, by
@@ -230,6 +239,24 @@ type Metrics struct {
 // Record methods handle nil instruments so partial construction still
 // produces a usable value.
 func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
+	mcpGatewayAdmissionCounter, err := meter.Int64Counter(
+		InstrumentMCPGatewayAdmission,
+		metric.WithDescription("Gateway admission decisions by caller and gateway policy type"),
+		metric.WithUnit("{decision}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create gateway admission counter", attr.SlogError(err))
+	}
+
+	mcpAgentGatewayRequestCounter, err := meter.Int64Counter(
+		InstrumentMCPAgentGatewayRequest,
+		metric.WithDescription("Authenticated agent gateway requests by organization and agent"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create agent gateway request counter", attr.SlogError(err))
+	}
+
 	mcpToolCallCounter, err := meter.Int64Counter(
 		"mcp.tool.call",
 		metric.WithDescription("MCP tool call"),
@@ -444,6 +471,8 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpInitializeCounter:                 mcpInitializeCounter,
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
+		mcpGatewayAdmissionCounter:           mcpGatewayAdmissionCounter,
+		mcpAgentGatewayRequestCounter:        mcpAgentGatewayRequestCounter,
 		upstreamIssuerParityCounter:          upstreamIssuerParityCounter,
 		upstreamIssuerReconsentCounter:       upstreamIssuerReconsentCounter,
 		metaStaleChoiceRefusalCounter:        metaStaleChoiceRefusalCounter,
@@ -465,6 +494,37 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 		shutdownInterruptedCounter:           shutdownInterruptedCounter,
 	}
+}
+
+// RecordGatewayAdmission counts one completed shared gateway admission decision.
+func (m *Metrics) RecordGatewayAdmission(ctx context.Context, callerKind, gatewayType string, admitted bool, refusalReason string) {
+	if m == nil || m.mcpGatewayAdmissionCounter == nil {
+		return
+	}
+	outcome := "refused"
+	if admitted {
+		outcome = "admitted"
+	}
+	attrs := []attribute.KeyValue{
+		attr.McpGatewayCallerKind(callerKind),
+		attr.McpGatewayType(gatewayType),
+		attr.Outcome(outcome),
+	}
+	if !admitted {
+		attrs = append(attrs, attr.McpGatewayRefusalReason(refusalReason))
+	}
+	m.mcpGatewayAdmissionCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// RecordAgentGatewayRequest counts one authenticated request to the legacy agent gateway.
+func (m *Metrics) RecordAgentGatewayRequest(ctx context.Context, organizationID, agentID string) {
+	if m == nil || m.mcpAgentGatewayRequestCounter == nil {
+		return
+	}
+	m.mcpAgentGatewayRequestCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(organizationID),
+		attr.AgentID(agentID),
+	))
 }
 
 // RecordShutdownInterrupted counts one tool call or resource read the
