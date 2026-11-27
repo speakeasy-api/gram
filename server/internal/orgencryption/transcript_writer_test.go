@@ -2,8 +2,6 @@ package orgencryption_test
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -136,26 +134,21 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			f := newTranscriptWriterFixture(t, true, true)
 			before := f.counts(t)
 			m := f.message("EXAMPLE transactional content")
-			errRollback := errors.New("roll back")
-			err := f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
-				n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
-				require.NoError(t, err)
-				require.EqualValues(t, 1, n)
-				require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
-				if commit {
-					return nil
-				}
-				return errRollback
-			})
+			tx, err := f.writer.Begin(t.Context(), f.projectID)
+			require.NoError(t, err)
+			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, n)
+			require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
 			if commit {
-				require.NoError(t, err)
+				require.NoError(t, tx.Commit(t.Context()))
 				f.assertTranscript(t, m.Params.ID)
 				after := f.counts(t)
 				require.Equal(t, before[0]+1, after[0])
 				require.Equal(t, before[1]+1, after[1])
 				require.Greater(t, after[2]+after[3], before[2]+before[3])
 			} else {
-				require.ErrorIs(t, err, errRollback)
+				require.NoError(t, tx.Rollback(t.Context()))
 				require.Equal(t, before, f.counts(t))
 			}
 		})
@@ -269,7 +262,7 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.EqualValues(t, 1, n)
 }
 
-// InTx loads the key before every write transaction, so a key that will not
+// Begin loads the key before every write transaction, so a key that will not
 // load fails each write before anything is stored, even one that would have
 // changed nothing.
 func TestTranscriptWriterFailsClosedWithoutKey(t *testing.T) {
@@ -349,17 +342,14 @@ func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	err = f.writer.InTx(t.Context(), f.projectID, func(tx pgx.Tx) error {
-		_, err := f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
-			row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("mark risk analyzed: %w", err)
-		}
+	tx, err := f.writer.Begin(t.Context(), f.projectID)
+	require.NoError(t, err)
+	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
+		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
 		return nil
 	})
 	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
 
 	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 	require.NoError(t, err)

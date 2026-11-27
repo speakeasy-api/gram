@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -142,26 +142,28 @@ func StoreTranscript(ctx context.Context, writer *chat.ChatMessageWriter, p Stor
 	}
 
 	// One transaction, so a failed message write leaves no empty chat behind.
-	err := writer.InTx(ctx, p.ProjectID, func(tx pgx.Tx) error {
-		if _, err := hooksrepo.New(tx).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
-			ID:             chatID,
-			ProjectID:      p.ProjectID,
-			OrganizationID: p.OrganizationID,
-			UserID:         conv.ToPGTextEmpty(p.UserID),
-			ExternalUserID: pgtype.Text{String: "", Valid: false},
-			UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Title:          conv.ToPGText(stripNUL(p.Title)),
-			Cwd:            conv.ToPGTextEmpty(stripNUL(t.Cwd)),
-		}); err != nil {
-			return fmt.Errorf("create chat: %w", err)
-		}
-		if _, err := writer.WriteInTx(ctx, tx, writes); err != nil {
-			return fmt.Errorf("write transcript messages: %w", err)
-		}
-		return nil
-	})
+	tx, err := writer.Begin(ctx, p.ProjectID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("store transcript: %w", err)
+		return uuid.Nil, fmt.Errorf("begin transcript transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if _, err := hooksrepo.New(tx).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      p.ProjectID,
+		OrganizationID: p.OrganizationID,
+		UserID:         conv.ToPGTextEmpty(p.UserID),
+		ExternalUserID: pgtype.Text{String: "", Valid: false},
+		UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Title:          conv.ToPGText(stripNUL(p.Title)),
+		Cwd:            conv.ToPGTextEmpty(stripNUL(t.Cwd)),
+	}); err != nil {
+		return uuid.Nil, fmt.Errorf("create chat: %w", err)
+	}
+	if _, err := writer.WriteInTx(ctx, tx, writes); err != nil {
+		return uuid.Nil, fmt.Errorf("write transcript messages: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit transcript: %w", err)
 	}
 	writer.NotifyStoredRows(ctx, p.ProjectID, writes)
 	return chatID, nil

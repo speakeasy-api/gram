@@ -10,7 +10,7 @@ Six `chat_messages` columns are protected fields: `content`, `content_raw`, `too
 
 ## Writes
 
-Writers open their transaction with `InTx`, which loads the key before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `transcriptstore` runs every chat message insert, and `UpdateChatMessage` every change. Both use one protector: it reads the protected fields once, writes them (empty in encrypted mode) with their metadata in the same statement, and, outside plaintext mode, seals that same value, all in one transaction. A failure rolls back; a sanity-check mismatch is logged.
+Writers open their transaction with `Begin`, which loads the key before `BEGIN`, so KMS runs outside the transaction; only the active key is cached. `transcriptstore` runs every chat message insert, and `UpdateChatMessage` every change. Both use one protector: it reads the protected fields once, writes them (empty in encrypted mode) with their metadata in the same statement, and, outside plaintext mode, seals that same value, all in one transaction. A failure rolls back; a sanity-check mismatch is logged.
 
 Legacy transcripts with an unkeyed `source_hash` read as missing until `Backfill` reseals them.
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -473,12 +472,12 @@ func (f *fixture) insert(t *testing.T, transcripts *Transcripts, id uuid.UUID) r
 		StorageError: pgtype.Text{String: "example storage error", Valid: true},
 		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 	}}
-	err := transcripts.InTx(ctx, f.db, f.org, f.project, func(tx pgx.Tx) error {
-		n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
-		require.EqualValues(t, 1, n)
-		return err
-	})
+	tx, err := transcripts.Begin(ctx, f.db, f.org, f.project)
 	require.NoError(t, err)
+	n, err := transcripts.InsertChatMessages(ctx, tx, f.org, f.project, params)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, "sensitive example", params[0].Content, "the caller's params are never changed")
 	row, err := repo.New(f.db).LockChatMessage(ctx, repo.LockChatMessageParams{MessageID: id, ProjectID: project(f.project), OrganizationID: f.org})
 	require.NoError(t, err)

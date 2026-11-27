@@ -154,27 +154,26 @@ func (w *ChatMessageWriter) WithTranscripts(transcripts *transcriptstore.Transcr
 	return w
 }
 
-// InTx runs fn in a new transaction and commits it. Any write in fn that
-// stores or changes a message's protected fields (WriteInTx,
-// UpdateChatMessage) must run in it: it loads the project's transcript key
-// before the transaction begins, so sealing makes no KMS call while the
-// transaction is open, and a key that will not load fails the call before
-// anything is written.
-func (w *ChatMessageWriter) InTx(ctx context.Context, projectID uuid.UUID, fn func(pgx.Tx) error) error {
+// Begin opens a transaction for writes that store or change a message's
+// protected fields (WriteInTx, UpdateChatMessage). It loads the project's
+// transcript key before the transaction begins, so sealing makes no KMS call
+// while the transaction is open, and a key that will not load fails before
+// anything is written. The caller defers Rollback and commits.
+func (w *ChatMessageWriter) Begin(ctx context.Context, projectID uuid.UUID) (pgx.Tx, error) {
 	organizationID := ""
 	if w.transcripts.Enabled(projectID) {
 		id, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
 		if err != nil {
-			return fmt.Errorf("get project organization id: %w", err)
+			return nil, fmt.Errorf("get project organization id: %w", err)
 		}
 		organizationID = id
 	}
-	return w.inTx(ctx, organizationID, projectID, fn)
+	return w.begin(ctx, organizationID, projectID)
 }
 
-func (w *ChatMessageWriter) inTx(ctx context.Context, organizationID string, projectID uuid.UUID, fn func(pgx.Tx) error) error {
-	//nolint:wrapcheck // InTx wraps its own errors, and fn's are the caller's.
-	return w.transcripts.InTx(ctx, w.db, organizationID, projectID, fn)
+func (w *ChatMessageWriter) begin(ctx context.Context, organizationID string, projectID uuid.UUID) (pgx.Tx, error) {
+	//nolint:wrapcheck // Begin wraps its own errors.
+	return w.transcripts.Begin(ctx, w.db, organizationID, projectID)
 }
 
 // UpdateChatMessage changes an existing message through
@@ -184,7 +183,8 @@ func (w *ChatMessageWriter) inTx(ctx context.Context, organizationID string, pro
 // mode, and in shadow mode when the transcript agrees with the plaintext;
 // otherwise they are the plaintext columns. Besides the
 // protected fields it may change only tool_outcome, finish_reason,
-// content_hash and risk_analyzed_at; any other change fails. Run it in InTx.
+// content_hash and risk_analyzed_at; any other change fails. Run it in a
+// transaction from Begin.
 // A nil writer updates the plaintext only.
 func (w *ChatMessageWriter) UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error) {
 	var transcripts *transcriptstore.Transcripts
@@ -555,19 +555,23 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	}
 	params := messageWriteParams(writes)
 
-	var n int64
-	err = w.inTx(ctx, organizationID, projectID, func(tx pgx.Tx) error {
-		n, err = w.insertChatMessages(ctx, tx, organizationID, projectID, params)
-		if err != nil {
-			return err
-		}
-		if err := metering.Enqueue(ctx, tx, readings); err != nil {
-			return fmt.Errorf("enqueue chat message readings: %w", err)
-		}
-		return w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt)
-	})
+	tx, err := w.begin(ctx, organizationID, projectID)
 	if err != nil {
-		return 0, nil, fmt.Errorf("write chat messages: %w", err)
+		return 0, nil, err
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	n, err := w.insertChatMessages(ctx, tx, organizationID, projectID, params)
+	if err != nil {
+		return 0, nil, err
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return 0, nil, fmt.Errorf("enqueue chat message readings: %w", err)
+	}
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+		return 0, nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, nil, fmt.Errorf("commit chat message transaction: %w", err)
 	}
 	return n, params, nil
 }
@@ -636,52 +640,17 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		Replayed:          param.Replayed,
 		CreatedAt:         param.CreatedAt,
 	}
-	found := false
-	err = w.inTx(ctx, organizationID, projectID, func(tx pgx.Tx) error {
-		if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
-			return err
-		}
-		stored, ok, err := w.transcripts.UpsertCorrelatedChatMessage(ctx, tx, organizationID, projectID, upsert)
-		if err != nil {
-			return fmt.Errorf("upsert correlated chat message: %w", err)
-		}
-		if !ok {
-			return nil
-		}
-		found = true
-		param.ID = stored.ID
-		param.Content = stored.Content
-		param.Source = stored.Source
-		param.UserAgent = stored.UserAgent
-		if err := persistClaudeTagMetadata(ctx, tx, param); err != nil {
-			return err
-		}
-		// A correlated promotion only updates attribution/source metadata on an
-		// existing message; its content is unchanged and its insertion already
-		// published a creation event. Do not publish again and trigger duplicate
-		// evaluation solely because that metadata was enriched.
-		if !stored.Inserted {
-			return nil
-		}
-		writes[0].Params.ID = stored.ID
-		metered := writes[0]
-		metered.Params.Content = stored.Content
-		metered.Params.ToolCalls = stored.ToolCalls
-		metered.Params.Model = stored.Model
-		metered.Params.UserID = stored.UserID
-		metered.Params.ExternalUserID = stored.ExternalUserID
-		metered.Params.Source = stored.Source
-		readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, []MessageWrite{metered}, occurredAt)
-		if err != nil {
-			return err
-		}
-		if err := metering.Enqueue(ctx, tx, readings); err != nil {
-			return fmt.Errorf("enqueue correlated chat message reading: %w", err)
-		}
-		return w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt)
-	})
+	tx, err := w.begin(ctx, organizationID, projectID)
+	if err != nil {
+		return 0, err
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	found, err := w.writeCorrelatedIn(ctx, tx, organizationID, projectID, upsert, writes, occurredAt)
 	if err != nil {
 		return 0, fmt.Errorf("write correlated chat message: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)
 	}
 	if !found {
 		return 0, nil
@@ -689,6 +658,55 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 
 	w.notifyMessagesStored(ctx, projectID)
 	return 1, nil
+}
+
+// writeCorrelatedIn is WriteCorrelated inside its transaction. It reports
+// whether a row was inserted or promoted.
+func (w *ChatMessageWriter) writeCorrelatedIn(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, upsert repo.UpsertCorrelatedChatMessageParams, writes []MessageWrite, occurredAt time.Time) (bool, error) {
+	param := writes[0].Params
+	if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
+		return false, err
+	}
+	stored, ok, err := w.transcripts.UpsertCorrelatedChatMessage(ctx, tx, organizationID, projectID, upsert)
+	if err != nil {
+		return false, fmt.Errorf("upsert correlated chat message: %w", err)
+	}
+	if !ok {
+		return false, nil
+	}
+	param.ID = stored.ID
+	param.Content = stored.Content
+	param.Source = stored.Source
+	param.UserAgent = stored.UserAgent
+	if err := persistClaudeTagMetadata(ctx, tx, param); err != nil {
+		return false, err
+	}
+	// A correlated promotion only updates attribution/source metadata on an
+	// existing message; its content is unchanged and its insertion already
+	// published a creation event. Do not publish again and trigger duplicate
+	// evaluation solely because that metadata was enriched.
+	if !stored.Inserted {
+		return true, nil
+	}
+	writes[0].Params.ID = stored.ID
+	metered := writes[0]
+	metered.Params.Content = stored.Content
+	metered.Params.ToolCalls = stored.ToolCalls
+	metered.Params.Model = stored.Model
+	metered.Params.UserID = stored.UserID
+	metered.Params.ExternalUserID = stored.ExternalUserID
+	metered.Params.Source = stored.Source
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, []MessageWrite{metered}, occurredAt)
+	if err != nil {
+		return false, err
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return false, fmt.Errorf("enqueue correlated chat message reading: %w", err)
+	}
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // jsonNULEscape is the JSON spelling of U+0000, which jsonb rejects.
@@ -770,48 +788,7 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			readings = nil
 		}
 
-		publicationWrites := []MessageWrite{externalPublication(*write)}
-		inserted := false
-		err = w.inTx(ctx, organizationID, projectID, func(tx pgx.Tx) error {
-			if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
-				return err
-			}
-			created, err := w.transcripts.InsertExternalChatMessage(ctx, tx, organizationID, projectID, *param)
-			if err != nil {
-				return fmt.Errorf("insert external chat message: %w", err)
-			}
-			if !created {
-				return nil
-			}
-			if attached := parts[param.ID]; len(attached) > 0 {
-				for _, part := range attached {
-					if part.ProjectID != projectID || part.ChatID != param.ChatID || !part.ParentChatMessageID.Valid || part.ParentChatMessageID.UUID != param.ID {
-						return fmt.Errorf("external content part does not match its parent message")
-					}
-				}
-				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
-					return fmt.Errorf("create external message content parts: %w", err)
-				}
-			}
-			if err := metering.Enqueue(ctx, tx, readings); err != nil {
-				return fmt.Errorf("enqueue external chat message readings: %w", err)
-			}
-			if _, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{Proto: telemetryv1.SessionObserved_builder{
-				ProjectId:    new(projectID.String()),
-				MessageId:    new(param.ID.String()),
-				Provider:     new(write.Provider),
-				HookHostname: new(write.HookHostname),
-				AccountType:  new(write.AccountType),
-				BillingMode:  new(write.BillingMode),
-			}.Build(), PublicID: uuid.Nil, Attributes: nil}); err != nil {
-				return fmt.Errorf("enqueue imported session observation: %w", err)
-			}
-			if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, publicationWrites, occurredAt); err != nil {
-				return err
-			}
-			inserted = true
-			return nil
-		})
+		inserted, err := w.writeExternalOne(ctx, organizationID, projectID, *write, parts[param.ID], readings, occurredAt)
 		if err != nil {
 			return total, fmt.Errorf("write external chat message: %w", err)
 		}
@@ -825,8 +802,60 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 	return total, nil
 }
 
+// writeExternalOne commits one imported message with its content parts,
+// readings and events in its own transaction. It reports whether the message
+// was new.
+func (w *ChatMessageWriter) writeExternalOne(ctx context.Context, organizationID string, projectID uuid.UUID, write ExternalMessageWrite, attached []repo.CreateChatContentPartParams, readings []metering.Reading, occurredAt time.Time) (bool, error) {
+	param := write.Params
+	tx, err := w.begin(ctx, organizationID, projectID)
+	if err != nil {
+		return false, err
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
+		return false, err
+	}
+	created, err := w.transcripts.InsertExternalChatMessage(ctx, tx, organizationID, projectID, param)
+	if err != nil {
+		return false, fmt.Errorf("insert external chat message: %w", err)
+	}
+	if !created {
+		return false, nil
+	}
+	for _, part := range attached {
+		if part.ProjectID != projectID || part.ChatID != param.ChatID || !part.ParentChatMessageID.Valid || part.ParentChatMessageID.UUID != param.ID {
+			return false, fmt.Errorf("external content part does not match its parent message")
+		}
+	}
+	if len(attached) > 0 {
+		if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
+			return false, fmt.Errorf("create external message content parts: %w", err)
+		}
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return false, fmt.Errorf("enqueue external chat message readings: %w", err)
+	}
+	if _, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{Proto: telemetryv1.SessionObserved_builder{
+		ProjectId:    new(projectID.String()),
+		MessageId:    new(param.ID.String()),
+		Provider:     new(write.Provider),
+		HookHostname: new(write.HookHostname),
+		AccountType:  new(write.AccountType),
+		BillingMode:  new(write.BillingMode),
+	}.Build(), PublicID: uuid.Nil, Attributes: nil}); err != nil {
+		return false, fmt.Errorf("enqueue imported session observation: %w", err)
+	}
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, []MessageWrite{externalPublication(write)}, occurredAt); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit external chat message transaction: %w", err)
+	}
+	return true, nil
+}
+
 // WriteInTx inserts messages via a caller-provided transaction, which must come
-// from InTx so the transcript key is loaded. Observers are
+// from Begin so the transcript key is loaded. Observers are
 // NOT fired here — the caller must invoke NotifyStored or NotifyStoredRows after
 // commit so observers never see a write that ended up rolled back. Use when the
 // write must be atomic with surrounding DB operations (e.g. a row-level lock
@@ -916,23 +945,27 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	writes := pendingWrites
 	writes = append(writes, assistants...)
 
-	var pendingCount, assistantCount int64
-	err = w.inTx(ctx, organizationID, projectID, func(tx pgx.Tx) error {
-		pendingCount, err = w.insertChatMessages(ctx, tx, organizationID, projectID, pendingParams)
-		if err != nil {
-			return fmt.Errorf("store pending chat messages: %w", err)
-		}
-		assistantCount, err = w.insertChatMessages(ctx, tx, organizationID, projectID, assistantParams)
-		if err != nil {
-			return fmt.Errorf("store assistant chat messages: %w", err)
-		}
-		if err := metering.Enqueue(ctx, tx, readings); err != nil {
-			return fmt.Errorf("enqueue chat turn readings: %w", err)
-		}
-		return w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt)
-	})
+	tx, err := w.begin(ctx, organizationID, projectID)
 	if err != nil {
-		return fmt.Errorf("write chat turn: %w", err)
+		return err
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	pendingCount, err := w.insertChatMessages(ctx, tx, organizationID, projectID, pendingParams)
+	if err != nil {
+		return fmt.Errorf("store pending chat messages: %w", err)
+	}
+	assistantCount, err := w.insertChatMessages(ctx, tx, organizationID, projectID, assistantParams)
+	if err != nil {
+		return fmt.Errorf("store assistant chat messages: %w", err)
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return fmt.Errorf("enqueue chat turn readings: %w", err)
+	}
+	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit chat turn transaction: %w", err)
 	}
 
 	if pendingCount+assistantCount > 0 {

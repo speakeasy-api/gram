@@ -27,6 +27,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 )
 
@@ -753,26 +754,29 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
 	}
-	page := Page{After: after, Count: 0, More: false}
-	prepare := func(ctx context.Context) error { return s.Prepare(ctx, organizationID) }
-	err := inTx(ctx, s.db, prepare, func(tx pgx.Tx) error {
-		ids, err := repo.New(tx).Backfill(ctx, repo.BackfillParams{ProjectID: project(projectID), OrganizationID: organizationID, AfterID: after, PageLimit: limit + 1})
-		if err != nil {
-			return safe(err)
-		}
-		page.More = len(ids) > int(limit)
-		ids = ids[:min(len(ids), int(limit))]
-		if err := s.Capture(ctx, tx, organizationID, projectID, ids); err != nil {
-			return err
-		}
-		page.Count = len(ids)
-		if len(ids) > 0 {
-			page.After = ids[len(ids)-1]
-		}
-		return nil
-	})
-	if err != nil {
+	if err := s.Prepare(ctx, organizationID); err != nil {
 		return Page{}, err
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return Page{}, safe(err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	ids, err := repo.New(tx).Backfill(ctx, repo.BackfillParams{ProjectID: project(projectID), OrganizationID: organizationID, AfterID: after, PageLimit: limit + 1})
+	if err != nil {
+		return Page{}, safe(err)
+	}
+	page := Page{After: after, Count: 0, More: len(ids) > int(limit)}
+	ids = ids[:min(len(ids), int(limit))]
+	if err := s.Capture(ctx, tx, organizationID, projectID, ids); err != nil {
+		return Page{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Page{}, safe(err)
+	}
+	page.Count = len(ids)
+	if len(ids) > 0 {
+		page.After = ids[len(ids)-1]
 	}
 	return page, nil
 }

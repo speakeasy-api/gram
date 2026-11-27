@@ -17,6 +17,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -154,29 +155,30 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		})
 	}
 
-	var n int64
-	err = s.chatWriter.InTx(ctx, projectID, func(tx pgx.Tx) error {
-		if err := chatrepo.New(tx).LockChatForCompaction(ctx, chatrepo.LockChatForCompactionParams{ID: threadRow.ChatID, ProjectID: projectID}); err != nil {
-			return fmt.Errorf("lock chat for compaction: %w", err)
-		}
-		currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})
-		if err != nil {
-			return fmt.Errorf("load chat generation: %w", err)
-		}
-		for i := range writes {
-			writes[i].Params.Generation = currentGen + 1
-		}
-		if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
-			return fmt.Errorf("capture compacted lineage: %w", err)
-		}
-		n, err = s.chatWriter.WriteInTx(ctx, tx, writes)
-		if err != nil {
-			return fmt.Errorf("write compacted chat messages: %w", err)
-		}
-		return nil
-	})
+	tx, err := s.chatWriter.Begin(ctx, projectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "persist compacted chat messages").LogError(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	if err := chatrepo.New(tx).LockChatForCompaction(ctx, chatrepo.LockChatForCompactionParams{ID: threadRow.ChatID, ProjectID: projectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
+	}
+	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
+	}
+	for i := range writes {
+		writes[i].Params.Generation = currentGen + 1
+	}
+	if err := chat.MarkCompactedLineage(ctx, tx, projectID, threadRow.ChatID, currentGen, writes); err != nil {
+		return fmt.Errorf("capture compacted lineage: %w", err)
+	}
+	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	if n > 0 {

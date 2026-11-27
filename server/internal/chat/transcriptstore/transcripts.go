@@ -63,7 +63,7 @@ func (t *Transcripts) Enabled(projectID uuid.UUID) bool {
 // Prepare loads the organization's transcript key into the process cache
 // before the caller opens the transaction that an insert or UpdateChatMessage
 // will use, so neither makes a KMS call while the transaction is open. An
-// error means they would fail too. InTx calls it for you.
+// error means they would fail too. Begin calls it for you.
 func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
 	if !t.Enabled(projectID) {
 		return nil

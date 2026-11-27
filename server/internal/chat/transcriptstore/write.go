@@ -17,7 +17,6 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // Every write of a message's protected fields, insert or update, goes through
@@ -151,7 +150,7 @@ func updateMetrics(m *storeMetrics) operationMetrics  { return m.update }
 
 // InsertChatMessages stores new messages with one COPY, in the caller's
 // transaction. The caller supplies every ID, so every row is new. The params
-// are taken by value and never changed. Run it inside InTx, and roll back on
+// are taken by value and never changed. Run it in a transaction from Begin, and roll back on
 // error.
 func (t *Transcripts) InsertChatMessages(ctx context.Context, db chatrepo.DBTX, organizationID string, projectID uuid.UUID, params []chatrepo.CreateChatMessageParams) (int64, error) {
 	if len(params) == 0 {
@@ -284,33 +283,19 @@ type Beginner interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
-// InTx runs fn in a new transaction on db and commits it. It loads the
-// project's transcript key before the transaction begins, so nothing inside fn
-// calls KMS while the transaction is open, and a key that will not load fails
-// the call before anything is written. An error from fn rolls back.
-func (t *Transcripts) InTx(ctx context.Context, db Beginner, organizationID string, projectID uuid.UUID, fn func(pgx.Tx) error) error {
-	prepare := func(ctx context.Context) error { return t.Prepare(ctx, organizationID, projectID) }
-	return inTx(ctx, db, prepare, fn)
-}
-
-// inTx loads the key with prepare, then runs fn in a new transaction on db
-// and commits it. Every transaction that writes protected fields opens here.
-func inTx(ctx context.Context, db Beginner, prepare func(context.Context) error, fn func(pgx.Tx) error) error {
-	if err := prepare(ctx); err != nil {
-		return err
+// Begin loads the project's transcript key into the cache, then opens a
+// transaction on db. Every transaction that writes protected fields opens
+// here, so nothing inside it calls KMS, and a key that will not load fails
+// before anything is written. The caller defers Rollback and commits.
+func (t *Transcripts) Begin(ctx context.Context, db Beginner, organizationID string, projectID uuid.UUID) (pgx.Tx, error) {
+	if err := t.Prepare(ctx, organizationID, projectID); err != nil {
+		return nil, err
 	}
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	if err := fn(tx); err != nil {
-		return err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-	return nil
+	return tx, nil
 }
 
 // canonicalAll returns each message's fields with their JSON in the text form
