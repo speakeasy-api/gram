@@ -30,11 +30,12 @@ var runtimeRequiredMethods = []string{
 // configurationMethods only read or change stored configuration, so they keep
 // working with the disabled provider. UpdateAssistant refuses only when it
 // switches runtime versions; DeleteAssistant reaps through any backend that is
-// still configured.
+// still configured. InferIntent calls a model directly, not the runtime.
 var configurationMethods = []string{
 	"DeleteAssistant",
 	"GetAssistant",
 	"GetManagedAssistant",
+	"InferIntent",
 	"ListAssistants",
 	"ListExecutionProfiles",
 	"SetExecutionProfileChoice",

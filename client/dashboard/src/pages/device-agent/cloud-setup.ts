@@ -22,6 +22,9 @@ export type CloudSetupCommandInput = {
   sha256: string;
   email: string;
   orgToken: string;
+  // Written as _control_plane_url when the agent's default host does not
+  // reach this deployment; null or absent keeps the default.
+  controlPlaneURL?: string | null;
 };
 
 /**
@@ -49,6 +52,10 @@ export function buildCloudSetupCommand(input: CloudSetupCommandInput): string {
   if (!RELEASE_SHA256.test(input.sha256)) {
     throw new Error("a valid device agent daemon checksum is required");
   }
+  const controlPlaneURL = input.controlPlaneURL || null;
+  if (controlPlaneURL !== null && !isControlPlaneOrigin(controlPlaneURL)) {
+    throw new Error("a valid control plane URL is required");
+  }
 
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -57,7 +64,12 @@ set -euo pipefail
 VERSION=${shellQuote(input.version)}
 SHA256=${shellQuote(input.sha256)}
 EMAIL=${shellQuote(email)}
-ORG_TOKEN=${shellQuote(input.orgToken)}
+ORG_TOKEN=${shellQuote(input.orgToken)}${
+    controlPlaneURL
+      ? `
+CONTROL_PLANE_URL=${shellQuote(controlPlaneURL)}`
+      : ""
+  }
 
 # 1) Install the device agent daemon (pinned, checksum-verified).
 curl -fsSL -o /usr/local/bin/speakeasyd \\
@@ -75,7 +87,12 @@ cat > /etc/speakeasy/managed.json <<JSON
   "email": "\${EMAIL}",
   "org_token": "\${ORG_TOKEN}",
   "auto_update": "disabled",
-  "hide_ui": true
+  "hide_ui": true${
+    controlPlaneURL
+      ? `,
+  "_control_plane_url": "\${CONTROL_PLANE_URL}"`
+      : ""
+  }
 }
 JSON
 chmod 0600 /etc/speakeasy/managed.json
@@ -104,6 +121,17 @@ cat > /root/.claude/settings.json <<'JSON'
 }
 JSON
 `;
+}
+
+// The URL lands inside the same JSON heredoc as the email and token, and the
+// agent sends the org token to it, so only a bare origin qualifies.
+function isControlPlaneOrigin(value: string): boolean {
+  if (!JSON_SAFE_VALUE.test(value)) return false;
+  try {
+    return new URL(value).origin === value;
+  } catch {
+    return false;
+  }
 }
 
 function shellQuote(value: string): string {
