@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -73,7 +74,7 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 	if err != nil {
 		return err
 	}
-	grants := initialGrants(p.ProjectID, p.AssistantID)
+	grants := initialGrants(p.ProjectID, p.AssistantID, assistant.IsManaged)
 	// A dedicated agent may inherit inference only within this project and
 	// only when everyone delegating it already has it: the provisioning user
 	// and the owner, or the owner alone when staff provision.
@@ -185,10 +186,25 @@ func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams,
 	return agent, nil
 }
 
+// BuiltinConnectGrants returns the explicit mcp:connect policy grants for an
+// assistant's built-in toolsets in project. Ordinary assistants receive the
+// assistants toolset; managed assistants also receive platform and
+// speakeasy-slack.
+func BuiltinConnectGrants(project uuid.UUID, managed bool) []authz.Grant {
+	slugs := platformtoolscore.AssistantBuiltinToolsetSlugs(managed)
+	grants := make([]authz.Grant, 0, len(slugs))
+	for _, slug := range slugs {
+		selector := authz.NewSelector(authz.ScopeMCPConnect, platformtoolscore.PlatformToolsetID(slug).String())
+		selector[authz.SelectorKeyProjectID] = project.String()
+		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector))
+	}
+	return grants
+}
+
 // initialGrants is the dedicated agent's starting ceiling: every MCP server
-// and skill in the assistant's project, plus administration of the assistant
-// itself.
-func initialGrants(project, assistant uuid.UUID) []authz.Grant {
+// and skill in the assistant's project, explicit Connect grants on the
+// assistant's built-in toolsets, plus administration of the assistant itself.
+func initialGrants(project, assistant uuid.UUID, managed bool) []authz.Grant {
 	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
 	projectMCP[authz.SelectorKeyProjectID] = project.String()
 	grants := []authz.Grant{
@@ -198,6 +214,7 @@ func initialGrants(project, assistant uuid.UUID) []authz.Grant {
 		// resource the project-wide skill:read check names.
 		authz.NewGrant(authz.ScopeSkillRead, project.String()),
 	}
+	grants = append(grants, BuiltinConnectGrants(project, managed)...)
 	return append(grants, assistantSelfAdminGrants(assistant)...)
 }
 

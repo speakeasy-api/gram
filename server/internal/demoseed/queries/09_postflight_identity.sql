@@ -473,7 +473,7 @@ WHERE t.organization_id = @org_id::text AND t.project_id = @project_id::uuid
   AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
   AND t.subject = 'assistant-trigger:' || r.id::text
   AND (SELECT count(*) FROM principal_grants g
-    WHERE g.organization_id = @org_id::text AND g.principal_urn = 'agent:' || ag.id::text) = 4;
+    WHERE g.organization_id = @org_id::text AND g.principal_urn = 'agent:' || ag.id::text) = 5;
 
 -- Workload sessions, and the trust configuration that labels them. A
 -- workload whose issuer or assignment went missing would render as an

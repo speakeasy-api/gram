@@ -299,6 +299,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationCreateRegistryEntry:                  &registryEntryWriter{runner: runner, registry: registry, writes: writes},
 		OperationSetRegistryIcons:                     &registryIconsWriter{runner: runner, registry: registry, writes: writes},
 		OperationRepairAssistantAgentNames:            &assistantAgentNameRepairWriter{runner: runner, audit: auditLogger, writes: writes},
+		OperationBackfillAssistantBuiltinGrants:       &assistantBuiltinGrantsBackfillWriter{runner: runner, audit: auditLogger, writes: writes},
 		OperationMigrateAssistantsToKit:               &assistantKitMigrationWriter{runner: runner, audit: auditLogger, writes: writes, now: time.Now},
 	}}
 	if deps.ProjectRedeployer != nil {

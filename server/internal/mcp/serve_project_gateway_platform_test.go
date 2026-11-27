@@ -10,13 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/admin"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -326,4 +332,153 @@ func TestServeProjectGateway_BuiltinAssistantsToolset_WorkloadTurn(t *testing.T)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, executed))
 	require.False(t, isError, text)
 	require.Contains(t, text, "no skills attached", "workload turn must resolve bound thread and execute built-in tool: %s", text)
+}
+
+func TestServeProjectGateway_ProvisionedAssistantHasBuiltinsAndRevocationRemovesThem(t *testing.T) {
+	t.Parallel()
+	ctx, ti, _ := newTestMCPServiceWithPlatformMCPReadTools(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	fixture := seedOrganizationGateway(t, ctx, ti)
+	grantProjectRead(t, ti, authCtx)
+	grantLiveOrgAdmin(t, ti, authCtx)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, authz.WildcardResource)
+	ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
+
+	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+
+	// Provision a brand-new ordinary assistant with no manual agent grant step.
+	ordinaryID := createAssistant(t, ti, authCtx, "Provisioned ordinary")
+	require.NoError(t, pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
+		return identities.Provision(ctx, tx, assistantidentity.ProvisionParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			AssistantID:    ordinaryID,
+			ActorUserID:    authCtx.UserID,
+			Staff:          nil,
+		})
+	}))
+	ordinaryStates, err := assistantidentity.States(ctx, ti.conn, *authCtx.ProjectID, []uuid.UUID{ordinaryID})
+	require.NoError(t, err)
+	require.NotNil(t, ordinaryStates[ordinaryID].AgentID)
+	ordinaryAgentID := *ordinaryStates[ordinaryID].AgentID
+
+	// Provision a brand-new managed assistant with no manual agent grant step.
+	managedID := createAssistant(t, ti, authCtx, "Provisioned managed")
+	require.NoError(t, assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(ctx, assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	}))
+	require.NoError(t, pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
+		return identities.Provision(ctx, tx, assistantidentity.ProvisionParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+			AssistantID:    managedID,
+			ActorUserID:    authCtx.UserID,
+			Staff:          nil,
+		})
+	}))
+	managedStates, err := assistantidentity.States(ctx, ti.conn, *authCtx.ProjectID, []uuid.UUID{managedID})
+	require.NoError(t, err)
+	require.NotNil(t, managedStates[managedID].AgentID)
+	managedAgentID := *managedStates[managedID].AgentID
+
+	ordinaryToken := mintAgentTurnCredential(t, ti, authCtx, ordinaryID, ordinaryAgentID)
+	managedToken := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
+
+	// New ordinary assistant sees and can call assistants built-in immediately.
+	ordinaryListed, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, ordinaryListed.Code, ordinaryListed.Body.String())
+	require.Contains(t, ordinaryListed.Body.String(), `"slug":"assistants"`)
+	require.NotContains(t, ordinaryListed.Body.String(), `"slug":"platform"`)
+	require.NotContains(t, ordinaryListed.Body.String(), `"slug":"speakeasy-slack"`)
+
+	qualifiedSkillLoad := platformtools.AssistantsPlatformToolsetSlug + "--" + platformtools.ToolNameSkillsLoad
+	executed, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": metamcp.ToolExecuteTool,
+		"arguments": map[string]any{
+			"name":      qualifiedSkillLoad,
+			"arguments": map[string]any{"name": "nonexistent-skill"},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, executed.Code, executed.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, executed))
+	require.False(t, isError, text)
+	require.Contains(t, text, "no skills attached")
+
+	// New managed assistant sees all three built-in toolsets with no manual step.
+	managedListed, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, managedToken, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, managedListed.Code, managedListed.Body.String())
+	require.Contains(t, managedListed.Body.String(), `"slug":"assistants"`)
+	require.Contains(t, managedListed.Body.String(), `"slug":"platform"`)
+	require.Contains(t, managedListed.Body.String(), `"slug":"speakeasy-slack"`)
+
+	// Remove the project-wide mcp:connect * grant from the ordinary agent: its
+	// explicit built-in grant still keeps the assistants toolset available.
+	agents := agentsrepo.New(ti.conn)
+	rows, err := agents.ListAgentPolicyGrants(ctx, agentsrepo.ListAgentPolicyGrantsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		AgentID:        ordinaryAgentID,
+	})
+	require.NoError(t, err)
+	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug).String()
+	var explicitBuiltinGrantID uuid.UUID
+	for _, row := range rows {
+		if row.Scope != string(authz.ScopeMCPConnect) {
+			continue
+		}
+		sel, err := authz.SelectorFromRow(row.Selectors)
+		require.NoError(t, err)
+		switch sel[authz.SelectorKeyResourceID] {
+		case authz.WildcardResource:
+			_, err = agents.DeleteAgentPolicyGrant(ctx, agentsrepo.DeleteAgentPolicyGrantParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				AgentID:        ordinaryAgentID,
+				GrantID:        row.ID,
+			})
+			require.NoError(t, err)
+		case assistantsID:
+			explicitBuiltinGrantID = row.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, explicitBuiltinGrantID, "provisioning must write an explicit built-in grant row")
+
+	afterWildcardRemoved, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+	require.NoError(t, err)
+	require.Contains(t, afterWildcardRemoved.Body.String(), `"slug":"assistants"`)
+
+	// Removing the explicit built-in grant removes the built-in from the gateway.
+	_, err = agents.DeleteAgentPolicyGrant(ctx, agentsrepo.DeleteAgentPolicyGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		AgentID:        ordinaryAgentID,
+		GrantID:        explicitBuiltinGrantID,
+	})
+	require.NoError(t, err)
+	afterBuiltinRemoved, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+	require.NoError(t, err)
+	require.NotContains(t, afterBuiltinRemoved.Body.String(), `"slug":"assistants"`)
+
+	// Running the per-org backfill restores the built-in through the gateway.
+	staffCtx := contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID:   "staff-session",
+		OIDCSubject: "staff-subject",
+		Email:       "staff@example.invalid",
+		Name:        "Staff Member",
+		HD:          "speakeasy.com",
+	})
+	require.NoError(t, pgx.BeginFunc(staffCtx, ti.conn, func(tx pgx.Tx) error {
+		run, err := admin.BackfillAssistantBuiltinGrantsTx(staffCtx, tx, testenv.NewLogger(t), audit.NewLogger(), authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), run.Granted)
+		require.Equal(t, int64(1), run.AlreadyGranted)
+		return nil
+	}))
+	afterBackfill, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, ordinaryToken, listServersBody(t))
+	require.NoError(t, err)
+	require.Contains(t, afterBackfill.Body.String(), `"slug":"assistants"`)
 }

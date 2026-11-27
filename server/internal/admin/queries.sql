@@ -1464,6 +1464,31 @@ UPDATE agents SET name = @name, updated_at = clock_timestamp()
 WHERE id = @agent_id AND organization_id = @organization_id AND project_id = @project_id
 AND deleted IS FALSE AND name = @old_name;
 
+-- name: AdminListAssistantBuiltinGrantTargets :many
+-- Every live assistant of an organization with a live bound dedicated agent,
+-- plus whether it is the project's managed assistant. Locked in assistant ID
+-- order so concurrent backfills serialize cleanly.
+SELECT
+    a.id AS assistant_id,
+    a.project_id,
+    a.name,
+    g.id AS agent_id,
+    g.name AS agent_name,
+    EXISTS (
+        SELECT 1
+        FROM project_managed_assistants pma
+        WHERE pma.project_id = a.project_id
+          AND pma.assistant_id = a.id
+    )::boolean AS is_managed
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id AND p.deleted IS FALSE
+JOIN assistant_agent_bindings b ON b.assistant_id = a.id AND b.project_id = a.project_id AND b.organization_id = a.organization_id AND b.deleted IS FALSE
+JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id AND g.deleted IS FALSE
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE
+ORDER BY a.id
+FOR UPDATE OF a, b, g;
+
 -- name: AdminGetMCPServerSourceToolset :one
 SELECT t.slug, COALESCE(s.tool_variations_group_id, t.tool_variations_group_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS variations_group_id
 FROM mcp_servers s

@@ -2949,6 +2949,85 @@ paths:
             x-speakeasy-name-override: listOrganizationAssistants
             x-speakeasy-react-hook:
                 name: AdminListOrganizationAssistants
+    /admin/organization.backfillAssistantBuiltinGrants:
+        post:
+            description: Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.
+            operationId: adminBackfillOrganizationAssistantBuiltinGrants
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BackfillOrganizationAssistantBuiltinGrantsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminAssistantBuiltinGrantBackfillRun'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: backfillOrganizationAssistantBuiltinGrants admin
+            tags:
+                - admin
+            x-speakeasy-name-override: backfillOrganizationAssistantBuiltinGrants
+            x-speakeasy-react-hook:
+                name: AdminBackfillOrganizationAssistantBuiltinGrants
     /admin/organization.cancelStripeSubscription:
         post:
             tags:
@@ -102520,6 +102599,68 @@ components:
                 - conflicts
                 - failed
                 - results
+        AdminAssistantBuiltinGrantBackfillResult:
+            type: object
+            properties:
+                assistant_id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
+                grants_added:
+                    type: integer
+                    description: How many built-in Connect grants were written or promoted to permanent for this assistant.
+                    format: int64
+                name:
+                    type: string
+                    description: The assistant name.
+                outcome:
+                    type: string
+                    description: granted when the run added one or more missing built-in Connect grants, already_granted when every built-in Connect grant was already present permanently, and failed when writing failed.
+                    enum:
+                        - granted
+                        - already_granted
+                        - failed
+                project_id:
+                    type: string
+                    description: The assistant's project ID.
+                    format: uuid
+            description: What the built-in toolset Connect grant backfill did to one agent-backed assistant.
+            required:
+                - assistant_id
+                - project_id
+                - name
+                - outcome
+                - grants_added
+        AdminAssistantBuiltinGrantBackfillRun:
+            type: object
+            properties:
+                already_granted:
+                    type: integer
+                    description: Assistants whose agents already held all required permanent built-in Connect grants.
+                    format: int64
+                failed:
+                    type: integer
+                    description: Assistants whose backfill failed. Running again retries them.
+                    format: int64
+                granted:
+                    type: integer
+                    description: Assistants whose agents received one or more built-in Connect grants.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminAssistantBuiltinGrantBackfillResult'
+                    description: One result per live agent-backed assistant.
+            description: The result of backfilling built-in toolset Connect grants for one organization's agent-backed assistants.
+            required:
+                - organization_id
+                - granted
+                - already_granted
+                - failed
+                - results
         AdminAssistantIdentityMigrationResult:
             type: object
             properties:
@@ -110023,6 +110164,14 @@ components:
                     type: string
                     description: Only copy grants created before this time. Set it to when read and write stopped implying connect, so grants written since are left alone.
                     format: date-time
+        BackfillOrganizationAssistantBuiltinGrantsRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+            required:
+                - organization_id
         BaseResourceAttributes:
             type: object
             properties:
