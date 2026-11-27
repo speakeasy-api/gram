@@ -11,6 +11,8 @@ from pystreams.risk.redisswitch import (
     DEFAULT_ROLE,
     HOLD_KEY,
     HOLD_TIMEOUT_SECONDS,
+    ROLE_AUTH,
+    ROLE_OPS,
     RedisSwitch,
     SwitchHoldTimeoutError,
     state_key,
@@ -39,7 +41,7 @@ class _Clock:
 
 
 class _Fixture:
-    def __init__(self) -> None:
+    def __init__(self, role: str = DEFAULT_ROLE) -> None:
         # Separate servers, so a write to one instance is invisible on the other.
         self.current_server = fakeredis.FakeServer()
         self.current = fakeredis.aioredis.FakeRedis(server=self.current_server)
@@ -49,6 +51,7 @@ class _Fixture:
             self.current,
             self.next,
             structlog.get_logger(),
+            role=role,
             clock=self.clock,
             sleep=self.clock.sleep,
         )
@@ -170,4 +173,39 @@ async def test_a_hold_set_between_the_check_and_the_write_is_refused():
         await f.switch.execute(queue)
 
     assert attempts == 1, "later attempts see the hold and never queue the write"
+    assert await f.lengths() == (0, 0)
+
+
+async def test_the_ops_role_ignores_a_move_of_the_auth_role():
+    f = _Fixture(role=ROLE_OPS)
+    await f.current.set(state_key(ROLE_AUTH), "moved:run-1")
+    await f.current.set(state_key(ROLE_OPS), "current")
+    await f.switch.start()
+
+    await f.write()
+
+    assert await f.lengths() == (1, 0)
+    assert not f.switch.moved
+
+
+async def test_the_ops_role_follows_its_own_move():
+    f = _Fixture(role=ROLE_OPS)
+    await f.current.set(state_key(ROLE_AUTH), "current")
+    await f.current.set(state_key(ROLE_OPS), "moved:run-2")
+    await f.switch.start()
+
+    await f.write()
+
+    assert await f.lengths() == (0, 1)
+
+
+async def test_the_hold_is_shared_by_every_role():
+    f = _Fixture(role=ROLE_OPS)
+    await f.current.set(state_key(ROLE_OPS), "current")
+    await f.current.set(HOLD_KEY, "run-1")
+    await f.switch.start()
+
+    with pytest.raises(SwitchHoldTimeoutError):
+        await f.write()
+
     assert await f.lengths() == (0, 0)

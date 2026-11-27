@@ -114,6 +114,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/redisconn"
 	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
@@ -480,14 +481,17 @@ type redisClientOptions struct {
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
 	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
-		Addr:            opts.redisAddr,
-		Password:        opts.redisPassword,
 		DB:              db,
 		DialTimeout:     1 * time.Second,
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	}, redisswitch.Binding{
+		Role:    redisswitch.DefaultRole,
+		Current: redisconn.PasswordEndpoint(opts.redisAddr, opts.redisPassword),
+		Next:    redisswitch.NextFromEnv(),
+		Tokens:  nil,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create redis client: %w", err)
 	}

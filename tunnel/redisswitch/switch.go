@@ -15,25 +15,38 @@
 // allow it. A process refuses to open a new connection without a fresh reading.
 //
 // A client follows the state key of one role. A process that keeps different
-// workloads on different instances gives each its own client and role, so one
-// workload can move while the others stay. The hold key is shared: a copy
-// pauses every client of the instance, which is what lets the operator's job
-// prove nothing else wrote to it.
+// workloads on different instances gives each its own client and role, each
+// role with its own next instance, so one workload can move while the others
+// stay. The hold key is shared: a copy pauses every client of the instance,
+// which is what lets the operator's job prove nothing else wrote to it.
+//
+// The current and next instances may differ in how they are reached: TLS or
+// plaintext, a password or an IAM token. Each new socket is encrypted and
+// authenticated inside the switch's dialer with the credentials of the
+// instance that dialer chose, and the client itself carries none. A move that
+// lands while a socket is being opened therefore cannot send one instance's
+// credentials to the other.
 package redisswitch
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/oauth2"
+
+	"github.com/speakeasy-api/gram/tunnel/redisconn"
 )
 
 const (
@@ -43,6 +56,13 @@ const (
 	// DefaultRole is the role of a process that keeps everything on one
 	// instance.
 	DefaultRole = "all"
+
+	// RoleAuth is the role of the authentication and session state.
+	RoleAuth = "auth"
+
+	// RoleOps is the role of the operational state: queues, routes, rate
+	// limits and the like.
+	RoleOps = "ops"
 
 	// HoldKey exists, with an expiry, while an operator is copying the data.
 	// Its expiry bounds the pause: if the operator's job dies, the key goes and
@@ -90,6 +110,17 @@ const (
 	// timeout at zero. It is the go-redis default; without it a dial to an
 	// unreachable instance would wait for the operating system to give up.
 	defaultDialTimeout = 5 * time.Second
+
+	// moveJitterWindow is how long after a move new connections to the next
+	// instance are spread out. Every process sees the move within a poll
+	// interval and refills its pool at once; by the end of the window those
+	// pools are full again.
+	moveJitterWindow = 10 * time.Second
+
+	// maxMoveJitter is the longest a dial waits inside moveJitterWindow. It
+	// spreads a fleet's TLS handshakes and token checks over a quarter of a
+	// second while staying well inside the dial timeout.
+	maxMoveJitter = 250 * time.Millisecond
 )
 
 // ErrHolding is returned when a command cannot run because the switch is
@@ -100,6 +131,15 @@ var ErrHolding = errors.New("redis switch is holding")
 // key for the role. An operator must set it before processes are configured
 // with a next instance.
 var ErrNotArmed = errors.New("redis switch state key is not set on the current instance")
+
+// ErrAmbiguousRole is returned by a client that Wrap built for options whose
+// instance has switches for more than one role: Wrap cannot tell which one the
+// options came from. Use WrapRole.
+var ErrAmbiguousRole = errors.New("redis switch follows several roles on this instance; name the role")
+
+// ErrUnknownRole is returned when an instance has switches but none for the
+// role supplied to WrapRole.
+var ErrUnknownRole = errors.New("redis switch does not follow the named role on this instance")
 
 // StateKey names the key that says which instance is authoritative for a role.
 // On the current instance its value is "current" until the move, then
@@ -125,73 +165,114 @@ const (
 	stateNext state = "next"
 )
 
-// Target is one Redis instance.
-type Target struct {
-	// Addr is the instance's host:port.
-	Addr string
+// Binding names the role a client follows and the instances it moves between.
+type Binding struct {
+	// Role names the state key the client follows on the current instance.
+	Role string
 
-	// Password is the instance's AUTH string.
-	Password string
+	// Current is the instance the role uses until it moves. Its switch keys
+	// live there.
+	Current redisconn.Endpoint
+
+	// Next is the instance the role moves to. The switch is inactive when its
+	// address is empty or equal to Current's.
+	Next redisconn.Endpoint
+
+	// Tokens supplies access tokens for an IAM endpoint. It may be nil when
+	// neither endpoint uses IAM.
+	Tokens oauth2.TokenSource
 }
 
-// NextFromEnv reads the next instance from the environment.
-func NextFromEnv() Target {
-	return Target{
-		Addr:     strings.TrimSpace(os.Getenv(EnvNextAddr)),
-		Password: os.Getenv(EnvNextPassword),
+// NextFromEnv reads a next instance that takes a password, or nothing, from
+// the environment. Its address is empty when the switch is not configured.
+func NextFromEnv() redisconn.Endpoint {
+	addr := strings.TrimSpace(os.Getenv(EnvNextAddr))
+	if addr == "" {
+		return redisconn.Endpoint{Addr: "", Auth: redisconn.AuthNone, Password: "", CACertPEM: "", ServerName: ""}
 	}
+	return redisconn.PasswordEndpoint(addr, os.Getenv(EnvNextPassword))
 }
 
 // Switch tracks which instance a process should use for one role.
 type Switch struct {
 	logger      *slog.Logger
 	stateKey    string
-	current     Target
-	next        Target
+	current     *redisconn.Connector
+	next        *redisconn.Connector
 	poller      *redis.Client
 	dialTimeout time.Duration
 	now         func() time.Time
 
+	// dialTCP opens the raw socket for a dial. Tests replace it to stall or
+	// observe a dial.
+	dialTCP func(ctx context.Context, network, addr string, timeout time.Duration) (net.Conn, error)
+
+	// jitter picks how long a dial waits shortly after a move.
+	jitter func() time.Duration
+
 	mu       sync.Mutex
 	state    state
 	readAt   time.Time
+	movedAt  time.Time
 	changed  chan struct{}
 	conns    map[*trackedConn]struct{}
 	lastSeen state
 }
 
-// switches maps a current instance's address to its Switch, so a second client
-// built from the first one's options gets the same gate. Connections carry no
-// name to tie a copy to its parent: an instance may reject the CLIENT command,
-// and a named client then cannot connect to it. One process therefore follows
-// one role per instance.
+// registryKey identifies a switch: the current instance it polls and the role
+// whose state key it follows there.
+type registryKey struct {
+	addr string
+	role string
+}
+
+// switches maps a registryKey to its *entry, so a second client built from the
+// first one's options gets the same gate. Connections carry no name to tie a
+// copy to its parent: an instance may reject the CLIENT command, and a named
+// client then cannot connect to it. One process therefore follows each role
+// of an instance with one switch.
 var switches sync.Map
 
-// NewClient returns a client for opts. When next names an instance, the client
-// follows the role's switch keys on the instance in opts; otherwise it is an
-// ordinary client. The poller runs for the life of the process: callers often
-// pass a startup context, and a poller that stopped with it would leave the
-// process unable to see a hold.
-func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, role string, next Target) (*redis.Client, error) {
+// NewClient returns a client for opts and binding. Binding's endpoints replace
+// the address, TLS configuration and credentials in opts; the rest of opts
+// (pool size, timeouts, database) is kept. When binding names a next instance,
+// the client follows the role's switch keys on the current instance;
+// otherwise it is an ordinary client of the current instance. The poller runs
+// for the life of the process: callers often pass a startup context, and a
+// poller that stopped with it would leave the process unable to see a hold.
+func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, binding Binding) (*redis.Client, error) {
 	// A next instance equal to the current one means the move is over.
-	if next.Addr == "" || next.Addr == opts.Addr {
-		return redis.NewClient(opts), nil
+	if binding.Next.Addr == "" || binding.Next.Addr == binding.Current.Addr {
+		return ordinaryClient(opts, binding)
+	}
+
+	current, err := redisconn.NewConnector(binding.Current, binding.Tokens)
+	if err != nil {
+		return nil, fmt.Errorf("current redis instance: %w", err)
+	}
+
+	if binding.Role == "" {
+		return nil, errors.New("redis switch needs a role")
+	}
+	next, err := redisconn.NewConnector(binding.Next, binding.Tokens)
+	if err != nil {
+		return nil, fmt.Errorf("next redis instance: %w", err)
 	}
 
 	// Reserved before starting, so two callers cannot both build a switch for
-	// the same instance.
-	key := opts.Addr
+	// the same instance and role.
+	key := registryKey{addr: current.Addr(), role: binding.Role}
 	reserved := &entry{ready: make(chan struct{}), sw: nil}
 	if found, taken := switches.LoadOrStore(key, reserved); taken {
 		// Only a switch that failed to start may be replaced. Its entry stays in
 		// the registry until then, so Wrap keeps refusing its address.
 		previous, ok := found.(*entry)
 		if !ok || !previous.failed() || !switches.CompareAndSwap(key, found, reserved) {
-			return nil, fmt.Errorf("a redis switch already follows this instance in this process, so role %q cannot", role)
+			return nil, fmt.Errorf("a redis switch already follows role %q on this instance in this process", binding.Role)
 		}
 	}
 
-	sw, err := start(context.WithoutCancel(ctx), logger, role, Target{Addr: opts.Addr, Password: opts.Password}, next, opts.DialTimeout)
+	sw, err := start(context.WithoutCancel(ctx), logger, binding.Role, current, next, opts.DialTimeout)
 	if err != nil {
 		close(reserved.ready)
 		return nil, err
@@ -200,6 +281,21 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, ro
 	close(reserved.ready)
 
 	return sw.client(opts), nil
+}
+
+// ordinaryClient returns a client of the current instance that follows no
+// switch. An unconfigured plaintext address uses go-redis's default.
+func ordinaryClient(opts *redis.Options, binding Binding) (*redis.Client, error) {
+	endpoint := binding.Current
+	if endpoint.Addr == "" && !endpoint.TLS() && endpoint.Auth != redisconn.AuthIAM {
+		endpoint.Addr = "localhost:6379"
+	}
+
+	current, err := redisconn.NewConnector(endpoint, binding.Tokens)
+	if err != nil {
+		return nil, fmt.Errorf("current redis instance: %w", err)
+	}
+	return redis.NewClient(current.Options(opts)), nil
 }
 
 // entry is a role's place in the registry. It is stored before its switch has
@@ -232,38 +328,89 @@ var ErrNotStarted = errors.New("redis switch for this client failed to start")
 // binding is applied again here. Options that did not come from such a client
 // (their address matches no switch) get redis.NewClient.
 //
+// The switch is found by address. When the process follows more than one role
+// on that instance the returned client cannot connect (ErrAmbiguousRole); use
+// WrapRole.
+//
 // If the matching switch is still starting, Wrap waits for it. If it failed to
 // start, the returned client cannot connect: an ordinary client would not
 // follow a move.
 func Wrap(opts *redis.Options) *redis.Client {
-	found, ok := switches.Load(opts.Addr)
+	var found []*entry
+	switches.Range(func(key, value any) bool {
+		if k, ok := key.(registryKey); ok && k.addr == opts.Addr {
+			if e, ok := value.(*entry); ok {
+				found = append(found, e)
+			}
+		}
+		return true
+	})
+
+	switch len(found) {
+	case 0:
+		return redis.NewClient(opts)
+	case 1:
+		return wrapEntry(opts, found[0])
+	default:
+		return refusedClient(opts, ErrAmbiguousRole)
+	}
+}
+
+// WrapRole is Wrap for options copied from the client of a named role.
+func WrapRole(opts *redis.Options, role string) *redis.Client {
+	found, ok := switches.Load(registryKey{addr: opts.Addr, role: role})
 	if !ok {
+		managed := false
+		switches.Range(func(key, _ any) bool {
+			candidate, ok := key.(registryKey)
+			managed = ok && candidate.addr == opts.Addr
+			return !managed
+		})
+		if managed {
+			return refusedClient(opts, ErrUnknownRole)
+		}
 		return redis.NewClient(opts)
 	}
-
 	reserved, ok := found.(*entry)
 	if !ok {
-		return redis.NewClient(opts)
+		return refusedClient(opts, ErrNotStarted)
 	}
+	return wrapEntry(opts, reserved)
+}
+
+func wrapEntry(opts *redis.Options, reserved *entry) *redis.Client {
 	<-reserved.ready
 	if reserved.sw == nil {
-		refused := *opts
-		refused.Dialer = func(context.Context, string, string) (net.Conn, error) { return nil, ErrNotStarted }
-		refused.MaxRetries = -1
-		refused.DialerRetries = 1
-		return redis.NewClient(&refused)
+		return refusedClient(opts, ErrNotStarted)
 	}
 	return reserved.sw.client(opts)
 }
 
-// client builds a client bound to this switch. The gate, the dialer and the
-// credentials are always set together: a client with the gate but an ordinary
-// dialer would wait through a hold and then write to the instance being left.
-// The caller's options are copied, not changed.
+// refusedClient returns a client whose every dial fails with err.
+func refusedClient(opts *redis.Options, err error) *redis.Client {
+	refused := *opts
+	refused.Dialer = func(context.Context, string, string) (net.Conn, error) { return nil, err }
+	refused.MaxRetries = -1
+	refused.DialerRetries = 1
+	return redis.NewClient(&refused)
+}
+
+// client builds a client bound to this switch. The gate and the dialer are
+// always set together: a client with the gate but an ordinary dialer would
+// wait through a hold and then write to the instance being left. The dialer
+// encrypts and authenticates each socket for the instance it chose, so the
+// client carries no credentials and no TLS configuration of its own. The
+// caller's options are copied, not changed.
 func (s *Switch) client(opts *redis.Options) *redis.Client {
 	bound := *opts
+	bound.Addr = s.current.Addr()
 	bound.Dialer = s.dial
-	bound.CredentialsProvider = s.credentials
+	bound.TLSConfig = nil
+	bound.Username = ""
+	bound.Password = ""
+	bound.CredentialsProvider = nil
+	bound.CredentialsProviderContext = nil
+	bound.StreamingCredentialsProvider = nil
 	// A command interrupted by the move must fail once. Replayed, it could run
 	// a second time on the other instance.
 	bound.MaxRetries = -1
@@ -278,7 +425,11 @@ func (s *Switch) client(opts *redis.Options) *redis.Client {
 	return client
 }
 
-func start(ctx context.Context, logger *slog.Logger, role string, current, next Target, dialTimeout time.Duration) (*Switch, error) {
+func start(ctx context.Context, logger *slog.Logger, role string, current, next *redisconn.Connector, dialTimeout time.Duration) (*Switch, error) {
+	if dialTimeout <= 0 {
+		dialTimeout = defaultDialTimeout
+	}
+
 	sw := &Switch{
 		logger:      logger,
 		stateKey:    StateKey(role),
@@ -286,19 +437,20 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 		next:        next,
 		dialTimeout: dialTimeout,
 		now:         time.Now,
-		poller: redis.NewClient(&redis.Options{
-			Addr:            current.Addr,
-			Password:        current.Password,
+		dialTCP:     dialTCP,
+		jitter:      func() time.Duration { return rand.N(maxMoveJitter) },
+		poller: redis.NewClient(current.Options(&redis.Options{
 			DialTimeout:     pollTimeout,
 			ReadTimeout:     pollTimeout,
 			WriteTimeout:    pollTimeout,
 			MaxRetries:      -1,
 			PoolSize:        1,
 			DisableIdentity: true,
-		}),
+		})),
 		mu:       sync.Mutex{},
 		state:    stateUnknown,
 		readAt:   time.Time{},
+		movedAt:  time.Time{},
 		changed:  make(chan struct{}),
 		conns:    make(map[*trackedConn]struct{}),
 		lastSeen: stateUnknown,
@@ -309,7 +461,7 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 		return nil, fmt.Errorf("read redis switch keys: %w", err)
 	}
 
-	// A wrong address or password for the next instance must fail this
+	// A wrong address or credentials for the next instance must fail this
 	// process at startup, not every process at the moment of the switch.
 	if err := checkReachable(ctx, next); err != nil {
 		_ = sw.poller.Close()
@@ -321,19 +473,26 @@ func start(ctx context.Context, logger *slog.Logger, role string, current, next 
 	return sw, nil
 }
 
-func checkReachable(ctx context.Context, target Target) error {
+func dialTCP(ctx context.Context, network, addr string, timeout time.Duration) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: timeout, KeepAlive: keepAlive}
+	conn, err := dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial redis: %w", err)
+	}
+	return conn, nil
+}
+
+func checkReachable(ctx context.Context, target *redisconn.Connector) error {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
-	client := redis.NewClient(&redis.Options{
-		Addr:            target.Addr,
-		Password:        target.Password,
-		DialTimeout:     pollTimeout,
+	client := redis.NewClient(target.Options(&redis.Options{
+		DialTimeout:     startTimeout,
 		ReadTimeout:     pollTimeout,
 		WriteTimeout:    pollTimeout,
 		PoolSize:        1,
 		DisableIdentity: true,
-	})
+	}))
 	defer func() { _ = client.Close() }()
 
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -465,10 +624,11 @@ func (s *Switch) set(ctx context.Context, next state, readAt time.Time) {
 		s.mu.Unlock()
 
 		for _, conn := range stale {
-			_ = conn.Conn.Close()
+			_ = conn.closeSocket()
 		}
 
 		s.mu.Lock()
+		s.movedAt = s.now()
 	}
 
 	s.state = next
@@ -515,37 +675,44 @@ func (s *Switch) wait(ctx context.Context) error {
 	}
 }
 
-// dial connects to whichever instance the switch points at. A connection to
-// the current instance is handed over only if three checks pass: the process
-// holds a fresh reading that allows it before connecting; the instance itself,
-// asked on the new socket, says it is current and not held; and the reading
-// still allows it when the socket is registered. A command that slipped past
-// the gate, a process that stalled mid-dial, or a socket whose handshake was
-// delayed past the operator's connection close therefore cannot write to the
-// instance being copied.
+// dial connects to whichever instance the switch points at. The instance is
+// chosen once, before connecting, and the socket is encrypted and
+// authenticated for that instance alone: a move while the dial is in progress
+// cannot make it send the other instance's credentials.
+//
+// A connection to the current instance is handed over only if three checks
+// pass: the process holds a fresh reading that allows it before connecting;
+// the instance itself, asked on the new socket, says it is current and not
+// held; and the reading still allows it when the socket is registered. A
+// command that slipped past the gate, a process that stalled mid-dial, or a
+// socket whose handshake was delayed past the operator's connection close
+// therefore cannot write to the instance being copied.
 func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) {
 	target, _ := s.load()
 
-	var addr string
+	var endpoint *redisconn.Connector
 	switch target {
 	case stateCurrent:
-		addr = s.current.Addr
+		endpoint = s.current
 	case stateNext:
-		addr = s.next.Addr
+		endpoint = s.next
+		if err := s.spreadAfterMove(ctx); err != nil {
+			return nil, err
+		}
 	case stateHold, stateUnknown:
 		return nil, ErrHolding
 	}
 
-	timeout := s.dialTimeout
-	if timeout <= 0 {
-		timeout = defaultDialTimeout
-	}
-	dialer := &net.Dialer{Timeout: timeout, KeepAlive: keepAlive}
-	conn, err := dialer.DialContext(ctx, network, addr)
+	conn, err := s.open(ctx, network, endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("dial redis: %w", err)
+		return nil, err
 	}
+
 	if target == stateNext {
+		if err := handshake(ctx, conn, endpoint, s.dialTimeout, ping); err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("authenticate to next redis instance: %w", err)
+		}
 		return conn, nil
 	}
 
@@ -556,7 +723,7 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 
 	// Checked and registered under one lock: a move cannot fall between the
 	// two and leave an unregistered connection to the instance being left.
-	tracked := &trackedConn{Conn: conn, sw: s}
+	tracked, handed := s.track(conn)
 	s.mu.Lock()
 	allowed := s.loadLocked() == stateCurrent
 	if allowed {
@@ -568,38 +735,110 @@ func (s *Switch) dial(ctx context.Context, network, _ string) (net.Conn, error) 
 		_ = conn.Close()
 		return nil, ErrHolding
 	}
-	return tracked, nil
+	return handed, nil
 }
 
-// verifyCurrent reads the switch keys on a socket just opened to the current
-// instance and fails unless the instance says it is current and not held. It
-// is asked on this socket, not through the poller, so the answer is about the
-// instance this socket reached and is as fresh as the socket.
+// spreadAfterMove waits a random moment when a dial to the next instance
+// comes soon after the move, so a fleet that moved together does not open
+// every connection at the same instant.
+func (s *Switch) spreadAfterMove(ctx context.Context) error {
+	s.mu.Lock()
+	movedAt := s.movedAt
+	s.mu.Unlock()
+
+	if s.now().Sub(movedAt) >= moveJitterWindow {
+		return nil
+	}
+	delay := s.jitter()
+	if delay <= 0 {
+		return nil
+	}
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait before dialing next redis instance: %w", ctx.Err())
+	}
+}
+
+// open dials endpoint and, when it uses TLS, completes the handshake, both
+// within the dial timeout.
+func (s *Switch) open(ctx context.Context, network string, endpoint *redisconn.Connector) (net.Conn, error) {
+	conn, err := s.dialTCP(ctx, network, endpoint.Addr(), s.dialTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	config := endpoint.TLSConfig()
+	if config == nil {
+		return conn, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, s.dialTimeout)
+	defer cancel()
+
+	encrypted := tls.Client(conn, config)
+	if err := encrypted.HandshakeContext(ctx); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("tls handshake with redis: %w", err)
+	}
+	return encrypted, nil
+}
+
+// verifyCurrent authenticates a socket just opened to the current instance,
+// reads the switch keys on it, and fails unless the instance says it is
+// current and not held. It is asked on this socket, not through the poller,
+// so the answer is about the instance this socket reached and is as fresh as
+// the socket.
 func (s *Switch) verifyCurrent(ctx context.Context, conn net.Conn) error {
-	// A throwaway client speaks the protocol over the socket. Closing it must
-	// leave the socket open for the caller.
-	probe := redis.NewClient(&redis.Options{
+	return handshake(ctx, conn, s.current, pollTimeout, func(ctx context.Context, probe *redis.Client) error {
+		values, err := probe.MGet(ctx, s.stateKey, HoldKey).Result()
+		if err != nil {
+			return fmt.Errorf("read switch keys on new connection: %w", err)
+		}
+		if value, _ := values[0].(string); value != valueCurrent || values[1] != nil {
+			return ErrHolding
+		}
+		return nil
+	})
+}
+
+func ping(ctx context.Context, probe *redis.Client) error {
+	if err := probe.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
+	return nil
+}
+
+// handshake authenticates conn with endpoint's credentials and runs check over
+// it, both through a throwaway client that leaves the socket open. Later
+// commands on the socket run as the authenticated user, so the client that
+// receives it sends no credentials of its own.
+func handshake(ctx context.Context, conn net.Conn, endpoint *redisconn.Connector, timeout time.Duration, check func(context.Context, *redis.Client) error) error {
+	opts := endpoint.Options(&redis.Options{
 		Dialer:          func(context.Context, string, string) (net.Conn, error) { return keepOpen{Conn: conn}, nil },
-		Password:        s.current.Password,
 		Protocol:        2,
-		ReadTimeout:     pollTimeout,
-		WriteTimeout:    pollTimeout,
+		ReadTimeout:     timeout,
+		WriteTimeout:    timeout,
 		MaxRetries:      -1,
 		DialerRetries:   1,
 		PoolSize:        1,
 		DisableIdentity: true,
 	})
+	// The socket is already encrypted.
+	opts.TLSConfig = nil
+
+	probe := redis.NewClient(opts)
 	defer func() { _ = probe.Close() }()
 
-	values, err := probe.MGet(ctx, s.stateKey, HoldKey).Result()
-	if err != nil {
-		return fmt.Errorf("read switch keys on new connection: %w", err)
-	}
-	if value, _ := values[0].(string); value != valueCurrent || values[1] != nil {
-		return ErrHolding
+	if err := check(ctx, probe); err != nil {
+		return err
 	}
 
-	// The probe set deadlines for its own command; the caller sets its own.
+	// The probe set deadlines for its own commands; the caller sets its own.
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return fmt.Errorf("clear deadline on new connection: %w", err)
 	}
@@ -615,13 +854,24 @@ func (keepOpen) Close() error {
 	return nil
 }
 
-// credentials returns the password of the instance the switch points at. A
-// connection whose instance and password disagree fails AUTH and is dropped.
-func (s *Switch) credentials() (string, string) {
-	if current, _ := s.load(); current == stateNext {
-		return "", s.next.Password
+// track wraps a connection to the current instance so the switch can close it
+// at the move. It returns the registry entry and the connection to hand to the
+// pool.
+//
+// Before reusing an idle connection the pool checks it through
+// syscall.Conn, and discards it when that check fails. A plain socket is
+// handed over with its own raw socket, so the pool sees a connection the
+// server closed. A connection without one, such as TLS, cannot be checked
+// that way (a raw read would see TLS records), so it is handed over with a
+// stand-in that fails only once the switch has closed the connection: an open
+// TLS connection is reused, and one the move closed is dropped rather than
+// failing the next command.
+func (s *Switch) track(conn net.Conn) (*trackedConn, net.Conn) {
+	tracked := &trackedConn{Conn: conn, sw: s, closed: atomic.Bool{}}
+	if raw, ok := conn.(syscall.Conn); ok {
+		return tracked, &rawTrackedConn{trackedConn: tracked, raw: raw}
 	}
-	return "", s.current.Password
+	return tracked, &checkedTrackedConn{trackedConn: tracked}
 }
 
 // trackedConn is a connection to the current instance, closed when the switch
@@ -629,6 +879,10 @@ func (s *Switch) credentials() (string, string) {
 type trackedConn struct {
 	net.Conn
 	sw *Switch
+
+	// closed is set once the connection has been closed, by its owner or by
+	// the move.
+	closed atomic.Bool
 }
 
 func (c *trackedConn) Close() error {
@@ -636,21 +890,56 @@ func (c *trackedConn) Close() error {
 	delete(c.sw.conns, c)
 	c.sw.mu.Unlock()
 
+	return c.closeSocket()
+}
+
+func (c *trackedConn) closeSocket() error {
+	c.closed.Store(true)
 	if err := c.Conn.Close(); err != nil {
 		return fmt.Errorf("close redis connection: %w", err)
 	}
 	return nil
 }
 
-// SyscallConn exposes the wrapped socket, which the connection pool uses to
-// detect a connection the server has already closed.
-func (c *trackedConn) SyscallConn() (syscall.RawConn, error) {
-	inner, ok := c.Conn.(syscall.Conn)
-	if !ok {
-		return nil, errors.New("redis connection has no raw socket")
-	}
+// checkedTrackedConn is a trackedConn over a connection without a raw socket.
+type checkedTrackedConn struct {
+	*trackedConn
+}
 
-	raw, err := inner.SyscallConn()
+func (c *checkedTrackedConn) SyscallConn() (syscall.RawConn, error) {
+	return closedCheck{conn: c.trackedConn}, nil
+}
+
+// closedCheck stands in for a raw socket in the pool's liveness check. It never
+// touches the socket: it fails once the connection is closed and otherwise
+// reports nothing to read.
+type closedCheck struct {
+	conn *trackedConn
+}
+
+func (r closedCheck) err() error {
+	if r.conn.closed.Load() {
+		return net.ErrClosed
+	}
+	return nil
+}
+
+func (r closedCheck) Control(func(fd uintptr)) error { return r.err() }
+
+func (r closedCheck) Read(func(fd uintptr) bool) error { return r.err() }
+
+func (r closedCheck) Write(func(fd uintptr) bool) error { return r.err() }
+
+// rawTrackedConn is a trackedConn over a plain socket. It exposes the socket,
+// which the connection pool uses to detect a connection the server has already
+// closed.
+type rawTrackedConn struct {
+	*trackedConn
+	raw syscall.Conn
+}
+
+func (c *rawTrackedConn) SyscallConn() (syscall.RawConn, error) {
+	raw, err := c.raw.SyscallConn()
 	if err != nil {
 		return nil, fmt.Errorf("raw redis connection: %w", err)
 	}

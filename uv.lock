@@ -380,6 +380,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/70/c5/d53bddd2c0949833fcb4ea06f9d5dd1c40575a1a4214cd1021eff57ba301/google_auth-2.54.0-py3-none-any.whl", hash = "sha256:784e9837f92244141250470d47c893df50cbab485ce491aca5e9deb558ad2b48", size = 249878, upload-time = "2026-06-12T18:02:57.58Z" },
 ]
 
+[package.optional-dependencies]
+requests = [
+    { name = "requests" },
+]
+
 [[package]]
 name = "google-cloud-pubsub"
 version = "2.39.0"
@@ -1115,6 +1120,7 @@ dependencies = [
     { name = "asyncer" },
     { name = "click" },
     { name = "en-core-web-lg" },
+    { name = "google-auth", extra = ["requests"] },
     { name = "gram-infra" },
     { name = "maxminddb" },
     { name = "opentelemetry-api" },
@@ -1146,6 +1152,7 @@ requires-dist = [
     { name = "asyncer", specifier = ">=0.0.18" },
     { name = "click", specifier = ">=8.4.2" },
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" },
+    { name = "google-auth", extras = ["requests"], specifier = ">=2.54.0" },
     { name = "gram-infra", editable = "infra" },
     { name = "maxminddb", specifier = ">=3.1.1" },
     { name = "opentelemetry-api", specifier = ">=1.44.0" },

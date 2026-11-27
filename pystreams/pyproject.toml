@@ -10,6 +10,7 @@ dependencies = [
   "asyncer>=0.0.18",
   "click>=8.4.2",
   "en-core-web-lg",
+  "google-auth[requests]>=2.54.0",
   "gram-infra",
   "maxminddb>=3.1.1",
   "opentelemetry-api>=1.44.0",

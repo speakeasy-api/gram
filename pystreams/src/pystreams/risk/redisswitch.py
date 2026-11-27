@@ -11,6 +11,12 @@ stall, and write after the copy had started. So a write to the current instance
 is a transaction that watches both keys and aborts if either changed: the
 instance itself refuses it. Once the instance has moved, the next instance is
 authoritative and takes plain writes.
+
+The current and next instances are separate clients, each bound to one
+endpoint with its own TLS settings and credentials (see
+``pystreams.deps.redisconn``), so a move never sends one instance's password
+or IAM token to the other. A process follows one role's state key; the hold
+key is shared by every role on the instance.
 """
 
 from __future__ import annotations
@@ -29,6 +35,10 @@ from redis.exceptions import WatchError
 STATE_KEY_PREFIX: Final = "gram:redis-switch:state:"
 # The role of a process that keeps everything on one instance.
 DEFAULT_ROLE: Final = "all"
+# The roles of a process whose state is split across instances. Enforcement
+# replies are operational state.
+ROLE_AUTH: Final = "auth"
+ROLE_OPS: Final = "ops"
 HOLD_KEY: Final = "gram:redis-switch:hold"
 
 _VALUE_CURRENT: Final = b"current"
