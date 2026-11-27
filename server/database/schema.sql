@@ -11386,7 +11386,7 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_official_servers (
   -- version exists, for example while it is tested.
   allow_direct_access boolean NOT NULL DEFAULT false,
   created_by_user_id TEXT,
-  updated_by_user_id TEXT,
+  updated_by TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -16985,7 +16985,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
 CREATE TABLE IF NOT EXISTS platform_switches (
   key TEXT PRIMARY KEY,
   engaged BOOLEAN NOT NULL DEFAULT false,
-  updated_by_user_id TEXT,
+  updated_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT platform_switches_key_check CHECK (key <> '')
@@ -16993,8 +16993,8 @@ CREATE TABLE IF NOT EXISTS platform_switches (
 
 COMMENT ON COLUMN platform_switches.key IS '@access: confidential';
 COMMENT ON COLUMN platform_switches.engaged IS '@access: confidential';
-COMMENT ON COLUMN platform_switches.updated_by_user_id IS 'Speakeasy users.id of the staff member who last changed the switch.
-@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_by IS 'Email of the staff member who last changed the switch.
+@access: confidential-pii';
 COMMENT ON COLUMN platform_switches.created_at IS '@access: confidential';
 COMMENT ON COLUMN platform_switches.updated_at IS '@access: confidential';
 
@@ -18410,7 +18410,7 @@ CREATE TABLE IF NOT EXISTS mcp_server_feedback_configs (
   enabled boolean NOT NULL,
   tool_name TEXT,
   tool_description TEXT,
-  updated_by_user_id TEXT,
+  updated_by TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
