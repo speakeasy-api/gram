@@ -239,7 +239,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 // Authenticate calls it on every dashboard request, and the chat-session
 // token manager on every chat token.
 func (s *Manager) CheckUserBlock(ctx context.Context, userID string) error {
-	if s.userBlock == nil {
+	if s == nil || s.userBlock == nil {
 		return nil
 	}
 	if err := s.userBlock.Check(ctx, s.logger, "dashboard_session", userID); err != nil {
@@ -251,7 +251,7 @@ func (s *Manager) CheckUserBlock(ctx context.Context, userID string) error {
 // IsUserBlocked reports whether staff blocked userID from the platform, for
 // callers that map the verdict to their own transport errors.
 func (s *Manager) IsUserBlocked(ctx context.Context, userID string) (bool, error) {
-	if s.userBlock == nil {
+	if s == nil || s.userBlock == nil {
 		return false, nil
 	}
 	blocked, err := s.userBlock.Blocked(ctx, userID)
