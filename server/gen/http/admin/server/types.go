@@ -608,6 +608,12 @@ type UpdateSignupOfferRequestBody struct {
 	Enabled               *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
+// SetSelfServeDisabledRequestBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP request body.
+type SetSelfServeDisabledRequestBody struct {
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -2923,6 +2929,32 @@ type UpdateSignupOfferResponseBody struct {
 	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
 	CreatedAt             string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetSelfServeStatusResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body.
+type GetSelfServeStatusResponseBody struct {
+	// When true, no self-serve path can create an organization or arm a self-serve
+	// trial.
+	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Email of the staff member who last changed the switch. Absent if it was
+	// never changed.
+	UpdatedBy *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	// When the switch last changed. Absent if it was never changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetSelfServeDisabledResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body.
+type SetSelfServeDisabledResponseBody struct {
+	// When true, no self-serve path can create an organization or arm a self-serve
+	// trial.
+	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Email of the staff member who last changed the switch. Absent if it was
+	// never changed.
+	UpdatedBy *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	// When the switch last changed. Absent if it was never changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListPlatformMcpFeedbackResponseBody is the type of the "admin" service
@@ -21793,6 +21825,376 @@ type UpdateSignupOfferGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSelfServeStatusUnauthorizedResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetSelfServeStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusForbiddenResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "forbidden" error.
+type GetSelfServeStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusBadRequestResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "bad_request" error.
+type GetSelfServeStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusNotFoundResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "not_found" error.
+type GetSelfServeStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusConflictResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "conflict" error.
+type GetSelfServeStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSelfServeStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusInvalidResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "invalid" error.
+type GetSelfServeStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusInvariantViolationResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSelfServeStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusUnexpectedResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "unexpected" error.
+type GetSelfServeStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSelfServeStatusGatewayErrorResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetSelfServeStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledUnauthorizedResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetSelfServeDisabledUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledForbiddenResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "forbidden" error.
+type SetSelfServeDisabledForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledBadRequestResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "bad_request" error.
+type SetSelfServeDisabledBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledNotFoundResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "not_found" error.
+type SetSelfServeDisabledNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledConflictResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "conflict" error.
+type SetSelfServeDisabledConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledUnsupportedMediaResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetSelfServeDisabledUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledInvalidResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "invalid" error.
+type SetSelfServeDisabledInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledInvariantViolationResponseBody is the type of the
+// "admin" service "setSelfServeDisabled" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetSelfServeDisabledInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledUnexpectedResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unexpected" error.
+type SetSelfServeDisabledUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSelfServeDisabledGatewayErrorResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetSelfServeDisabledGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListPlatformMcpFeedbackUnauthorizedResponseBody is the type of the "admin"
 // service "listPlatformMcpFeedback" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -35421,6 +35823,28 @@ func NewUpdateSignupOfferResponseBody(res *admin.AdminSignupOffer) *UpdateSignup
 		Enabled:               res.Enabled,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusResponseBody builds the HTTP response body from the
+// result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusResponseBody(res *admin.AdminSelfServeStatus) *GetSelfServeStatusResponseBody {
+	body := &GetSelfServeStatusResponseBody{
+		Disabled:  res.Disabled,
+		UpdatedBy: res.UpdatedBy,
+		UpdatedAt: res.UpdatedAt,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledResponseBody builds the HTTP response body from the
+// result of the "setSelfServeDisabled" endpoint of the "admin" service.
+func NewSetSelfServeDisabledResponseBody(res *admin.AdminSelfServeStatus) *SetSelfServeDisabledResponseBody {
+	body := &SetSelfServeDisabledResponseBody{
+		Disabled:  res.Disabled,
+		UpdatedBy: res.UpdatedBy,
+		UpdatedAt: res.UpdatedAt,
 	}
 	return body
 }
@@ -50539,6 +50963,298 @@ func NewUpdateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *Update
 	return body
 }
 
+// NewGetSelfServeStatusUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetSelfServeStatusUnauthorizedResponseBody {
+	body := &GetSelfServeStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusForbiddenResponseBody builds the HTTP response body
+// from the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusForbiddenResponseBody(res *goa.ServiceError) *GetSelfServeStatusForbiddenResponseBody {
+	body := &GetSelfServeStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusBadRequestResponseBody(res *goa.ServiceError) *GetSelfServeStatusBadRequestResponseBody {
+	body := &GetSelfServeStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusNotFoundResponseBody(res *goa.ServiceError) *GetSelfServeStatusNotFoundResponseBody {
+	body := &GetSelfServeStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusConflictResponseBody builds the HTTP response body from
+// the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusConflictResponseBody(res *goa.ServiceError) *GetSelfServeStatusConflictResponseBody {
+	body := &GetSelfServeStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSelfServeStatus" endpoint of the "admin"
+// service.
+func NewGetSelfServeStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSelfServeStatusUnsupportedMediaResponseBody {
+	body := &GetSelfServeStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusInvalidResponseBody builds the HTTP response body from
+// the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusInvalidResponseBody(res *goa.ServiceError) *GetSelfServeStatusInvalidResponseBody {
+	body := &GetSelfServeStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSelfServeStatus" endpoint of the "admin"
+// service.
+func NewGetSelfServeStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetSelfServeStatusInvariantViolationResponseBody {
+	body := &GetSelfServeStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusUnexpectedResponseBody(res *goa.ServiceError) *GetSelfServeStatusUnexpectedResponseBody {
+	body := &GetSelfServeStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSelfServeStatusGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSelfServeStatus" endpoint of the "admin" service.
+func NewGetSelfServeStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetSelfServeStatusGatewayErrorResponseBody {
+	body := &GetSelfServeStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledUnauthorizedResponseBody(res *goa.ServiceError) *SetSelfServeDisabledUnauthorizedResponseBody {
+	body := &SetSelfServeDisabledUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledForbiddenResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledForbiddenResponseBody(res *goa.ServiceError) *SetSelfServeDisabledForbiddenResponseBody {
+	body := &SetSelfServeDisabledForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledBadRequestResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledBadRequestResponseBody(res *goa.ServiceError) *SetSelfServeDisabledBadRequestResponseBody {
+	body := &SetSelfServeDisabledBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledNotFoundResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledNotFoundResponseBody(res *goa.ServiceError) *SetSelfServeDisabledNotFoundResponseBody {
+	body := &SetSelfServeDisabledNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledConflictResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledConflictResponseBody(res *goa.ServiceError) *SetSelfServeDisabledConflictResponseBody {
+	body := &SetSelfServeDisabledConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledUnsupportedMediaResponseBody(res *goa.ServiceError) *SetSelfServeDisabledUnsupportedMediaResponseBody {
+	body := &SetSelfServeDisabledUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledInvalidResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledInvalidResponseBody(res *goa.ServiceError) *SetSelfServeDisabledInvalidResponseBody {
+	body := &SetSelfServeDisabledInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setSelfServeDisabled" endpoint of the
+// "admin" service.
+func NewSetSelfServeDisabledInvariantViolationResponseBody(res *goa.ServiceError) *SetSelfServeDisabledInvariantViolationResponseBody {
+	body := &SetSelfServeDisabledInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledUnexpectedResponseBody(res *goa.ServiceError) *SetSelfServeDisabledUnexpectedResponseBody {
+	body := &SetSelfServeDisabledUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSelfServeDisabledGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setSelfServeDisabled" endpoint of the "admin"
+// service.
+func NewSetSelfServeDisabledGatewayErrorResponseBody(res *goa.ServiceError) *SetSelfServeDisabledGatewayErrorResponseBody {
+	body := &SetSelfServeDisabledGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListPlatformMcpFeedbackUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "listPlatformMcpFeedback" endpoint of the
 // "admin" service.
@@ -58956,6 +59672,26 @@ func NewUpdateSignupOfferPayload(body *UpdateSignupOfferRequestBody, adminSessio
 	return v
 }
 
+// NewGetSelfServeStatusPayload builds a admin service getSelfServeStatus
+// endpoint payload.
+func NewGetSelfServeStatusPayload(adminSessionToken *string) *admin.GetSelfServeStatusPayload {
+	v := &admin.GetSelfServeStatusPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetSelfServeDisabledPayload builds a admin service setSelfServeDisabled
+// endpoint payload.
+func NewSetSelfServeDisabledPayload(body *SetSelfServeDisabledRequestBody, adminSessionToken *string) *admin.SetSelfServeDisabledPayload {
+	v := &admin.SetSelfServeDisabledPayload{
+		Disabled: *body.Disabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewListPlatformMcpFeedbackPayload builds a admin service
 // listPlatformMcpFeedback endpoint payload.
 func NewListPlatformMcpFeedbackPayload(limit int, adminSessionToken *string) *admin.ListPlatformMcpFeedbackPayload {
@@ -60387,6 +61123,15 @@ func ValidateUpdateSignupOfferRequestBody(body *UpdateSignupOfferRequestBody) (e
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledRequestBody runs the validations defined on
+// SetSelfServeDisabledRequestBody
+func ValidateSetSelfServeDisabledRequestBody(body *SetSelfServeDisabledRequestBody) (err error) {
+	if body.Disabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
 	return
 }

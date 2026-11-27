@@ -112,6 +112,9 @@ const (
 	// authErrSignInRevoked asks the user to sign in again: the identity
 	// provider handed back a session whose sign-in was revoked.
 	authErrSignInRevoked authErr = "sign_in_revoked"
+	// authErrSelfServeDisabled tells a new user that staff turned self-serve
+	// signup off, so no organization was created for them.
+	authErrSelfServeDisabled authErr = "self_serve_disabled"
 )
 
 type AuthConfigurations struct {
@@ -539,6 +542,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				ActorEmail:            userInfo.Email,
 				CreationSource:        orgprovision.SourceSignup,
 			})
+			if errors.Is(err, ErrSelfServeDisabled) {
+				return s.redirectPartnerSignupError(ctx, payload, authErrSelfServeDisabled, err, intent)
+			}
 			if err != nil {
 				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 			}
@@ -568,6 +574,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 		if s.dispositionFromState(payload) == dispositionAssistants && (intent == nil || intent.PartnerCode == "") {
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session, authenticatedAt)
+			if errors.Is(err, ErrSelfServeDisabled) {
+				return redirectWithError(authErrSelfServeDisabled, err)
+			}
 			if err != nil {
 				return redirectWithError(authErrInit, err)
 			}
@@ -641,7 +650,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// identity. Starting a trial from it would bill the customer and record
 	// the customer as the actor.
 	var trialArmed bool
-	if idpUser.ImpersonatorEmail() == "" {
+	if idpUser.ImpersonatorEmail() == "" && !s.selfServeDisabled(ctx) {
 		var armErr error
 		orgMetadata, trialArmed, armErr = s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email, membershipRoleForOrg(login.MembershipRoles, workosOrgID))
 		if armErr != nil {
@@ -1471,6 +1480,9 @@ type orgProvisionOptions struct {
 // ActiveOrganizationID on an in-memory session before storing it once.
 func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
+	if s.selfServeDisabled(ctx) {
+		return empty, ErrSelfServeDisabled
+	}
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
 	if err != nil {
 		return empty, err
@@ -1534,6 +1546,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		CreationSource:        orgprovision.SourceSignup,
 	})
 	if err != nil {
+		if errors.Is(err, ErrSelfServeDisabled) {
+			return oops.E(oops.CodeForbidden, err, selfServeDisabledMessage)
+		}
 		if oops.IsClientFault(err) {
 			return err
 		}

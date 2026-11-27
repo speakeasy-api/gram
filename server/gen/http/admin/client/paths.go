@@ -477,6 +477,16 @@ func UpdateSignupOfferAdminPath() string {
 	return "/admin/signupOffers.update"
 }
 
+// GetSelfServeStatusAdminPath returns the URL path to the admin service getSelfServeStatus HTTP endpoint.
+func GetSelfServeStatusAdminPath() string {
+	return "/admin/selfServe"
+}
+
+// SetSelfServeDisabledAdminPath returns the URL path to the admin service setSelfServeDisabled HTTP endpoint.
+func SetSelfServeDisabledAdminPath() string {
+	return "/admin/selfServe.set"
+}
+
 // ListPlatformMcpFeedbackAdminPath returns the URL path to the admin service listPlatformMcpFeedback HTTP endpoint.
 func ListPlatformMcpFeedbackAdminPath() string {
 	return "/admin/platformMcpFeedback.list"
