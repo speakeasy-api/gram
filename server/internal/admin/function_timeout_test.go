@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 func TestSetFunctionTimeout_DefaultsUntilSet(t *testing.T) {
@@ -90,9 +91,11 @@ func TestSetFunctionTimeout_RejectsOutOfRange(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 
-	got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_fn_timeout_bad"})
+	// Read the column itself: the effective value would mask a stored
+	// out-of-range value as the default.
+	row, err := orgrepo.New(conn).GetOrganizationMetadata(ctx, "org_fn_timeout_bad")
 	require.NoError(t, err)
-	require.True(t, conv.PtrValOr(got.FunctionTimeoutIsDefault, false), "a rejected value must not be stored")
+	require.False(t, row.FunctionTimeoutSeconds.Valid, "a rejected value must not be stored")
 }
 
 func TestSetFunctionTimeout_UnknownOrganization(t *testing.T) {

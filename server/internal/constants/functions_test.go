@@ -9,13 +9,25 @@ import (
 func TestIsFunctionTimeoutSeconds(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, IsFunctionTimeoutSeconds(29))
-	require.True(t, IsFunctionTimeoutSeconds(30))
-	require.True(t, IsFunctionTimeoutSeconds(60))
-	require.True(t, IsFunctionTimeoutSeconds(600))
-	require.False(t, IsFunctionTimeoutSeconds(601))
-	require.False(t, IsFunctionTimeoutSeconds(0))
-	require.False(t, IsFunctionTimeoutSeconds(-1))
+	cases := []struct {
+		name    string
+		seconds int
+		want    bool
+	}{
+		{name: "below lower bound", seconds: 29, want: false},
+		{name: "lower bound", seconds: 30, want: true},
+		{name: "default", seconds: 60, want: true},
+		{name: "upper bound", seconds: 600, want: true},
+		{name: "above upper bound", seconds: 601, want: false},
+		{name: "zero", seconds: 0, want: false},
+		{name: "negative", seconds: -1, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, IsFunctionTimeoutSeconds(tc.seconds))
+		})
+	}
 }
 
 func TestEffectiveFunctionTimeoutSeconds(t *testing.T) {
