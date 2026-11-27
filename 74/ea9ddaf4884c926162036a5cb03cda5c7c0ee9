@@ -1,0 +1,98 @@
+.agents/skills/gram-rbac/SKILL.md
+  h_2620cc60cfd1e9 3,68-69,75-81,87,91
+.agents/skills/gram-rbac/reference.md
+  h_2620cc60cfd1e9 45,51
+docs/rbac.md
+  h_2620cc60cfd1e9 753,1099,1101,1111,1122,1124,1130,1336
+server/.golangci.yaml
+  h_2620cc60cfd1e9 586
+server/internal/assistants/impl.go
+  h_2620cc60cfd1e9 119,526
+server/internal/assistants/service.go
+  h_2620cc60cfd1e9 1458
+server/internal/auth/impl.go
+  h_2620cc60cfd1e9 1278
+server/internal/authz/challenge_logger.go
+  h_2620cc60cfd1e9 30-32,54,271-273,306,309-312,318-320,324-326,337-339,358,361,366
+server/internal/authz/challenge_logger_test.go
+  h_2620cc60cfd1e9 27,53,85,134,166,215,246,284,326,441-446,449
+server/internal/authz/decision.go
+  h_2620cc60cfd1e9 36,45,49-52,54-69,75-79,81,83-85,88-91,96,98,102-105,140-143,145,147-150,152-162,165,167-169,172-180,183-184,187-194,196-205,209,211,214-222,224-228,230-234,236-246,249-253,255-266,272-285,288-298,303-304,320-331,337,340,347,350,364,681-682,699,704
+server/internal/authz/decision_test.go
+  h_2620cc60cfd1e9 109-111,114-158
+server/internal/authz/entry_points_test.go
+  h_2620cc60cfd1e9 149,151,159-160,166,257
+server/internal/authz/mandatory_challenge.go
+  h_2620cc60cfd1e9 45,56
+server/internal/chat/conversation_access.go
+  h_2620cc60cfd1e9 37
+server/internal/commandsearch/impl.go
+  h_2620cc60cfd1e9 74,528
+server/internal/commandsearch/impl_test.go
+  h_2620cc60cfd1e9 134-136
+server/internal/mcp/authclient_connection.go
+  h_2620cc60cfd1e9 141
+server/internal/mcp/authclient_refusal_internal_test.go
+  h_2620cc60cfd1e9 25,70
+server/internal/mcp/authclientresolve.go
+  h_2620cc60cfd1e9 240-241,246,248-252,257-261,501,531,560,581-582,603,606-633,757-759,769-771,773
+server/internal/mcp/authnchallenge_consent_meta_resource.go
+  h_2620cc60cfd1e9 207,211
+server/internal/mcp/consent_tool_inventory.go
+  h_2620cc60cfd1e9 346-349,361,365,368-387
+server/internal/mcp/public_admission_shadow_test.go
+  h_2620cc60cfd1e9 119,121-122,124
+server/internal/mcp/rpc_tools_list.go
+  h_2620cc60cfd1e9 284-289,293-302
+server/internal/mcp/serve_agent_gateway.go
+  h_2620cc60cfd1e9 475
+server/internal/mcp/serve_meta_auth.go
+  h_2620cc60cfd1e9 12,30-31,35,39,52,61,63,67,72,74-76,78,80-81,94,109,119
+server/internal/mcp/serve_meta_code_bridge.go
+  h_2620cc60cfd1e9 292-296,314-315,318,321
+server/internal/mcp/serve_meta_members.go
+  h_2620cc60cfd1e9 88-90,93-97,527-531,634,660-661,670,714-724,732-746,748-752,754-758,765-771,773,796-800,802-807,810,812-813,818,820
+server/internal/mcp/serve_meta_tools.go
+  h_2620cc60cfd1e9 761,765-768,777-779,785,788,790,792,794
+server/internal/mcp/serve_platform.go
+  h_2620cc60cfd1e9 628,649
+server/internal/mcp/upstreamselection.go
+  h_2620cc60cfd1e9 780
+server/internal/mcpservers/impl.go
+  h_2620cc60cfd1e9 667,708
+server/internal/oktaresourceconnections/impl.go
+  h_2620cc60cfd1e9 161
+server/internal/platformmcp/adapters.go
+  h_2620cc60cfd1e9 790,1073
+server/internal/platformmcp/organization_gateway_activity.go
+  h_2620cc60cfd1e9 47,278
+server/internal/platformmcp/organization_gateway_activity_integration_test.go
+  h_2620cc60cfd1e9 53
+server/internal/projects/impl.go
+  h_2620cc60cfd1e9 277
+server/internal/remotemcp/tools_list_mcp_connect_filter_interceptor.go
+  h_2620cc60cfd1e9 88-90,128
+server/internal/remotesessions/emaserviceshandlers.go
+  h_2620cc60cfd1e9 223
+server/internal/remotesessions/identityimpact.go
+  h_2620cc60cfd1e9 289,331
+server/internal/risk/signals_ch.go
+  h_2620cc60cfd1e9 530
+server/internal/skills/links.go
+  h_2620cc60cfd1e9 564
+server/internal/telemetry/impl.go
+  h_2620cc60cfd1e9 3940,4647
+server/internal/toolsets/impl.go
+  h_2620cc60cfd1e9 370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74ea9ddaf4884c926162036a5cb03cda5c7c0ee9",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
