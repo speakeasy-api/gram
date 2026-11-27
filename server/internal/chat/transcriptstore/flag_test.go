@@ -5,9 +5,13 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -65,18 +69,40 @@ func (f *flagFixture) setFlag(on bool) {
 	f.flags.SetFlag(feature.FlagChatTranscriptShadow, f.org, on)
 }
 
-// write runs Prepare, then Seal in its own transaction, as every writer does.
+// write runs Prepare, then inserts the message in its own transaction, as
+// every writer does.
 func (f *flagFixture) write(t *testing.T, id uuid.UUID) {
 	t.Helper()
-	f.add(t, id)
 	require.NoError(t, f.transcripts.Prepare(t.Context(), f.org, f.project))
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
+	f.insertWithoutPrepare(t, id)
+}
+
+// insertWithoutPrepare inserts one message through InsertChatMessages in its
+// own committed transaction, flagging any provisioning that runs inside it.
+func (f *flagFixture) insertWithoutPrepare(t *testing.T, id uuid.UUID) {
+	t.Helper()
+	ctx := t.Context()
+	params := []chatrepo.CreateChatMessageParams{{
+		ID: id, ChatID: f.chat, Role: "assistant", ProjectID: f.project,
+		Content:      "sensitive example",
+		ContentRaw:   []byte(`{"n":1e2,"large":9007199254740993}`),
+		ToolCalls:    []byte(`[{"id":"example"}]`),
+		StorageError: pgtype.Text{String: "", Valid: false},
+		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+	}}
+	p := &params[0]
+	refs := []ProtectedFieldRefs{{MessageID: id, Content: &p.Content, ContentRaw: &p.ContentRaw, ToolCalls: &p.ToolCalls, ToolOutcomeNotes: nil, ToolCallSummaries: nil, StorageError: &p.StorageError}}
+	tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
 	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(t.Context()) }()
+	defer func() { _ = tx.Rollback(ctx) }()
 	f.provisioner.inTx.Store(true)
 	defer f.provisioner.inTx.Store(false)
-	require.NoError(t, f.transcripts.Seal(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
-	require.NoError(t, tx.Commit(t.Context()))
+	_, err = f.transcripts.InsertChatMessages(ctx, tx, f.org, f.project, refs, func() ([]uuid.UUID, error) {
+		_, err := chatrepo.New(tx).CreateChatMessage(ctx, params) //nolint:glint // nodirectchatmessageinsert: drives InsertChatMessages with the writer's own insert query.
+		return []uuid.UUID{id}, err                               //nolint:wrapcheck // test insert.
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
 }
 
 func (f *flagFixture) sealed(t *testing.T, id uuid.UUID) bool {
@@ -127,20 +153,15 @@ func TestFlagOnProvisionsBeforeTheWriteTransaction(t *testing.T) {
 	require.Equal(t, "sensitive example", rows[0].content, "reads open the transcript")
 }
 
-// A Seal that runs before any Prepare for a flag-enabled organization writes
-// no transcript: the organization is plaintext until its key is provisioned
-// outside a transaction.
-func TestFlagOnSealWithoutPrepareStaysPlaintext(t *testing.T) {
+// An insert that runs before any Prepare for a flag-enabled organization
+// writes no transcript: the organization is plaintext until its key is
+// provisioned outside a transaction.
+func TestFlagOnInsertWithoutPrepareStaysPlaintext(t *testing.T) {
 	t.Parallel()
 	f := setupFlag(t)
 	f.setFlag(true)
 	id := uuid.New()
-	f.add(t, id)
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is the behavior under test.
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, f.transcripts.Seal(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
-	require.NoError(t, tx.Commit(t.Context()))
+	f.insertWithoutPrepare(t, id)
 	require.False(t, f.sealed(t, id))
 	require.Zero(t, f.provisioner.calls.Load())
 }
@@ -233,7 +254,7 @@ func TestFlagReadsNeverProvision(t *testing.T) {
 	f := setupFlag(t)
 	f.setFlag(true)
 	id := uuid.New()
-	f.add(t, id)
+	f.insertWithoutPrepare(t, id)
 
 	reader := NewTranscripts(f.store).WithFeatureFlag(f.flags, f.provisioner)
 	rows := []openRow{plaintextRow(id)}

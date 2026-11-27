@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 )
@@ -18,7 +19,8 @@ import (
 // opened on read. Mode is that decision and nothing else reads its inputs: the
 // projects on GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS, and the organizations
 // feature.FlagChatTranscriptShadow is on for (see WithFeatureFlag). Every other
-// project reads plaintext: Seal and Open do nothing for it. A nil *Transcripts
+// project reads plaintext: inserts, updates and Open touch no transcript. A
+// nil *Transcripts
 // means no project has encrypted transcripts.
 type Transcripts struct {
 	store     *Store
@@ -85,10 +87,11 @@ func (t *Transcripts) Enabled(ctx context.Context, projectID uuid.UUID) bool {
 }
 
 // Prepare loads the organization's transcript key into the process cache
-// before the caller opens the transaction that Seal will use, so Seal makes no
-// KMS call while the transaction is open. For a project the feature flag puts
-// in shadow mode it first provisions the organization's key, once per process.
-// An error means Seal would fail too.
+// before the caller opens the transaction that InsertChatMessages or
+// UpdateChatMessage will use, so neither makes a KMS call while the
+// transaction is open. For a project the feature flag puts in shadow mode it
+// first provisions the organization's key, once per process. An error means
+// they would fail too.
 func (t *Transcripts) Prepare(ctx context.Context, organizationID string, projectID uuid.UUID) error {
 	if t.activate(ctx, projectID) == ModePlaintext {
 		return nil
@@ -120,25 +123,28 @@ func (t *Transcripts) PrepareProject(ctx context.Context, projectID uuid.UUID) e
 	return t.Prepare(ctx, org.OrganizationID, projectID)
 }
 
-// Seal stores the encrypted copy of messages the caller just wrote, inside the
-// caller's transaction. Call Prepare before beginning that transaction. The
-// caller must roll back on error.
-func (t *Transcripts) Seal(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+// InsertChatMessages is the one way to store new messages, as
+// UpdateChatMessage is for existing ones. Inside the caller's transaction it
+// runs insert, which executes the INSERT and returns the IDs of the rows it
+// created, and keeps every copy the project needs. refs point at the protected
+// fields of the params insert writes, one per message.
+//
+// Plaintext mode only inserts. Shadow mode inserts, then seals each new row
+// from what Postgres stored. Encrypted mode copies the protected fields and
+// empties them before insert runs, so plaintext never reaches the table (or
+// its write-ahead log), restores them once insert returns, and seals each new
+// row from the copy. Call Prepare before beginning the transaction, and roll
+// back on error.
+func (t *Transcripts) InsertChatMessages(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, refs []ProtectedFieldRefs, insert func() ([]uuid.UUID, error)) ([]uuid.UUID, error) {
 	mode := t.decide(ctx, db, projectID).mode
 	if mode == ModePlaintext {
-		return nil
+		return insert()
 	}
-	encrypted := mode == ModeEncrypted
-	if err := t.store.captureIn(ctx, db, encrypted, organizationID, projectID, messageIDs); err != nil {
-		return fmt.Errorf("seal chat transcript: %w", err)
+	ids, err := t.store.insert(ctx, db, mode == ModeEncrypted, organizationID, projectID, refs, insert)
+	if err != nil {
+		return nil, fmt.Errorf("insert chat messages: %w", err)
 	}
-	if !encrypted {
-		return nil
-	}
-	if err := emptyPlaintext(ctx, repo.New(db), organizationID, projectID, messageIDs); err != nil {
-		return fmt.Errorf("empty sealed plaintext: %w", err)
-	}
-	return nil
+	return ids, nil
 }
 
 // Mode is how a project stores protected fields.
@@ -307,24 +313,7 @@ func (t *Transcripts) Open(ctx context.Context, organizationID string, projectID
 		if !ok {
 			continue
 		}
-		if b.Content != nil {
-			*b.Content = message.Content
-		}
-		if b.ContentRaw != nil {
-			*b.ContentRaw = message.ContentRaw
-		}
-		if b.ToolCalls != nil {
-			*b.ToolCalls = message.ToolCalls
-		}
-		if b.ToolCallSummaries != nil {
-			*b.ToolCallSummaries = message.ToolCallSummaries
-		}
-		if b.ToolOutcomeNotes != nil {
-			*b.ToolOutcomeNotes = optionalText(message.ToolOutcomeNotes)
-		}
-		if b.StorageError != nil {
-			*b.StorageError = optionalText(message.StorageError)
-		}
+		b.set(message)
 	}
 	return nil
 }
@@ -340,6 +329,56 @@ func OpenRows[T any](ctx context.Context, t *Transcripts, organizationID string,
 		refs[i] = refsOf(&rows[i])
 	}
 	return t.Open(ctx, organizationID, projectID, refs)
+}
+
+// fields reads the protected fields the refs point at. A nil ref reads as
+// empty.
+func (r ProtectedFieldRefs) fields() transcriptcrypto.ProtectedFields {
+	f := emptyProtectedFields
+	if r.Content != nil {
+		f.Content = *r.Content
+	}
+	if r.ContentRaw != nil {
+		f.ContentRaw = *r.ContentRaw
+	}
+	if r.ToolCalls != nil {
+		f.ToolCalls = *r.ToolCalls
+	}
+	if r.ToolCallSummaries != nil {
+		f.ToolCallSummaries = *r.ToolCallSummaries
+	}
+	// Copy the strings: insertEncrypted empties the refs while it holds f.
+	if r.ToolOutcomeNotes != nil && r.ToolOutcomeNotes.Valid {
+		notes := r.ToolOutcomeNotes.String
+		f.ToolOutcomeNotes = &notes
+	}
+	if r.StorageError != nil && r.StorageError.Valid {
+		storageError := r.StorageError.String
+		f.StorageError = &storageError
+	}
+	return f
+}
+
+// set writes fields through the refs. A nil ref is left alone.
+func (r ProtectedFieldRefs) set(f transcriptcrypto.ProtectedFields) {
+	if r.Content != nil {
+		*r.Content = f.Content
+	}
+	if r.ContentRaw != nil {
+		*r.ContentRaw = f.ContentRaw
+	}
+	if r.ToolCalls != nil {
+		*r.ToolCalls = f.ToolCalls
+	}
+	if r.ToolCallSummaries != nil {
+		*r.ToolCallSummaries = f.ToolCallSummaries
+	}
+	if r.ToolOutcomeNotes != nil {
+		*r.ToolOutcomeNotes = optionalText(f.ToolOutcomeNotes)
+	}
+	if r.StorageError != nil {
+		*r.StorageError = optionalText(f.StorageError)
+	}
 }
 
 func optionalText(v *string) pgtype.Text {

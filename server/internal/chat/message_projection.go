@@ -77,13 +77,9 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if exists {
 		changed, err = w.patchProjection(ctx, tx, projectID, row, write, prepared)
 	} else {
-		changed, err = q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{write.Params})
+		changed, organizationID, err = w.insertProjection(ctx, tx, projectID, write.Params, prepared)
 		if err == nil && changed > 0 {
-			org, lookupErr := q.GetProjectOrganizationID(ctx, projectID)
-			if lookupErr != nil {
-				return false, fmt.Errorf("look up projection organization: %w", lookupErr)
-			}
-			organizationID = org
+			org := organizationID
 			readings, meterErr := w.meterMessages(ctx, w.logger, org, projectID, writes, now)
 			if meterErr != nil {
 				return false, fmt.Errorf("meter projected message: %w", meterErr)
@@ -99,14 +95,6 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
-	if !exists && changed > 0 && w.transcripts.Enabled(ctx, projectID) {
-		if prepared != nil {
-			return false, prepared
-		}
-		if err := w.sealTranscripts(ctx, tx, organizationID, projectID, []uuid.UUID{messageID}); err != nil {
-			return false, err
-		}
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit message projection: %w", err)
 	}
@@ -115,6 +103,37 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return changed > 0, nil
+}
+
+// insertProjection stores a new kit message through the project's transcript
+// mode. A projection that reaches here always writes, so a failed key load
+// fails it.
+func (w *ChatMessageWriter) insertProjection(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, params repo.CreateChatMessageParams, prepared error) (int64, string, error) {
+	q := repo.New(tx)
+	organizationID, err := q.GetProjectOrganizationID(ctx, projectID)
+	if err != nil {
+		return 0, "", fmt.Errorf("look up projection organization: %w", err)
+	}
+	if prepared != nil && w.transcripts.Enabled(ctx, projectID) {
+		return 0, "", prepared
+	}
+	var changed int64
+	refs := []transcriptstore.ProtectedFieldRefs{protectedFieldRefs(params.ID, &params.Content, &params.ContentRaw, &params.ToolCalls, &params.StorageError)}
+	_, err = w.insertMessages(ctx, tx, organizationID, projectID, refs, func() ([]uuid.UUID, error) {
+		n, err := q.CreateChatMessage(ctx, []repo.CreateChatMessageParams{params})
+		if err != nil {
+			return nil, fmt.Errorf("create projected message: %w", err)
+		}
+		changed = n
+		if n == 0 {
+			return nil, nil
+		}
+		return []uuid.UUID{params.ID}, nil
+	})
+	if err != nil {
+		return 0, "", err
+	}
+	return changed, organizationID, nil
 }
 
 // patchProjection rewrites an existing kit message in the caller's
