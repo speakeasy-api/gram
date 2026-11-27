@@ -27,6 +27,7 @@ export const RemoveCauses = {
   AdminLock: "admin_lock",
   TrialDemotion: "trial_demotion",
   BillingInactive: "billing_inactive",
+  OrganizationDisabled: "organization_disabled",
 } as const;
 export type RemoveCauses = ClosedEnum<typeof RemoveCauses>;
 

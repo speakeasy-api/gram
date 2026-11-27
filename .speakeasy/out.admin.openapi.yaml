@@ -17358,9 +17358,10 @@ components:
               - admin_lock
               - trial_demotion
               - billing_inactive
+              - organization_disabled
           description: Unique known disable causes to remove.
           minItems: 1
-          maxItems: 3
+          maxItems: 4
           uniqueItems: true
       required:
         - organization_id
