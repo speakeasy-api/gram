@@ -1342,4 +1342,38 @@ func TestResolveAuthClientReadsTypedStateUnderEnforcement(t *testing.T) {
 		require.Equal(t, authClientLegacy, res.outcome)
 		require.Equal(t, authClientReasonNoAuthDeclared, res.reason, "only auth clients say whether the server has OAuth clients")
 	})
+
+	t.Run("slack_app client is never resolved or forwarded as outbound headers", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		id := f.client(authClientTypeSlackApp, uuid.NullUUID{}, true)
+		encrypted, err := f.service.enc.Encrypt([]byte("xoxb-never-forward"))
+		require.NoError(t, err)
+		f.copyHeader(id, "SLACK_BOT_TOKEN", false, true, pgtype.Text{String: encrypted, Valid: true}, pgtype.Text{})
+
+		// Even if a selection row somehow referenced a slack_app client,
+		// decideAuthClient refuses it as unknown_type and sendsClientHeaders is false.
+		res := decideAuthClient(upstreamclientsrepo.GetAuthClientSelectionRow{
+			NoAuth:        false,
+			AuthClientID:  validUUID(id),
+			ClientID:      validUUID(id),
+			ClientType:    pgtype.Text{String: authClientTypeSlackApp, Valid: true},
+			ClientEnabled: pgtype.Bool{Bool: true, Valid: true},
+			ClientDeleted: pgtype.Bool{Bool: false, Valid: true},
+			Associated:    true,
+		})
+		require.Equal(t, authClientGap, res.outcome)
+		require.Equal(t, authClientReasonUnknownType, res.reason)
+		require.False(t, res.sendsClientHeaders())
+
+		// Defense-in-depth: sendsClientHeaders is false even if outcome were forced.
+		forced := res
+		forced.outcome = authClientResolved
+		require.False(t, forced.sendsClientHeaders())
+
+		// Shared SQL seam ListAuthClientHeaders never returns slack_app headers.
+		loaded, err := f.service.loadAuthClientHeaders(t.Context(), f.orgID, []uuid.UUID{id})
+		require.NoError(t, err)
+		require.Empty(t, loaded[id].headers)
+	})
 }

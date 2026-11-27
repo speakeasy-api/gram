@@ -53,7 +53,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
 	Attribute("client_type", String, "Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).", func() {
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*")
 	})
 	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
 	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")

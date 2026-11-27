@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -94,6 +95,37 @@ func TestServeSharedSkillPageWrongOrganizationDomain(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	require.Contains(t, rr.Body.String(), "This skill isn't available")
 	require.NotContains(t, rr.Body.String(), created.Skill.DisplayName)
+}
+
+func TestServeSharedSkillPageDisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created := createSkill(t, ctx, ti, "disabled-org-page", "Shared before the disable.")
+	link, err := ti.service.Share(ctx, &gen.SharePayload{SkillID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.authContext.ActiveOrganizationID)
+	require.NoError(t, err)
+
+	rr, err := serveSharedSkillRequest(t, ctx, ti.service.ServeSharedSkillPage, link.Token, &customdomains.Context{
+		OrganizationID: ti.authContext.ActiveOrganizationID,
+		Domain:         "mcp.customer.example",
+		DomainID:       uuid.New(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.NotContains(t, rr.Body.String(), created.Skill.DisplayName)
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.authContext.ActiveOrganizationID)
+	require.NoError(t, err)
+	rr, err = serveSharedSkillRequest(t, ctx, ti.service.ServeSharedSkillPage, link.Token, &customdomains.Context{
+		OrganizationID: ti.authContext.ActiveOrganizationID,
+		Domain:         "mcp.customer.example",
+		DomainID:       uuid.New(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code, "re-enabling the organization restores the page")
+	require.Contains(t, rr.Body.String(), created.Skill.DisplayName)
 }
 
 func TestServeSharedSkillPageRevokedToken(t *testing.T) {

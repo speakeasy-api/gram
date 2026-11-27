@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 // MemberConnectionStatuses reports a member's sign-in state for one MCP server.
@@ -228,6 +230,9 @@ func (s *Service) memberFor(ctx context.Context, vouchedEmail *string, what stri
 
 	organizationID := authCtx.ActiveOrganizationID
 	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
+	if errors.Is(err, plugins.ErrDeliveryUserBlocked) {
+		return agentMember{}, fmt.Errorf("plugin delivery: %w", userblock.RefusalForEmail(ctx, s.logger, "plugin_delivery", email))
+	}
 	if err != nil {
 		return agentMember{}, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}

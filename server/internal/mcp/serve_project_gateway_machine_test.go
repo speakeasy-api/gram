@@ -18,6 +18,7 @@ import (
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
@@ -29,6 +30,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -444,4 +446,137 @@ func TestServeProjectGateway_AssistantTurnWorkloadCredential(t *testing.T) {
 	}))
 	_, err = serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, token, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestServeProjectGateway_KitWorkloadBuiltinsAndLiveGrantChanges(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	authCtx, ok := contextvalues.GetAuthContext(f.ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotNil(t, authCtx.ProjectSlug)
+
+	fixture := seedOrganizationGateway(t, f.ctx, f.ti)
+	grantProjectRead(t, f.ti, authCtx)
+	binding := seedAssistantThreadBinding(t, f.ctx, f.ti, authCtx)
+	member, _ := seedExecutableHostedProjectMember(t, f.ctx, f.ti, authCtx, "echo_kit", `{"reply":"kit project tool ok"}`)
+
+	// Seed the minimal grant set needed for this test: explicit mcp:connect on
+	// the built-in assistants toolset (zero project servers granted yet), plus
+	// assistant:write on the target assistant for both owner and agent so
+	// thread-keyed built-in calls pass authorization. The Project Gateway
+	// jwt-bearer exchange must succeed even with zero project servers granted.
+	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
+	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, assistantsID.String())
+	seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, authCtx.ActiveOrganizationID, agentPrincipal, assistantsID)
+	assistantSel, err := authz.NewSelector(authz.ScopeAssistantWrite, binding.AssistantID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.ti.conn).UpsertPrincipalGrant(f.ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		Scope:          string(authz.ScopeAssistantWrite),
+		Selectors:      assistantSel,
+	})
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.ti.conn).UpsertPrincipalGrant(f.ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   agentPrincipal,
+		Scope:          string(authz.ScopeAssistantWrite),
+		Selectors:      assistantSel,
+	})
+	require.NoError(t, err)
+	// Give owner access to the private project member so granting the agent
+	// later takes effect immediately.
+	seedUserMCPConnectGrant(t, f.ctx, f.ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, member.toolsetID.String())
+
+	f.ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, f.fx.orgID, true)
+	root := strings.TrimSuffix(f.ti.serverURL.String(), "/") + "/mcp/gateway/" + fixture.organizationSlug + "/projects/" + fixture.projectSlug
+	target, ok, err := f.ti.service.WorkloadTokenTargetFor(t.Context(), root)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamAssertion: {f.assertion(t, target.Audience)},
+		oauthwire.ParamResource:  {target.Resource},
+	}
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, f.ti.service.Service, nil)
+	request := httptest.NewRequest(http.MethodPost, target.TokenEndpoint, strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	bearer := decodeSharedTokenResponse(t, response).AccessToken
+	require.NotEmpty(t, bearer)
+
+	// 1. Built-in assistants toolset is listed and callable through the single
+	// Project Gateway endpoint; ungranted private project server is hidden.
+	listed, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
+	require.Contains(t, listed.Body.String(), `"slug":"assistants"`)
+	require.NotContains(t, listed.Body.String(), member.slug)
+
+	qualifiedSkillLoad := platformtools.AssistantsPlatformToolsetSlug + "--" + platformtools.ToolNameSkillsLoad
+	builtinExec, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": metamcp.ToolExecuteTool,
+		"arguments": map[string]any{
+			"name": qualifiedSkillLoad,
+			"arguments": map[string]any{
+				"name":      "nonexistent-skill",
+				"thread_id": binding.ThreadID.String(),
+			},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, builtinExec.Code, builtinExec.Body.String())
+	builtinText, builtinErr := metaToolResultText(t, decodeRPCResponse(t, builtinExec))
+	require.False(t, builtinErr, builtinText)
+	require.Contains(t, builtinText, "no skills attached")
+
+	// 2. Granting mcp:connect on the private project server takes effect
+	// immediately using the SAME workload session (no runtime replacement).
+	agentGrantID := seedPrincipalMCPConnectGrant(t, f.ctx, f.ti, authCtx.ActiveOrganizationID, agentPrincipal, member.toolsetID)
+	afterGrant, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, afterGrant.Code, afterGrant.Body.String())
+	require.Contains(t, afterGrant.Body.String(), `"slug":"assistants"`)
+	require.Contains(t, afterGrant.Body.String(), member.slug)
+
+	projectExec, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": metamcp.ToolExecuteTool,
+		"arguments": map[string]any{
+			"name":      member.slug + "--echo_kit",
+			"arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, projectExec.Code, projectExec.Body.String())
+	projectText, projectErr := metaToolResultText(t, decodeRPCResponse(t, projectExec))
+	require.False(t, projectErr, projectText)
+	require.Contains(t, projectText, "kit project tool ok")
+
+	// 3. Revoking the grant removes access immediately on the next call using
+	// the SAME workload session (no runtime replacement).
+	_, err = accessrepo.New(f.ti.conn).DeletePrincipalGrant(f.ctx, accessrepo.DeletePrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ID: agentGrantID,
+	})
+	require.NoError(t, err)
+	afterRevoke, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, afterRevoke.Code, afterRevoke.Body.String())
+	require.NotContains(t, afterRevoke.Body.String(), member.slug)
+	require.Contains(t, afterRevoke.Body.String(), `"slug":"assistants"`)
+
+	refusedExec, err := serveProjectGatewayHTTP(t, f.ti, fixture, fixture.projectSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": metamcp.ToolExecuteTool,
+		"arguments": map[string]any{
+			"name":      member.slug + "--echo_kit",
+			"arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Contains(t, refusedExec.Body.String(), "unknown server")
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -37,8 +38,9 @@ func TestMain(m *testing.M) {
 }
 
 // newConnection creates an organization, a project and its GitHub connection
-// without a marketplace token, and returns the database and project.
-func newConnection(t *testing.T) (*pgxpool.Pool, uuid.UUID) {
+// without a marketplace token, and returns the database, organization and
+// project.
+func newConnection(t *testing.T) (*pgxpool.Pool, string, uuid.UUID) {
 	t.Helper()
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
@@ -73,13 +75,13 @@ func newConnection(t *testing.T) (*pgxpool.Pool, uuid.UUID) {
 	})
 	require.NoError(t, err)
 
-	return conn, project.ID
+	return conn, orgID, project.ID
 }
 
 func TestDBResolverResolvesAHashedToken(t *testing.T) {
 	t.Parallel()
 
-	conn, projectID := newConnection(t)
+	conn, _, projectID := newConnection(t)
 	token, err := marketplacetokens.Mint()
 	require.NoError(t, err)
 	marketplacetokenstest.Plant(t, conn, projectID, token)
@@ -92,7 +94,7 @@ func TestDBResolverResolvesAHashedToken(t *testing.T) {
 func TestDBResolverResolvesAPlaintextTokenTheBackfillHasNotMoved(t *testing.T) {
 	t.Parallel()
 
-	conn, projectID := newConnection(t)
+	conn, _, projectID := newConnection(t)
 	token, err := marketplacetokens.Mint()
 	require.NoError(t, err)
 	marketplacetokenstest.PlantLegacy(t, conn, projectID, token)
@@ -102,10 +104,31 @@ func TestDBResolverResolvesAPlaintextTokenTheBackfillHasNotMoved(t *testing.T) {
 	require.Equal(t, "resolver-owner", upstream.Owner)
 }
 
+func TestDBResolverRefusesATokenWhileItsOrganizationIsDisabled(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID, projectID := newConnection(t)
+	token, err := marketplacetokens.Mint()
+	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, conn, projectID, token)
+	resolver := marketplace.NewLocalDBResolver(testenv.NewLogger(t), conn)
+
+	_, err = adminrepo.New(conn).AdminDisableOrganization(t.Context(), orgID)
+	require.NoError(t, err)
+	_, err = resolver.Resolve(t.Context(), token)
+	require.ErrorIs(t, err, marketplace.ErrNotFound)
+
+	_, err = adminrepo.New(conn).AdminEnableOrganization(t.Context(), orgID)
+	require.NoError(t, err)
+	upstream, err := resolver.Resolve(t.Context(), token)
+	require.NoError(t, err, "re-enabling the organization restores the same install URL")
+	require.Equal(t, "resolver-owner", upstream.Owner)
+}
+
 func TestDBResolverRejectsAnUnknownToken(t *testing.T) {
 	t.Parallel()
 
-	conn, projectID := newConnection(t)
+	conn, _, projectID := newConnection(t)
 	token, err := marketplacetokens.Mint()
 	require.NoError(t, err)
 	marketplacetokenstest.Plant(t, conn, projectID, token)

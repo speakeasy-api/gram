@@ -196,6 +196,7 @@ describe("AgentCredentialAccess", () => {
       "static_credential",
       "pass_through",
       "ema",
+      "slack_app",
     ]);
     expect(mocks.create.mock.invocationCallOrder.at(-1)!).toBeLessThan(
       mocks.remove.mock.invocationCallOrder[0]!,

@@ -70,6 +70,9 @@ var TriggerInstance = Type("TriggerInstance", func() {
 	Attribute("environment_id", String, "The linked environment ID.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("auth_client_id", String, "The linked slack_app auth client ID. Mutually exclusive with environment_id.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("target_kind", String, "The target kind for the trigger instance.")
 	Attribute("target_ref", String, "The opaque target reference.")
 	Attribute("target_display", String, "The user-facing target display value.")

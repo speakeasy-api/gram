@@ -26,6 +26,10 @@ export type TriggerInstanceStatus = OpenEnum<typeof TriggerInstanceStatus>;
 
 export type TriggerInstance = {
   /**
+   * The linked slack_app auth client ID. Mutually exclusive with environment_id.
+   */
+  authClientId?: string | undefined;
+  /**
    * The trigger config payload.
    */
   config: { [k: string]: any };
@@ -91,6 +95,7 @@ export const TriggerInstance$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    auth_client_id: z.optional(z.string()),
     config: z.record(z.string(), z.any()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -113,6 +118,7 @@ export const TriggerInstance$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_client_id": "authClientId",
       "created_at": "createdAt",
       "definition_slug": "definitionSlug",
       "environment_id": "environmentId",

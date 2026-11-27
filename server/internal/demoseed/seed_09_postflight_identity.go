@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	platformtoolscore "github.com/speakeasy-api/gram/server/internal/platformtools/core"
 
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
@@ -79,7 +80,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)
 		{byOrg(s.q.PostflightIDAPIKeys), 0, "demo seed postflight: %d api keys survived the reseed"},
-		{byOrg(s.q.PostflightIDAgentGrants), 7, "demo seed postflight: expected 7 scoped agent grants, found %d"},
+		{byOrg(s.q.PostflightIDAgentGrants), 8, "demo seed postflight: expected 8 scoped agent grants, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDScopedAgentGrants(ctx, repo.PostflightIDScopedAgentGrantsParams{
 				OrgID:         org,
@@ -300,12 +301,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected 1 root binding, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDBoundAssistantRoot(ctx, repo.PostflightIDBoundAssistantRootParams{
-				OrgID:       org,
-				ProjectID:   proj,
-				AssistantID: s.det("assistant-bound"),
-				Issuer:      s.assistantIssuer,
-				JwksUri:     s.assistantIssuer + jwks.Path,
-				OwnerUserID: s.userID(demoUsers[0].handle),
+				OrgID:               org,
+				ProjectID:           proj,
+				AssistantID:         s.det("assistant-bound"),
+				Issuer:              s.assistantIssuer,
+				JwksUri:             s.assistantIssuer + jwks.Path,
+				OwnerUserID:         s.userID(demoUsers[0].handle),
+				AssistantsBuiltinID: platformtoolscore.PlatformToolsetID(platformtoolscore.AssistantsPlatformToolsetSlug).String(),
 			})
 		}, 1, "demo seed postflight: identity-bound assistant root is incoherent"},
 		// Workload sessions, and the trust configuration that labels them. A

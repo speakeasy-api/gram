@@ -94,6 +94,10 @@ func ScheduleTriggerCronWorkflow(ctx context.Context, temporalEnv *tenv.Environm
 			UUID:  uuid.Nil,
 			Valid: false,
 		},
+		AuthClientID: uuid.NullUUID{
+			UUID:  uuid.Nil,
+			Valid: false,
+		},
 		TargetKind:    "",
 		TargetRef:     "",
 		TargetDisplay: "",

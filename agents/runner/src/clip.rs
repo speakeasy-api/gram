@@ -377,7 +377,10 @@ mod tests {
 
     #[test]
     fn unresolved_tool_names_are_classed_unknown() {
-        let source = ClippedToolSource::new(crate::catalog::UnknownToolSource, "/tmp/unused");
+        let source = ClippedToolSource::new(
+            crate::catalog::UnknownToolSource::new(crate::mcp_actor::GatewayModeState::default()),
+            "/tmp/unused",
+        );
         let name = ToolName::new("hallucinated_tool");
         let tool = source.inner.get(&name).unwrap();
         assert_eq!(source.kind_of(&name, tool.as_ref()), "unknown");
