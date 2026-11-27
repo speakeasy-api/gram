@@ -50,11 +50,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			}
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "typed-upstream-token")
-			var bindings []uuid.UUID
-			if scenario == "legacy" || scenario == "gateway_legacy" {
-				bindings = []uuid.UUID{issuerID}
-			}
-			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL, bindings)
+			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "typed-login", as.URL)
 			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, issuerID, "typed-login")
 			q := authclientbackfill.New(ti.conn)
 			serverID, remoteID := uuid.New(), uuid.New()
@@ -82,6 +78,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			require.NoError(t, loadErr)
 			require.Len(t, loaded, 1)
 			if scenario == "legacy" || scenario == "gateway_legacy" {
+				require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: serverID, UserSessionIssuerID: conv.ToNullUUID(issuerID)}))
 				_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: registration})
 				require.NoError(t, err)
 			}
@@ -152,7 +149,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				require.NoError(t, q.SeedMCPServerFixture(ctx, authclientbackfill.SeedMCPServerFixtureParams{ID: otherServer, ProjectID: projectID, Slug: conv.ToPGText("alternative-resource"), RemoteMcpServerID: conv.ToNullUUID(otherRemote)}))
 				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: otherServer, AuthClientID: authClientID, Source: "admin"}))
 				alternativeAS := newConsentExchangeAS(t, new(atomic.Value), "alternative-token")
-				alternative := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "alternative-provider", alternativeAS.URL, nil)
+				alternative := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "alternative-provider", alternativeAS.URL)
 				alternativeID, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(alternative)})
 				require.NoError(t, err)
 				require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: alternativeID, Source: "admin"}))

@@ -244,8 +244,9 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 	})
 }
 
+// The export sends data to the customer's own OTEL endpoint.
 func createDataExportAnnotations() *mcp.ToolAnnotations {
-	return writeAnnotations(false, false, false)
+	return writeAnnotations(false, false, true)
 }
 
 func registerUnavailableDataExportMutationTool(reg *Registrar) {

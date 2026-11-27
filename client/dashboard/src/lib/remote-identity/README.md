@@ -15,11 +15,11 @@ choice, so they live together.
 The API exposes three records for what an administrator experiences as one
 thing:
 
-| Record                                       | What it really is                   |
-| -------------------------------------------- | ----------------------------------- |
-| `remote_session_issuers`                     | where users sign in                 |
-| `remote_session_clients`                     | the OAuth client registered there   |
-| `remote_session_client_user_session_issuers` | that client bound to one MCP server |
+| Record                    | What it really is                 |
+| ------------------------- | --------------------------------- |
+| `remote_session_issuers`  | where users sign in               |
+| `remote_session_clients`  | the OAuth client registered there |
+| `mcp_server_auth_clients` | a typed offer on one MCP server   |
 
 Nobody configuring a server thinks in those terms, and AIM-230 says so
 outright: _"Administrators experience the upstream provider and client as one

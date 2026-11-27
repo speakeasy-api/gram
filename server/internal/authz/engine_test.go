@@ -79,26 +79,26 @@ func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
+func TestEngineEither_mapsDeniedToForbidden(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
-	err := engine.RequireAny(ctx,
+	err := engine.Require(ctx, Either(
 		MCPServer(MCPServerIDFrom("tool_b"), ProjectIDFrom(testProjectID)).Connect(),
 		MCPServer(MCPServerIDFrom("tool_c"), ProjectIDFrom(testProjectID)).Connect(),
-	)
+	))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
+func TestDecide_returnsAllowedSubset(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
-	resourceIDs, err := engine.Filter(ctx, []Check{
+	resourceIDs, err := allowedIDs(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
@@ -106,7 +106,7 @@ func TestEngineFilter_returnsAllowedSubset(t *testing.T) {
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
-func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
+func TestDecide_logsSingleAggregateChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -115,7 +115,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	resourceIDs, err := engine.Filter(ctx, []Check{
+	resourceIDs, err := allowedIDs(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_denied"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
@@ -136,7 +136,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	require.Len(t, message.GetRequestedChecks(), 3)
 }
 
-func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
+func TestDecide_logsDenyWhenNoMatches(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -145,7 +145,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	resourceIDs, err := engine.Filter(ctx, []Check{
+	resourceIDs, err := allowedIDs(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
 	})
@@ -162,7 +162,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	require.Zero(t, message.GetFilterAllowedCount())
 }
 
-func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
+func TestDecide_skipsLogWhenNoChecks(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -171,7 +171,7 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	seedOrganization(t, ctx, conn, orgID)
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 
-	resourceIDs, err := engine.Filter(ctx, nil)
+	resourceIDs, err := allowedIDs(ctx, engine, nil)
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
@@ -286,7 +286,7 @@ func TestPrincipalCredentialPoliciesConjoinEveryCheck(t *testing.T) {
 	}
 }
 
-func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
+func TestPrincipalCredentialPoliciesEitherUsesSameCheck(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := principalPolicyTestContext(t,
@@ -295,10 +295,10 @@ func TestPrincipalCredentialPoliciesRequireAnyUsesSameCheck(t *testing.T) {
 		[]Grant{NewGrant(ScopeProjectRead, WildcardResource)},
 	)
 
-	err := engine.RequireAny(ctx,
+	err := engine.Require(ctx, Either(
 		Check{Scope: ScopeProjectRead, ResourceID: "project-one"},
 		Check{Scope: ScopeProjectRead, ResourceID: "project-two"},
-	)
+	))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -317,17 +317,17 @@ func TestPrincipalCredentialPoliciesApplyToEvaluationAndFilters(t *testing.T) {
 		{Scope: ScopeProjectRead, ResourceID: "project-two"},
 	}
 
-	allowed, err := engine.Evaluate(ctx, checks[0])
+	allowed, err := allAllowed(ctx, engine, checks[0])
 	require.NoError(t, err)
 	require.True(t, allowed)
-	allowed, err = engine.Evaluate(ctx, checks[1])
+	allowed, err = allAllowed(ctx, engine, checks[1])
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	filtered, err := engine.Filter(ctx, checks)
+	filtered, err := allowedIDs(ctx, engine, checks)
 	require.NoError(t, err)
 	require.Equal(t, []string{"project-one"}, filtered)
-	matched, err := engine.FindMatched(ctx, checks)
+	matched, err := allowedEach(ctx, engine, checks)
 	require.NoError(t, err)
 	require.Equal(t, []bool{true, false}, matched)
 
@@ -343,7 +343,7 @@ func TestPrincipalCredentialPoliciesApplyToEvaluationAndFilters(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
+func TestDecide_enforcesForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	sessionID := "session_123"
@@ -364,7 +364,7 @@ func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 	})
 
 	ctx = GrantsToContext(ctx, []Grant{NewGrant(ScopeProjectRead, "proj_123")})
-	resourceIDs, err := engine.Filter(ctx, []Check{
+	resourceIDs, err := allowedIDs(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
@@ -372,12 +372,12 @@ func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 	require.Equal(t, []string{"proj_123"}, resourceIDs)
 }
 
-func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
+func TestDecide_returnsParallelBools(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, "proj_123")})
 
-	matched, err := engine.FindMatched(ctx, []Check{
+	matched, err := allowedEach(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_456"},
 	})
@@ -385,7 +385,7 @@ func TestEngineFindMatched_returnsParallelBools(t *testing.T) {
 	require.Equal(t, []bool{true, false}, matched, "result must align with input order")
 }
 
-func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
+func TestDecide_preservesOrderAcrossMixedMatches(t *testing.T) {
 	t.Parallel()
 
 	// Grants allow proj_b and proj_d. Input ordering puts allowed entries
@@ -397,7 +397,7 @@ func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_d"),
 	})
 
-	matched, err := engine.FindMatched(ctx, []Check{
+	matched, err := allowedEach(ctx, engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_a"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_b"},
 		{Scope: ScopeProjectRead, ResourceID: "proj_c"},
@@ -407,7 +407,7 @@ func TestEngineFindMatched_preservesOrderAcrossMixedMatches(t *testing.T) {
 	require.Equal(t, []bool{false, true, false, true}, matched)
 }
 
-func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
+func TestDecide_emptyInputReturnsEmptySlice(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -416,18 +416,18 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	matched, err := engine.FindMatched(ctx, nil)
+	matched, err := allowedEach(ctx, engine, nil)
 	require.NoError(t, err)
 	require.Empty(t, matched)
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
-func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
+func TestDecide_missingGrantsReturnsError(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
-	_, err := engine.FindMatched(enterpriseSessionCtx(t), []Check{
+	_, err := allowedEach(enterpriseSessionCtx(t), engine, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj_123"},
 	})
 	var oopsErr *oops.ShareableError
@@ -436,26 +436,26 @@ func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-func TestEngineFindMatched_rejectsInvalidCheck(t *testing.T) {
+func TestDecide_rejectsCheckWithoutResource(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	_, err := engine.FindMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
+	_, err := allowedEach(ctx, engine, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestEngineFilter_rejectsInvalidCheck(t *testing.T) {
+func TestDecide_oneInvalidCheckFailsTheBatch(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPWrite, WildcardResource)})
 
 	// An MCP check without its project fails the whole batch rather than
 	// dropping out of it.
-	_, err := engine.Filter(ctx, []Check{
+	_, err := allowedIDs(ctx, engine, []Check{
 		mcpCheck(ScopeMCPWrite, "server-1", "project-1"),
 		mcpCheck(ScopeMCPWrite, "server-2", ""),
 	})
@@ -465,63 +465,33 @@ func TestEngineFilter_rejectsInvalidCheck(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }
 
-func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
-	t.Parallel()
+// --- Decide without challenges ---
 
-	orgID := "org_" + uuid.NewString()
-	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, "proj_allowed")})
-	conn := newTestDB(t)
-	seedOrganization(t, ctx, conn, orgID)
-	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
-
-	matched, err := engine.FindMatched(ctx, []Check{
-		{Scope: ScopeProjectRead, ResourceID: "proj_allowed"},
-		{Scope: ScopeProjectRead, ResourceID: "proj_denied"},
-		{Scope: ScopeProjectRead, ResourceID: "proj_other"},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []bool{true, false, false}, matched)
-
-	// A batched FindMatched must emit exactly one challenge log entry for
-	// the whole input, not N per check — the per-check granularity lives in
-	// the returned slice, not in the outbox.
-	rows := listChallengeOutboxRows(t, conn)
-	require.Len(t, rows, 1)
-	message := &authzv1.Challenge{}
-	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
-	require.Equal(t, string(authzrepo.OutcomeAllow), message.GetOutcome())
-	require.Equal(t, string(authzrepo.ReasonGrantMatched), message.GetReason())
-	require.Equal(t, uint32(3), message.GetFilterCandidateCount())
-	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
-}
-
-// --- Engine.Evaluate tests ---
-
-func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
+func TestDecideWithoutChallenges_trueWhenGranted(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
+	allowed, err := allAllowed(ctx, engine, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
 
-func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
+func TestDecideWithoutChallenges_falseWhenUnsatisfied(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
+	allowed, err := allAllowed(ctx, engine, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.False(t, allowed)
 }
 
-func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
+func TestDecideWithoutChallenges_errorsWhenGrantsMissing(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
-	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), Chat(ChatIDFrom("proj_123")).Read())
+	allowed, err := allAllowed(enterpriseSessionCtx(t), engine, Chat(ChatIDFrom("proj_123")).Read())
 	require.False(t, allowed)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -529,10 +499,10 @@ func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
-// An unsatisfied Evaluate check is a routine visibility branch, not a denial —
+// A refused quiet Decide is a routine visibility branch, not a denial —
 // it must never emit an authz challenge, otherwise it would pollute the
 // diagnostics UI with false "denied" scopes (the coupling AIS-305 removes).
-func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
+func TestDecideWithoutChallenges_neverLogsChallenge(t *testing.T) {
 	t.Parallel()
 
 	orgID := "org_" + uuid.NewString()
@@ -541,7 +511,7 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
+	allowed, err := allAllowed(ctx, engine, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.False(t, allowed)
 
@@ -677,7 +647,7 @@ func TestEngineRequire_assistantGrantNarrowedToOneAssistant(t *testing.T) {
 	// Project-level operations such as creating an assistant need a project-wide grant.
 	requireForbidden(t, engine.Require(ctx, Assistants(ProjectIDFrom("project_a")).Write()))
 
-	allowed, err := engine.Filter(ctx, []Check{
+	allowed, err := allowedIDs(ctx, engine, []Check{
 		Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read(),
 		Assistant(AssistantIDFrom("assistant_2"), ProjectIDFrom("project_a")).Read(),
 	})
@@ -782,7 +752,7 @@ func TestShouldEnforce_platformMCPSurfaceEnforcesWithoutASession(t *testing.T) {
 	require.True(t, marked)
 }
 
-func TestRequireAnyUnblocked(t *testing.T) {
+func TestEitherRefusesBlockedAlternatives(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	checks := []Check{
@@ -807,7 +777,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := GrantsToContext(enterpriseSessionCtx(t), tc.grants)
-			err := engine.RequireAnyUnblocked(ctx, checks...)
+			err := engine.Require(ctx, Either(checks...))
 			if tc.allowed {
 				require.NoError(t, err)
 			} else {
@@ -826,7 +796,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 			policies[i] = deny
 			ctx := principalPolicyTestContext(t, policies[0], policies[1], policies[2])
 			var forbidden *oops.ShareableError
-			require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+			require.ErrorAs(t, engine.Require(ctx, Either(checks...)), &forbidden)
 			require.Equal(t, oops.CodeForbidden, forbidden.Code)
 		}
 	})
@@ -838,7 +808,7 @@ func TestRequireAnyUnblocked(t *testing.T) {
 			[]Grant{NewGrant(ScopeSkillRead, "*")},
 		)
 		var forbidden *oops.ShareableError
-		require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+		require.ErrorAs(t, engine.Require(ctx, Either(checks...)), &forbidden)
 		require.Equal(t, oops.CodeForbidden, forbidden.Code)
 	})
 }

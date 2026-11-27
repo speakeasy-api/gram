@@ -86,3 +86,56 @@ func TestOperationBudgetToolResultMapsRegistrationInputErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestOperationBudgetToolResultMapsDiagnosticsInputErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		code     string
+		contains string
+	}{
+		{
+			name:     "gateway id passed as mcp_id",
+			err:      fmt.Errorf("resolve drilldown mcp: parse mcp id: %w: %w", ErrMCPIDInvalid, errors.New("invalid UUID length: 44")),
+			code:     "invalid_request",
+			contains: "A gateway is not an MCP server",
+		},
+		{
+			name:     "window longer than the tool allows",
+			err:      fmt.Errorf("%w: 7d allows at most 24h", ErrDiagnosticWindowTooLong),
+			code:     "invalid_request",
+			contains: "query_mcp_metrics at most 7d",
+		},
+		{
+			name:     "unknown window",
+			err:      ErrDiagnosticWindowInvalid,
+			code:     "invalid_request",
+			contains: "window field",
+		},
+		{
+			name:     "mcp not in project",
+			err:      ErrDiagnosticsTargetNotFound,
+			code:     "mcp_not_found",
+			contains: "find_mcp",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, ok := operationBudgetToolResult(test.err)
+			require.True(t, ok)
+			require.True(t, result.IsError)
+			text, ok := result.Content[0].(*mcp.TextContent)
+			require.True(t, ok)
+			var body operationBudgetResult
+			require.NoError(t, json.Unmarshal([]byte(text.Text), &body))
+			require.Equal(t, test.code, body.Code)
+			require.Contains(t, body.Message, test.contains)
+			require.NotContains(t, text.Text, "UUID length")
+		})
+	}
+}

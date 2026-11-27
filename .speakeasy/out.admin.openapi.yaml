@@ -1284,6 +1284,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getHooksRollout
+  /admin/hooksRollout.progress:
+    get:
+      tags:
+        - admin
+      summary: getHooksReleaseProgress admin
+      description: 'Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.'
+      operationId: adminGetHooksReleaseProgress
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksReleaseProgress'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksReleaseProgress
   /admin/hooksRollout.setDefault:
     post:
       tags:
@@ -1361,7 +1430,7 @@ paths:
       x-speakeasy-name-override: setHooksRolloutDefault
   /admin/mcpAuthGrants.backfill:
     post:
-      description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+      description: Retired. Rejects authenticated calls and does not modify grants.
       operationId: adminBackfillMcpAuthGrants
       responses:
         "200":
@@ -5989,7 +6058,7 @@ paths:
       x-speakeasy-name-override: getOrganizationEncryption
   /admin/organizationEncryption.listTransitions:
     get:
-      description: Lists organizations by transition state for one use case, oldest first. Organizations never enrolled are in platform_key.
+      description: Lists organizations by transition state for one use case. Organizations never enrolled are in platform_key. By default it lists only organizations with values for the use case, most recently written first.
       operationId: adminListOrganizationEncryptionTransitions
       parameters:
         - allowEmptyValue: true
@@ -6009,6 +6078,28 @@ paths:
               - platform_key
               - dual_write
               - org_kms
+            type: string
+        - allowEmptyValue: true
+          description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+          in: query
+          name: values
+          schema:
+            default: present
+            description: present lists only organizations with at least one value for the use case under either key, soft-deleted rows included. all lists every organization.
+            enum:
+              - present
+              - all
+            type: string
+        - allowEmptyValue: true
+          description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+          in: query
+          name: sort
+          schema:
+            default: last_written
+            description: last_written lists the most recently written organizations first, then organizations without values oldest first. oldest lists the oldest organizations first. The list pages by offset, so an organization whose last write changes between page requests can repeat or be skipped.
+            enum:
+              - last_written
+              - oldest
             type: string
         - allowEmptyValue: true
           description: Organizations per page.
@@ -9506,6 +9597,235 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: updateGlobalIssuer
+  /admin/secretBackfills.get:
+    get:
+      description: 'Previews the temporary secret backfills: what applying each would change now. Writes nothing.'
+      operationId: adminGetSecretBackfills
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSecretBackfills'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getSecretBackfills admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getSecretBackfills
+  /admin/secretBackfills.runMarketplaceTokens:
+    post:
+      description: 'Applies the marketplace token backfill to one organization or to all: gives each GitHub connection its project''s organization, then moves each plaintext marketplace token to its hash and the copies its organization''s transition state writes, sealed with this process''s platform key. Install URLs do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress, and when this process''s platform key fingerprint is not the one the operator checked.'
+      operationId: adminRunMarketplaceTokenBackfill
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunMarketplaceTokenBackfillRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMarketplaceTokenBackfill'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: runMarketplaceTokenBackfill admin
+      tags:
+        - admin
+      x-speakeasy-name-override: runMarketplaceTokenBackfill
+      x-speakeasy-react-hook:
+        name: AdminRunMarketplaceTokenBackfill
+  /admin/secretBackfills.runRunnerKeyOrganizations:
+    post:
+      description: 'Applies the runner key organization backfill to one organization or to all: sets functions_access.organization_id from each runner key''s project, in batches that each commit on their own. Runner keys and deployed function runners do not change. Safe to run again; an interrupted run continues where it stopped. Refused while another run of it is in progress.'
+      operationId: adminRunRunnerKeyOrganizationBackfill
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRunnerKeyOrganizationBackfillRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRunnerKeyOrganizationBackfill'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: runRunnerKeyOrganizationBackfill admin
+      tags:
+        - admin
+      x-speakeasy-name-override: runRunnerKeyOrganizationBackfill
+      x-speakeasy-react-hook:
+        name: AdminRunRunnerKeyOrganizationBackfill
   /admin/session.get:
     get:
       tags:
@@ -10786,7 +11106,7 @@ paths:
       x-speakeasy-name-override: listUpstreamOAuthMigrationOrganizations
   /admin/upstreamOAuthMigration.run:
     post:
-      description: 'Migrates one organization''s upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential''s client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.'
+      description: Retired. Rejects authenticated calls and does not change upstream authentication configuration.
       operationId: adminRunUpstreamOAuthMigration
       requestBody:
         content:
@@ -10861,7 +11181,7 @@ paths:
       x-speakeasy-name-override: runUpstreamOAuthMigration
   /admin/upstreamOAuthMigration.status:
     get:
-      description: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.
+      description: Reports typed upstream authentication readiness for one organization without making changes.
       operationId: adminGetUpstreamOAuthMigrationStatus
       parameters:
         - allowEmptyValue: true
@@ -11393,7 +11713,7 @@ components:
       properties:
         granted:
           type: integer
-          description: How many principals gained the mcp:auth grant.
+          description: Legacy response field; the retired endpoint does not grant access.
           format: int64
       required:
         - granted
@@ -11927,6 +12247,114 @@ components:
         - version
         - status
         - installs
+    AdminHooksReleaseFleet:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs seen in the window.
+          format: int64
+        installs_on_current:
+          type: integer
+          description: Installs reporting exactly the binary version this build ships, on any endpoint.
+          format: int64
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseInstallVersion'
+          description: Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
+        window_days:
+          type: integer
+          description: Installs count when they sent a hook in this many full UTC days.
+          format: int64
+      description: Hooks installs across every organization, by binary version.
+      required:
+        - window_days
+        - installs
+        - installs_on_current
+        - versions
+    AdminHooksReleaseInstallVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs that sent no version.
+        status:
+          $ref: "#/components/schemas/AdminHooksReleaseInstallStatus"
+      description: Hooks installs reporting one binary version.
+      required:
+        - version
+        - status
+        - installs
+    AdminHooksReleaseProgress:
+      type: object
+      properties:
+        current_binary_version:
+          type: string
+          description: The hooks binary version this server build ships. Absent when unknown.
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes.
+          format: int64
+        fleet:
+          $ref: '#/components/schemas/AdminHooksReleaseFleet'
+        organizations:
+          type: integer
+          description: Organizations with at least one marketplace repository.
+          format: int64
+        organizations_cleared:
+          type: integer
+          description: 'Of those, organizations whose next publish moves to current_version: canaries and organizations pinned at or above it.'
+          format: int64
+        organizations_held:
+          type: integer
+          description: Organizations pinned below current_version.
+          format: int64
+        organizations_on_legacy_flag:
+          type: integer
+          description: Organizations with no pin, which follow the legacy hooks-rollout PostHog flag the admin server cannot read.
+          format: int64
+        repo_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseRepoVersion'
+          description: Repositories per published hooks generator version, newest first.
+        repos:
+          type: integer
+          description: Marketplace repositories.
+          format: int64
+        repos_on_current:
+          type: integer
+          description: Repositories whose last published hooks plugin carries current_version.
+          format: int64
+      description: 'How far the current hooks release has reached: organizations cleared by the rollout pins, marketplace repositories republished with it, and installs running it.'
+      required:
+        - current_version
+        - organizations
+        - organizations_cleared
+        - organizations_held
+        - organizations_on_legacy_flag
+        - repos
+        - repos_on_current
+        - repo_versions
+    AdminHooksReleaseRepoVersion:
+      type: object
+      properties:
+        repos:
+          type: integer
+          description: Repositories on this version.
+          format: int64
+        version:
+          type: string
+          description: The hooks generator version last published, or empty for repositories that have never published the hooks plugin.
+      description: Marketplace repositories whose last published hooks plugin carries one hooks generator version.
+      required:
+        - version
+        - repos
     AdminHooksRollout:
       type: object
       properties:
@@ -12277,6 +12705,51 @@ components:
         - total
         - page
         - limit
+    AdminMarketplaceTokenBackfill:
+      type: object
+      properties:
+        attributed:
+          type: integer
+          description: Connections this run gave an organization. Zero in a preview.
+          format: int64
+        hashed:
+          type: integer
+          description: Connections whose token is stored as a hash and sealed copies.
+          format: int64
+        legacy:
+          type: integer
+          description: Connections that still hold a plaintext token, not counting those in missing_organization.
+          format: int64
+        missing_organization:
+          type: integer
+          description: Connections whose project's organization has no metadata row. An apply can't give them an organization or move their plaintext token, so they stay as they are.
+          format: int64
+        moved:
+          type: integer
+          description: Plaintext tokens this run moved. Zero in a preview.
+          format: int64
+        needs_organization_key:
+          type: integer
+          description: Plaintext tokens left in place because their organization's transition state needs organization encryption this process does not have. Zero in a preview.
+          format: int64
+        skipped:
+          type: integer
+          description: Plaintext tokens that changed between the read and the write, such as when another run moved them first. Zero in a preview.
+          format: int64
+        unattributed:
+          type: integer
+          description: Connections without an organization whose project's organization exists. An apply gives these one.
+          format: int64
+      description: 'The plugin marketplace token backfill: gives each GitHub connection its project''s organization, and moves each plaintext marketplace token to its hash and a sealed copy. The counts cover every organization, or only the one a run covered.'
+      required:
+        - attributed
+        - moved
+        - skipped
+        - needs_organization_key
+        - unattributed
+        - legacy
+        - hashed
+        - missing_organization
     AdminMcpServer:
       type: object
       properties:
@@ -13622,12 +14095,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminOrganizationEncryptionTransitionRow'
-          description: The page of organizations, oldest first.
+          description: The page of organizations, in the requested order.
         state_counts:
           type: array
           items:
             $ref: '#/components/schemas/AdminOrganizationEncryptionStateCount'
-          description: How many organizations are in each state, across every page.
+          description: How many organizations the values filter keeps are in each state, across every page.
         use_case:
           type: string
           description: The use case listed.
@@ -13671,6 +14144,10 @@ components:
           type: string
           description: When the last clean verification pass started.
           format: date-time
+        last_written_at:
+          type: string
+          description: The latest updated_at of a row storing one of the organization's values. A change that updates the row's updated_at moves it, such as a session's token refresh or an OpenRouter key's limit change; a write that leaves updated_at alone, such as a backfill seal, does not. Absent when the organization has none.
+          format: date-time
         name:
           type: string
           description: The organization name.
@@ -13695,6 +14172,10 @@ components:
           type: string
           description: When the state was entered.
           format: date-time
+        value_count:
+          type: integer
+          description: How many values the organization stores for the use case under either key, soft-deleted rows included. A row storing values in two columns counts once in each.
+          format: int64
       description: One organization's transition state for a use case, from stored state only.
       required:
         - organization_id
@@ -13702,6 +14183,7 @@ components:
         - slug
         - disabled
         - state
+        - value_count
     AdminOrganizationEncryptionUseCase:
       type: object
       properties:
@@ -14474,6 +14956,78 @@ components:
         - published
         - updated_at
         - issues
+    AdminRunnerKeyOrganizationBackfill:
+      type: object
+      properties:
+        filled:
+          type: integer
+          description: Runner keys this run gave an organization. Zero in a preview.
+          format: int64
+        missing_organization:
+          type: integer
+          description: Runner keys without an organization whose project is gone or whose project's organization has no metadata row. They stay without one.
+          format: int64
+        pending:
+          type: integer
+          description: Runner keys without an organization whose project's organization exists. An apply fills these.
+          format: int64
+      description: 'The function runner key organization backfill: sets functions_access.organization_id from each runner key''s project. Counts include soft-deleted runner keys, and cover every organization or only the one a run covered.'
+      required:
+        - filled
+        - pending
+        - missing_organization
+    AdminSecretBackfillOrganization:
+      type: object
+      properties:
+        legacy_tokens:
+          type: integer
+          description: Its GitHub connections that still hold a plaintext marketplace token.
+          format: int64
+        name:
+          type: string
+          description: The organization's name.
+        organization_id:
+          type: string
+          description: The organization ID.
+        pending_runner_keys:
+          type: integer
+          description: Its runner keys without an organization.
+          format: int64
+        slug:
+          type: string
+          description: The organization's slug.
+        unattributed_connections:
+          type: integer
+          description: Its GitHub connections without an organization.
+          format: int64
+      description: One organization with secret backfill work left. A GitHub connection or runner key without an organization belongs to its project's organization.
+      required:
+        - organization_id
+        - name
+        - slug
+        - legacy_tokens
+        - unattributed_connections
+        - pending_runner_keys
+    AdminSecretBackfills:
+      type: object
+      properties:
+        marketplace_tokens:
+          $ref: '#/components/schemas/AdminMarketplaceTokenBackfill'
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSecretBackfillOrganization'
+          description: Every organization either backfill has work left in, by name. Rows whose project's organization has no metadata row belong to none of them.
+        platform_key_fingerprint:
+          type: string
+          description: The fingerprint of the platform key this admin process seals marketplace tokens with. It must match the fingerprint every server and worker logs at startup as "encryption key loaded". Absent when this process has no platform key, so the marketplace token backfill cannot be applied.
+        runner_key_organizations:
+          $ref: '#/components/schemas/AdminRunnerKeyOrganizationBackfill'
+      description: What each secret backfill would do if applied now.
+      required:
+        - marketplace_tokens
+        - runner_key_organizations
+        - organizations
     AdminSession:
       type: object
       properties:
@@ -16867,6 +17421,19 @@ components:
       required:
         - organization_id
         - use_case
+    RunMarketplaceTokenBackfillRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Limits the run to this organization's GitHub connections. Omit it to run for every organization. The result's counts then cover only this organization.
+          minLength: 1
+        platform_key_fingerprint:
+          type: string
+          description: The platform key fingerprint the operator checked against the servers' "encryption key loaded" log. The run is refused when this process's platform key has another fingerprint, such as after a restart with a different key.
+          minLength: 1
+      required:
+        - platform_key_fingerprint
     RunOrganizationEncryptionRequestBody:
       type: object
       properties:
@@ -16879,6 +17446,13 @@ components:
       required:
         - organization_id
         - use_case
+    RunRunnerKeyOrganizationBackfillRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Limits the run to this organization's runner keys. Omit it to run for every organization. The result's counts then cover only this organization.
+          minLength: 1
     RunTailscaleOAuthMigrationStepRequestBody:
       type: object
       properties:
@@ -17713,6 +18287,14 @@ components:
         - organization
         - default
         - legacy_flag
+    AdminHooksReleaseInstallStatus:
+      type: string
+      description: How the version compares to the release Speakeasy ships.
+      enum:
+        - current
+        - behind
+        - unsupported
+        - unknown
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

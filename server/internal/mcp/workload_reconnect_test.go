@@ -40,7 +40,7 @@ func TestDirectWorkloadReconnect(t *testing.T) {
 	issuer := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
 	assignment := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuer, workloadSessionSubject, agent.ID)
 	subject := urn.NewWorkloadSubject(issuer, workloadSessionSubject)
-	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "workload-reconnect", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "workload-reconnect", "")
 	selection := selectionFixture{ti: ti, projectID: fx.target.ProjectID, orgID: fx.orgID}
 	selection.associate(t, ctx, server.ID, client)
 	typed := seedTypedSessionClient(t, ctx, ti, fx.orgID, fx.target.ProjectID, server.ID, client, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(fx.userID))

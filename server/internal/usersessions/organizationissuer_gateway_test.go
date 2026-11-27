@@ -25,8 +25,8 @@ import (
 )
 
 // organizationGatewayAssociation is a server in a sibling project associated
-// with a client bound to the organization's only organization-level issuer:
-// the organization gateway fronts the server, so the binding serves it.
+// with its own upstream registration. The organization gateway fronts the
+// server through the organization's only organization-level sign-in issuer.
 type organizationGatewayAssociation struct {
 	organizationIssuer uuid.UUID
 	projectID          uuid.UUID
@@ -96,10 +96,6 @@ func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *t
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
-	require.NoError(t, rq.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   organizationIssuer,
-	}))
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		ProjectID:             projectID,
 		OrganizationID:        orgID,

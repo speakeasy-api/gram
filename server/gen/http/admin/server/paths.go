@@ -532,6 +532,21 @@ func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"
 }
 
+// GetSecretBackfillsAdminPath returns the URL path to the admin service getSecretBackfills HTTP endpoint.
+func GetSecretBackfillsAdminPath() string {
+	return "/admin/secretBackfills.get"
+}
+
+// RunMarketplaceTokenBackfillAdminPath returns the URL path to the admin service runMarketplaceTokenBackfill HTTP endpoint.
+func RunMarketplaceTokenBackfillAdminPath() string {
+	return "/admin/secretBackfills.runMarketplaceTokens"
+}
+
+// RunRunnerKeyOrganizationBackfillAdminPath returns the URL path to the admin service runRunnerKeyOrganizationBackfill HTTP endpoint.
+func RunRunnerKeyOrganizationBackfillAdminPath() string {
+	return "/admin/secretBackfills.runRunnerKeyOrganizations"
+}
+
 // GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
 func GetProjectRedeployPreviewAdminPath() string {
 	return "/admin/project.redeployPreview"
@@ -625,6 +640,11 @@ func MigrateOrganizationAssistantsToKitAdminPath() string {
 // GetHooksRolloutAdminPath returns the URL path to the admin service getHooksRollout HTTP endpoint.
 func GetHooksRolloutAdminPath() string {
 	return "/admin/hooksRollout.get"
+}
+
+// GetHooksReleaseProgressAdminPath returns the URL path to the admin service getHooksReleaseProgress HTTP endpoint.
+func GetHooksReleaseProgressAdminPath() string {
+	return "/admin/hooksRollout.progress"
 }
 
 // SetHooksRolloutDefaultAdminPath returns the URL path to the admin service setHooksRolloutDefault HTTP endpoint.

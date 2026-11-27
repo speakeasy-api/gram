@@ -33,12 +33,18 @@ func markHostedDownstreamOnly(t *testing.T, ctx context.Context, conn *pgxpool.P
 	}))
 }
 
-// assignHostedOAuth gives a hosted server its exact upstream registration.
-func assignHostedOAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID) {
+// associateServerRegistration makes a registration reachable from this server and its gateways.
+func associateServerRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID) {
 	t.Helper()
 	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		OrganizationID: organizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: registrationID,
 	}))
+}
+
+// assignHostedOAuth gives a hosted server its exact upstream registration.
+func assignHostedOAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, registrationID uuid.UUID) {
+	t.Helper()
+	associateServerRegistration(t, ctx, conn, organizationID, projectID, serverID, registrationID)
 	require.NoError(t, authclientbackfill.New(conn).SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{
 		ID: serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true},
 	}))

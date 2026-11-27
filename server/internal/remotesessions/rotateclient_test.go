@@ -152,6 +152,7 @@ func TestRotateClient(t *testing.T) {
 	issuerID := createRemoteIssuer(t, ctx, ti, "rotate-client-issuer", registration.URL+"/register")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "rotate-client-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "rotate-client-original")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 	subject := urn.NewUserSubject("rotate-client-user")
 	insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID)
 

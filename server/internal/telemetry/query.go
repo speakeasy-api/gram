@@ -143,7 +143,7 @@ func (s *Service) query(ctx context.Context, payload *telem_gen.QueryPayload, wi
 		topN = defaultQueryTopN
 	}
 
-	interval := calculateInterval(timeStart, timeEnd)
+	interval := CalculateInterval(timeStart, timeEnd)
 	if payload.GranularitySeconds != nil && *payload.GranularitySeconds > 0 {
 		interval = *payload.GranularitySeconds
 	}
@@ -594,26 +594,30 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 }
 
 // chatReadableProjects returns the projects whose session rows the caller may
-// see. Evaluate rather than Require: an org reader without chat:read is the
+// see. Decide rather than Require: an org reader without chat:read is the
 // expected case, not a denial to record, and RBAC off keeps every project.
 func (s *Service) chatReadableProjects(ctx context.Context, orgID string, projectIDs []string) ([]string, error) {
 	// An organization-wide grant reads every project at once.
-	allowed, err := s.authz.Evaluate(ctx, authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
+	orgDecision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.OrgChats(authz.OrgIDFrom(orgID)).Read())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
 	}
-	if allowed {
+	if orgDecision.AllAllowed {
 		return projectIDs, nil
 	}
 
+	checks := make([]authz.Check, len(projectIDs))
+	for i, projectID := range projectIDs {
+		checks[i] = authz.Chats(authz.ProjectIDFrom(projectID)).Read()
+	}
+	decisions, err := s.authz.Decide(authz.WithoutChallenges(ctx), checks...)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
+	}
 	readable := make([]string, 0, len(projectIDs))
-	for _, projectID := range projectIDs {
-		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "evaluate chat read access")
-		}
-		if allowed {
-			readable = append(readable, projectID)
+	for i, decision := range decisions.Each {
+		if decision.Allowed {
+			readable = append(readable, projectIDs[i])
 		}
 	}
 	return readable, nil

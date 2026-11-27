@@ -107,7 +107,7 @@ func (s *Service) approvalViewer(ctx context.Context, authCtx *contextvalues.Aut
 }
 
 // enforcedOrgAdmin reports whether RBAC checked the caller's org admin grant.
-// Evaluate answers true when RBAC is not enforced at all, as for a legacy API
+// Decide answers true when RBAC is not enforced at all, as for a legacy API
 // key, and that must not widen what the caller sees.
 func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (bool, error) {
 	enforced, err := s.authz.ShouldEnforce(ctx)
@@ -117,11 +117,11 @@ func (s *Service) enforcedOrgAdmin(ctx context.Context, organizationID string) (
 	if !enforced {
 		return false, nil
 	}
-	isAdmin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
+	decision, err := s.authz.Decide(authz.WithoutChallenges(ctx), authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check admin access").LogError(ctx, s.logger)
 	}
-	return isAdmin, nil
+	return decision.AllAllowed, nil
 }
 
 func (s *Service) requireApprovalsReader(ctx context.Context) (*contextvalues.AuthContext, error) {

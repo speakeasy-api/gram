@@ -185,6 +185,7 @@ trackedFiles:
   src/funcs/assistantsEnsureManaged.ts: {}
   src/funcs/assistantsGet.ts: {}
   src/funcs/assistantsGetManaged.ts: {}
+  src/funcs/assistantsInferIntent.ts: {}
   src/funcs/assistantsInterruptTurn.ts: {}
   src/funcs/assistantsList.ts: {}
   src/funcs/assistantsListExecutionProfiles.ts: {}
@@ -1063,7 +1064,9 @@ trackedFiles:
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
+  src/models/components/assistantactivityentry.ts: {}
   src/models/components/assistantexecutionprofile.ts: {}
+  src/models/components/assistantintent.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
   src/models/components/assistantsessionsummary.ts: {}
@@ -1473,6 +1476,7 @@ trackedFiles:
   src/models/components/identityproviderconnectionchecklistitem.ts: {}
   src/models/components/identityproviderconnectionreconcilerun.ts: {}
   src/models/components/inferencespendcap.ts: {}
+  src/models/components/inferintentrequestbody.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
@@ -2809,6 +2813,7 @@ trackedFiles:
   src/models/operations/hooksnumbercursor.ts: {}
   src/models/operations/hooksnumberlogs.ts: {}
   src/models/operations/hooksnumbermetrics.ts: {}
+  src/models/operations/inferassistantintent.ts: {}
   src/models/operations/ingesthookevent.ts: {}
   src/models/operations/ingestlitellmguardrail.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
@@ -3814,6 +3819,7 @@ trackedFiles:
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
+  src/react-query/inferAssistantIntent.ts: {}
   src/react-query/ingestHookEvent.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
@@ -8460,7 +8466,7 @@ examples:
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "include_time_series": true, "to": "2025-12-19T11:00:00Z"}
+        application/json: {"from": "2025-12-19T10:00:00Z", "include_time_series": true, "to": "2025-12-19T11:00:00Z", "tool_calls_only": false}
       responses:
         "200":
           application/json: {"comparison": {"avg_latency_ms": 5127.98, "avg_resolution_time_ms": 6526.16, "avg_session_duration_ms": 2329.54, "cache_creation_input_tokens": 692955, "cache_read_input_tokens": 84255, "failed_chats": 887520, "failed_tool_calls": 365738, "resolved_chats": 399299, "total_chats": 784070, "total_cost": 4077.03, "total_input_tokens": 909191, "total_output_tokens": 591733, "total_tokens": 918591, "total_tool_calls": 617784}, "interval_seconds": 341256, "summary": {"avg_latency_ms": 3857.2, "avg_resolution_time_ms": 5632.09, "avg_session_duration_ms": 6426.44, "cache_creation_input_tokens": 844170, "cache_read_input_tokens": 875850, "failed_chats": 411493, "failed_tool_calls": 369654, "resolved_chats": 601657, "total_chats": 778118, "total_cost": 4488.34, "total_input_tokens": 516564, "total_output_tokens": 396368, "total_tokens": 255551, "total_tool_calls": 136888}, "time_series": [], "top_tools_by_count": [{"avg_latency_ms": 7986.12, "call_count": 373081, "failure_count": 471755, "failure_rate": 54.59, "gram_urn": "<value>", "success_count": 74511}], "top_tools_by_failure_rate": [{"avg_latency_ms": 6544.77, "call_count": 563679, "failure_count": 464561, "failure_rate": 9129.96, "gram_urn": "<value>", "success_count": 333408}]}
@@ -9656,6 +9662,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  inferAssistantIntent:
+    speakeasy-default-infer-assistant-intent:
+      requestBody:
+        application/json: {"activity": [{"at": "2025-12-10T23:14:56.174Z", "detail": "<value>", "kind": "error"}], "assistant_id": "bde7d84e-94e8-4081-9eb6-8c14a3a1859c"}
+      responses:
+        "200":
+          application/json: {"confidence": 9446.24, "frustration": "medium", "suggested_prompts": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   ingestHookEvent:
     speakeasy-default-ingest-hook-event:
       requestBody:

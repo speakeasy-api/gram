@@ -1,5 +1,47 @@
 # server
 
+## 2.45.0
+
+### Minor Changes
+
+- 5cecfc1: Each intent-policy analysis now records its results. Every tool call judged on the intent policies analysis page is published as a `gram.intentpolicy.v1.Assessment` event, and `gram streams` writes those events to the lake as daily-partitioned Parquet under `gram.intentpolicy.v1.LakePrimary/`. Each row says who ran the analysis (organization, project, user), which session and tool call it judged, the guardrail version, the evaluator and model, every label and contract outcome, the final decision, cost and latency, and when the call happened and when it was judged. Tool arguments are left out; a row carries only their size. Publishing never waits on Pub/Sub or fails the analysis.
+
+### Patch Changes
+
+- fc4921c: A risk policy evaluate grant that names a server (`server_url` or `server_identity`) is now refused when saved. A policy's audience is the same on every server, so such a grant applied everywhere despite naming one server. Bypass and block grants still take a server.
+- 2c4200a: Staff can preview and apply the plugin marketplace token backfill and the function runner key organization backfill from a temporary **Secret backfills** page in the admin dashboard. Both run inside the admin server, so nobody needs database write access or the platform key on their machine.
+
+## 2.44.0
+
+### Minor Changes
+
+- 4bb4d5f: Show how far the current hooks release has reached on the admin Hooks rollout page: how many organizations the pins clear for it, how many marketplace repositories have republished it, and how many installs report its binary version. The staff Admin MCP gains a read-only `get_hooks_release_progress` tool.
+- 38df61f: Organization administrators can now see pending access requests in the device agent. `agent.listPendingAccessRequests` lists the organization's pending requests, newest first, each with a link that opens it in the dashboard to approve or deny; anyone who is not an administrator gets an empty list. It accepts only a per-user device agent key and is off unless access requests are enabled for the organization. Access requests can now also carry a suggestion of how long the requester needs the access, from the dashboard request form: a duration counted from approval (1 hour, 2 hours or 4 hours), or a deadline such as the end of their day, sent as `requested_until` and stored in UTC. The Slack card shows it ("Asked for 2 hours" or "Asked until" the requested time) and opens its time menu on the matching choice, and approving End of day on a request with a deadline gives access until that deadline.
+- 92e2d04: Members can now ask for temporary access from the device agent. `agent.listRequestableAccess` lists the temporary permissions the signed-in member can still ask for, with the projects they can ask for each on, plus their own pending requests. `agent.requestAccess` files one, with an optional message and either a duration (1, 2 or 4 hours) or a deadline such as the end of their day, and notifies administrators the same way as a request from the dashboard. When a delivered MCP server says the member has no access, `agent.getMyConnections` now names the exact access to ask for, so the device agent can request it in one step. Both endpoints accept only a per-user device agent key and are off unless access requests are enabled for the organization.
+- eb154bd: Intent-based policies now use six reusable primitive labels and ten composed rules, adding protections against broadcasting personal data and making unreviewed public releases.
+- b5a6e25: `telemetry.getObservabilityOverview` takes `tool_calls_only`. When set, chat, token, cost and session duration figures come back as 0, and overviews of two hours or more can be read from pre-summed tool call counts instead of raw logs, with periods aligned to 15-minute boundaries.
+
+### Patch Changes
+
+- 6186112: The MCP gateway no longer sends a `mcp_server_tools_list` analytics event for every `tools/list` request. No reports used it, and it was the largest share of product analytics volume. Hosted MCP servers still send `mcp_server_count`.
+- 5a611c9: The admin encryption transitions list now shows only organizations with values for the selected use case by default, with how many values each has and when one was last written, most recently written first. Staff can switch to every organization or sort oldest first, and the state counts follow the filter.
+- 637f8cc: The Agent Feedback tab, the MCP feedback API description and the `mcp_feedback.submitted_v1` webhook payload now say that secrets and personal data in a report are masked on a best-effort basis, so some may remain.
+- 5db6470: Removing a workload's credential policy at gateway admission is now safe to repeat: a second removal keeps the agent and owner policies in place.
+- 53c7c45: Signed-in MCP gateways use the upstream registration assigned to each hosted server. A hosted tool that requires an upstream connection does not run without its own usable credential.
+- b5a3729: Hosted MCP servers use the upstream registration assigned to that server. When setup is incomplete, consent asks an administrator to assign a registration or explicitly choose No upstream authentication without changing downstream sign-in.
+  
+  Removed the internal `remoteSessionClients.attachUserSessionIssuer`, `remoteSessionClients.detachUserSessionIssuer`, and `organizationUserSessionIssuers.listRemoteSessionClientBindings` RPCs. Use the server-scoped `remoteSessions.attachServerClientAssociation`, `remoteSessions.detachServerClientAssociation`, and `remoteSessions.listServerClientAssociations` operations to manage explicit placements. Those operations do not edit issuer-wide bindings.
+- 9f8cbba: Model completion spans now record which upstream provider served the call, the time to the first streamed chunk, and the reasoning and cached token counts.
+- b723114: Fix the Platform MCP consent page blocking the redirect back to ChatGPT after "Give access". Chrome checks the page's `form-action` policy on every redirect after the form posts, and ChatGPT's callback redirects onward to another origin, so the browser blocked the navigation. The page no longer sets `form-action`, matching the MCP consent page.
+- 33f2e27: Fix the Platform MCP consent page needing two clicks. Its script was inline, which the production content security policy blocks, so "Give access" gave no feedback and a second click reused the already-spent link and showed "This connection link expired or was already used." The script is now served as a separate file, so the button disables and shows "Connecting…" after the first click.
+- 00f6da4: The Project Assistant now finds its tools with less overhead. Tool search sends the full tool catalog once per turn, no longer repeats schemas it already returned that turn, leaves the per-server tool lists out, and lists oversized schemas by name instead of returning them in full. The assistant's instructions now say which Platform MCP tools to start with for project health, failures, usage and recent activity, to say plainly when no tool reports what was asked, and to keep answers short.
+- 976756c: A permission rule whose resource is the nil UUID (`00000000-0000-0000-0000-000000000000`) is now refused when saved, for roles, direct grants and agent policies. Such a rule could never match a real resource.
+- 3b8fbeb: Remove the legacy managed-assistant platform toolset and the `assistant-platform-mcp` rollout flag. The project's managed assistant now always gets the Platform MCP read toolset, which every organization already used, and its system prompt now names the Platform MCP tools instead of the removed `platform_*` tools. The changelog tool has no Platform MCP counterpart yet, so the prompt no longer mentions it. The Speakeasy Slack toolset and the base assistant toolset (memory, skills, triggers) are unchanged.
+- 567072c: Claude Code and Cowork session titles now come from what the user asked, not from the system reminders those apps add to the start of a prompt. Sessions are no longer named after connected-folder setup, and their titles no longer show raw `<system-reminder>` text.
+- 05c984d: Suspected problems where every person's app asked for a connection on a server that is missing, has expired, or can no longer be used now say "N people need to connect an account for <server>" instead of "can't sign in", and say that a connection link their app shows can fix it. Problems each person fixes themselves are now listed after the rest, and each problem can say who has to fix it (`who_fixes`). A seeded demo or local organization whose logs feature is newer than its seeded connection events has it moved back once, then left alone, so its seeded suspected problems are listed.
+- 30a2fe8: A tool call check carrying a disposition the permission model does not know is now an invalid check, like any other malformed check, instead of being matched as if it were a known disposition.
+- f188e6f: Suspected problems no longer list a person as unable to sign in to a server once that person gets in on that server again. For an app that names no client, any later sign-in or served request by the person there counts, except the Speakeasy dashboard's own sign-in. For a named app, the same app counts under any app key.
+
 ## 2.43.0
 
 ### Minor Changes

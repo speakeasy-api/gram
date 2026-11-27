@@ -66,7 +66,8 @@ func newReconsentFixture(t *testing.T, slug string) (context.Context, reconsentF
 	r := reconsentFixture{authClientTokenFixture: f, member: f.member(t, ctx)}
 	r.otherOrg, r.otherProject, r.otherSignIn = f.otherOrganizationSignIn(t, ctx, slug+"-b")
 	r.issuerID = seedGlobalRemoteIssuer(t, ctx, f.ti.conn, slug+"-rsi")
-	r.clientID = seedRemoteClientAtTier(t, ctx, f.ti.conn, uuid.NullUUID{}, pgtype.Text{}, r.issuerID, slug+"-client", f.signInA, r.otherSignIn)
+	r.clientID = seedRemoteClientAtTier(t, ctx, f.ti.conn, uuid.NullUUID{}, pgtype.Text{}, r.issuerID, slug+"-client", f.signInA)
+	placeClientForSignInInProject(t, ctx, f.ti.conn, r.otherProject, r.otherOrg, r.clientID, r.otherSignIn)
 	agent, err := agentsrepo.New(f.ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: f.organizationID, OwnerUserID: r.member.ID, ProjectID: conv.ToNullUUID(f.projectID), Name: slug})
 	require.NoError(t, err)
 	r.agentID = agent.ID

@@ -3620,6 +3620,83 @@ func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody stri
 	return v, nil
 }
 
+// BuildGetSecretBackfillsPayload builds the payload for the admin
+// getSecretBackfills endpoint from CLI flags.
+func BuildGetSecretBackfillsPayload(adminGetSecretBackfillsAdminSessionToken string) (*admin.GetSecretBackfillsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSecretBackfillsAdminSessionToken != "" {
+			adminSessionToken = &adminGetSecretBackfillsAdminSessionToken
+		}
+	}
+	v := &admin.GetSecretBackfillsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunMarketplaceTokenBackfillPayload builds the payload for the admin
+// runMarketplaceTokenBackfill endpoint from CLI flags.
+func BuildRunMarketplaceTokenBackfillPayload(adminRunMarketplaceTokenBackfillBody string, adminRunMarketplaceTokenBackfillAdminSessionToken string) (*admin.RunMarketplaceTokenBackfillPayload, error) {
+	var err error
+	var body RunMarketplaceTokenBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunMarketplaceTokenBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\",\n      \"platform_key_fingerprint\": \"aa\"\n   }'")
+		}
+		if body.OrganizationID != nil {
+			if utf8.RuneCountInString(*body.OrganizationID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.organization_id", *body.OrganizationID, utf8.RuneCountInString(*body.OrganizationID), 1, true))
+			}
+		}
+		if utf8.RuneCountInString(body.PlatformKeyFingerprint) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.platform_key_fingerprint", body.PlatformKeyFingerprint, utf8.RuneCountInString(body.PlatformKeyFingerprint), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunMarketplaceTokenBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunMarketplaceTokenBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunMarketplaceTokenBackfillPayload{
+		OrganizationID:         body.OrganizationID,
+		PlatformKeyFingerprint: body.PlatformKeyFingerprint,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunRunnerKeyOrganizationBackfillPayload builds the payload for the
+// admin runRunnerKeyOrganizationBackfill endpoint from CLI flags.
+func BuildRunRunnerKeyOrganizationBackfillPayload(adminRunRunnerKeyOrganizationBackfillBody string, adminRunRunnerKeyOrganizationBackfillAdminSessionToken string) (*admin.RunRunnerKeyOrganizationBackfillPayload, error) {
+	var err error
+	var body RunRunnerKeyOrganizationBackfillRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunRunnerKeyOrganizationBackfillBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"aa\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunRunnerKeyOrganizationBackfillAdminSessionToken != "" {
+			adminSessionToken = &adminRunRunnerKeyOrganizationBackfillAdminSessionToken
+		}
+	}
+	v := &admin.RunRunnerKeyOrganizationBackfillPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetProjectRedeployPreviewPayload builds the payload for the admin
 // getProjectRedeployPreview endpoint from CLI flags.
 func BuildGetProjectRedeployPreviewPayload(adminGetProjectRedeployPreviewOrganizationID string, adminGetProjectRedeployPreviewProjectID string, adminGetProjectRedeployPreviewAdminSessionToken string) (*admin.GetProjectRedeployPreviewPayload, error) {
@@ -4145,6 +4222,21 @@ func BuildGetHooksRolloutPayload(adminGetHooksRolloutAdminSessionToken string) (
 	return v, nil
 }
 
+// BuildGetHooksReleaseProgressPayload builds the payload for the admin
+// getHooksReleaseProgress endpoint from CLI flags.
+func BuildGetHooksReleaseProgressPayload(adminGetHooksReleaseProgressAdminSessionToken string) (*admin.GetHooksReleaseProgressPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetHooksReleaseProgressAdminSessionToken != "" {
+			adminSessionToken = &adminGetHooksReleaseProgressAdminSessionToken
+		}
+	}
+	v := &admin.GetHooksReleaseProgressPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildSetHooksRolloutDefaultPayload builds the payload for the admin
 // setHooksRolloutDefault endpoint from CLI flags.
 func BuildSetHooksRolloutDefaultPayload(adminSetHooksRolloutDefaultBody string, adminSetHooksRolloutDefaultAdminSessionToken string) (*admin.SetHooksRolloutDefaultPayload, error) {
@@ -4328,7 +4420,7 @@ func BuildGetOrganizationEncryptionPayload(adminGetOrganizationEncryptionOrganiz
 
 // BuildListOrganizationEncryptionTransitionsPayload builds the payload for the
 // admin listOrganizationEncryptionTransitions endpoint from CLI flags.
-func BuildListOrganizationEncryptionTransitionsPayload(adminListOrganizationEncryptionTransitionsUseCase string, adminListOrganizationEncryptionTransitionsState string, adminListOrganizationEncryptionTransitionsLimit string, adminListOrganizationEncryptionTransitionsOffset string, adminListOrganizationEncryptionTransitionsAdminSessionToken string) (*admin.ListOrganizationEncryptionTransitionsPayload, error) {
+func BuildListOrganizationEncryptionTransitionsPayload(adminListOrganizationEncryptionTransitionsUseCase string, adminListOrganizationEncryptionTransitionsState string, adminListOrganizationEncryptionTransitionsValues string, adminListOrganizationEncryptionTransitionsSort string, adminListOrganizationEncryptionTransitionsLimit string, adminListOrganizationEncryptionTransitionsOffset string, adminListOrganizationEncryptionTransitionsAdminSessionToken string) (*admin.ListOrganizationEncryptionTransitionsPayload, error) {
 	var err error
 	var useCase *string
 	{
@@ -4342,6 +4434,30 @@ func BuildListOrganizationEncryptionTransitionsPayload(adminListOrganizationEncr
 			state = &adminListOrganizationEncryptionTransitionsState
 			if !(*state == "platform_key" || *state == "dual_write" || *state == "org_kms") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("state", *state, []any{"platform_key", "dual_write", "org_kms"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var values string
+	{
+		if adminListOrganizationEncryptionTransitionsValues != "" {
+			values = adminListOrganizationEncryptionTransitionsValues
+			if !(values == "present" || values == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("values", values, []any{"present", "all"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort string
+	{
+		if adminListOrganizationEncryptionTransitionsSort != "" {
+			sort = adminListOrganizationEncryptionTransitionsSort
+			if !(sort == "last_written" || sort == "oldest") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"last_written", "oldest"}))
 			}
 			if err != nil {
 				return nil, err
@@ -4394,6 +4510,8 @@ func BuildListOrganizationEncryptionTransitionsPayload(adminListOrganizationEncr
 	v := &admin.ListOrganizationEncryptionTransitionsPayload{}
 	v.UseCase = useCase
 	v.State = state
+	v.Values = values
+	v.Sort = sort
 	v.Limit = limit
 	v.Offset = offset
 	v.AdminSessionToken = adminSessionToken

@@ -21,21 +21,28 @@ WHERE c.id IN (
     JOIN projects AS tp ON tp.id = target.project_id
     JOIN organization_metadata AS om ON om.id = tp.organization_id
     WHERE target.organization_id IS NULL
+      AND ($1::text IS NULL OR tp.organization_id = $1::text)
     ORDER BY target.id
-    LIMIT $1
+    LIMIT $2
   )
   AND p.id = c.project_id
   AND c.organization_id IS NULL
 `
 
+type AttributeGitHubConnectionsParams struct {
+	OrganizationID pgtype.Text
+	LimitValue     int32
+}
+
 // The backfill's first step: copies each project's organization onto up to
 // limit connections stored without one, so every later write fences on the
-// right organization. projects.organization_id has no foreign key, so a
-// project whose organization has no metadata row is never picked: its
+// right organization. With organization_id set, it picks only connections of
+// that organization's projects. projects.organization_id has no foreign key,
+// so a project whose organization has no metadata row is never picked: its
 // connection keeps a NULL organization_id and counts as unattributed. It
 // writes no token column, and updated_at stays the last-published timestamp.
-func (q *Queries) AttributeGitHubConnections(ctx context.Context, limitValue int32) (int64, error) {
-	result, err := q.db.Exec(ctx, attributeGitHubConnections, limitValue)
+func (q *Queries) AttributeGitHubConnections(ctx context.Context, arg AttributeGitHubConnectionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributeGitHubConnections, arg.OrganizationID, arg.LimitValue)
 	if err != nil {
 		return 0, err
 	}
@@ -94,23 +101,41 @@ func (q *Queries) ClearMarketplaceTokenPlatformCopies(ctx context.Context, arg C
 
 const countMarketplaceTokenBackfill = `-- name: CountMarketplaceTokenBackfill :one
 SELECT
-    COUNT(*) FILTER (WHERE c.organization_id IS NULL)::bigint AS unattributed,
-    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy,
-    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed
+    COUNT(*) FILTER (WHERE c.organization_id IS NULL AND om.id IS NOT NULL)::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL AND om.id IS NOT NULL)::bigint AS legacy,
+    COUNT(*) FILTER (WHERE c.marketplace_token_hash IS NOT NULL)::bigint AS hashed,
+    COUNT(*) FILTER (WHERE om.id IS NULL)::bigint AS missing_organization
 FROM plugin_github_connections AS c
+LEFT JOIN projects AS p ON p.id = c.project_id
+LEFT JOIN organization_metadata AS om ON om.id = p.organization_id
+WHERE $1::text IS NULL
+   OR COALESCE(c.organization_id, p.organization_id) = $1::text
 `
 
 type CountMarketplaceTokenBackfillRow struct {
-	Unattributed int64
-	Legacy       int64
-	Hashed       int64
+	Unattributed        int64
+	Legacy              int64
+	Hashed              int64
+	MissingOrganization int64
 }
 
-// What the backfill has left to do across every organization.
-func (q *Queries) CountMarketplaceTokenBackfill(ctx context.Context) (CountMarketplaceTokenBackfillRow, error) {
-	row := q.db.QueryRow(ctx, countMarketplaceTokenBackfill)
+// What the backfill has left to do across every organization, or in one
+// organization when organization_id is set. A connection without an
+// organization_id belongs to its project's organization. A connection whose
+// project's organization has no metadata row counts only as
+// missing_organization: the backfill can neither attribute it nor move its
+// plaintext token. projects.organization_id has no foreign key, so such a
+// project can exist; a connection with an organization_id always has a
+// metadata row, through plugin_github_connections_organization_id_fkey.
+func (q *Queries) CountMarketplaceTokenBackfill(ctx context.Context, organizationID pgtype.Text) (CountMarketplaceTokenBackfillRow, error) {
+	row := q.db.QueryRow(ctx, countMarketplaceTokenBackfill, organizationID)
 	var i CountMarketplaceTokenBackfillRow
-	err := row.Scan(&i.Unattributed, &i.Legacy, &i.Hashed)
+	err := row.Scan(
+		&i.Unattributed,
+		&i.Legacy,
+		&i.Hashed,
+		&i.MissingOrganization,
+	)
 	return i, err
 }
 
@@ -142,7 +167,15 @@ SELECT
     COUNT(*) FILTER (
         WHERE c.organization_id = $1::text
           AND c.marketplace_token_encrypted IS NOT NULL
-    )::bigint AS platform_copies
+    )::bigint AS platform_copies,
+    COUNT(*) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::bigint AS value_count,
+    MAX(c.updated_at) FILTER (
+        WHERE c.organization_id = $1::text
+          AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+    )::timestamptz AS last_written_at
 FROM plugin_github_connections AS c
 LEFT JOIN projects AS p ON p.id = c.project_id
 LEFT JOIN organization_encryption_unreadable_values AS u
@@ -160,6 +193,8 @@ type CountMarketplaceTokenCopiesRow struct {
 	Unreadable     int64
 	Unattributed   int64
 	PlatformCopies int64
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
 }
 
 // The organization's token counts for the organization encryption backfill and
@@ -169,6 +204,9 @@ type CountMarketplaceTokenCopiesRow struct {
 // connections of the organization's projects stored without organization_id,
 // and connections that still hold a plaintext token the marketplace token
 // backfill has not moved. Either keeps the organization from finalizing.
+// value_count and last_written_at cover every row of the organization storing
+// a value under either key, soft-deleted rows included, as
+// ListOrganizationsWith* reports them.
 func (q *Queries) CountMarketplaceTokenCopies(ctx context.Context, organizationID string) (CountMarketplaceTokenCopiesRow, error) {
 	row := q.db.QueryRow(ctx, countMarketplaceTokenCopies, organizationID)
 	var i CountMarketplaceTokenCopiesRow
@@ -177,6 +215,8 @@ func (q *Queries) CountMarketplaceTokenCopies(ctx context.Context, organizationI
 		&i.Unreadable,
 		&i.Unattributed,
 		&i.PlatformCopies,
+		&i.ValueCount,
+		&i.LastWrittenAt,
 	)
 	return i, err
 }
@@ -215,14 +255,16 @@ SELECT c.id, c.organization_id::text AS organization_id, c.marketplace_token::te
 FROM plugin_github_connections AS c
 WHERE c.marketplace_token IS NOT NULL
   AND c.organization_id IS NOT NULL
-  AND ($1::uuid IS NULL OR c.id > $1::uuid)
+  AND ($1::text IS NULL OR c.organization_id = $1::text)
+  AND ($2::uuid IS NULL OR c.id > $2::uuid)
 ORDER BY c.id
-LIMIT $2
+LIMIT $3
 `
 
 type ListLegacyMarketplaceTokensParams struct {
-	After      uuid.NullUUID
-	LimitValue int32
+	OrganizationID pgtype.Text
+	After          uuid.NullUUID
+	LimitValue     int32
 }
 
 type ListLegacyMarketplaceTokensRow struct {
@@ -232,10 +274,10 @@ type ListLegacyMarketplaceTokensRow struct {
 }
 
 // The backfill's next page of connections that still hold a plaintext token,
-// paged by id. Connections without an organization are left to
-// AttributeGitHubConnections.
+// paged by id, of one organization when organization_id is set. Connections
+// without an organization are left to AttributeGitHubConnections.
 func (q *Queries) ListLegacyMarketplaceTokens(ctx context.Context, arg ListLegacyMarketplaceTokensParams) ([]ListLegacyMarketplaceTokensRow, error) {
-	rows, err := q.db.Query(ctx, listLegacyMarketplaceTokens, arg.After, arg.LimitValue)
+	rows, err := q.db.Query(ctx, listLegacyMarketplaceTokens, arg.OrganizationID, arg.After, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
@@ -244,6 +286,60 @@ func (q *Queries) ListLegacyMarketplaceTokens(ctx context.Context, arg ListLegac
 	for rows.Next() {
 		var i ListLegacyMarketplaceTokensRow
 		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.LegacyToken); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMarketplaceTokenBackfillOrganizations = `-- name: ListMarketplaceTokenBackfillOrganizations :many
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    COUNT(*) FILTER (WHERE c.organization_id IS NULL)::bigint AS unattributed,
+    COUNT(*) FILTER (WHERE c.marketplace_token IS NOT NULL)::bigint AS legacy
+FROM plugin_github_connections AS c
+LEFT JOIN projects AS p ON p.id = c.project_id
+JOIN organization_metadata AS om ON om.id = COALESCE(c.organization_id, p.organization_id)
+WHERE c.organization_id IS NULL OR c.marketplace_token IS NOT NULL
+GROUP BY om.id, om.name, om.slug
+ORDER BY om.name, om.id
+`
+
+type ListMarketplaceTokenBackfillOrganizationsRow struct {
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	Unattributed     int64
+	Legacy           int64
+}
+
+// The organizations the backfill has work left in, with how much: connections
+// without an organization_id and plaintext tokens. A connection without an
+// organization_id belongs to its project's organization. Organizations without
+// a metadata row are left out, because the backfill cannot attribute their
+// connections.
+func (q *Queries) ListMarketplaceTokenBackfillOrganizations(ctx context.Context) ([]ListMarketplaceTokenBackfillOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, listMarketplaceTokenBackfillOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMarketplaceTokenBackfillOrganizationsRow
+	for rows.Next() {
+		var i ListMarketplaceTokenBackfillOrganizationsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Unattributed,
+			&i.Legacy,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -333,6 +429,46 @@ func (q *Queries) ListMarketplaceTokensWaiting(ctx context.Context, arg ListMark
 	for rows.Next() {
 		var i ListMarketplaceTokensWaitingRow
 		if err := rows.Scan(&i.ID, &i.PlatformCopy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithMarketplaceTokens = `-- name: ListOrganizationsWithMarketplaceTokens :many
+SELECT
+    c.organization_id::text AS organization_id,
+    COUNT(*)::bigint AS value_count,
+    MAX(c.updated_at)::timestamptz AS last_written_at
+FROM plugin_github_connections AS c
+WHERE c.organization_id IS NOT NULL
+  AND (c.marketplace_token_encrypted IS NOT NULL OR c.marketplace_token_org_encrypted IS NOT NULL)
+GROUP BY c.organization_id
+`
+
+type ListOrganizationsWithMarketplaceTokensRow struct {
+	OrganizationID string
+	ValueCount     int64
+	LastWrittenAt  pgtype.Timestamptz
+}
+
+// Every organization storing a marketplace token under either key,
+// soft-deleted rows included, with how many and the latest updated_at of the
+// rows storing them. Rows without organization_id are left out.
+func (q *Queries) ListOrganizationsWithMarketplaceTokens(ctx context.Context) ([]ListOrganizationsWithMarketplaceTokensRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithMarketplaceTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsWithMarketplaceTokensRow
+	for rows.Next() {
+		var i ListOrganizationsWithMarketplaceTokensRow
+		if err := rows.Scan(&i.OrganizationID, &i.ValueCount, &i.LastWrittenAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

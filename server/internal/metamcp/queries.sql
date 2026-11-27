@@ -267,6 +267,13 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    EXISTS (
+        SELECT 1
+        FROM mcp_server_feedback_configs AS feedback
+        WHERE feedback.mcp_server_id = s.id
+          AND feedback.project_id = s.project_id
+          AND feedback.enabled
+    ) AS mcp_server_feedback_tool_enabled,
     ARRAY(
         SELECT DISTINCT c.remote_session_issuer_id
         FROM mcp_server_remote_session_clients AS a
@@ -559,145 +566,6 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
 ORDER BY m.sort_order, m.created_at, m.id, a.remote_session_client_id;
-
--- name: AutoAttachMemberProviderClient :execrows
--- Bind the client the member is associated with to the gateway's issuer so
--- consent can offer the member's provider. A member can hold several clients
--- of one upstream, one per gateway it joined, so the client on its own issuer
--- wins, then the oldest. No-op when the gateway's issuer already holds a client
--- for that upstream (one client per upstream per issuer), or when the member
--- has no live association to the upstream. Tenancy mirrors the resync
--- derivation: the member's own project client, or an org-level client.
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT c.id, @gateway_issuer_id
-FROM mcp_server_remote_session_clients AS a
-JOIN remote_session_clients AS c
-  ON c.id = a.remote_session_client_id
-JOIN mcp_servers AS s
-  ON s.id = a.mcp_server_id
- AND s.project_id = a.project_id
-JOIN projects AS p
-  ON p.id = @project_id
-LEFT JOIN remote_session_client_user_session_issuers AS own
-  ON own.remote_session_client_id = c.id
- AND own.user_session_issuer_id = s.user_session_issuer_id
-WHERE a.mcp_server_id = @member_server_id
-  AND a.project_id = @project_id
-  AND a.deleted IS FALSE
-  AND c.remote_session_issuer_id = @remote_issuer_id
-  AND c.deleted IS FALSE
-  AND (c.project_id = @project_id
-       OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
-  AND NOT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS l2
-    JOIN remote_session_clients AS c2
-      ON c2.id = l2.remote_session_client_id
-     AND c2.deleted IS FALSE
-    WHERE l2.user_session_issuer_id = @gateway_issuer_id
-      AND c2.remote_session_issuer_id = @remote_issuer_id
-  )
-ORDER BY own.remote_session_client_id IS NULL, c.created_at
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
--- name: CountServersOnGatewayIssuer :one
--- Live servers signing in directly through a gateway's issuer, across the
--- organization because an issuer can be organization-level. A gateway's issuer
--- is expected to serve only gateways, so this should be zero.
-SELECT count(*)
-FROM mcp_servers AS s
-JOIN projects AS p
-  ON p.id = s.project_id
- AND p.organization_id = @organization_id
- AND p.deleted IS FALSE
-WHERE s.user_session_issuer_id = @gateway_issuer_id
-  AND s.deleted IS FALSE;
-
--- name: LockMemberProviderClientParents :exec
--- Lock parents before the attachment check in the delete's fresh snapshot.
-SELECT l.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS l
-JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
-WHERE l.user_session_issuer_id = @gateway_issuer_id
-  AND c.remote_session_issuer_id = @remote_issuer_id
-  AND EXISTS (
-    SELECT 1
-    FROM projects AS p
-    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
-    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
-      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
-      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
-  )
-ORDER BY l.remote_session_client_id
-FOR UPDATE OF l;
-
--- name: AutoDetachMemberProviderClient :execrows
--- Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
--- client(s) for a removed member's upstream so the provider stops appearing on
--- the gateway's consent screen. The binding is scoped to the user_session_issuer,
--- so it must survive as long as ANY live member of a meta server on the issuer
--- (issuers can be shared across gateways) still fronts the upstream. Callers
--- must check CountServersOnGatewayIssuer first: a server directly on the issuer
--- has no association to prove which provider it uses.
--- Run after the member row is soft-deleted so the just-removed member is
--- already excluded by the deleted filter below.
-DELETE FROM remote_session_client_user_session_issuers AS l
-USING remote_session_clients AS c
-WHERE l.remote_session_client_id = c.id
-  AND l.user_session_issuer_id = @gateway_issuer_id
-  AND c.remote_session_issuer_id = @remote_issuer_id
-  AND EXISTS (
-    SELECT 1
-    FROM projects AS p
-    JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
-    WHERE p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
-      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
-      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id = p.organization_id OR c.organization_id IS NULL)))
-  )
-  -- This is mirror cleanup, not a principal attachment revocation.
-  AND NOT EXISTS (
-    SELECT 1 FROM principal_remote_session_bindings AS binding
-    WHERE binding.remote_session_client_id = l.remote_session_client_id
-      AND binding.user_session_issuer_id = l.user_session_issuer_id
-      AND binding.revoked_at IS NULL
-  )
-  AND NOT EXISTS (
-    -- Project-owned links are local. A shared client on an organization
-    -- issuer must keep its link for consumers in every live project.
-    SELECT 1
-    FROM mcp_servers AS s
-    JOIN projects AS consumer_project
-      ON consumer_project.id = s.project_id
-     AND consumer_project.organization_id = @organization_id::text
-     AND NOT consumer_project.deleted
-    JOIN mcp_server_remote_session_clients AS a
-      ON a.mcp_server_id = s.id
-     AND a.project_id = s.project_id
-     AND a.deleted IS FALSE
-    JOIN remote_session_clients AS consumer_client
-      ON consumer_client.id = a.remote_session_client_id
-     AND consumer_client.remote_session_issuer_id = @remote_issuer_id
-     AND consumer_client.deleted IS FALSE
-    JOIN remote_session_issuers AS provider
-      ON provider.id = consumer_client.remote_session_issuer_id
-     AND provider.deleted IS FALSE
-    JOIN meta_mcp_server_members AS m
-      ON m.project_id = s.project_id
-     AND m.mcp_server_id = s.id
-     AND m.deleted IS FALSE
-    JOIN meta_mcp_servers AS mm
-      ON mm.project_id = m.project_id
-     AND mm.id = m.meta_mcp_server_id
-     AND mm.organization_id = consumer_project.organization_id
-     AND mm.deleted IS FALSE
-    JOIN user_session_issuers AS gateway_issuer
-      ON gateway_issuer.id = mm.user_session_issuer_id
-     AND (gateway_issuer.project_id = s.project_id OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = consumer_project.organization_id))
-    WHERE s.deleted IS FALSE
-      AND (c.project_id IS NULL OR c.project_id = s.project_id)
-      AND mm.user_session_issuer_id = @gateway_issuer_id
-  );
 
 -- name: ListMemberProviderIdentities :many
 -- Each live member's provider, for re-running consent wiring when the gateway's issuer changes. The provider

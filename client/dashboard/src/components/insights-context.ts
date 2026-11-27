@@ -26,8 +26,10 @@ export interface InsightsContextValue {
   setOverride: (override: InsightsConfigOptions | null) => void;
   /** Queue a prompt to be auto-appended to the Insights chat thread.
    *  Fires once per call — intended for "Explore with AI" CTAs that should
-   *  drop the user straight into a running conversation. */
-  sendPrompt: (prompt: string) => void;
+   *  drop the user straight into a running conversation. Starts a fresh
+   *  conversation unless `newConversation: false`, which continues the
+   *  current one (e.g. the homepage terminal's widgets). */
+  sendPrompt: (prompt: string, options?: { newConversation?: boolean }) => void;
   /** True once the shared Project Assistant runtime is mounted. Surfaces
    *  (e.g. the full-page chat) gate on this before rendering chat UI that
    *  needs the runtime. */
