@@ -444,3 +444,8 @@ func (s *Service) ConsentSwitched(ctx context.Context, stateID string) bool {
 func AgentConnectionsOutageError(w http.ResponseWriter, err error) error {
 	return agentConnectionsOutage(remoteSessionUnavailableError(w, err), err)
 }
+
+// SetDirectWorkloadClock swaps the clock read by the direct-bearer Stage-1 cache.
+func (s *Service) SetDirectWorkloadClock(now func() time.Time) {
+	s.directWorkloadCache.setClock(now)
+}

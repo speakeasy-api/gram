@@ -475,6 +475,8 @@ func issuerGateFailureReason(err error) string {
 		return "workload_session_load_failed"
 	case errors.Is(err, errWorkloadSessionAdmissionLoad):
 		return "workload_admission_load_failed"
+	case errors.Is(err, errDirectWorkloadUnavailable):
+		return "direct_workload_unavailable"
 	case errors.Is(err, sessiontokens.ErrRevocationUnavailable):
 		return issuerGateReasonRevocationUnavailable
 	case errors.Is(err, errWorkloadSessionOutOfReach):
@@ -498,7 +500,7 @@ func issuerGateCheckUnavailable(ctx context.Context, err error) bool {
 	if ctx.Err() == nil && oops.IsInfrastructureFailure(err) {
 		return true
 	}
-	return errors.Is(err, sessiontokens.ErrRevocationUnavailable)
+	return errors.Is(err, sessiontokens.ErrRevocationUnavailable) || errors.Is(err, errDirectWorkloadUnavailable)
 }
 
 // credentialCheckFault reports a credential check that failed on our side without judging it.
@@ -1163,6 +1165,8 @@ func (s *Service) authenticateIssuerGate(
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
 	case principalcredential.IsToken(authToken):
 		valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	case isDirectWorkloadBearer(authToken):
+		newCtx, subject, valErr = s.authenticateIssuerGateDirectWorkload(ctx, authToken, endpoint)
 	default:
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}

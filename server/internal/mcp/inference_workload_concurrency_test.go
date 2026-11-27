@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +69,7 @@ func TestWorkloadInference_ConcurrentAssertionExchange(t *testing.T) {
 	renewedToken := requireWorkloadInferenceToken(t, f, issuer)
 	require.NotEqual(t, originalToken, renewedToken)
 	for _, token := range []string{originalToken, renewedToken} {
-		_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+		_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 		require.True(t, handled)
 		require.NoError(t, err)
 	}

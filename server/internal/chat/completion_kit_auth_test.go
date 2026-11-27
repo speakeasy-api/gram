@@ -103,7 +103,7 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, assistantsrepo.New(ti.conn).UpdateAssistantRuntimeMetadata(ctx, assistantsrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: ti.projectID, RuntimeID: runtimeID, BackendMetadataJson: metadata}))
 	effectiveAgent := resolved.AgentID
-	ti.service.WithWorkloadInference(kitWorkloadAuthorizer(func(ctx context.Context, token string) (context.Context, bool, error) {
+	ti.service.WithWorkloadInference(kitWorkloadAuthorizer(func(ctx context.Context, token string, _ uuid.UUID) (context.Context, bool, error) {
 		require.Equal(t, "verified-workload", token)
 		ac := &contextvalues.AuthContext{ActiveOrganizationID: ti.orgID, ProjectID: &ti.projectID}
 		ctx = contextvalues.WithAuthenticatedActor(ctx, ac, urn.NewWorkloadPrincipal(issuerID, subject))
@@ -177,10 +177,10 @@ func TestCompletionKitWorkloadAdmission(t *testing.T) {
 	requireKitAuthError(t, err, oops.CodeUnauthorized)
 }
 
-type kitWorkloadAuthorizer func(context.Context, string) (context.Context, bool, error)
+type kitWorkloadAuthorizer func(context.Context, string, uuid.UUID) (context.Context, bool, error)
 
-func (f kitWorkloadAuthorizer) AuthorizeWorkloadInference(ctx context.Context, token string) (context.Context, bool, error) {
-	return f(ctx, token)
+func (f kitWorkloadAuthorizer) AuthorizeWorkloadInference(ctx context.Context, token string, projectID uuid.UUID) (context.Context, bool, error) {
+	return f(ctx, token, projectID)
 }
 
 func requireKitAuthError(t *testing.T, err error, code oops.Code) {

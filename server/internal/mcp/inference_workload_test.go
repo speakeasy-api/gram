@@ -81,7 +81,7 @@ func TestWorkloadInference_ExchangeAndAuthorize(t *testing.T) {
 			require.Equal(t, issuer, claims["iss"])
 			require.Equal(t, []any{mcp.InferenceResource}, claims["aud"])
 			require.Equal(t, urn.NewWorkloadSubject(f.issuerID, f.subject).String(), claims["sub"])
-			ctx, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+			ctx, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 			require.NoError(t, err)
 			require.True(t, handled)
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -131,7 +131,7 @@ func TestWorkloadInference_LiveRevocation(t *testing.T) {
 			issuer := f.sharedIssuer(t)
 			agentGrant, ownerGrant := enableWorkloadInference(t, f)
 			token := requireWorkloadInferenceToken(t, f, issuer)
-			_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+			_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 			require.NoError(t, err)
 			require.True(t, handled)
 			switch change {
@@ -174,7 +174,7 @@ func TestWorkloadInference_LiveRevocation(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, int64(1), rows)
 			}
-			_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+			_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 			require.True(t, handled)
 			require.Error(t, err, "an already-issued token must observe revocation on the next request")
 		})
@@ -228,12 +228,13 @@ func TestWorkloadInference_RejectsOtherCredentials(t *testing.T) {
 	f := newWorkloadGrantFixture(t)
 	issuer := f.sharedIssuer(t)
 	enableWorkloadInference(t, f)
-	// A platform assertion is an exchange credential, not a completion credential.
-	_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), f.assertion(t, issuer))
-	require.NoError(t, err)
-	require.False(t, handled)
+	// A platform workload JWT on unscoped /chat/completions is classified as a
+	// workload bearer and refused without falling through to another identity.
+	_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), f.assertion(t, issuer), uuid.Nil)
+	require.True(t, handled)
+	require.Error(t, err)
 	// A platform signature cannot become a session signature by claiming the inference audience.
-	_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), f.assertion(t, mcp.InferenceResource))
+	_, handled, err = f.ti.service.AuthorizeWorkloadInference(t.Context(), f.assertion(t, mcp.InferenceResource), uuid.Nil)
 	require.True(t, handled)
 	require.Error(t, err)
 	for _, resource := range []string{"", f.resource} {
@@ -244,7 +245,7 @@ func TestWorkloadInference_RejectsOtherCredentials(t *testing.T) {
 		w := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		token := decodeSharedTokenResponse(t, w).AccessToken
-		_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+		_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 		require.NoError(t, err)
 		require.False(t, handled, "MCP-only credentials must not authenticate inference")
 	}

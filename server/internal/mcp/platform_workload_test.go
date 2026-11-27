@@ -41,7 +41,7 @@ func TestPlatformWorkloadResourceSeparation(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	_, err = servePlatformHTTP(t, f.ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a token for one builtin cannot reach another")
-	_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
+	_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
 	require.NoError(t, err)
 	require.False(t, handled, "platform token is not an inference credential")
 	_, _, _, err = f.ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, f.ti.serverURL.String(), workloadSessionEndpoint(f.fx))
