@@ -26,8 +26,15 @@ import (
 // URI.
 func seedDisabledFunctionsServer(t *testing.T) (context.Context, *testInstance, string, string, string) {
 	t.Helper()
+	return seedFunctionsServer(t, functions.Disabled{})
+}
 
-	ctx, ti, _ := newTestMCPServiceWithScanSpans(t, functions.Disabled{})
+// seedFunctionsServer is seedDisabledFunctionsServer with the orchestrator
+// chosen by the caller.
+func seedFunctionsServer(t *testing.T, orchestrator functions.ToolCaller) (context.Context, *testInstance, string, string, string) {
+	t.Helper()
+
+	ctx, ti, _ := newTestMCPServiceWithScanSpans(t, orchestrator)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID := *authCtx.ProjectID

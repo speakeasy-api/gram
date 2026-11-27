@@ -60,14 +60,29 @@ const (
 	// httpToolCallTimeout bounds a single outbound HTTP-tool request attempt.
 	httpToolCallTimeout = 60 * time.Second
 
-	// functionRunnerCallTimeout bounds a single function-runner request attempt.
-	// It sits above the runner's 5-minute per-tool-call execution budget (see
-	// functions/internal/runner/handle_tool_call.go) plus slack so the runner's
-	// own timeout fires first and returns a proper response, rather than the
-	// caller cancelling mid-execution (which yields a non-retryable
-	// context.DeadlineExceeded and a PP03 at the Fly edge).
-	functionRunnerCallTimeout = 6 * time.Minute
+	// functionRunnerCallSlack is how much longer a function-runner request
+	// attempt may take than the invocation's own limit. It covers machine
+	// start, admission and process spawn so the runner's timeout (see
+	// functions/internal/runner/timeout.go) fires first and returns a proper
+	// response, rather than the caller cancelling mid-execution (which yields
+	// a non-retryable context.DeadlineExceeded and a PP03 at the Fly edge).
+	functionRunnerCallSlack = 30 * time.Second
 )
+
+// functionTimeoutSeconds returns the invocation limit a plan carries, or the
+// platform default when the plan carries none in the allowed range.
+func functionTimeoutSeconds(planSeconds int) int {
+	if !constants.IsFunctionTimeoutSeconds(planSeconds) {
+		return constants.DefaultFunctionTimeoutSeconds
+	}
+	return planSeconds
+}
+
+// functionRunnerCallTimeout bounds one function-runner request attempt for an
+// invocation limited to timeoutSeconds.
+func functionRunnerCallTimeout(timeoutSeconds int) time.Duration {
+	return time.Duration(timeoutSeconds)*time.Second + functionRunnerCallSlack
+}
 
 var proxiedHeaders = []string{
 	"Cache-Control",
@@ -469,6 +484,7 @@ func (tp *ToolProxy) doFunction(
 	// fails, the missing variables are the cause the caller can act on, not
 	// the runner's validation dump.
 	missingVariables := missingFunctionVariables(plan.Variables, payloadEnv)
+	timeoutSeconds := functionTimeoutSeconds(plan.TimeoutSeconds)
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
@@ -482,6 +498,7 @@ func (tp *ToolProxy) doFunction(
 			FunctionsAccessID: accessID,
 			Input:             input,
 			Environment:       payloadEnv,
+			TimeoutSeconds:    timeoutSeconds,
 		},
 		ToolURN:  descriptor.URN,
 		ToolName: descriptor.Name,
@@ -551,7 +568,7 @@ func (tp *ToolProxy) doFunction(
 			return oops.E(oops.CodeFailedPrecondition, nil, "server not configured: missing environment variables %s", strings.Join(missingVariables, ", ")).LogWarn(ctx, logger)
 		},
 		RetryConfig:       functionRunnerRetryConfig(),
-		Timeout:           functionRunnerCallTimeout,
+		Timeout:           functionRunnerCallTimeout(timeoutSeconds),
 		DisableKeepAlives: true,
 		ID:                descriptor.ID,
 		Name:              descriptor.Name,

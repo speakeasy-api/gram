@@ -51,6 +51,9 @@ type CallToolPayload struct {
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 	Meta        *ToolCallMeta     `json:"_meta,omitempty"`
+	// TimeoutSeconds is how long the invocation may run. The runner strips it
+	// before the request reaches the function.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 // ToolCallMeta carries per-call metadata about the caller, keyed the way MCP
@@ -79,6 +82,9 @@ type ReadResourcePayload struct {
 	URI         string            `json:"uri"`
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
+	// TimeoutSeconds is how long the invocation may run. The runner strips it
+	// before the request reaches the function.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, keys *runnerkeys.Keys, token string, scheme *security.JWTScheme) (context.Context, error) {

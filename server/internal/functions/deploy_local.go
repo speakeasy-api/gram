@@ -121,10 +121,11 @@ func (l *LocalRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (
 	}
 
 	payload, err := json.Marshal(CallToolPayload{
-		ToolName:    req.ToolName,
-		Input:       req.Input,
-		Environment: req.Environment,
-		Meta:        req.Meta,
+		ToolName:       req.ToolName,
+		Input:          req.Input,
+		Environment:    req.Environment,
+		Meta:           req.Meta,
+		TimeoutSeconds: req.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function tool payload").LogError(ctx, logger)
@@ -180,9 +181,10 @@ func (l *LocalRunner) ReadResource(ctx context.Context, req RunnerResourceReadRe
 	}
 
 	payload, err := json.Marshal(ReadResourcePayload{
-		URI:         req.ResourceURI,
-		Input:       req.Input,
-		Environment: req.Environment,
+		URI:            req.ResourceURI,
+		Input:          req.Input,
+		Environment:    req.Environment,
+		TimeoutSeconds: req.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal local function read resource payload").LogError(ctx, logger)
