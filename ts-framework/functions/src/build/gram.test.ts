@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createZipArchive, pushArgs } from "./gram.ts";
+import { createZipArchive, profileDashboardURL, pushArgs } from "./gram.ts";
 
 let outDir: string;
 
@@ -75,3 +75,16 @@ test("pushArgs passes the configured project", () => {
 
   expect(args.slice(-2)).toEqual(["--project", "my-project"]);
 });
+
+test("profileDashboardURL links to the host the CLI profile uses", () => {
+  expect(profileDashboardURL("https://ai.eu.example.com/")).toBe(
+    "https://ai.eu.example.com",
+  );
+});
+
+test.each([undefined, "", "not a url", "ftp://example.com"])(
+  "profileDashboardURL falls back to the default dashboard for %j",
+  (apiURL) => {
+    expect(profileDashboardURL(apiURL)).toBe("https://app.getgram.ai");
+  },
+);

@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { clientServerURLOverride } from "@/lib/client-host";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
@@ -941,8 +942,12 @@ function PiInstallContent(): JSX.Element {
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
+  // Name this deployment's host when the binary's default does not reach it.
+  const hooksServerURL = clientServerURLOverride("hooks");
   const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
-speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
+speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug${
+    hooksServerURL ? ` --server-url=${hooksServerURL}` : ""
+  }`;
 
   const mcpConfig = `{
   "mcpServers": {
