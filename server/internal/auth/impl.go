@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgmetrics"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -173,6 +175,9 @@ type Service struct {
 	tokens               signins.TokenRevoker
 	deliverer            *signins.Deliverer
 
+	// orgsCreated counts organizations the provisioning flows insert.
+	orgsCreated *orgmetrics.Created
+
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
 	// target is allowed to name.
@@ -237,6 +242,7 @@ func NewService(
 		transferManager:      authsessions.NewTransferManager(nonceStore),
 		tokens:               nil,
 		deliverer:            signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
+		orgsCreated:          orgmetrics.NewCreated(logger, otel.GetMeterProvider()),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -1736,6 +1742,10 @@ func (s *Service) persistProvisionedOrganization(
 	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("recheck organization cap: %w", err)
 	}
+	// inserted records whether this transaction, rather than identity sync or a
+	// concurrent signup, wrote the organization row. Only then does it count
+	// as created, and only once the transaction commits.
+	inserted := false
 	if opts.StripePromotionCodeID != "" {
 		// The existing create-only primitive rejects a row already inserted by
 		// identity sync (or a concurrent signup). Attribution never adopts an org.
@@ -1744,9 +1754,10 @@ func (s *Service) persistProvisionedOrganization(
 		}); err != nil {
 			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create partner signup organization: %w", err)
 		}
+		inserted = true
 	}
 
-	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, upsertInserted, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,
@@ -1760,6 +1771,7 @@ func (s *Service) persistProvisionedOrganization(
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
 	}
+	inserted = inserted || upsertInserted
 
 	if _, err := queries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: org.ID,
@@ -1796,6 +1808,9 @@ func (s *Service) persistProvisionedOrganization(
 
 	if err := tx.Commit(ctx); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("commit organization provisioning transaction: %w", err)
+	}
+	if inserted {
+		s.orgsCreated.Record(ctx, orgmetrics.ProvisioningSource(opts.CreationSource))
 	}
 
 	return org, nil

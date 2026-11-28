@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -52,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgmetrics"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -112,6 +114,9 @@ type Service struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
+
+	// orgsCreated counts organizations staff create.
+	orgsCreated *orgmetrics.Created
 
 	// staffOrg is the deployment's Speakeasy staff organization, whose
 	// OpenRouter keys bypass the tier credit limits.
@@ -339,6 +344,7 @@ func NewService(
 		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
 		customDomainTargetSuffix: "",
 		staffOrg:                 staffOrg,
+		orgsCreated:              orgmetrics.NewCreated(logger, otel.GetMeterProvider()),
 	}
 }
 
@@ -1771,7 +1777,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	// already created this organization is updated rather than duplicated. The
 	// FromWorkOS variants of this query are for the sync path and would insert a
 	// second row here.
-	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, inserted, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:   created.GramOrganizationID,
 		Name: name,
 		Slug: uniqueSlug,
@@ -1809,6 +1815,11 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	// A row the WorkOS sync inserted first was counted there; this write only
+	// updated it.
+	if inserted {
+		s.orgsCreated.Record(ctx, orgmetrics.CreationSourcePlatformAdmin)
 	}
 
 	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")

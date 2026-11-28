@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgmetrics"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -156,6 +158,9 @@ type Resolver struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations membership sync creates.
 	newOrganizationDefaultHost pgtype.Text
+
+	// orgsCreated counts organizations membership sync inserts.
+	orgsCreated *orgmetrics.Created
 }
 
 func NewResolver(
@@ -189,6 +194,7 @@ func NewResolver(
 		growth:        growth,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		orgsCreated:                orgmetrics.NewCreated(logger, otel.GetMeterProvider()),
 	}
 }
 
@@ -758,7 +764,7 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		if err != nil {
 			return fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
 		}
-		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		_, inserted, err := r.orgRepo.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 			ID:          gramOrgID,
 			Name:        org.Name,
 			Slug:        uniqueSlug,
@@ -769,8 +775,14 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			// inserts first is filled in by the flow that did know.
 			CreationSource: pgtype.Text{String: "", Valid: false},
 			DefaultHost:    r.newOrganizationDefaultHost,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		}
+		// The upsert commits on its own. A provisioning flow or the WorkOS
+		// event sync that inserted the row first has already counted it.
+		if inserted {
+			r.orgsCreated.Record(ctx, orgmetrics.CreationSourceLoginMirror)
 		}
 	default:
 		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)

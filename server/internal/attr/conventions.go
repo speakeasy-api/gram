@@ -860,6 +860,10 @@ const (
 	OrganizationRoleAssignmentIDKey = attribute.Key("gram.org.role_assignment.id")
 	OrganizationIDKey               = attribute.Key("gram.org.id")
 	OrganizationSlugKey             = attribute.Key("gram.org.slug")
+	// OrganizationCreationSourceKey is the flow that inserted a new
+	// organization: a self-serve product flow, a platform admin, or one of the
+	// two WorkOS mirrors. Monitors query this key by name.
+	OrganizationCreationSourceKey   = attribute.Key("gram.organization.creation_source")
 	WorkOSOrganizationIDKey         = attribute.Key("gram.workos.organization_id")
 	WorkOSLinkedUserIDKey           = attribute.Key("gram.workos.linked_user_id")
 	WorkOSUserIDKey                 = attribute.Key("gram.workos.user_id")
@@ -3269,6 +3273,13 @@ func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(Org
 
 func OrganizationSlug(v string) attribute.KeyValue { return OrganizationSlugKey.String(v) }
 func SlogOrganizationSlug(v string) slog.Attr      { return slog.String(string(OrganizationSlugKey), v) }
+
+func OrganizationCreationSource[V ~string](v V) attribute.KeyValue {
+	return OrganizationCreationSourceKey.String(string(v))
+}
+func SlogOrganizationCreationSource[V ~string](v V) slog.Attr {
+	return slog.String(string(OrganizationCreationSourceKey), string(v))
+}
 
 func HookVersionStatus(v string) attribute.KeyValue { return HookVersionStatusKey.String(v) }
 
