@@ -1164,6 +1164,8 @@ func TestKitSteerRejectsIneligibleSenderOnNonSlackThread(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"elig-steer-session"}`)
 			case "session/prompt":
