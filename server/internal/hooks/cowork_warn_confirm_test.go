@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // dbChallengeScanner warns on every prompt and keeps challenges and
@@ -135,8 +136,6 @@ func TestIngest_CoworkPromptWarnLeadsWithShortLink(t *testing.T) {
 	require.NotContains(t, *first.Message, "ack_token=", "Cowork gets the short link, not the long one")
 	require.NotContains(t, *first.Message, "\x1b", "no terminal escapes in a web UI")
 
-	require.Equal(t, "deny", send(sentAt(36)).Decision, "sending it again does not confirm the warning")
-
 	// The person approves at the link, which marks the challenge acknowledged.
 	scanner, ok := ti.service.riskScanner.(*dbChallengeScanner)
 	require.True(t, ok)
@@ -155,6 +154,77 @@ func TestIngest_CoworkPromptWarnLeadsWithShortLink(t *testing.T) {
 
 	require.Equal(t, "allow", send(sentAt(37)).Decision, "the retry a minute later matches the approved prompt")
 	require.Equal(t, "deny", send(sentAt(37)+" and 472-81-3365").Decision, "a different prompt is challenged on its own")
+}
+
+// TestIngest_CoworkPromptWarnConfirmedByResend: the first send of a warned
+// prompt in Cowork is challenged with the short link and a "send it again"
+// instruction, and the identical resend goes through.
+func TestIngest_CoworkPromptWarnConfirmedByResend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, authCtx := newCoworkWarnTest(t)
+
+	sessionID := uuid.NewString()
+	surface := surfaceCowork
+	sendKeyed := func(text, idempotencyKey string) *gen.IngestHookResult {
+		t.Helper()
+		payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+		payload.IdempotencyKey = &idempotencyKey
+		payload.Session.Surface = &surface
+		promptID := uuid.NewString()
+		payload.Session.TurnID = &promptID
+		payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &text}}
+		res, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
+		require.NoError(t, err)
+		return res
+	}
+	send := func(text string) *gen.IngestHookResult {
+		t.Helper()
+		return sendKeyed(text, uuid.NewString())
+	}
+
+	// A transport retry reuses the challenged send's idempotency key. It gets
+	// the same challenge and does not count as the person sending again.
+	retried := "Payroll check: Mira Okonkwo 305-64-7182"
+	key := uuid.NewString()
+	require.Equal(t, "deny", sendKeyed(retried, key).Decision)
+	require.Equal(t, "deny", sendKeyed(retried, key).Decision, "a retried delivery does not confirm")
+
+	prompt := "Sort these employees: Avery Lindqvist 618-27-4093"
+	first := send(prompt)
+	require.Equal(t, "deny", first.Decision, "the first send is challenged")
+	require.NotNil(t, first.Message)
+	require.Regexp(t, `^https?://\S+/ack#[0-9A-Za-z]{10} Speakeasy warning:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
+	require.Contains(t, *first.Message, "send the same message again")
+	require.Contains(t, *first.Message, "618-27-4093 looks like sensitive information.")
+	require.NotContains(t, *first.Message, "ack_token=", "Cowork gets the short link, not the long one")
+	require.NotContains(t, *first.Message, "\x1b", "no terminal escapes in a web UI")
+
+	require.Equal(t, "allow", send(prompt).Decision, "resending the same prompt confirms the warning")
+	require.Equal(t, "allow", send(prompt).Decision, "the confirmation holds for an immediate retry")
+	require.Equal(t, "deny", send(prompt+" and 472-81-3365").Decision, "a different prompt is challenged on its own")
+
+	// Claude's apps put the minute a message was sent in a reminder before the
+	// prompt, so a resend a minute later differs only there and still confirms.
+	minute := func(m int) string {
+		return fmt.Sprintf("<system-reminder>Message sent at Thu 2026-11-12 13:%02d local time.</system-reminder>\nCheck Priya Okafor 731-52-8806", m)
+	}
+	require.Equal(t, "deny", send(minute(36)).Decision)
+	require.Equal(t, "allow", send(minute(37)).Decision, "a resend in the next minute is the same prompt")
+
+	// A resend after the window is a fresh first send, so it is challenged.
+	late := "Sort these too: Noah Castellanos 472-81-3365"
+	require.Equal(t, "deny", send(late).Decision)
+	require.NoError(t, testrepo.New(ti.conn).BackdateRiskPolicyChallenges(ctx, testrepo.BackdateRiskPolicyChallengesParams{
+		Seconds:   (coworkResendWindow + time.Minute).Seconds(),
+		ProjectID: *authCtx.ProjectID,
+	}))
+	require.Equal(t, "deny", send(late).Decision, "a resend after the window does not confirm")
+	require.Equal(t, "allow", send(late).Decision, "the challenge it raised confirms the next resend")
+
+	audited, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyChallengeAcknowledge)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, audited, "each confirmation is audited once")
 }
 
 // TestIngest_CoworkToolWarnAsksAndConfirms: in Cowork a warned tool call is
