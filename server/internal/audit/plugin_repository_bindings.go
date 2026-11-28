@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -55,6 +54,7 @@ func (l *Logger) LogPluginRepositoryBinding(ctx context.Context, dbtx repo.DBTX,
 	if err != nil {
 		return fmt.Errorf("marshal plugin repository binding audit: %w", err)
 	}
+	absent := conv.ToPGTextEmpty("")
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
 		IsInternal:         true,
 		OrganizationID:     event.OrganizationID,
@@ -66,12 +66,12 @@ func (l *Logger) LogPluginRepositoryBinding(ctx context.Context, dbtx repo.DBTX,
 		SubjectID:          event.ProjectID.String(),
 		SubjectType:        string(subjectTypePluginRepository),
 		Metadata:           metadata,
-		ActorSlug:          pgtype.Text{},
-		SubjectDisplayName: pgtype.Text{},
-		SubjectSlug:        pgtype.Text{},
+		ActorSlug:          absent,
+		SubjectDisplayName: absent,
+		SubjectSlug:        absent,
 		BeforeSnapshot:     nil,
 		AfterSnapshot:      nil,
-		ActingSurface:      pgtype.Text{},
-		ActingClientID:     pgtype.Text{},
+		ActingSurface:      absent,
+		ActingClientID:     absent,
 	}, OutboxEvent: nil})
 }
