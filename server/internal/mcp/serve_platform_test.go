@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,12 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -35,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -64,12 +64,25 @@ func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	otherID := createAssistant(t, ti, authCtx, "Other")
-	token := mintAssistantToken(t, ti, authCtx, otherID)
+	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a non-managed assistant must be rejected at the entrypoint")
 	require.Contains(t, err.Error(), "not found")
+}
+
+func TestServePlatformToolset_RejectsUnrecognizedBearer(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+
+	_, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), "not-a-valid-credential")
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
 }
 
 func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
@@ -86,8 +99,9 @@ func TestServePlatformToolset_DeniedAndMissingInvalidBodiesMatch(t *testing.T) {
 		AssistantID: managedID,
 	})
 	require.NoError(t, err)
-	otherID := createAssistant(t, ti, authCtx, "Other")
-	token := mintAssistantToken(t, ti, authCtx, otherID)
+	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
@@ -241,15 +255,11 @@ func TestServePlatformToolset_ResearchToolsetIsNotServed(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
-	_, err = servePlatformHTTP(t, ti, platformtools.ResearchToolsetSlug, toolsListBody(), token)
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
+	_, err := servePlatformHTTP(t, ti, platformtools.ResearchToolsetSlug, toolsListBody(), token)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not found")
 }
@@ -267,15 +277,11 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
+	grantProjectRead(t, ti, authCtx)
 	grantLiveOrgAdmin(t, ti, authCtx)
-	token, threadID := mintThreadAssistantToken(t, ti, authCtx, managedID, "audit-test")
+	token, threadID := mintAgentTurnCredentialWithThread(t, ti, authCtx, managedID, managedAgentID)
 
 	countBefore, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
 	require.NoError(t, err)
@@ -331,12 +337,7 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	require.NotNil(t, authCtx.ProjectID)
 	grantLiveOrgAdmin(t, ti, authCtx)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -351,7 +352,8 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	})
 	require.NoError(t, err)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -387,51 +389,17 @@ func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.Auth
 	return a.ID
 }
 
-func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID) string {
+func createAssistantWithAgent(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, name string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
-		OrgID:       authCtx.ActiveOrganizationID,
-		ProjectID:   *authCtx.ProjectID,
-		UserID:      authCtx.UserID,
-		AssistantID: assistantID,
-		ThreadID:    uuid.Nil,
-		TTL:         time.Hour,
-	})
-	require.NoError(t, err)
-	return token
-}
-
-func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, correlationPrefix string) (string, uuid.UUID) {
-	t.Helper()
-
-	chatID := uuid.New()
-	err := assistantsrepo.New(ti.conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
-		ChatID:         chatID,
-		ProjectID:      *authCtx.ProjectID,
+	assistantID := createAssistant(t, ti, authCtx, name)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(t.Context(), agentrepo.CreateAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		UserID:         pgtype.Text{String: authCtx.UserID, Valid: true},
-		Title:          pgtype.Text{},
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Name:           name + " agent " + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
-	threadID, err := assistantsrepo.New(ti.conn).UpsertAssistantThread(t.Context(), assistantsrepo.UpsertAssistantThreadParams{
-		AssistantID:   assistantID,
-		ProjectID:     *authCtx.ProjectID,
-		CorrelationID: correlationPrefix + "-" + uuid.NewString()[:8],
-		ChatID:        chatID,
-		SourceKind:    "dashboard",
-		SourceRefJson: []byte("{}"),
-	})
-	require.NoError(t, err)
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
-		OrgID:       authCtx.ActiveOrganizationID,
-		ProjectID:   *authCtx.ProjectID,
-		UserID:      authCtx.UserID,
-		AssistantID: assistantID,
-		ThreadID:    threadID,
-		TTL:         time.Hour,
-	})
-	require.NoError(t, err)
-	return token, threadID
+	return assistantID, agent.ID
 }
 
 func toolsListBody() []byte {
@@ -471,14 +439,10 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the platform toolset: %s", w.Body.String())
@@ -520,8 +484,9 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 	})
 	require.NoError(t, err)
 
-	otherID := createAssistant(t, ti, authCtx, "Other")
-	token := mintAssistantToken(t, ti, authCtx, otherID)
+	otherID, otherAgentID := createAssistantWithAgent(t, ti, authCtx, "Other")
+	grantProjectRead(t, ti, authCtx)
+	token := mintAgentTurnCredential(t, ti, authCtx, otherID, otherAgentID)
 
 	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "a non-managed assistant must not reach the platform toolset")
@@ -539,18 +504,21 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
 
 	// Assistant calls are authorized live on every request, not carried from
 	// an earlier decision, so the grant has to exist for real.
+	grantProjectRead(t, ti, authCtx)
 	grantLiveOrgAdmin(t, ti, authCtx)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	token := mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           "other-readable-" + uuid.NewString()[:8],
+		Slug:           "other-readable-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -567,20 +535,20 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
 	require.NotContains(t, w.Body.String(), `"error"`)
-	require.Contains(t, w.Body.String(), `"projects":[]`)
-	require.NotContains(t, w.Body.String(), authCtx.ProjectID.String(), "org:admin alone does not grant project:read")
+	require.Contains(t, w.Body.String(), authCtx.ProjectID.String())
+	require.NotContains(t, w.Body.String(), otherProject.ID.String(), "org:admin alone does not grant project:read on another project")
 
 	require.NoError(t, authz.PatchPrincipalGrants(
 		t.Context(), ti.conn, authCtx.ActiveOrganizationID,
 		urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		[]*authz.RoleGrant{{Scope: string(authz.ScopeProjectRead), Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String())}}},
+		[]*authz.RoleGrant{{Scope: string(authz.ScopeProjectRead), Selectors: []authz.Selector{authz.NewSelector(authz.ScopeProjectRead, otherProject.ID.String())}}},
 		nil,
 	))
 	w, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "list_projects call must succeed: %s", w.Body.String())
 	require.NotContains(t, w.Body.String(), `"error"`)
-	require.Contains(t, w.Body.String(), authCtx.ProjectID.String(), "the caller's readable project must appear in the listing")
+	require.Contains(t, w.Body.String(), otherProject.ID.String(), "the caller's newly readable project must appear in the listing")
 
 	events := scanAttributes(recorder, mcpriskscan.SurfacePlatformMCP)
 	require.Len(t, events, 4)

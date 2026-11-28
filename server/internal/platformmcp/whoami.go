@@ -54,15 +54,26 @@ type WhoamiOutput struct {
 	// to switch, and its transcript belongs to the active organization.
 	OtherOrganizations          []WhoamiOrganization `json:"other_organizations"`
 	OtherOrganizationsTruncated bool                 `json:"other_organizations_truncated"`
+	// FreeTrial is present only while the active organization's free trial
+	// waits for an organization admin to add a card.
+	FreeTrial *PendingFreeTrial `json:"free_trial,omitempty"`
 }
 
 // WhoamiService backs the whoami tool.
 type WhoamiService struct {
-	db *pgxpool.Pool
+	db        *pgxpool.Pool
+	freeTrial *FreeTrialStatus
 }
 
 func NewWhoamiService(db *pgxpool.Pool) *WhoamiService {
-	return &WhoamiService{db: db}
+	return &WhoamiService{db: db, freeTrial: nil}
+}
+
+// WithFreeTrialStatus reports a free trial that waits for a card. Without it,
+// whoami never reports one.
+func (s *WhoamiService) WithFreeTrialStatus(status *FreeTrialStatus) *WhoamiService {
+	s.freeTrial = status
+	return s
 }
 
 func (s *WhoamiService) Whoami(ctx context.Context, principal Principal) (WhoamiOutput, error) {
@@ -90,6 +101,7 @@ func (s *WhoamiService) Whoami(ctx context.Context, principal Principal) (Whoami
 		ClientName:                  "",
 		OtherOrganizations:          []WhoamiOrganization{},
 		OtherOrganizationsTruncated: false,
+		FreeTrial:                   s.freeTrial.Pending(ctx, organization.ID),
 	}
 	if principal.surface() != SurfacePlatformMCP {
 		return output, nil

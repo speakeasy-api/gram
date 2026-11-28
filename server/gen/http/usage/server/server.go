@@ -18,26 +18,27 @@ import (
 
 // Server lists the usage service endpoint HTTP handlers.
 type Server struct {
-	Mounts                    []*MountPoint
-	GetPeriodUsage            http.Handler
-	GetMeterUsage             http.Handler
-	GetSpendBreakdown         http.Handler
-	GetTokensUnderManagement  http.Handler
-	SetBillingMetadata        http.Handler
-	GetBillingEmail           http.Handler
-	SetBillingEmail           http.Handler
-	SetSpendCap               http.Handler
-	GetInferenceSpendCaps     http.Handler
-	GetUsageTiers             http.Handler
-	CreateCustomerSession     http.Handler
-	GetStripeCheckoutStatus   http.Handler
-	CreateStripeCheckout      http.Handler
-	GetStripeSubscription     http.Handler
-	GetPaygBillingSummary     http.Handler
-	CreateStripePortalSession http.Handler
-	CancelStripeSubscription  http.Handler
-	ResumeStripeSubscription  http.Handler
-	CreateTopUpCheckout       http.Handler
+	Mounts                           []*MountPoint
+	GetPeriodUsage                   http.Handler
+	GetMeterUsage                    http.Handler
+	GetSpendBreakdown                http.Handler
+	GetTokensUnderManagement         http.Handler
+	SetBillingMetadata               http.Handler
+	GetBillingEmail                  http.Handler
+	SetBillingEmail                  http.Handler
+	SetSpendCap                      http.Handler
+	GetInferenceSpendCaps            http.Handler
+	GetUsageTiers                    http.Handler
+	CreateCustomerSession            http.Handler
+	GetStripeCheckoutStatus          http.Handler
+	CreateStripeCheckout             http.Handler
+	CreateTrialPaymentMethodCheckout http.Handler
+	GetStripeSubscription            http.Handler
+	GetPaygBillingSummary            http.Handler
+	CreateStripePortalSession        http.Handler
+	CancelStripeSubscription         http.Handler
+	ResumeStripeSubscription         http.Handler
+	CreateTopUpCheckout              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -80,6 +81,7 @@ func New(
 			{"CreateCustomerSession", "POST", "/rpc/usage.createCustomerSession"},
 			{"GetStripeCheckoutStatus", "GET", "/rpc/usage.getStripeCheckoutStatus"},
 			{"CreateStripeCheckout", "POST", "/rpc/usage.createStripeCheckout"},
+			{"CreateTrialPaymentMethodCheckout", "POST", "/rpc/usage.createTrialPaymentMethodCheckout"},
 			{"GetStripeSubscription", "GET", "/rpc/usage.getStripeSubscription"},
 			{"GetPaygBillingSummary", "GET", "/rpc/usage.getPaygBillingSummary"},
 			{"CreateStripePortalSession", "POST", "/rpc/usage.createStripePortalSession"},
@@ -87,25 +89,26 @@ func New(
 			{"ResumeStripeSubscription", "POST", "/rpc/usage.resumeStripeSubscription"},
 			{"CreateTopUpCheckout", "POST", "/rpc/usage.createTopUpCheckout"},
 		},
-		GetPeriodUsage:            NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
-		GetMeterUsage:             NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
-		GetSpendBreakdown:         NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
-		GetTokensUnderManagement:  NewGetTokensUnderManagementHandler(e.GetTokensUnderManagement, mux, decoder, encoder, errhandler, formatter),
-		SetBillingMetadata:        NewSetBillingMetadataHandler(e.SetBillingMetadata, mux, decoder, encoder, errhandler, formatter),
-		GetBillingEmail:           NewGetBillingEmailHandler(e.GetBillingEmail, mux, decoder, encoder, errhandler, formatter),
-		SetBillingEmail:           NewSetBillingEmailHandler(e.SetBillingEmail, mux, decoder, encoder, errhandler, formatter),
-		SetSpendCap:               NewSetSpendCapHandler(e.SetSpendCap, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceSpendCaps:     NewGetInferenceSpendCapsHandler(e.GetInferenceSpendCaps, mux, decoder, encoder, errhandler, formatter),
-		GetUsageTiers:             NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
-		CreateCustomerSession:     NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
-		GetStripeCheckoutStatus:   NewGetStripeCheckoutStatusHandler(e.GetStripeCheckoutStatus, mux, decoder, encoder, errhandler, formatter),
-		CreateStripeCheckout:      NewCreateStripeCheckoutHandler(e.CreateStripeCheckout, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscription:     NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		GetPaygBillingSummary:     NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
-		CreateStripePortalSession: NewCreateStripePortalSessionHandler(e.CreateStripePortalSession, mux, decoder, encoder, errhandler, formatter),
-		CancelStripeSubscription:  NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ResumeStripeSubscription:  NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		CreateTopUpCheckout:       NewCreateTopUpCheckoutHandler(e.CreateTopUpCheckout, mux, decoder, encoder, errhandler, formatter),
+		GetPeriodUsage:                   NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
+		GetMeterUsage:                    NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSpendBreakdown:                NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
+		GetTokensUnderManagement:         NewGetTokensUnderManagementHandler(e.GetTokensUnderManagement, mux, decoder, encoder, errhandler, formatter),
+		SetBillingMetadata:               NewSetBillingMetadataHandler(e.SetBillingMetadata, mux, decoder, encoder, errhandler, formatter),
+		GetBillingEmail:                  NewGetBillingEmailHandler(e.GetBillingEmail, mux, decoder, encoder, errhandler, formatter),
+		SetBillingEmail:                  NewSetBillingEmailHandler(e.SetBillingEmail, mux, decoder, encoder, errhandler, formatter),
+		SetSpendCap:                      NewSetSpendCapHandler(e.SetSpendCap, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendCaps:            NewGetInferenceSpendCapsHandler(e.GetInferenceSpendCaps, mux, decoder, encoder, errhandler, formatter),
+		GetUsageTiers:                    NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
+		CreateCustomerSession:            NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
+		GetStripeCheckoutStatus:          NewGetStripeCheckoutStatusHandler(e.GetStripeCheckoutStatus, mux, decoder, encoder, errhandler, formatter),
+		CreateStripeCheckout:             NewCreateStripeCheckoutHandler(e.CreateStripeCheckout, mux, decoder, encoder, errhandler, formatter),
+		CreateTrialPaymentMethodCheckout: NewCreateTrialPaymentMethodCheckoutHandler(e.CreateTrialPaymentMethodCheckout, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:            NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:            NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		CreateStripePortalSession:        NewCreateStripePortalSessionHandler(e.CreateStripePortalSession, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:         NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:         NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CreateTopUpCheckout:              NewCreateTopUpCheckoutHandler(e.CreateTopUpCheckout, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -127,6 +130,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateCustomerSession = m(s.CreateCustomerSession)
 	s.GetStripeCheckoutStatus = m(s.GetStripeCheckoutStatus)
 	s.CreateStripeCheckout = m(s.CreateStripeCheckout)
+	s.CreateTrialPaymentMethodCheckout = m(s.CreateTrialPaymentMethodCheckout)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
 	s.CreateStripePortalSession = m(s.CreateStripePortalSession)
@@ -153,6 +157,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateCustomerSessionHandler(mux, h.CreateCustomerSession)
 	MountGetStripeCheckoutStatusHandler(mux, h.GetStripeCheckoutStatus)
 	MountCreateStripeCheckoutHandler(mux, h.CreateStripeCheckout)
+	MountCreateTrialPaymentMethodCheckoutHandler(mux, h.CreateTrialPaymentMethodCheckout)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
 	MountCreateStripePortalSessionHandler(mux, h.CreateStripePortalSession)
@@ -827,6 +832,60 @@ func NewCreateStripeCheckoutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createStripeCheckout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateTrialPaymentMethodCheckoutHandler configures the mux to serve the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint.
+func MountCreateTrialPaymentMethodCheckoutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.createTrialPaymentMethodCheckout", f)
+}
+
+// NewCreateTrialPaymentMethodCheckoutHandler creates a HTTP handler which
+// loads the HTTP request and calls the "usage" service
+// "createTrialPaymentMethodCheckout" endpoint.
+func NewCreateTrialPaymentMethodCheckoutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateTrialPaymentMethodCheckoutRequest(mux, decoder)
+		encodeResponse = EncodeCreateTrialPaymentMethodCheckoutResponse(encoder)
+		encodeError    = EncodeCreateTrialPaymentMethodCheckoutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createTrialPaymentMethodCheckout")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

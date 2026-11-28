@@ -20,7 +20,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/require"
 
-	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
@@ -47,17 +46,13 @@ func newPlatformSkillsFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, true)
 
 	return &platformSkillsFixture{
 		authCtx: authCtx,
-		token:   mintAssistantToken(t, ti, authCtx, managedID),
+		token:   mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID),
 		slug:    platformtools.PlatformMCPReadToolsetSlug,
 	}
 }

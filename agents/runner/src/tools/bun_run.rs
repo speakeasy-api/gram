@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -16,6 +17,23 @@ use crate::workdir::{ASSISTANT_WORKDIR, canonicalize_inside_workdir};
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(600);
 const STDOUT_LIMIT: usize = 50_000;
 const STDERR_LIMIT: usize = 10_000;
+
+/// Environment variables a `bun_run` child may inherit from the runner. The
+/// runner's environment carries deployment configuration (server URL, OTLP
+/// exporter headers, initial token) that model-authored code has no use for,
+/// so the child starts from an empty environment plus this allowlist.
+const INHERITED_ENV: &[&str] = &[
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TZ",
+    "TMPDIR",
+    // TLS trust: the image's filtered bundle, plus the local-dev CA init.sh
+    // adds when the platform mounts one.
+    "SSL_CERT_FILE",
+    "NODE_EXTRA_CA_CERTS",
+];
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct BunRunInput {
@@ -66,7 +84,9 @@ pub async fn bun_run(input: BunRunInput) -> Result<ToolResult, ToolError> {
     cmd.arg("run")
         .arg(script.path())
         .current_dir(ASSISTANT_WORKDIR);
-    cmd.env("NO_COLOR", "1");
+    cmd.env_clear()
+        .envs(sandbox_env(std::env::vars_os()))
+        .env("NO_COLOR", "1");
     cmd.kill_on_drop(true);
 
     let output = timeout(dur, cmd.output())
@@ -97,6 +117,18 @@ pub async fn bun_run(input: BunRunInput) -> Result<ToolResult, ToolError> {
         },
         duration: Some(start.elapsed()),
         metadata: MetadataMap::new(),
+    })
+}
+
+/// Filters `vars` down to [`INHERITED_ENV`].
+fn sandbox_env<I>(vars: I) -> impl Iterator<Item = (OsString, OsString)>
+where
+    I: IntoIterator<Item = (OsString, OsString)>,
+{
+    vars.into_iter().filter(|(key, _)| {
+        INHERITED_ENV
+            .iter()
+            .any(|allowed| key.as_os_str() == *allowed)
     })
 }
 
@@ -144,6 +176,28 @@ async fn resolve_script(input: &BunRunInput) -> Result<Script, ToolError> {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sandbox_env_keeps_only_allowlisted_variables() {
+        let vars = [
+            ("PATH", "/usr/local/bin:/usr/bin"),
+            (
+                "SSL_CERT_FILE",
+                "/usr/local/share/gram/bun-ca-certificates.pem",
+            ),
+            ("GRAM_SERVER_URL", "https://example.invalid"),
+            ("GRAM_INITIAL_TOKEN", "secret"),
+            ("OTEL_EXPORTER_OTLP_HEADERS", "authorization=secret"),
+        ]
+        .map(|(k, v)| (OsString::from(k), OsString::from(v)));
+
+        let mut kept: Vec<String> = sandbox_env(vars)
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        kept.sort();
+
+        assert_eq!(kept, ["PATH", "SSL_CERT_FILE"]);
+    }
 
     #[tokio::test]
     async fn rejects_input_with_both_code_and_file() {

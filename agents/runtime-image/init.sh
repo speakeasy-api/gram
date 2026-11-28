@@ -38,7 +38,15 @@ else
   done
 fi
 
-/usr/local/bin/lightpanda-supervise &
+# Start the browser supervisor with a minimal environment: it stays dumpable,
+# so its /proc/<pid>/environ is readable by bun_run code running as the same
+# user, and must not carry the runner's configuration.
+env -i \
+  PATH="$PATH" \
+  HOME="${HOME:-/}" \
+  SSL_CERT_FILE="${SSL_CERT_FILE:-}" \
+  NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
+  /usr/local/bin/lightpanda-supervise &
 
 runner_port="${GRAM_ASSISTANT_RUNTIME_GUEST_PORT:-8081}"
 runner_addr="${GRAM_RUNNER_ADDR:-0.0.0.0:${runner_port}}"

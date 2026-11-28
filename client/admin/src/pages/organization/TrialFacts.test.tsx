@@ -50,6 +50,23 @@ describe("TrialFacts", () => {
     expect(screen.getByText("No trial")).toBeTruthy();
   });
 
+  it("shows a rejected trial card on an organization with no trial", () => {
+    render(
+      <TrialFacts
+        org={anOrganization({
+          trial_state: "none",
+          trial_card_added_at: END,
+          trial_card_rejection_reason: "prepaid_card",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("No trial")).toBeTruthy();
+    expect(screen.getByText("Trial card").nextElementSibling?.textContent).toBe(
+      `Rejected ${new Date(END).toLocaleDateString()}: prepaid card`,
+    );
+  });
+
   it("does not expose an unknown stored tier", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-05-06T00:00:30Z");

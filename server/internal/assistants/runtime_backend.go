@@ -23,7 +23,7 @@ type runTurnRequest struct {
 	// admissions per key.
 	IdempotencyKey string
 
-	// AuthToken is the thread-scoped runtime token the runner uses for its
+	// AuthToken is the turn's principal credential the runner uses for its
 	// management-API calls during the turn.
 	AuthToken string
 

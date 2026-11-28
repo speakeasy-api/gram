@@ -593,6 +593,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
+		WithFreeTrialStatus(config.FeatureFlags, config.DashboardURL, config.ServerURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).
@@ -1392,6 +1393,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithNetworkIngressStatus(config.DashboardURL).
+		WithFreeTrialStatus(config.FeatureFlags, config.DashboardURL, config.ServerURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber)).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.JWTSigningKey), budgets.RiskFindings).
 		WithRiskFindingList(platformmcp.NewRiskFindingListService(config.DB, config.RiskFindingList, config.JWTSigningKey), budgets.RiskFindings).

@@ -89,6 +89,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.InfoContext(ctx, "skipping unsupported Stripe webhook event")
 		return nil
 	}
+	// A setup Checkout that saves a trial card carries no subscription.
+	if event.Type == "checkout.session.completed" && event.SubscriptionID == "" && event.ObjectID != "" && event.CustomerID != "" {
+		handled, err := s.handleTrialSetupCheckout(ctx, logger, event)
+		if err != nil || handled {
+			return err
+		}
+	}
 	if isStripeCheckoutEvent(event.Type) && (event.ObjectID == "" || event.CustomerID == "" || event.SubscriptionID == "") {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe Checkout completion identifiers").LogWarn(ctx, logger)
 	}
