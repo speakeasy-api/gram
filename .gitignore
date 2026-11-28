@@ -107,6 +107,10 @@ __pycache__/
 # Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
 e2e/.playwright
 
+# Local auth regression diagnostics and preserved traces may contain test credentials.
+.logs/mcp-auth/
+/e2e/.logs/mcp-auth/
+
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
 
