@@ -1,4 +1,3 @@
-import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useAuiState } from "@assistant-ui/react";
 import { generateText, Output } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -37,8 +36,6 @@ export function useFollowOnSuggestions(): {
   isLoading: boolean;
 } {
   const { config } = useElements();
-  const replayCtx = useReplayContext();
-  const isReplay = replayCtx?.isReplay ?? false;
 
   const auth = useAuth({
     auth: config.api,
@@ -48,8 +45,7 @@ export function useFollowOnSuggestions(): {
   const model = useModel(SUGGESTIONS_MODEL);
 
   // Check if follow-up suggestions are enabled (default: true)
-  // Disable in replay mode since we don't need AI-generated suggestions
-  const isEnabled = !isReplay && config.thread?.followUpSuggestions !== false;
+  const isEnabled = config.thread?.followUpSuggestions !== false;
 
   const [suggestions, setSuggestions] = useState<FollowOnSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);

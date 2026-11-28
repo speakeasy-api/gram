@@ -8,14 +8,14 @@ type KnownModelId = (typeof MODELS)[number];
  * through untouched; above this, oldest non-system turns are dropped until
  * the estimated token count is back under the threshold.
  */
-export const DEFAULT_COMPACTION_FRACTION = 0.7;
+const DEFAULT_COMPACTION_FRACTION = 0.7;
 
 /**
  * Number of most-recent messages preserved verbatim, even if the conversation
  * is already over the limit. Ensures the assistant always has the latest turn
  * and its immediate predecessor.
  */
-export const DEFAULT_KEEP_RECENT = 4;
+const DEFAULT_KEEP_RECENT = 4;
 
 /**
  * Conservative fallback when we encounter a model we haven't mapped — big

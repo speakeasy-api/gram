@@ -138,21 +138,10 @@ export const ConnectionStatusProvider = ({
   );
 };
 
-export const useConnectionStatus = (): ConnectionStatusContextValue => {
-  const context = useContext(ConnectionStatusContext);
-  if (!context) {
-    throw new Error(
-      "useConnectionStatus must be used within a ConnectionStatusProvider",
-    );
-  }
-  return context;
-};
-
 /**
  * Hook that returns connection status helpers for use in sendMessages.
- * Returns null if not within a ConnectionStatusProvider (for backwards compatibility).
+ * Returns null if not within a ConnectionStatusProvider.
  */
-
 export const useConnectionStatusOptional =
   (): ConnectionStatusContextValue | null => {
     return useContext(ConnectionStatusContext);

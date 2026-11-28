@@ -8,7 +8,7 @@
 
 // Instructed phrases are 3–8 words; anything longer is commentary, not an
 // annotation, and renders as prose.
-export const TOOL_CALL_ANNOTATION_MAX_LENGTH = 100;
+const TOOL_CALL_ANNOTATION_MAX_LENGTH = 100;
 
 /**
  * Strict shape gate: a heading must read like "Investigating X" / "Deep

@@ -16,7 +16,5 @@ function createPluginList(plugins: Plugin[]): PluginList {
 }
 
 export const recommended: PluginList = createPluginList([chart, generativeUI]);
-export { chart } from "./chart";
-export { generativeUI } from "./generative-ui";
 
 export type { Plugin } from "@/elements/types/plugins";

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useConnectionStatus,
   useConnectionStatusOptional,
   type ConnectionState,
 } from "@/elements/contexts/ConnectionStatusContext";
@@ -13,41 +12,6 @@ import type { FC } from "react";
 interface ConnectionStatusIndicatorProps {
   className?: string;
 }
-
-/**
- * iOS-style floating island that appears when connection is lost.
- * Shows "Reconnecting..." with a spinner, or "Connection Lost" after timeout.
- */
-export const ConnectionStatusIndicator: FC<ConnectionStatusIndicatorProps> = ({
-  className,
-}) => {
-  const { state, isOnline } = useConnectionStatus();
-
-  const shouldShow = state === "reconnecting" || state === "disconnected";
-
-  return (
-    <AnimatePresence>
-      {shouldShow && (
-        <motion.div
-          initial={{ opacity: 0, y: -20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -20, scale: 0.95 }}
-          transition={{
-            type: "spring",
-            stiffness: 500,
-            damping: 30,
-          }}
-          className={cn(
-            "pointer-events-none absolute top-4 right-0 left-0 z-50 flex justify-center",
-            className,
-          )}
-        >
-          <StatusPill state={state} isOnline={isOnline} />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
 
 const StatusPill: FC<{ state: ConnectionState; isOnline: boolean }> = ({
   state,
