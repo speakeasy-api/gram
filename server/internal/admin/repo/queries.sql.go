@@ -287,6 +287,7 @@ filtered AS (
             OR ($8::text = 'active' AND om.disabled_at IS NULL)
             OR ($8::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
+        AND ($9::boolean IS NULL OR om.whitelisted = $9::boolean)
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
@@ -301,6 +302,7 @@ type AdminCountOrganizationsParams struct {
 	CreatedAtGte   pgtype.Timestamptz
 	CreatedAtLt    pgtype.Timestamptz
 	DisabledStatus string
+	Whitelisted    pgtype.Bool
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -324,6 +326,7 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 		arg.CreatedAtGte,
 		arg.CreatedAtLt,
 		arg.DisabledStatus,
+		arg.Whitelisted,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -2565,15 +2568,16 @@ filtered AS (
             OR ($9::text = 'active' AND om.disabled_at IS NULL)
             OR ($9::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
+        AND ($10::boolean IS NULL OR om.whitelisted = $10::boolean)
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
         -- deleted or unknown anchor exhausts the walk rather than restarting it.
         AND (
-            $10::text IS NULL
+            $11::text IS NULL
             OR EXISTS (
                 SELECT 1 FROM organization_metadata anchor
-                WHERE anchor.id = $10::text
+                WHERE anchor.id = $11::text
                   AND (om.created_at < anchor.created_at
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
@@ -2581,7 +2585,7 @@ filtered AS (
 ),
 paged AS MATERIALIZED (
 SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
-WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
+WHERE coalesce(cardinality($12::text[]), 0) = 0 OR trial_state = ANY($12::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
     CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
@@ -2601,8 +2605,8 @@ ORDER BY
     CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $13::int
-OFFSET $12::bigint
+LIMIT $14::int
+OFFSET $13::bigint
 )
 SELECT
     id, name, slug, account_type, workos_id, stripe_customer_id,
@@ -2646,6 +2650,7 @@ type AdminListOrganizationsParams struct {
 	CreatedAtGte   pgtype.Timestamptz
 	CreatedAtLt    pgtype.Timestamptz
 	DisabledStatus string
+	Whitelisted    pgtype.Bool
 	AfterID        pgtype.Text
 	TrialStates    []string
 	PageOffset     int64
@@ -2691,6 +2696,7 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 		arg.CreatedAtGte,
 		arg.CreatedAtLt,
 		arg.DisabledStatus,
+		arg.Whitelisted,
 		arg.AfterID,
 		arg.TrialStates,
 		arg.PageOffset,

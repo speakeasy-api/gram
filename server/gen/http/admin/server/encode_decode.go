@@ -4662,6 +4662,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			accountTypes      []string
 			trialStates       []string
 			disabledStatus    *string
+			whitelisted       *bool
 			minMembers        *int64
 			maxMembers        *int64
 			createdFrom       *string
@@ -4692,6 +4693,16 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if disabledStatus != nil {
 			if !(*disabledStatus == "all" || *disabledStatus == "active" || *disabledStatus == "disabled") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disabled_status", *disabledStatus, []any{"all", "active", "disabled"}))
+			}
+		}
+		{
+			whitelistedRaw := qp.Get("whitelisted")
+			if whitelistedRaw != "" {
+				v, err2 := strconv.ParseBool(whitelistedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("whitelisted", whitelistedRaw, "boolean"))
+				}
+				whitelisted = &v
 			}
 		}
 		{
@@ -4773,7 +4784,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStatus, minMembers, maxMembers, createdFrom, createdTo, cursor, limit, sort, direction, page, adminSessionToken)
+		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStatus, whitelisted, minMembers, maxMembers, createdFrom, createdTo, cursor, limit, sort, direction, page, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

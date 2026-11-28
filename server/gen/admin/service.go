@@ -4067,6 +4067,10 @@ type ListOrganizationsPayload struct {
 	// Organization status: all (default), active (disabled_at IS NULL), or
 	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
 	DisabledStatus *string
+	// Whitelist filter: true matches only whitelisted organizations, false only
+	// organizations that are not whitelisted. Omitted matches both. Applies even
+	// to exact ID matches.
+	Whitelisted *bool
 	// Inclusive minimum active member count, from 0 through 9223372036854775807.
 	// The generated TypeScript SDK accepts bigint. The handwritten admin client
 	// accepts safe integers or decimal strings; use decimal strings above
