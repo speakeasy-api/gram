@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
 type cutoverStubKitBackend struct {
@@ -113,8 +113,8 @@ func newCutoverATEBackend(
 	localCfg.Environment = "production"
 	localCfg.nativeIdentity = nil
 	localCfg.Origin = nil
-	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
-	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/openid/v1/jwks"
+	localCfg.WorkloadIssuerURL = ""
+	localCfg.WorkloadJWKSURL = ""
 	localCfg.WorkloadIssuerBaseURL = ""
 
 	cluster, client := startFakeATEStack(t, atespace)
@@ -265,7 +265,7 @@ func TestKitATECutover_RollbackAdmissionRetiresATEActorsAndAdmissions(t *testing
 		ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium",
 	}))
 
-	// Confirm actor row + ATE actor + workload admission are live before rollback.
+	// Confirm actor row + ATE actor + live credential-mint eligibility before rollback.
 	actorsBefore, err := q.ListAssistantATEActorsForRuntime(ctx, assistantrepo.ListAssistantATEActorsForRuntimeParams{
 		ProjectID: runtimeSeed.ProjectID, RuntimeID: ateRuntimeRow.ID,
 	})
@@ -274,13 +274,16 @@ func TestKitATECutover_RollbackAdmissionRetiresATEActorsAndAdmissions(t *testing
 	var wb KitWorkloadBinding
 	require.NoError(t, json.Unmarshal(actorsBefore[0].WorkloadBindingJson, &wb))
 	require.NotEmpty(t, wb.Subject)
+	require.Equal(t, uuid.Nil, wb.IssuerID)
 
-	admittedBefore, err := workloadidentity.IsAdmitted(ctx, db, workloadidentity.AdmissionParams{
-		OrganizationID: wb.Identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: runtimeSeed.ProjectID, Valid: true},
-		WorkloadIssuerID: wb.IssuerID, Subject: wb.Subject,
+	_, err = q.GetLiveAssistantATEActorByUID(ctx, assistantrepo.GetLiveAssistantATEActorByUIDParams{
+		ActorUid:              actorsBefore[0].ActorUid,
+		RunningState:          ateActorStateRunning,
+		RuntimeStartingState:  runtimeStateStarting,
+		RuntimeActiveState:    runtimeStateActive,
+		AssistantActiveStatus: StatusActive,
 	})
 	require.NoError(t, err)
-	require.True(t, admittedBefore)
 
 	// Roll back to GKE with ATE retained strictly in retiring-only cleanup.
 	gkeStub := &cutoverStubKitBackend{name: runtimeBackendGKE}
@@ -304,7 +307,7 @@ func TestKitATECutover_RollbackAdmissionRetiresATEActorsAndAdmissions(t *testing
 	require.Equal(t, runtimeBackendGKE, newRuntime.Backend)
 	require.NotEqual(t, ateRuntimeRow.ID, newRuntime.ID)
 
-	// ATE actor deleted in ATE, row soft-deleted, and workload admission removed.
+	// ATE actor deleted in ATE, row soft-deleted, and live credential-mint lookup rejected.
 	actorsAfter, err := q.ListAssistantATEActorsForRuntime(ctx, assistantrepo.ListAssistantATEActorsForRuntimeParams{
 		ProjectID: runtimeSeed.ProjectID, RuntimeID: ateRuntimeRow.ID,
 	})
@@ -316,12 +319,14 @@ func TestKitATECutover_RollbackAdmissionRetiresATEActorsAndAdmissions(t *testing
 	cluster.mu.Unlock()
 	require.False(t, existsInATE, "retired ATE actor must be deleted in ATE on rollback")
 
-	admittedAfter, err := workloadidentity.IsAdmitted(ctx, db, workloadidentity.AdmissionParams{
-		OrganizationID: wb.Identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: runtimeSeed.ProjectID, Valid: true},
-		WorkloadIssuerID: wb.IssuerID, Subject: wb.Subject,
+	_, err = q.GetLiveAssistantATEActorByUID(ctx, assistantrepo.GetLiveAssistantATEActorByUIDParams{
+		ActorUid:              actorsBefore[0].ActorUid,
+		RunningState:          ateActorStateRunning,
+		RuntimeStartingState:  runtimeStateStarting,
+		RuntimeActiveState:    runtimeStateActive,
+		AssistantActiveStatus: StatusActive,
 	})
-	require.NoError(t, err)
-	require.False(t, admittedAfter, "retired ATE actor workload admission must be removed on rollback")
+	require.ErrorIs(t, err, pgx.ErrNoRows, "retired ATE actor must not be eligible for credential minting after rollback")
 }
 
 func TestKitATECutover_SwitchReaperConvergesIdleOldBackendRuntimesBothDirections(t *testing.T) {

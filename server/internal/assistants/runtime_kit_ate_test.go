@@ -669,7 +669,6 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	assistantID := uuid.New()
 	projectID := uuid.New()
 	threadID := uuid.New()
-	issuerID := uuid.New()
 	agentID := uuid.New()
 
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
@@ -702,13 +701,13 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 				Model:              "openai/gpt-4.1-mini",
 				ReasoningEffort:    "medium",
 				EgressInjectedAuth: true,
-				InferenceEndpoint:  "https://api.speakeasy.test/projects/" + projectID.String() + "/chat/completions",
+				InferenceEndpoint:  "https://api.speakeasy.test/chat/completions",
 				AgentsMD:           []byte("# Speakeasy assistant\n"),
 				MCPJSON:            mcpJSON,
 				GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
 				Workload: &KitWorkloadBinding{
 					MCPProjectGateway: true,
-					IssuerID:          issuerID,
+					IssuerID:          uuid.Nil,
 					Subject:           "actor/" + atespace + "/" + actorName,
 					Audience:          "",
 					Identity: assistantidentity.RuntimeIdentity{
@@ -780,7 +779,7 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.Contains(t, string(actorEntry.bootstrapFiles[".kit/config.toml"]), `provider = "openrouter"`)
 	require.NotContains(t, string(actorEntry.bootstrapFiles[".kit/credentials/mcp.json"]), "workload_identity")
 	require.Contains(t, string(actorEntry.bootstrapFiles[".kit/credentials/mcp.json"]), "Bearer "+kitATEEgressAuthPlaceholder)
-	require.Equal(t, "https://api.speakeasy.test/projects/"+projectID.String()+"/chat/completions", actorEntry.bootstrapEnv["OPENROUTER_BASE_URL"])
+	require.Equal(t, "https://api.speakeasy.test/chat/completions", actorEntry.bootstrapEnv["OPENROUTER_BASE_URL"])
 	require.Equal(t, kitATEEgressAuthPlaceholder, actorEntry.bootstrapEnv["OPENROUTER_API_KEY"])
 
 	// Verify ActorTemplate mounts ATE's projected egress-mitm + system-roots trust bundle.
@@ -789,16 +788,19 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.NotNil(t, createdTmpl)
 	require.True(t, matchesKitATETemplateTrustBundle(createdTmpl, createdTmpl.GetContainers()[0]))
 
-	// Verify EgressPolicy has split HTTPS MITM+JWT rules for api.speakeasy.test (inference)
+	// Verify EgressPolicy has split HTTPS MITM+credential_uri rules for api.speakeasy.test (inference)
 	// and tools.speakeasy.test (project gateway), plus * tls_passthrough (:443) and * http (:80) with nil effects.
+	wantURI := "ate-secret://speakeasy.com/v1/actors/" + atespace + "/" + actorName + "/" + originalUID
 	require.NotNil(t, actorEntry.egressPolicy)
 	require.Len(t, actorEntry.egressPolicy.GetRules(), 4)
 	rules := actorEntry.egressPolicy.GetRules()
 	require.NoError(t, validateKitATEEgressRulesNoWildcardEffects(rules))
 	require.Equal(t, []string{"api.speakeasy.test"}, rules[0].GetHttps().GetHostnames())
-	require.Equal(t, []string{ateDirectWorkloadInferenceAudience}, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt().GetAudiences())
+	require.Equal(t, wantURI, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetCredentialUri())
+	require.Nil(t, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt())
 	require.Equal(t, []string{"tools.speakeasy.test"}, rules[1].GetHttps().GetHostnames())
-	require.Equal(t, []string{ateDirectWorkloadProjectGatewayAudience}, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt().GetAudiences())
+	require.Equal(t, wantURI, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetCredentialUri())
+	require.Nil(t, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt())
 	require.Equal(t, []string{"*"}, rules[2].GetTlsPassthrough().GetHostnames())
 	require.Equal(t, []int32{443}, rules[2].GetTlsPassthrough().GetPorts().GetNumbers())
 	require.Equal(t, []string{"*"}, rules[3].GetHttp().GetHostnames())
@@ -1020,7 +1022,6 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 	projectID := uuid.New()
 	thread1 := uuid.New()
 	thread2 := uuid.New()
-	issuerID := uuid.New()
 	agentID := uuid.New()
 
 	newBackend := func(imageRef string) *KitATERuntimeBackend {
@@ -1053,13 +1054,13 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 					Model:              "openai/gpt-4.1-mini",
 					ReasoningEffort:    "medium",
 					EgressInjectedAuth: true,
-					InferenceEndpoint:  "https://api.speakeasy.test/projects/" + projectID.String() + "/chat/completions",
+					InferenceEndpoint:  "https://api.speakeasy.test/chat/completions",
 					AgentsMD:           []byte("# Speakeasy assistant\n"),
 					MCPJSON:            []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.speakeasy.test/mcp/gateway/org/projects/proj","headers":{"Authorization":"Bearer ` + kitATEEgressAuthPlaceholder + `"}}}}`),
 					GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
 					Workload: &KitWorkloadBinding{
 						MCPProjectGateway: true,
-						IssuerID:          issuerID,
+						IssuerID:          uuid.Nil,
 						Subject:           "actor/" + atespace + "/" + actorName,
 						Audience:          "",
 						Identity: assistantidentity.RuntimeIdentity{
@@ -1200,7 +1201,6 @@ func newTestKitATEHarness(t *testing.T, onRunTurn func(runTurnRequest)) (*fakeAT
 	runtimeID := uuid.New()
 	assistantID := uuid.New()
 	projectID := uuid.New()
-	issuerID := uuid.New()
 	agentID := uuid.New()
 
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
@@ -1231,13 +1231,13 @@ func newTestKitATEHarness(t *testing.T, onRunTurn func(runTurnRequest)) (*fakeAT
 				Model:              "openai/gpt-4.1-mini",
 				ReasoningEffort:    "medium",
 				EgressInjectedAuth: true,
-				InferenceEndpoint:  "https://api.speakeasy.test/projects/" + projectID.String() + "/chat/completions",
+				InferenceEndpoint:  "https://api.speakeasy.test/chat/completions",
 				AgentsMD:           []byte("# Speakeasy assistant\n"),
 				MCPJSON:            []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.speakeasy.test/mcp/gateway/org/projects/proj","headers":{"Authorization":"Bearer ` + kitATEEgressAuthPlaceholder + `"}}}}`),
 				GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
 				Workload: &KitWorkloadBinding{
 					MCPProjectGateway: true,
-					IssuerID:          issuerID,
+					IssuerID:          uuid.Nil,
 					Subject:           "actor/" + atespace + "/" + actorName,
 					Audience:          "",
 					Identity: assistantidentity.RuntimeIdentity{
@@ -1517,11 +1517,21 @@ func TestKitATEInitVersionMismatchFailsClearly(t *testing.T) {
 func TestBuildKitATEEgressPolicyRules(t *testing.T) {
 	t.Parallel()
 
-	t.Run("same host combines both audiences on one HTTPS rule and keeps wildcards effect-free", func(t *testing.T) {
+	const (
+		atespace  = "prod-assistants"
+		actorName = "spk-kit-actor-1"
+		actorUID  = "uid-12345"
+		wantURI   = "ate-secret://speakeasy.com/v1/actors/prod-assistants/spk-kit-actor-1/uid-12345"
+	)
+
+	t.Run("same host deduplicates to one HTTPS rule with credentialUri and keeps wildcards effect-free", func(t *testing.T) {
 		t.Parallel()
 		rules, err := BuildKitATEEgressPolicyRules(
+			atespace,
+			actorName,
+			actorUID,
 			"https://api.speakeasy.com/mcp/gateway/org/projects/proj",
-			"https://api.speakeasy.com/projects/00000000-0000-0000-0000-000000000001/chat/completions",
+			"https://api.speakeasy.com/chat/completions",
 		)
 		require.NoError(t, err)
 		require.NoError(t, validateKitATEEgressRulesNoWildcardEffects(rules))
@@ -1535,8 +1545,8 @@ func TestBuildKitATEEgressPolicyRules(t *testing.T) {
 		hdr := httpsRule.GetEffects().GetReplaceHeaders()[0]
 		require.Equal(t, "Authorization", hdr.GetHeader())
 		require.Equal(t, "Bearer ", hdr.GetPrefix())
-		require.Equal(t, []string{ateDirectWorkloadInferenceAudience, ateDirectWorkloadProjectGatewayAudience}, hdr.GetActorJwt().GetAudiences())
-		require.Equal(t, ateActorJWTExpirationSeconds, hdr.GetActorJwt().GetExpirationSeconds())
+		require.Equal(t, wantURI, hdr.GetCredentialUri())
+		require.Nil(t, hdr.GetActorJwt())
 
 		require.Equal(t, []string{"*"}, rules[1].GetTlsPassthrough().GetHostnames())
 		require.Equal(t, []int32{443}, rules[1].GetTlsPassthrough().GetPorts().GetNumbers())
@@ -1545,24 +1555,29 @@ func TestBuildKitATEEgressPolicyRules(t *testing.T) {
 		require.Nil(t, rules[2].GetHttp().GetEffects())
 	})
 
-	t.Run("distinct hosts scope each HTTPS rule to its single endpoint audience", func(t *testing.T) {
+	t.Run("distinct hosts emit sorted HTTPS rules with actor credentialUri", func(t *testing.T) {
 		t.Parallel()
 		rules, err := BuildKitATEEgressPolicyRules(
+			atespace,
+			actorName,
+			actorUID,
 			"https://mcp.speakeasy.com/mcp/gateway/org/projects/proj",
-			"https://ai.speakeasy.com/projects/00000000-0000-0000-0000-000000000001/chat/completions",
+			"https://ai.speakeasy.com/chat/completions",
 		)
 		require.NoError(t, err)
 		require.NoError(t, validateKitATEEgressRulesNoWildcardEffects(rules))
 		require.Len(t, rules, 4)
 
 		require.Equal(t, []string{"ai.speakeasy.com"}, rules[0].GetHttps().GetHostnames())
-		require.Equal(t, []string{ateDirectWorkloadInferenceAudience}, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt().GetAudiences())
+		require.Equal(t, wantURI, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetCredentialUri())
+		require.Nil(t, rules[0].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt())
 
 		require.Equal(t, []string{"mcp.speakeasy.com"}, rules[1].GetHttps().GetHostnames())
-		require.Equal(t, []string{ateDirectWorkloadProjectGatewayAudience}, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt().GetAudiences())
+		require.Equal(t, wantURI, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetCredentialUri())
+		require.Nil(t, rules[1].GetHttps().GetEffects().GetReplaceHeaders()[0].GetActorJwt())
 	})
 
-	t.Run("rejects wildcard, IP, or non-HTTPS Speakeasy targets and forbids wildcard actorJwt", func(t *testing.T) {
+	t.Run("rejects wildcard, IP, or non-HTTPS Speakeasy targets and forbids wildcard header effects", func(t *testing.T) {
 		t.Parallel()
 		for _, bad := range []string{
 			"http://api.speakeasy.com/mcp/gateway/org/projects/proj",
@@ -1570,7 +1585,7 @@ func TestBuildKitATEEgressPolicyRules(t *testing.T) {
 			"https://169.254.169.254/latest/meta-data",
 			"https://127.0.0.1/mcp/gateway/org/projects/proj",
 		} {
-			_, err := BuildKitATEEgressPolicyRules(bad, "https://api.speakeasy.com/projects/p/chat/completions")
+			_, err := BuildKitATEEgressPolicyRules(atespace, actorName, actorUID, bad, "https://api.speakeasy.com/chat/completions")
 			require.Error(t, err, bad)
 		}
 
@@ -1580,9 +1595,9 @@ func TestBuildKitATEEgressPolicyRules(t *testing.T) {
 				Ports:     &ateapiv1.Ports{Numbers: []int32{443}},
 				Effects: &ateapiv1.HttpRuleEffects{
 					ReplaceHeaders: []*ateapiv1.CredentialHeader{{
-						Header:   "Authorization",
-						Prefix:   "Bearer ",
-						ActorJwt: &ateapiv1.ActorJwtSource{Audiences: []string{ateDirectWorkloadInferenceAudience}, ExpirationSeconds: 300},
+						Header:        "Authorization",
+						Prefix:        "Bearer ",
+						CredentialUri: wantURI,
 					}},
 				},
 			},

@@ -64,6 +64,63 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const isLiveAssistantATEActor = `-- name: IsLiveAssistantATEActor :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_ate_actors a
+  JOIN assistant_runtimes r
+    ON r.id = a.runtime_id
+   AND r.project_id = a.project_id
+   AND r.assistant_id = a.assistant_id
+  JOIN assistant_threads t
+    ON t.id = a.assistant_thread_id
+   AND t.project_id = a.project_id
+   AND t.assistant_id = a.assistant_id
+  JOIN chats c
+    ON c.id = t.chat_id
+   AND c.project_id = a.project_id
+   AND c.organization_id = a.organization_id
+  WHERE a.organization_id = $1
+    AND a.project_id = $2
+    AND a.assistant_id = $3
+    AND a.assistant_thread_id = $4
+    AND a.actor_uid = $5
+    AND a.deleted IS FALSE
+    AND a.configured IS TRUE
+    AND a.state = 'running'
+    AND r.runtime_version = 3
+    AND r.backend = 'ate'
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+    AND r.state IN ('starting', 'active')
+    AND t.deleted IS FALSE
+    AND c.deleted IS FALSE
+)::boolean AS live
+`
+
+type IsLiveAssistantATEActorParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	ThreadID       uuid.UUID
+	ActorUid       string
+}
+
+// Checks that an ATE thread actor bound to an already-minted turn credential
+// is still configured, running, and attached to a live runtime and chat.
+func (q *Queries) IsLiveAssistantATEActor(ctx context.Context, arg IsLiveAssistantATEActorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLiveAssistantATEActor,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ActorUid,
+	)
+	var live bool
+	err := row.Scan(&live)
+	return live, err
+}
+
 const listKitInferenceSessionBindings = `-- name: ListKitInferenceSessionBindings :many
 SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
 FROM assistant_kit_sessions s
@@ -75,19 +132,7 @@ WHERE s.runtime_id = $1 AND s.project_id = $2 AND s.assistant_id = $3
   AND r.runtime_version = 3 AND a.runtime_version = 3
   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active') AND NOT a.deleted AND a.status = 'active'
   AND NOT t.deleted AND NOT c.deleted
-  AND (
-    r.backend_metadata_json->'workload' = $4::jsonb
-    OR EXISTS (
-      SELECT 1
-      FROM assistant_ate_actors act
-      WHERE act.runtime_id = r.id
-        AND act.project_id = r.project_id
-        AND act.assistant_id = r.assistant_id
-        AND act.assistant_thread_id = s.assistant_thread_id
-        AND NOT act.deleted
-        AND act.workload_binding_json = $4::jsonb
-    )
-  )
+  AND r.backend_metadata_json->'workload' = $4::jsonb
 `
 
 type ListKitInferenceSessionBindingsParams struct {
@@ -139,25 +184,6 @@ JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 WHERE r.project_id = $1 AND a.organization_id = $2
   AND r.backend_metadata_json->'workload'->>'issuer_id' = $3::text
   AND r.backend_metadata_json->'workload'->>'subject' = $4::text
-UNION ALL
-SELECT r.id AS runtime_id, r.assistant_id,
-  jsonb_build_object(
-    'runtime_id', r.id,
-    'assistant_id', r.assistant_id,
-    'project_id', r.project_id,
-    'runtime_version', r.runtime_version,
-    'workload', act.workload_binding_json
-  ) AS backend_metadata_json,
-  (r.runtime_version = 3 AND a.runtime_version = 3
-   AND NOT r.deleted AND NOT r.ended AND r.state IN ('starting', 'active')
-   AND NOT a.deleted AND a.status = 'active'
-   AND NOT act.deleted)::boolean AS active
-FROM assistant_ate_actors act
-JOIN assistant_runtimes r ON r.id = act.runtime_id AND r.project_id = act.project_id
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE act.project_id = $1 AND act.organization_id = $2
-  AND act.workload_binding_json->>'issuer_id' = $3::text
-  AND act.workload_binding_json->>'subject' = $4::text
 `
 
 type ListKitWorkloadBindingsParams struct {
@@ -174,7 +200,7 @@ type ListKitWorkloadBindingsRow struct {
 	Active              bool
 }
 
-// The workload subject is unique to one runtime generation (or ATE thread actor), not a guest claim.
+// The workload subject is unique to one runtime generation, not a guest claim.
 func (q *Queries) ListKitWorkloadBindings(ctx context.Context, arg ListKitWorkloadBindingsParams) ([]ListKitWorkloadBindingsRow, error) {
 	rows, err := q.db.Query(ctx, listKitWorkloadBindings,
 		arg.ProjectID,

@@ -128,14 +128,13 @@ func TestIsOTelPublicEndpointKnownRouteSurface(t *testing.T) {
 		"/rpc/toolsets.list":        false,
 		"/admin/organizations.list": false,
 		// Public untrusted surfaces.
-		"/mcp/some-slug":                                                  true,
-		"/oauth/some-slug/authorize":                                      true,
-		"/oauth-external/authorize":                                       true,
-		"/.well-known/oauth-protected-resource/mcp/some-slug":             true,
-		"/.well-known/oauth-authorization-server/mcp/some-slug":           true,
-		"/chat/completions":                                               true,
-		"/projects/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f/chat/completions": true,
-		"/openapi.yaml":                                                   true,
+		"/mcp/some-slug":                                        true,
+		"/oauth/some-slug/authorize":                            true,
+		"/oauth-external/authorize":                             true,
+		"/.well-known/oauth-protected-resource/mcp/some-slug":   true,
+		"/.well-known/oauth-authorization-server/mcp/some-slug": true,
+		"/chat/completions":                                     true,
+		"/openapi.yaml":                                         true,
 		// Safe-by-default: an unclassified future route is public.
 		"/some-future-route": true,
 	}

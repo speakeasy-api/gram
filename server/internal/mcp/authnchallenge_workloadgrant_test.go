@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -85,20 +84,17 @@ func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL stri
 func newWorkloadGrantFixtureWithPool(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config)) workloadGrantFixture {
 	t.Helper()
 
-	return newWorkloadGrantFixtureWithIdentity(t, logger, nil, serverURL, configurePool, "", "repo:acme/payments-api:ref:refs/heads/main")
+	return newWorkloadGrantFixtureWithIdentity(t, logger, serverURL, configurePool, "", "repo:acme/payments-api:ref:refs/heads/main")
 }
 
 // The issuer identity may differ from the local HTTPS server publishing its keys.
-func newWorkloadGrantFixtureWithIdentity(t *testing.T, logger *slog.Logger, meterProvider metric.MeterProvider, serverURL string, configurePool func(*pgxpool.Config), issuerURL, subject string) workloadGrantFixture {
+func newWorkloadGrantFixtureWithIdentity(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config), issuerURL, subject string) workloadGrantFixture {
 	t.Helper()
 
-	if meterProvider == nil {
-		meterProvider = testenv.NewMeterProvider(t)
-	}
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
