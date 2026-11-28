@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"go.opentelemetry.io/otel/attribute"
@@ -69,6 +70,7 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
+			c.confirmer.health.Failed(ctx, req.OrgID, ctx.Err())
 			results[i] = unavailableResult
 			continue
 		}
@@ -89,7 +91,10 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 	return results, nil
 }
 
+// classifyOne records one evaluation on risk.analysis.evaluations for each
+// return that does not reach the confirmer, which records its own.
 func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
+	health := c.confirmer.health
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second+ConfirmationTimeout)
 	defer cancel()
 	ctx, span := c.confirmer.tracer.Start(ctx, "risk.prompt_injection.cascade")
@@ -105,10 +110,16 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputTokens)
 	if err != nil {
 		c.confirmer.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
+		if errors.Is(err, errPrefilterInputTooLarge) {
+			health.Degraded(ctx, req.OrgID, riskhealth.ReasonInputTooLarge)
+		} else {
+			health.Degraded(ctx, req.OrgID, riskhealth.ReasonError)
+		}
 		return unavailableResult
 	}
 	questionJSON, err := json.Marshal(questions)
 	if err != nil {
+		health.Degraded(ctx, req.OrgID, riskhealth.ReasonError)
 		return unavailableResult
 	}
 	// Both attempts share the prefilter deadline; shrinking must not extend
@@ -118,6 +129,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	var result typesafe.Result
 	for attempt := range 2 {
 		if prefilterCtx.Err() != nil {
+			health.Failed(ctx, req.OrgID, prefilterCtx.Err())
 			return unavailableResult
 		}
 		span.SetAttributes(attribute.Bool("prefilter.input_truncated", truncated), attribute.Int("prefilter.state_bytes", len(prepared)), attribute.Int("prefilter.estimated_input_tokens", estimatePrefilterTokens(prepared, questionJSON)), attribute.Int("prefilter.attempts", attempt+1))
@@ -139,16 +151,23 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	if err != nil {
 		span.SetAttributes(attribute.String("prefilter.outcome", "unavailable"))
 		c.confirmer.logger.WarnContext(ctx, "PI prefilter unavailable", attr.SlogError(err))
+		if errors.Is(err, errPrefilterInputTooLarge) {
+			health.Degraded(ctx, req.OrgID, riskhealth.ReasonInputTooLarge)
+		} else {
+			health.Failed(ctx, req.OrgID, err)
+		}
 		return unavailableResult
 	}
 	probability, err := injectionProbability(result)
 	if err != nil {
+		health.Degraded(ctx, req.OrgID, riskhealth.ReasonMalformedResponse)
 		return unavailableResult
 	}
 	span.SetAttributes(attribute.Float64("prefilter.probability", probability), attribute.Float64("prefilter.cost_usd", result.CostUSD), attribute.Int("prefilter.input_tokens", result.InputTokens), attribute.Int("prefilter.output_tokens", result.OutputTokens), attribute.Bool("prefilter.escalated", probability >= PrefilterThreshold))
 	if probability < PrefilterThreshold {
 		// Omitted evidence cannot be cleared by a negative prefilter judgment.
 		if truncated {
+			health.Degraded(ctx, req.OrgID, riskhealth.ReasonInputTooLarge)
 			return unavailableResult
 		}
 		cleared := safeResult
@@ -156,11 +175,13 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		count, countErr := c.confirmer.stokenCodec.Count(ctx, content...)
 		cleared.STokens = int64(count)
 		cleared.Completed = countErr == nil
+		health.Completed(ctx, req.OrgID)
 		return cleared
 	}
 	window, err := c.loadWindow(ctx, req.OrgID, req.ProjectID, msg)
 	if err != nil {
 		c.confirmer.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
+		health.Failed(ctx, req.OrgID, err)
 		return unavailableResult
 	}
 	return c.confirmer.classifyOne(ctx, req, msg, trajectory, userID, &window)

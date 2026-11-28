@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -132,6 +133,7 @@ type Engine struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
 	metrics      *metrics
+	health       *riskhealth.Recorder
 	client       gramopenrouter.CompletionClient
 	model        string
 	reasoning    string
@@ -177,6 +179,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
 		metrics:      newMetrics(meterProvider, logger),
+		health:       riskhealth.New(meterProvider, logger, riskhealth.ComponentPromptInjectionJudge),
 		client:       client,
 		model:        Model,
 		reasoning:    ReasoningEffort,
@@ -244,6 +247,7 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 			continue
 		}
 		if ctx.Err() != nil {
+			c.health.Failed(ctx, req.OrgID, ctx.Err())
 			results[i] = unavailableResult
 			continue
 		}
@@ -272,9 +276,11 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 const maxConfirmationPayloadBytes = 256 << 10
 
 // classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
-// judgement that cleared the content.
+// judgement that cleared the content. Every return records one evaluation on
+// risk.analysis.evaluations.
 func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, window *judgemessage.Window) promptinjection.Result {
 	if ctx.Err() != nil {
+		c.health.Failed(ctx, req.OrgID, ctx.Err())
 		return unavailableResult
 	}
 
@@ -319,7 +325,12 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 			Window     judgemessage.Window             `json:"window"`
 			Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
 		}{Window: *window, Trajectory: trajectoryPayload})
-		if err != nil || len(prepared) > maxConfirmationPayloadBytes {
+		if err != nil {
+			c.health.Degraded(ctx, req.OrgID, riskhealth.ReasonError)
+			return unavailableResult
+		}
+		if len(prepared) > maxConfirmationPayloadBytes {
+			c.health.Degraded(ctx, req.OrgID, riskhealth.ReasonInputTooLarge)
 			return unavailableResult
 		}
 		for i, evidence := range window.Messages {
@@ -380,6 +391,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		Model:         model,
 		Provider:      "openrouter",
 	}
+	c.recordHealth(ctx, req.OrgID, err)
 	if failOpen {
 		result.Label = promptinjection.LabelUnavailable
 		result.Completed = false
@@ -454,6 +466,26 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 		}
 	}
 	return verdict, reason, err
+}
+
+// recordHealth records one judged message on risk.analysis.evaluations: the
+// judge's own refusal and verdict-shape failures first, then the provider
+// failure classification.
+func (c *Engine) recordHealth(ctx context.Context, orgID string, err error) {
+	switch {
+	case err == nil:
+		c.health.Completed(ctx, orgID)
+	case errors.Is(err, context.Canceled):
+		c.health.Canceled(ctx, orgID)
+	case errors.Is(err, errRefused):
+		c.health.Degraded(ctx, orgID, riskhealth.ReasonContentPolicy)
+	case errors.Is(err, errTruncatedVerdict):
+		c.health.Degraded(ctx, orgID, riskhealth.ReasonTruncatedResponse)
+	case errors.Is(err, errMalformedVerdict):
+		c.health.Degraded(ctx, orgID, riskhealth.ReasonMalformedResponse)
+	default:
+		c.health.Degraded(ctx, orgID, riskhealth.ReasonFromError(err))
+	}
 }
 
 func typedFailureReason(err error, outcome o11y.Outcome) string {

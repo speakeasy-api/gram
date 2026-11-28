@@ -91,7 +91,7 @@ func newHandler(t *testing.T, stub *llmanalyzer.StubCompleter, findingsPub gcp.P
 	if stub != nil {
 		completer = stub
 	}
-	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), completer)
 	return llmanalyzer.NewHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), analyzer, findingsPub, metering.NewRiskRecorder(meterPub))
 }
 
@@ -381,7 +381,7 @@ func TestHandle_ShadowRequestPublishesMarkedFindings(t *testing.T) {
 		ParseFailures:    0,
 	}
 	meterProvider, reader := newEnforceMeterProvider(t)
-	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), stub)
 	h := llmanalyzer.NewHandler(testenv.NewLogger(t), meterProvider, analyzer, pub, metering.NewRiskRecorder(meterPub))
 
 	request := newAnalysis("AKIA0000000000000000")

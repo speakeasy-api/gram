@@ -52,7 +52,7 @@ func newEnforceHandler(t *testing.T, stub *llmanalyzer.StubCompleter, opts ...ll
 	if stub != nil {
 		completer = stub
 	}
-	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), completer)
 	handler := llmanalyzer.NewEnforceHandler(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, analyzer, writer, opts...)
 	return handler, mr, client, reader
 }
