@@ -11965,6 +11965,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_assignments_plugin_id_principal_urn_key
 CREATE INDEX IF NOT EXISTS plugin_assignments_organization_id_principal_urn_idx
   ON plugin_assignments (organization_id, principal_urn);
 
+-- Pins the GitHub repository identity independently of the publishing connection.
+CREATE TABLE IF NOT EXISTS plugin_repository_bindings (
+  project_id uuid NOT NULL,
+  repository_id bigint NOT NULL,
+  repo_owner text NOT NULL CHECK (repo_owner <> ''),
+  repo_name text NOT NULL CHECK (repo_name <> ''),
+  installation_id bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT plugin_repository_bindings_pkey PRIMARY KEY (project_id),
+  CONSTRAINT plugin_repository_bindings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+COMMENT ON COLUMN plugin_repository_bindings.project_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_repository_bindings.repository_id IS '@access: restricted';
+COMMENT ON COLUMN plugin_repository_bindings.repo_owner IS '@access: confidential-pii';
+COMMENT ON COLUMN plugin_repository_bindings.repo_name IS '@access: opaque-confidential';
+COMMENT ON COLUMN plugin_repository_bindings.installation_id IS '@access: restricted';
+COMMENT ON COLUMN plugin_repository_bindings.created_at IS '@access: confidential';
+COMMENT ON COLUMN plugin_repository_bindings.updated_at IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_repository_bindings_repository_id_key
+  ON plugin_repository_bindings (repository_id);
+
 -- Tracks the GitHub repository where plugin packages are published for a project.
 CREATE TABLE IF NOT EXISTS plugin_github_connections (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

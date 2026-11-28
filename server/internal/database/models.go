@@ -5965,6 +5965,23 @@ type PluginGithubConnection struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PluginRepositoryBinding struct {
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
+	RepositoryID int64
+	// @access: confidential-pii
+	RepoOwner string
+	// @access: opaque-confidential
+	RepoName string
+	// @access: restricted
+	InstallationID int64
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type PluginServer struct {
 	// @access: confidential
 	ID uuid.UUID
