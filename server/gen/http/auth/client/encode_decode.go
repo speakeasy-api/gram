@@ -1567,6 +1567,7 @@ func EncodeRegisterRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 // register endpoint. restoreBody controls whether the response body should be
 // restored after having been read.
 // DecodeRegisterResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -1595,6 +1596,20 @@ func DecodeRegisterResponse(decoder func(*http.Response) goahttp.Decoder, restor
 		switch resp.StatusCode {
 		case http.StatusOK:
 			return nil, nil
+		case http.StatusTooManyRequests:
+			var (
+				body RegisterRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			return nil, NewRegisterRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body RegisterUnauthorizedResponseBody

@@ -139,3 +139,26 @@ func TestRedisStoreAllowNChargesBatch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, res.Allowed, "only 2 tokens remain, cannot charge 8")
 }
+
+func TestRedisStorePerHour(t *testing.T) {
+	t.Parallel()
+
+	rate := PerHour(3)
+	require.Equal(t, Rate{Tokens: 3, Interval: time.Hour, Burst: 3}, rate)
+
+	limiter := New(newRedisStore(t), redisTestNamespace(t), rate)
+	for i := range 3 {
+		res, err := limiter.Allow(t.Context(), "user-1")
+		require.NoError(t, err)
+		require.True(t, res.Allowed, "token %d should be allowed", i)
+	}
+
+	res, err := limiter.Allow(t.Context(), "user-1")
+	require.NoError(t, err)
+	require.False(t, res.Allowed, "hourly burst is exhausted")
+	require.Greater(t, res.RetryAfter, time.Duration(0))
+
+	other, err := limiter.Allow(t.Context(), "user-2")
+	require.NoError(t, err)
+	require.True(t, other.Allowed, "different key has its own bucket")
+}

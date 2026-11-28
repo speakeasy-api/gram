@@ -72,6 +72,16 @@ describe("SigninErrorNotice", () => {
     ).toBeTruthy();
   });
 
+  it("explains an organization creation rate limit refusal", () => {
+    renderNotice("?signin_error=org_creation_rate_limited");
+
+    expect(
+      screen.getByText(
+        "Too many organization creation attempts. Please try again later.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("falls back to the generic message for an unknown code", () => {
     renderNotice("?signin_error=not_a_real_code");
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var Trial = Type("Trial", func() {
@@ -231,6 +232,8 @@ var _ = Service("auth", func() {
 	Method("register", func() {
 		Description("Register a new org for a user with their session information.")
 
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("org_name", String, "The name of the org to register")
@@ -242,6 +245,9 @@ var _ = Service("auth", func() {
 			POST("/rpc/auth.register")
 			security.SessionHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "register")

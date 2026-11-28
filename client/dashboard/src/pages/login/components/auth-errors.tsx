@@ -11,6 +11,8 @@ const authErrorMessages: Record<string, string> = {
   sign_in_revoked: "Your sign-in was ended. Sign in again to continue.",
   self_serve_disabled:
     "Self-serve signup is temporarily unavailable. Contact sales@speakeasy.com to get started.",
+  org_creation_rate_limited:
+    "Too many organization creation attempts. Please try again later.",
   // A session transfer between Speakeasy hosts failed and sent the browser here.
   transfer_session_expired:
     "Your previous sign-in is no longer available. Please sign in again.",

@@ -26,6 +26,7 @@ type workspaceTestState struct {
 	mu            sync.Mutex
 	organizations []OrganizationOption
 	provisioned   []string
+	provisionErr  error
 	invitations   []WorkspaceInvitation
 	joined        []string
 }
@@ -43,6 +44,9 @@ func (s *workspaceTestState) SuggestedWorkspaceName(context.Context, string) (st
 func (s *workspaceTestState) ProvisionWorkspace(_ context.Context, userID, name, clientName string) (OrganizationOption, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.provisionErr != nil {
+		return OrganizationOption{}, s.provisionErr
+	}
 	// Mirrors the auth service, which refuses while an invitation is pending.
 	if len(s.invitations) > 0 {
 		return OrganizationOption{}, auth.ErrUserHasPendingInvitation
@@ -479,4 +483,27 @@ func TestOAuthHTTPUserWithoutOrganizationIsRefusedWithoutProvisioner(t *testing.
 
 	response := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {"csrf"}, "workspace_name": {"Acme"}})
 	require.Equal(t, http.StatusNotFound, response.Code)
+}
+
+func TestOAuthHTTPCreateWorkspaceRateLimitedRedirectsTemporarilyUnavailable(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	workspaces := &workspaceTestState{provisionErr: auth.ErrOrgCreationRateLimited}
+	service.organizations = workspaces
+	service.workspaces = workspaces
+	state := startWorkspaceFlow(t, service)
+
+	selection := getSelection(service, state)
+	require.Equal(t, http.StatusOK, selection.Code)
+	csrf := formValue(t, selection.Body.String(), "csrf_token")
+
+	response := postWorkspace(service, url.Values{"state": {state}, "csrf_token": {csrf}, "workspace_name": {"Acme Inc"}})
+	require.Equal(t, http.StatusFound, response.Code)
+	redirect, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "temporarily_unavailable", redirect.Query().Get("error"))
+	require.Equal(t, "Too many organization creation attempts. Please try again later.", redirect.Query().Get("error_description"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	require.Zero(t, workspaces.provisionedCount())
 }

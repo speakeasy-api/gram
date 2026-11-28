@@ -919,6 +919,10 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		case errors.Is(err, auth.ErrSelfServeDisabled):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Self-serve signup is temporarily unavailable. Contact sales@speakeasy.com to get started."})
 			return
+		case errors.Is(err, auth.ErrOrgCreationRateLimited):
+			s.logger.WarnContext(r.Context(), "Platform MCP workspace creation rate limited", attr.SlogError(err), attr.SlogUserID(userID))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "Too many organization creation attempts. Please try again later."})
+			return
 		case errors.Is(err, auth.ErrUserHasPendingInvitation):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
 			return
