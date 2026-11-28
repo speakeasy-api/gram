@@ -146,6 +146,7 @@ func (k KeyType) Validate() error {
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	claudeOpusLatest:                true,
 	"anthropic/claude-opus-5.5":     true,
 	"anthropic/claude-fable-5.1":    true,
 	"anthropic/claude-opus-5":       true,
@@ -245,7 +246,8 @@ func ResolveModel(model string) string {
 		return model
 	}
 
-	provider, _, ok := strings.Cut(model, "/")
+	// OpenRouter marks rolling aliases with a leading tilde, not a new provider.
+	provider, _, ok := strings.Cut(strings.TrimPrefix(model, "~"), "/")
 	if !ok || provider == "" {
 		return ""
 	}
