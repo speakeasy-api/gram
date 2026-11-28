@@ -64,6 +64,63 @@ func (q *Queries) GetAssistantTokenRevocation(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const isLiveAssistantATEActor = `-- name: IsLiveAssistantATEActor :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_ate_actors a
+  JOIN assistant_runtimes r
+    ON r.id = a.runtime_id
+   AND r.project_id = a.project_id
+   AND r.assistant_id = a.assistant_id
+  JOIN assistant_threads t
+    ON t.id = a.assistant_thread_id
+   AND t.project_id = a.project_id
+   AND t.assistant_id = a.assistant_id
+  JOIN chats c
+    ON c.id = t.chat_id
+   AND c.project_id = a.project_id
+   AND c.organization_id = a.organization_id
+  WHERE a.organization_id = $1
+    AND a.project_id = $2
+    AND a.assistant_id = $3
+    AND a.assistant_thread_id = $4
+    AND a.actor_uid = $5
+    AND a.deleted IS FALSE
+    AND a.configured IS TRUE
+    AND a.state = 'running'
+    AND r.runtime_version = 3
+    AND r.backend = 'ate'
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+    AND r.state IN ('starting', 'active')
+    AND t.deleted IS FALSE
+    AND c.deleted IS FALSE
+)::boolean AS live
+`
+
+type IsLiveAssistantATEActorParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	AssistantID    uuid.UUID
+	ThreadID       uuid.UUID
+	ActorUid       string
+}
+
+// Checks that an ATE thread actor bound to an already-minted turn credential
+// is still configured, running, and attached to a live runtime and chat.
+func (q *Queries) IsLiveAssistantATEActor(ctx context.Context, arg IsLiveAssistantATEActorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLiveAssistantATEActor,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.ActorUid,
+	)
+	var live bool
+	err := row.Scan(&live)
+	return live, err
+}
+
 const listKitInferenceSessionBindings = `-- name: ListKitInferenceSessionBindings :many
 SELECT s.acp_session_id, t.id AS thread_id, t.chat_id
 FROM assistant_kit_sessions s

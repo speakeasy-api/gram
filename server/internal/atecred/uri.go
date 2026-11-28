@@ -64,7 +64,7 @@ const (
 )
 
 var (
-	ateNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+	ateNamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 	actorUIDChars  = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 )
 

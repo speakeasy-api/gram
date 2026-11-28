@@ -56,6 +56,21 @@ func TestMountATECredentialMintEndpointFromCLI(t *testing.T) {
 		})
 	})
 
+	t.Run("disabled runtime provider leaves mint endpoint unmounted", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                "production",
+			"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+			"assistant-ate-enabled":      "true",
+		})
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, c, &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
 	t.Run("local static token mounts mint endpoint and authenticates", func(t *testing.T) {
 		t.Parallel()
 		mux := goahttp.NewMuxer()
@@ -71,6 +86,12 @@ func TestMountATECredentialMintEndpointFromCLI(t *testing.T) {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		authReq := httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil)
+		authReq.Header.Set("Authorization", "Bearer dev-static-token")
+		authRec := httptest.NewRecorder()
+		mux.ServeHTTP(authRec, authReq)
+		require.Equal(t, http.StatusBadRequest, authRec.Code)
 	})
 }
 

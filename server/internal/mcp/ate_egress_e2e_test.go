@@ -55,17 +55,21 @@ import (
 var errFakeATEEgressDenied = errors.New("ATE egress proxy denied request")
 
 type fakeATEEgressIDTokenValidator struct {
-	expectedToken string
-	email         string
+	expectedToken    string
+	expectedAudience string
+	email            string
 }
 
 func (v fakeATEEgressIDTokenValidator) Validate(_ context.Context, token, audience string) (*idtoken.Payload, error) {
 	if token != v.expectedToken {
 		return nil, errors.New("invalid google id token")
 	}
+	if audience != v.expectedAudience {
+		return nil, fmt.Errorf("unexpected audience %q", audience)
+	}
 	return &idtoken.Payload{
 		Issuer:   "https://accounts.google.com",
-		Audience: audience,
+		Audience: v.expectedAudience,
 		Claims: map[string]any{
 			"email":          v.email,
 			"email_verified": true,
@@ -392,16 +396,24 @@ func TestATEEgress_EndToEndCredentialInjectionAndWebAccess(t *testing.T) {
 
 			actorName := "spk-kit-" + strings.ReplaceAll(uuid.NewString()[:12], "-", "")
 			actorUID := "ate-uid-" + uuid.NewString()
+			bindingJSON, err := json.Marshal(assistants.KitWorkloadBinding{
+				MCPProjectGateway: true,
+				IssuerID:          uuid.Nil,
+				Subject:           "actor/" + atespace + "/" + actorName,
+				Identity:          identity,
+			})
+			require.NoError(t, err)
 			actorRow, err := q.InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
-				ActorName:   actorName,
-				ActorUid:    actorUID,
-				State:       "running",
-				Configured:  true,
-				WarmUntil:   pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
-				RuntimeID:   runtimeRec.ID,
-				ProjectID:   project,
-				AssistantID: a.ID,
-				ThreadID:    threadID,
+				ActorName:           actorName,
+				ActorUid:            actorUID,
+				State:               "running",
+				Configured:          true,
+				WorkloadBindingJson: bindingJSON,
+				WarmUntil:           pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
+				RuntimeID:           runtimeRec.ID,
+				ProjectID:           project,
+				AssistantID:         a.ID,
+				ThreadID:            threadID,
 			})
 			require.NoError(t, err)
 
@@ -427,7 +439,7 @@ func TestATEEgress_EndToEndCredentialInjectionAndWebAccess(t *testing.T) {
 				ExpectedAudience: mintURL,
 				ServiceAccount:   providerSAEmail,
 				LocalToken:       "",
-				Validator:        fakeATEEgressIDTokenValidator{expectedToken: providerGoogleJWT, email: providerSAEmail},
+				Validator:        fakeATEEgressIDTokenValidator{expectedToken: providerGoogleJWT, expectedAudience: mintURL, email: providerSAEmail},
 			})
 			mintMux.Handle(atecred.MintEndpointPath, atecred.NewMintHandler(logger, auth, core))
 
@@ -591,23 +603,16 @@ func TestATEEgress_EndToEndCredentialInjectionAndWebAccess(t *testing.T) {
 			cachedToken := string(fetched.GetOpaqueBytes())
 			require.NotEmpty(t, cachedToken)
 
-			// 6. Retiring the ATE actor immediately rejects new mint requests (PermissionDenied) once cache expires.
+			// 6. Retiring the ATE actor IMMEDIATELY rejects even an already-minted
+			//    cached credential at both Project Gateway and /chat/completions
+			//    (inside the 1m provider cache window), AND rejects new mints once
+			//    the provider cache expires.
 			deletedRows, err := q.SoftDeleteAssistantATEActor(ctx, assistantrepo.SoftDeleteAssistantATEActorParams{
 				RetiredState: "retired", ProjectID: project, ID: actorRow.ID,
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(1), deletedRows)
-			clockOffset.Store(int64(2 * time.Minute))
 
-			_, _, err = proxy.doProjectGateway(t, ctx, gatewayURL, placeholderHeaders, listServersBody(t))
-			require.Equal(t, codes.PermissionDenied, status.Code(err))
-			_, _, err = proxy.doInference(t, ctx, inferenceURL, placeholderHeaders, string(infBody))
-			require.Equal(t, codes.PermissionDenied, status.Code(err))
-
-			// 7. Soft-deleting the thread immediately rejects even a previously-minted cached credential.
-			require.NoError(t, q.SoftDeleteAssistantThread(ctx, assistantrepo.SoftDeleteAssistantThreadParams{
-				ID: threadID, ProjectID: project,
-			}))
 			_, err = serveProjectGatewayHTTP(t, ti, gateway, gateway.projectSlug, cachedToken, listServersBody(t))
 			requireOopsCode(t, err, oops.CodeUnauthorized)
 
@@ -615,6 +620,12 @@ func TestATEEgress_EndToEndCredentialInjectionAndWebAccess(t *testing.T) {
 			infReq.Header.Set("Authorization", "Bearer "+cachedToken)
 			err = chatSvc.HandleCompletion(httptest.NewRecorder(), infReq)
 			requireOopsCode(t, err, oops.CodeUnauthorized)
+
+			clockOffset.Store(int64(2 * time.Minute))
+			_, _, err = proxy.doProjectGateway(t, ctx, gatewayURL, placeholderHeaders, listServersBody(t))
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+			_, _, err = proxy.doInference(t, ctx, inferenceURL, placeholderHeaders, string(infBody))
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
 			require.Equal(t, int32(1), inferenceCalls.Load())
 		})
 	}

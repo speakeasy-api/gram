@@ -114,6 +114,14 @@ func mountATECredentialMintEndpointFromCLI(ctx context.Context, logger *slog.Log
 	if !c.Bool("assistant-ate-enabled") && sa == "" && localToken == "" {
 		return nil
 	}
+	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
+	if err != nil {
+		return err
+	}
+	if base.Provider == assistants.RuntimeProviderDisabled {
+		logger.WarnContext(ctx, "ignoring ATE credential provider mint endpoint settings: the assistant runtime provider is disabled")
+		return nil
+	}
 
 	atespace := strings.TrimSpace(c.String("assistant-ate-atespace"))
 	var (

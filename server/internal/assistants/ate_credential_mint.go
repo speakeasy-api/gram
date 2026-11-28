@@ -71,6 +71,21 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 		return "", time.Time{}, fmt.Errorf("%w: runtime metadata mismatch", atecred.ErrActorCredentialDenied)
 	}
 
+	// Verify the immutable workload binding recorded at actor bootstrap so live
+	// checks can only narrow or revoke an actor, never rebind it to another
+	// assistant, agent, or subject.
+	var binding KitWorkloadBinding
+	if err := json.Unmarshal(row.WorkloadBindingJson, &binding); err != nil ||
+		!binding.MCPProjectGateway ||
+		binding.IssuerID != uuid.Nil ||
+		binding.Subject != "actor/"+atespace+"/"+actorName ||
+		binding.Identity.OrganizationID != row.OrganizationID ||
+		binding.Identity.ProjectID != row.ProjectID ||
+		binding.Identity.AssistantID != row.AssistantID ||
+		binding.Identity.AgentID == uuid.Nil {
+		return "", time.Time{}, fmt.Errorf("%w: actor workload binding invalid", atecred.ErrActorCredentialDenied)
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, row.OrganizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", time.Time{}, fmt.Errorf("%w: organization not found", atecred.ErrActorCredentialDenied)
@@ -82,14 +97,9 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 		return "", time.Time{}, fmt.Errorf("%w: organization %s", atecred.ErrActorCredentialDenied, refusal)
 	}
 
-	var triggerID uuid.UUID
-	if row.TriggerInstanceID.Valid {
-		triggerID = row.TriggerInstanceID.UUID
-	} else {
-		triggerID, err = s.resolveDashboardTriggerInstance(ctx, row.OrganizationID, row.ProjectID, row.AssistantID, row.AssistantName)
-		if err != nil {
-			return "", time.Time{}, fmt.Errorf("resolve ATE actor execution trigger: %w", err)
-		}
+	triggerID, err := s.resolveDashboardTriggerInstance(ctx, row.OrganizationID, row.ProjectID, row.AssistantID, row.AssistantName)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("resolve ATE actor execution trigger: %w", err)
 	}
 
 	resolution, err := s.identities.Resolve(ctx, s.db, row.OrganizationID, row.ProjectID, row.AssistantID, triggerID)
@@ -100,6 +110,9 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 		return "", time.Time{}, fmt.Errorf("%w: trigger workload identity is %s", atecred.ErrActorCredentialDenied, resolution.State)
 	}
 	workload := *resolution.Identity
+	if workload.AgentID != binding.Identity.AgentID {
+		return "", time.Time{}, fmt.Errorf("%w: actor agent binding mismatch", atecred.ErrActorCredentialDenied)
+	}
 
 	// Check live agent and owner eligibility up front so revoked/suspended
 	// agents or removed owners fail closed at mint time as well as on every
@@ -149,6 +162,7 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 		ThreadID:        row.AssistantThreadID,
 		ChatID:          row.ChatID,
 		TranscriptOwned: true,
+		ATEActorUID:     row.ActorUid,
 	}, atecred.MintedCredentialLifetime)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("mint ATE actor turn credential: %w", err)

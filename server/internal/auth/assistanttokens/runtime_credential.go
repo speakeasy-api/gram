@@ -32,6 +32,7 @@ type RuntimeBinding struct {
 	ThreadID        uuid.UUID `json:"thread_id"`
 	ChatID          uuid.UUID `json:"chat_id"`
 	TranscriptOwned bool      `json:"transcript_owned,omitempty"`
+	ATEActorUID     string    `json:"ate_actor_uid,omitempty"`
 }
 
 type runtimeChatKey struct{}
@@ -173,6 +174,21 @@ func (m *Manager) loadRuntimeBinding(ctx context.Context, credential principalcr
 	}
 	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
 		return binding, false, oops.C(oops.CodeUnauthorized)
+	}
+	if binding.ATEActorUID != "" {
+		live, err := m.tokens.IsLiveAssistantATEActor(ctx, tokenrepo.IsLiveAssistantATEActorParams{
+			OrganizationID: binding.OrganizationID,
+			ProjectID:      binding.ProjectID,
+			AssistantID:    binding.AssistantID,
+			ThreadID:       binding.ThreadID,
+			ActorUid:       binding.ATEActorUID,
+		})
+		if err != nil {
+			return binding, false, fmt.Errorf("check ATE actor revocation: %w", err)
+		}
+		if !live {
+			return binding, false, oops.C(oops.CodeUnauthorized)
+		}
 	}
 	return binding, true, nil
 }

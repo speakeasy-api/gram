@@ -62,15 +62,24 @@ func NewMintHandler(logger *slog.Logger, auth *Authenticator, minter ActorCreden
 		}
 
 		defer o11y.NoLogDefer(func() error { return r.Body.Close() })
-		dec := json.NewDecoder(io.LimitReader(r.Body, maxMintRequestBytes))
+		limitedBody := http.MaxBytesReader(w, r.Body, maxMintRequestBytes)
+		dec := json.NewDecoder(limitedBody)
 		dec.DisallowUnknownFields()
 		var req MintRequest
 		if err := dec.Decode(&req); err != nil {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			logger.WarnContext(ctx, "ATE credential mint invalid request body", attr.SlogError(err))
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 		if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}

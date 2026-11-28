@@ -107,7 +107,7 @@ func (c *HTTPMintClient) Mint(ctx context.Context, req MintRequest) (MintRespons
 	callCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	tok, err := c.tokenSource.Token()
+	tok, err := tokenWithContext(callCtx, c.tokenSource)
 	if err != nil || tok == nil || tok.AccessToken == "" {
 		return MintResponse{}, fmt.Errorf("%w: acquire provider auth token: %w", ErrMintUnavailable, err)
 	}
@@ -338,4 +338,25 @@ func validHeaderSecret(raw string) bool {
 		}
 	}
 	return true
+}
+
+func tokenWithContext(ctx context.Context, ts oauth2.TokenSource) (*oauth2.Token, error) {
+	type result struct {
+		tok *oauth2.Token
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		tok, err := ts.Token()
+		ch <- result{tok: tok, err: err}
+	}()
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return nil, fmt.Errorf("fetch token from source: %w", res.err)
+		}
+		return res.tok, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("token acquisition timed out: %w", ctx.Err())
+	}
 }

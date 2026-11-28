@@ -2138,9 +2138,10 @@ WHERE organization_id = @organization_id AND project_id = @project_id
   AND actor_uid = @actor_uid AND deleted IS FALSE;
 
 -- name: GetLiveAssistantATEActorByUID :one
--- Looks up a live running ATE thread actor by its unique ATE actor_uid for
--- on-demand egress credential minting. Joins runtime, assistant, thread, and
--- chat so retired, paused, non-running, or deleted actors fail closed.
+-- Looks up a live, configured, running ATE thread actor by its unique ATE
+-- actor_uid for on-demand egress credential minting. Joins runtime, assistant,
+-- thread, and chat so retired, unconfigured, paused, non-running, or deleted
+-- actors fail closed.
 SELECT
   a.id,
   a.organization_id,
@@ -2156,18 +2157,7 @@ SELECT
   r.backend_metadata_json,
   asst.name AS assistant_name,
   asst.status AS assistant_status,
-  t.chat_id,
-  (
-    SELECT e.trigger_instance_id
-    FROM assistant_thread_events e
-    WHERE e.project_id = a.project_id
-      AND e.assistant_thread_id = a.assistant_thread_id
-      AND e.deleted IS FALSE
-      AND e.trigger_instance_id IS NOT NULL
-      AND COALESCE(e.normalized_payload_json->>'_gram_source_kind', '') <> 'wake'
-    ORDER BY e.created_at DESC
-    LIMIT 1
-  ) AS trigger_instance_id
+  t.chat_id
 FROM assistant_ate_actors a
 JOIN assistant_runtimes r
   ON r.id = a.runtime_id
@@ -2187,6 +2177,7 @@ JOIN chats c
  AND c.organization_id = a.organization_id
 WHERE a.actor_uid = @actor_uid
   AND a.deleted IS FALSE
+  AND a.configured IS TRUE
   AND a.state = @running_state
   AND r.runtime_version = 3
   AND r.backend = 'ate'

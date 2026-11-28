@@ -78,6 +78,7 @@ func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistan
 		OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID,
 		AssistantID: assistant.ID, ThreadID: thread.ID, ChatID: thread.ChatID,
 		TranscriptOwned: false,
+		ATEActorUID:     "",
 	})
 	if err != nil {
 		return "", fmt.Errorf("mint turn credential: %w", err)

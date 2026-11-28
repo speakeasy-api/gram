@@ -260,9 +260,15 @@ func runATECredentialProvider(c *cli.Context) error {
 		ReadHeaderTimeout: ateCredProviderHealthReadHeaderTimeout,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
+	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	healthErrCh := make(chan error, 1)
 	go func() {
 		if serveErr := healthSrv.Serve(healthLis); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			logger.ErrorContext(ctx, "ATE credential provider health server exited", attr.SlogError(serveErr))
+			healthErrCh <- fmt.Errorf("serve ATE credential provider health: %w", serveErr)
+			cancel()
 		}
 	}()
 	defer func() {
@@ -270,9 +276,6 @@ func runATECredentialProvider(c *cli.Context) error {
 		defer shutCancel()
 		_ = healthSrv.Shutdown(shutCtx)
 	}()
-
-	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		<-sigCtx.Done()
@@ -295,5 +298,10 @@ func runATECredentialProvider(c *cli.Context) error {
 	if err := grpcSrv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 		return fmt.Errorf("serve ATE credential provider gRPC: %w", err)
 	}
-	return nil
+	select {
+	case healthErr := <-healthErrCh:
+		return healthErr
+	default:
+		return nil
+	}
 }
