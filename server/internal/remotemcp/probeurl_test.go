@@ -18,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	remotemcpproxy "github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -100,6 +103,64 @@ func TestProbeURL_BlockedHostIsStructuredUnreachable(t *testing.T) {
 	require.Equal(t, remotemcp.ProbeOutcomeUnreachable, result.Outcome)
 	require.Equal(t, remotemcp.ProbeReasonGuardianRejected, requireValue(t, result.Reason))
 	require.Nil(t, result.HTTPStatus)
+}
+
+func TestProbeURL_LimitsProbesPerOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPWrite})
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	ti.service.WithProbeLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), t.Name()+":"+uuid.NewString(), ratelimit.PerMinute(2)))
+
+	// The blocked host answers without any network I/O, so each call spends
+	// one probe and nothing else.
+	blockedURL := "https://" + blockedTestHost + "/mcp"
+	for range 2 {
+		_, err := ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
+	})
+	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+
+	// The deprecated endpoint spends from the same allowance.
+	_, err = ti.service.VerifyURL(ctx, &gen.VerifyURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
+	})
+	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+
+	// Another organization has its own allowance.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	otherAuthCtx := *authCtx
+	otherAuthCtx.ActiveOrganizationID = "another-organization"
+	_, err = ti.service.ProbeURL(contextvalues.SetAuthContext(ctx, &otherAuthCtx), &gen.ProbeURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
+	})
+	require.NoError(t, err)
+}
+
+func TestProbeURL_FailsClosedWhenTheLimiterIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPWrite})
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	closed := redis.NewClient(redisClient.Options())
+	require.NoError(t, closed.Close())
+	ti.service.WithProbeLimiter(ratelimit.New(ratelimit.NewRedisStore(closed), t.Name(), ratelimit.PerMinute(1)))
+
+	_, err = ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: "https://" + blockedTestHost + "/mcp",
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
 }
 
 func TestVerifyURL_CompatibilityInvalidMCPResponse(t *testing.T) {

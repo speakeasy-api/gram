@@ -1983,7 +1983,8 @@ func newStartCommand() *cli.Command {
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
 			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).
-				WithDistributionAdmission(distributionAdmission)
+				WithDistributionAdmission(distributionAdmission).
+				WithProbeLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), remotemcp.ProbeLimitName, ratelimit.PerMinute(remotemcp.ProbesPerOrganizationPerMinute), ratelimit.WithMetrics(meterProvider)))
 			remotemcp.Attach(mux, remoteMcpService)
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			tunnelService := tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient)

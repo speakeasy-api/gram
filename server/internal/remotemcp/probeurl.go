@@ -29,6 +29,16 @@ const (
 
 	probeURLMaxRedirects = 3
 
+	// ProbeLimitName namespaces the per-organization URL probe allowance.
+	ProbeLimitName = "remote-mcp-url-probe"
+
+	// ProbesPerOrganizationPerMinute bounds an organization's URL probes
+	// across its projects and members. The dashboard probes once when a server
+	// is added or its sign-in panel opens, so an admin setting up a batch of
+	// servers stays well under 30 a minute, while a script cannot turn the
+	// endpoint into a scanner.
+	ProbesPerOrganizationPerMinute = 30
+
 	// probeURLMaxBodyBytes caps each response body the probe reads. Discovery
 	// and initialize results are small; 1 MiB leaves headroom without letting
 	// an untrusted upstream hold a large buffer.
