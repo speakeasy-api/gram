@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 
@@ -609,6 +610,10 @@ func (s *StubClient) SetUserSessionIDs(workosUserID string, sessionIDs []string)
 }
 
 func (s *StubClient) ListUserSessionIDs(_ context.Context, workosUserID string) ([]string, error) {
+	if strings.TrimSpace(workosUserID) == "" {
+		return nil, fmt.Errorf("list workos user sessions: missing workos user ID")
+	}
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -616,6 +621,10 @@ func (s *StubClient) ListUserSessionIDs(_ context.Context, workosUserID string) 
 }
 
 func (s *StubClient) SetUserBlacklistedMetadata(_ context.Context, workosUserID string, blacklisted bool) error {
+	if strings.TrimSpace(workosUserID) == "" {
+		return fmt.Errorf("set workos user blacklisted metadata: missing workos user ID")
+	}
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -633,10 +642,15 @@ func (s *StubClient) BlacklistedMetadata() map[string]bool {
 }
 
 func (s *StubClient) AddRadarEmailBlocklistEntry(_ context.Context, email string) error {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
+		return fmt.Errorf("add workos radar email blocklist entry: missing email")
+	}
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	s.radarBlockedEmails = append(s.radarBlockedEmails, email)
+	s.radarBlockedEmails = append(s.radarBlockedEmails, normalized)
 	return nil
 }
 

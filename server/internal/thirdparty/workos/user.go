@@ -310,7 +310,11 @@ func (wc *Client) RevokeSession(ctx context.Context, sessionID string) error {
 // maxUserSessionPages caps WorkOS session pagination for a single user.
 const maxUserSessionPages = 50
 
-// ListUserSessionIDs lists all WorkOS AuthKit session IDs for workosUserID.
+// ListUserSessionIDs lists all active WorkOS AuthKit session IDs for
+// workosUserID. Historical sessions whose status is already revoked or expired
+// are skipped so callers only attempt to revoke live sessions. If pagination
+// fails after collecting earlier pages, the IDs collected so far are returned
+// alongside the error so callers can still revoke them best-effort.
 func (wc *Client) ListUserSessionIDs(ctx context.Context, workosUserID string) ([]string, error) {
 	if strings.TrimSpace(workosUserID) == "" {
 		return nil, fmt.Errorf("list workos user sessions: missing workos user ID")
@@ -326,12 +330,16 @@ func (wc *Client) ListUserSessionIDs(ctx context.Context, workosUserID string) (
 			Order:  usermanagement.Desc,
 		})
 		if err != nil {
-			return nil, wrapSDKError(err, "list workos user sessions")
+			return ids, wrapSDKError(err, "list workos user sessions")
 		}
 		for _, sess := range resp.Data {
-			if sess.ID != "" {
-				ids = append(ids, sess.ID)
+			if sess.ID == "" {
+				continue
 			}
+			if sess.Status != "" && !strings.EqualFold(sess.Status, "active") {
+				continue
+			}
+			ids = append(ids, sess.ID)
 		}
 		if resp.ListMetadata.After == "" || len(resp.Data) == 0 {
 			return ids, nil
@@ -339,7 +347,7 @@ func (wc *Client) ListUserSessionIDs(ctx context.Context, workosUserID string) (
 		after = resp.ListMetadata.After
 	}
 
-	return nil, fmt.Errorf("list workos user sessions: exceeded %d pages", maxUserSessionPages)
+	return ids, fmt.Errorf("list workos user sessions: exceeded %d pages", maxUserSessionPages)
 }
 
 // SetUserBlacklistedMetadata updates the WorkOS user's custom "blacklisted"

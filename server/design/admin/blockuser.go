@@ -7,7 +7,9 @@ import (
 
 var AdminBlockUserStepResult = Type("AdminBlockUserStepResult", func() {
 	Description("Outcome of one post-commit cache or external system step during a user block.")
-	Attribute("status", String, "Step outcome: succeeded, partial, skipped, failed, or not_configured.")
+	Attribute("status", String, "Step outcome: succeeded, partial, skipped, failed, or not_configured.", func() {
+		Enum("succeeded", "partial", "skipped", "failed", "not_configured")
+	})
 	Attribute("detail", String, "Human-readable detail explaining skipped, partial, failed, or not_configured outcomes.")
 	Required("status")
 })

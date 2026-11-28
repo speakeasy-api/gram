@@ -66,11 +66,11 @@ func TestBlockUser_FullFlowWithMockedWorkOS(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/user_management/users/workos_block_target/sessions":
 			sessionListPage++
 			if r.URL.Query().Get("after") == "" {
-				_, _ = w.Write([]byte(`{"data":[{"id":"wos_sess_1"},{"id":"wos_sess_2"}],"list_metadata":{"after":"page_2"}}`))
+				_, _ = w.Write([]byte(`{"data":[{"id":"wos_sess_1","status":"active"},{"id":"wos_sess_old","status":"revoked"},{"id":"wos_sess_2","status":"active"}],"list_metadata":{"after":"page_2"}}`))
 				return
 			}
 			assert.Equal(t, "page_2", r.URL.Query().Get("after"))
-			_, _ = w.Write([]byte(`{"data":[{"id":"wos_sess_3"}],"list_metadata":{"after":""}}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":"wos_sess_3","status":"active"},{"id":"wos_sess_expired","status":"expired"}],"list_metadata":{"after":""}}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/user_management/sessions/revoke":
 			var body struct {
 				SessionID string `json:"session_id"`
@@ -326,6 +326,73 @@ func TestBlockUser_PartialFailureWhenWorkOSErrors(t *testing.T) {
 	require.Equal(t, blockStepFailed, res.WorkosRadar.Status)
 	require.Equal(t, blockStepNotConfigured, res.RegistryDisable.Status)
 	require.GreaterOrEqual(t, len(res.Warnings), 4)
+}
+
+func TestBlockUser_PartialSessionListingStillRevokesCollectedSessions(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu              sync.Mutex
+		revokedSessions []string
+	)
+	workosClient := newAdminWorkOSHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/user_management/users/workos_list_partial":
+			_, _ = w.Write([]byte(`{"id":"workos_list_partial","email":"listpartial@example.invalid"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/user_management/users/workos_list_partial/sessions":
+			if r.URL.Query().Get("after") == "" {
+				_, _ = w.Write([]byte(`{"data":[{"id":"sess_page1","status":"active"},{"id":"sess_page1_revoked","status":"revoked"}],"list_metadata":{"after":"page_2"}}`))
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"message":"cursor expired"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/user_management/sessions/revoke":
+			var body struct {
+				SessionID string `json:"session_id"`
+			}
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			mu.Lock()
+			revokedSessions = append(revokedSessions, body.SessionID)
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"revoked"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/radar/lists/email/block":
+			w.WriteHeader(http.StatusCreated)
+		default:
+			t.Errorf("unexpected WorkOS request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, workosClient)
+	ctx = blockUserAdminContext(ctx)
+
+	uRepo := usersrepo.New(conn)
+	const targetUserID = "user-admin-block-list-partial"
+	_, err := uRepo.UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          targetUserID,
+		Email:       "listpartial@example.invalid",
+		DisplayName: "List Partial Target",
+		PhotoUrl:    conv.ToPGTextEmpty(""),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, uRepo.SetUserWorkosID(ctx, usersrepo.SetUserWorkosIDParams{
+		ID:       targetUserID,
+		WorkosID: conv.ToPGText("workos_list_partial"),
+	}))
+
+	res, err := svc.BlockUser(ctx, &gen.BlockUserPayload{UserID: targetUserID})
+	require.NoError(t, err)
+	require.Equal(t, blockStepSucceeded, res.WorkosMetadata.Status)
+	require.Equal(t, blockStepPartial, res.WorkosSessions.Status)
+	require.Equal(t, 1, res.WorkosSessionsRevokedCount)
+	require.Equal(t, blockStepSucceeded, res.WorkosRadar.Status)
+
+	mu.Lock()
+	require.Equal(t, []string{"sess_page1"}, revokedSessions)
+	mu.Unlock()
 }
 
 func TestBlockUser_WithoutWorkOSConfigured(t *testing.T) {

@@ -4,8 +4,26 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Step outcome: succeeded, partial, skipped, failed, or not_configured.
+ */
+export const AdminBlockUserStepResultStatus = {
+  Succeeded: "succeeded",
+  Partial: "partial",
+  Skipped: "skipped",
+  Failed: "failed",
+  NotConfigured: "not_configured",
+} as const;
+/**
+ * Step outcome: succeeded, partial, skipped, failed, or not_configured.
+ */
+export type AdminBlockUserStepResultStatus = ClosedEnum<
+  typeof AdminBlockUserStepResultStatus
+>;
 
 /**
  * Outcome of one post-commit cache or external system step during a user block.
@@ -18,8 +36,13 @@ export type AdminBlockUserStepResult = {
   /**
    * Step outcome: succeeded, partial, skipped, failed, or not_configured.
    */
-  status: string;
+  status: AdminBlockUserStepResultStatus;
 };
+
+/** @internal */
+export const AdminBlockUserStepResultStatus$inboundSchema: z.ZodMiniEnum<
+  typeof AdminBlockUserStepResultStatus
+> = z.enum(AdminBlockUserStepResultStatus);
 
 /** @internal */
 export const AdminBlockUserStepResult$inboundSchema: z.ZodMiniType<
@@ -27,7 +50,7 @@ export const AdminBlockUserStepResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   detail: z.optional(z.string()),
-  status: z.string(),
+  status: AdminBlockUserStepResultStatus$inboundSchema,
 });
 
 export function adminBlockUserStepResultFromJSON(

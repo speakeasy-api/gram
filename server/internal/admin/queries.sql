@@ -1832,3 +1832,29 @@ SELECT (
     + (SELECT count(*) FROM mcp_server_auth_clients msac
        WHERE msac.mcp_server_id = @mcp_server_id AND msac.project_id = @project_id AND msac.deleted IS FALSE)
 )::bigint AS ref_count;
+
+-- name: AdminLockUserForBlock :one
+-- Locks the target user row before validating admin/staff guards and running
+-- userblock.BlacklistTx in the same transaction so concurrent admin promotion
+-- or staff membership changes cannot race past preflight validation.
+SELECT id, email, workos_id, admin, deleted_at
+FROM users
+WHERE id = @id
+FOR UPDATE;
+
+-- name: AdminHasActiveStaffMembershipForUser :one
+-- Checks whether the target user holds an active membership in the configured
+-- staff organization (matched by local user_id or linked workos_user_id).
+SELECT EXISTS (
+    SELECT 1
+    FROM users AS u
+    JOIN organization_user_relationships AS our
+      ON our.organization_id = @staff_organization_id
+     AND our.deleted IS FALSE
+     AND (
+       our.user_id = u.id
+       OR (u.workos_id IS NOT NULL AND our.workos_user_id = u.workos_id)
+     )
+    WHERE u.id = @user_id
+      AND u.deleted_at IS NULL
+) AS is_staff;

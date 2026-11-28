@@ -1102,6 +1102,36 @@ func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUse
 	return i, err
 }
 
+const adminHasActiveStaffMembershipForUser = `-- name: AdminHasActiveStaffMembershipForUser :one
+SELECT EXISTS (
+    SELECT 1
+    FROM users AS u
+    JOIN organization_user_relationships AS our
+      ON our.organization_id = $1
+     AND our.deleted IS FALSE
+     AND (
+       our.user_id = u.id
+       OR (u.workos_id IS NOT NULL AND our.workos_user_id = u.workos_id)
+     )
+    WHERE u.id = $2
+      AND u.deleted_at IS NULL
+) AS is_staff
+`
+
+type AdminHasActiveStaffMembershipForUserParams struct {
+	StaffOrganizationID string
+	UserID              string
+}
+
+// Checks whether the target user holds an active membership in the configured
+// staff organization (matched by local user_id or linked workos_user_id).
+func (q *Queries) AdminHasActiveStaffMembershipForUser(ctx context.Context, arg AdminHasActiveStaffMembershipForUserParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminHasActiveStaffMembershipForUser, arg.StaffOrganizationID, arg.UserID)
+	var is_staff bool
+	err := row.Scan(&is_staff)
+	return is_staff, err
+}
+
 const adminInsertAuthPermissionProvisionFixture = `-- name: AdminInsertAuthPermissionProvisionFixture :exec
 INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
 VALUES ($1, $2, $3, $4, 'attachment')
@@ -3384,6 +3414,37 @@ ORDER BY a.id FOR UPDATE OF a, p, b, g
 func (q *Queries) AdminLockAssistantAgentNames(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, adminLockAssistantAgentNames, organizationID)
 	return err
+}
+
+const adminLockUserForBlock = `-- name: AdminLockUserForBlock :one
+SELECT id, email, workos_id, admin, deleted_at
+FROM users
+WHERE id = $1
+FOR UPDATE
+`
+
+type AdminLockUserForBlockRow struct {
+	ID        string
+	Email     string
+	WorkosID  pgtype.Text
+	Admin     bool
+	DeletedAt pgtype.Timestamptz
+}
+
+// Locks the target user row before validating admin/staff guards and running
+// userblock.BlacklistTx in the same transaction so concurrent admin promotion
+// or staff membership changes cannot race past preflight validation.
+func (q *Queries) AdminLockUserForBlock(ctx context.Context, id string) (AdminLockUserForBlockRow, error) {
+	row := q.db.QueryRow(ctx, adminLockUserForBlock, id)
+	var i AdminLockUserForBlockRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.WorkosID,
+		&i.Admin,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one

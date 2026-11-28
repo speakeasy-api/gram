@@ -10,13 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/userblock"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -88,12 +88,23 @@ func (s *Service) BlockUser(ctx context.Context, payload *gen.BlockUserPayload) 
 		attr.SlogUserID(userID),
 	)
 
-	target, err := usersrepo.New(s.db).GetUser(ctx, userID)
+	// Lock the target user row FOR UPDATE, verify self-block and admin/staff
+	// guards under that lock, and run userblock.BlacklistTx in the same
+	// transaction so concurrent admin promotion or staff membership changes
+	// cannot race past validation.
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin user block transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	adminQ := repo.New(tx)
+	target, err := adminQ.AdminLockUserForBlock(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, err, "user not found")
 	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load user for block").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock user for block").LogError(ctx, logger)
 	}
 	if strings.EqualFold(strings.TrimSpace(target.Email), strings.TrimSpace(operatorEmail)) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "cannot block your own account")
@@ -102,9 +113,9 @@ func (s *Service) BlockUser(ctx context.Context, payload *gen.BlockUserPayload) 
 		return nil, oops.E(oops.CodeForbidden, nil, "cannot block an active platform administrator")
 	}
 	if s.staffOrg.Configured() {
-		isStaff, err := orgRepo.New(s.db).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
-			OrganizationID: s.staffOrg.ID(),
-			UserID:         userID,
+		isStaff, err := adminQ.AdminHasActiveStaffMembershipForUser(ctx, repo.AdminHasActiveStaffMembershipForUserParams{
+			StaffOrganizationID: s.staffOrg.ID(),
+			UserID:              userID,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check staff organization membership").LogError(ctx, logger)
@@ -114,7 +125,7 @@ func (s *Service) BlockUser(ctx context.Context, payload *gen.BlockUserPayload) 
 		}
 	}
 
-	cascade, err := userblock.Blacklist(ctx, s.db, userblock.BlacklistParams{
+	cascade, err := userblock.BlacklistTx(ctx, tx, userblock.BlacklistParams{
 		UserID: userID,
 		Actor: userblock.Actor{
 			Principal:   actor,
@@ -131,6 +142,10 @@ func (s *Service) BlockUser(ctx context.Context, payload *gen.BlockUserPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "blacklist user and cascade revocations").LogError(ctx, logger)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit user block transaction").LogError(ctx, logger)
+	}
+	userblock.Forget(s.db)
 
 	warnings := make([]string, 0)
 
@@ -252,7 +267,7 @@ func (s *Service) pushBlockSessionCaches(ctx context.Context, cascade userblock.
 		}
 		if jtiFailures > 0 {
 			failed += jtiFailures
-			warnings = append(warnings, fmt.Sprintf("session cache: failed to push %d of %d revoked JTIs (queued for retry): %v", jtiFailures, len(cascade.RevokedJTIs), firstErr))
+			warnings = append(warnings, fmt.Sprintf("session cache: failed to push %d of %d revoked JTIs: %v", jtiFailures, len(cascade.RevokedJTIs), firstErr))
 		}
 	}
 
@@ -305,50 +320,65 @@ func (s *Service) applyWorkOSBlockSteps(ctx context.Context, cascade userblock.C
 		}
 	}
 
-	// 2. WorkOS sessions: list and revoke all active sessions.
+	// 2. WorkOS sessions: list and revoke all active sessions. Listing and each
+	// revocation get their own bounded timeout so many sessions cannot exhaust
+	// one shared deadline. If listing fails after collecting earlier pages,
+	// revoke the collected IDs best-effort before reporting partial or failed.
 	if cascade.WorkOSUserID == "" {
 		detail := "user has no linked WorkOS user ID"
 		sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepSkipped, Detail: &detail}
 	} else {
-		stepCtx, cancel := context.WithTimeout(baseCtx, blockUserWorkOSStepTimeout)
-		sessionIDs, err := s.workosUserBlocker.ListUserSessionIDs(stepCtx, cascade.WorkOSUserID)
-		if err != nil {
-			cancel()
-			detail := fmt.Sprintf("list WorkOS sessions: %v", err)
-			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepFailed, Detail: &detail}
-			warnings = append(warnings, "WorkOS sessions: "+detail)
-		} else {
-			failedCount := 0
-			var firstErr error
-			for _, sessionID := range sessionIDs {
-				if err := s.workosUserBlocker.RevokeSession(stepCtx, sessionID); err != nil {
-					if signins.WorkOSSessionGone(err) {
-						continue
-					}
-					if firstErr == nil {
-						firstErr = err
-					}
-					failedCount++
+		listCtx, listCancel := context.WithTimeout(baseCtx, blockUserWorkOSStepTimeout)
+		sessionIDs, listErr := s.workosUserBlocker.ListUserSessionIDs(listCtx, cascade.WorkOSUserID)
+		listCancel()
+
+		failedCount := 0
+		var firstRevokeErr error
+		for _, sessionID := range sessionIDs {
+			revokeCtx, revokeCancel := context.WithTimeout(baseCtx, blockUserWorkOSStepTimeout)
+			err := s.workosUserBlocker.RevokeSession(revokeCtx, sessionID)
+			revokeCancel()
+			if err != nil {
+				if signins.WorkOSSessionGone(err) {
 					continue
 				}
-				sessionsRevokedCount++
+				if firstRevokeErr == nil {
+					firstRevokeErr = err
+				}
+				failedCount++
+				continue
 			}
-			cancel()
-			switch {
-			case failedCount == 0 && len(sessionIDs) == 0:
-				detail := "no active WorkOS sessions found"
-				sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepSucceeded, Detail: &detail}
-			case failedCount == 0:
-				sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepSucceeded, Detail: nil}
-			case sessionsRevokedCount > 0:
-				detail := fmt.Sprintf("revoked %d WorkOS sessions; %d failed: %v", sessionsRevokedCount, failedCount, firstErr)
-				sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepPartial, Detail: &detail}
-				warnings = append(warnings, "WorkOS sessions: "+detail)
-			default:
-				detail := fmt.Sprintf("failed to revoke %d WorkOS sessions: %v", failedCount, firstErr)
-				sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepFailed, Detail: &detail}
-				warnings = append(warnings, "WorkOS sessions: "+detail)
+			sessionsRevokedCount++
+		}
+
+		switch {
+		case listErr != nil && sessionsRevokedCount > 0:
+			detail := fmt.Sprintf("revoked %d WorkOS sessions before session listing failed: %v", sessionsRevokedCount, listErr)
+			if failedCount > 0 {
+				detail = fmt.Sprintf("revoked %d WorkOS sessions (%d revocations failed: %v) and session listing failed: %v", sessionsRevokedCount, failedCount, firstRevokeErr, listErr)
 			}
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepPartial, Detail: &detail}
+			warnings = append(warnings, "WorkOS sessions: "+detail)
+		case listErr != nil:
+			detail := fmt.Sprintf("list WorkOS sessions: %v", listErr)
+			if failedCount > 0 {
+				detail = fmt.Sprintf("list WorkOS sessions failed (%v) and %d revocations failed: %v", listErr, failedCount, firstRevokeErr)
+			}
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepFailed, Detail: &detail}
+			warnings = append(warnings, "WorkOS sessions: "+detail)
+		case failedCount == 0 && len(sessionIDs) == 0:
+			detail := "no active WorkOS sessions found"
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepSucceeded, Detail: &detail}
+		case failedCount == 0:
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepSucceeded, Detail: nil}
+		case sessionsRevokedCount > 0:
+			detail := fmt.Sprintf("revoked %d WorkOS sessions; %d failed: %v", sessionsRevokedCount, failedCount, firstRevokeErr)
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepPartial, Detail: &detail}
+			warnings = append(warnings, "WorkOS sessions: "+detail)
+		default:
+			detail := fmt.Sprintf("failed to revoke %d WorkOS sessions: %v", failedCount, firstRevokeErr)
+			sessionsStep = &gen.AdminBlockUserStepResult{Status: blockStepFailed, Detail: &detail}
+			warnings = append(warnings, "WorkOS sessions: "+detail)
 		}
 	}
 

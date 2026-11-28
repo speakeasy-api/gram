@@ -105133,5 +105133,10 @@ func ValidateAdminBlockUserStepResultResponseBody(body *AdminBlockUserStepResult
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
+	if body.Status != nil {
+		if !(*body.Status == "succeeded" || *body.Status == "partial" || *body.Status == "skipped" || *body.Status == "failed" || *body.Status == "not_configured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"succeeded", "partial", "skipped", "failed", "not_configured"}))
+		}
+	}
 	return
 }

@@ -29,7 +29,7 @@ func newTestWorkOSHTTPClient(t *testing.T, handler http.HandlerFunc) *workos.Cli
 	})
 }
 
-func TestClient_ListUserSessionIDs_Paginates(t *testing.T) {
+func TestClient_ListUserSessionIDs_PaginatesAndFiltersActive(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -42,17 +42,54 @@ func TestClient_ListUserSessionIDs_Paginates(t *testing.T) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("after") == "" {
-			_, _ = w.Write([]byte(`{"data":[{"id":"sess_1"},{"id":"sess_2"}],"list_metadata":{"after":"cursor_2"}}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":"sess_active","status":"active"},{"id":"sess_revoked","status":"revoked"},{"id":"sess_no_status"}],"list_metadata":{"after":"cursor_2"}}`))
 			return
 		}
 		assert.Equal(t, "cursor_2", r.URL.Query().Get("after"))
-		_, _ = w.Write([]byte(`{"data":[{"id":"sess_3"}],"list_metadata":{"after":""}}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"sess_expired","status":"expired"},{"id":"sess_active_upper","status":"ACTIVE"}],"list_metadata":{"after":""}}`))
 	})
 
 	ids, err := client.ListUserSessionIDs(ctx, "workos_user_1")
 	require.NoError(t, err)
 	require.Equal(t, 2, calls)
-	require.Equal(t, []string{"sess_1", "sess_2", "sess_3"}, ids)
+	require.Equal(t, []string{"sess_active", "sess_no_status", "sess_active_upper"}, ids)
+}
+
+func TestClient_ListUserSessionIDs_ReturnsCollectedIDsWhenLaterPageFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	client := newTestWorkOSHTTPClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("after") == "" {
+			_, _ = w.Write([]byte(`{"data":[{"id":"sess_p1","status":"active"},{"id":"sess_p1_old","status":"revoked"}],"list_metadata":{"after":"cursor_2"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"bad cursor"}`))
+	})
+
+	ids, err := client.ListUserSessionIDs(ctx, "workos_user_1")
+	require.Error(t, err)
+	require.Equal(t, []string{"sess_p1"}, ids)
+}
+
+func TestStubClient_BlockValidationMirrorsRealClient(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stub := workos.NewStubClient()
+
+	_, err := stub.ListUserSessionIDs(ctx, "   ")
+	require.Error(t, err)
+	require.Error(t, stub.SetUserBlacklistedMetadata(ctx, " ", true))
+	require.Error(t, stub.AddRadarEmailBlocklistEntry(ctx, "   "))
+
+	require.NoError(t, stub.SetUserBlacklistedMetadata(ctx, "workos_u1", true))
+	require.Equal(t, map[string]bool{"workos_u1": true}, stub.BlacklistedMetadata())
+
+	require.NoError(t, stub.AddRadarEmailBlocklistEntry(ctx, "  Blocked@Example.Invalid "))
+	require.Equal(t, []string{"blocked@example.invalid"}, stub.RadarBlockedEmails())
 }
 
 func TestClient_SetUserBlacklistedMetadata(t *testing.T) {
