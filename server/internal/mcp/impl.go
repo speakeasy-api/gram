@@ -93,6 +93,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
@@ -1417,6 +1418,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 	req := prepared.request
 	protocolVersion := prepared.protocolVersion
+	ctx = sessionactivity.WithMCPMethod(ctx, req.Method)
+	r = r.WithContext(ctx)
 
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)

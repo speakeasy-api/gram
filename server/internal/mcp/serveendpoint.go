@@ -3,8 +3,10 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -43,6 +45,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -207,6 +210,15 @@ func (s *Service) serveResolvedMCPEndpoint(
 		}
 	}
 
+	method := ""
+	if prepared != nil {
+		method = prepared.request.Method
+	} else if r.Method == http.MethodPost {
+		method = peekSessionActivityMethod(r)
+	}
+	ctx = sessionactivity.WithMCPMethod(ctx, method)
+	r = r.WithContext(ctx)
+
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
@@ -319,6 +331,32 @@ func (s *Service) serveResolvedMCPEndpoint(
 		// exactly one backend is set; this is defensive.
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
+}
+
+// peekSessionActivityMethod buffers a proxied MCP request once so activity can
+// be classified before authentication. The proxy recognizes the replacement
+// body and reuses the same bytes for decoding and forwarding.
+func peekSessionActivityMethod(r *http.Request) string {
+	return peekSessionActivityMethodWithLimit(r, proxy.DefaultMaxBufferedBodyBytes)
+}
+
+func peekSessionActivityMethodWithLimit(r *http.Request, maxBytes int64) string {
+	if r.Body == nil {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBytes+1))
+	_ = r.Body.Close()
+	r.Body = proxy.NewBufferedRequestBody(body, err)
+	if err != nil || int64(len(body)) > maxBytes {
+		return ""
+	}
+	var request struct {
+		Method string `json:"method"`
+	}
+	if json.Unmarshal(body, &request) != nil {
+		return ""
+	}
+	return request.Method
 }
 
 // hostedServingFromWrapper derives the hosting configuration for a request

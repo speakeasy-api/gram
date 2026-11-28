@@ -19240,7 +19240,7 @@ INSERT INTO remote_session_ema_credentials AS c (
 SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
   $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
   $10::uuid, 'external', $11::text[], $12::text[], $13::timestamptz,
-  $14::boolean, clock_timestamp()
+  $14::boolean, CASE WHEN $15::boolean THEN clock_timestamp() ELSE NULL END
 WHERE EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.id = $8::uuid AND b.generation = $9::bigint
@@ -19270,7 +19270,7 @@ WHERE EXISTS (
     JOIN remote_session_issuers AS ti ON ti.id = tc.remote_session_issuer_id
       AND ti.project_id IS NULL AND (ti.organization_id = $1::text OR ti.organization_id IS NULL) AND ti.deleted IS FALSE
     WHERE s.id = $10::uuid AND s.deleted IS FALSE
-      AND s.credential_obtained_at IS NOT DISTINCT FROM $15::timestamptz
+      AND s.credential_obtained_at IS NOT DISTINCT FROM $16::timestamptz
       AND s.observation_status IS DISTINCT FROM 'reauthentication_required'
       AND s.observation_status IS DISTINCT FROM 'configuration_failure'
       AND s.organization_id = $1::text AND s.project_id IS NULL
@@ -19309,7 +19309,7 @@ DO UPDATE SET
   granted_scopes = EXCLUDED.granted_scopes,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
-  last_used_at = EXCLUDED.last_used_at,
+  last_used_at = CASE WHEN $15::boolean THEN EXCLUDED.last_used_at ELSE c.last_used_at END,
   updated_at = clock_timestamp()
 RETURNING id, updated_at
 `
@@ -19329,6 +19329,7 @@ type UpsertEMACredentialParams struct {
 	GrantedScopes                  []string
 	AccessExpiresAt                pgtype.Timestamptz
 	DownstreamRefreshTokenObserved bool
+	MarkUsed                       bool
 	TrustedCredentialObtainedAt    pgtype.Timestamptz
 }
 
@@ -19361,6 +19362,7 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 		arg.GrantedScopes,
 		arg.AccessExpiresAt,
 		arg.DownstreamRefreshTokenObserved,
+		arg.MarkUsed,
 		arg.TrustedCredentialObtainedAt,
 	)
 	var i UpsertEMACredentialRow
@@ -19692,7 +19694,7 @@ SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
   $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
   'speakeasy', $10::uuid, $11::timestamptz, $12::uuid,
   $13::uuid, $14::uuid, $15::text[], $16::text[],
-  $17::timestamptz, $18::boolean, clock_timestamp()
+  $17::timestamptz, $18::boolean, CASE WHEN $19::boolean THEN clock_timestamp() ELSE NULL END
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
   JOIN remote_session_clients rc ON rc.id = b.remote_session_client_id AND rc.deleted IS FALSE
@@ -19725,7 +19727,7 @@ DO UPDATE SET
   granted_scopes = EXCLUDED.granted_scopes,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
-  last_used_at = EXCLUDED.last_used_at,
+  last_used_at = CASE WHEN $19::boolean THEN EXCLUDED.last_used_at ELSE c.last_used_at END,
   updated_at = clock_timestamp()
 RETURNING id, updated_at
 `
@@ -19749,6 +19751,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	GrantedScopes                  []string
 	AccessExpiresAt                pgtype.Timestamptz
 	DownstreamRefreshTokenObserved bool
+	MarkUsed                       bool
 }
 
 type UpsertSpeakeasyEMACredentialRow struct {
@@ -19782,6 +19785,7 @@ func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSp
 		arg.GrantedScopes,
 		arg.AccessExpiresAt,
 		arg.DownstreamRefreshTokenObserved,
+		arg.MarkUsed,
 	)
 	var i UpsertSpeakeasyEMACredentialRow
 	err := row.Scan(&i.ID, &i.UpdatedAt)

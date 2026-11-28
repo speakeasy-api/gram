@@ -45,6 +45,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessionactivity"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -195,6 +196,8 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	req := prepared.request
 	resolution := prepared.protocolVersion
+	ctx = sessionactivity.WithMCPMethod(ctx, req.Method)
+	r = r.WithContext(ctx)
 	if initializeNegotiable(&req, resolution) {
 		// A conforming initialize declares nothing, so Resolve lands on the
 		// default; the negotiated answer is what actually governs the

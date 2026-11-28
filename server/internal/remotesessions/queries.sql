@@ -6523,7 +6523,7 @@ INSERT INTO remote_session_ema_credentials AS c (
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
   @trusted_issuer_session_id::uuid, 'external', @requested_scopes::text[], @granted_scopes::text[], @access_expires_at::timestamptz,
-  @downstream_refresh_token_observed::boolean, clock_timestamp()
+  @downstream_refresh_token_observed::boolean, CASE WHEN @mark_used::boolean THEN clock_timestamp() ELSE NULL END
 WHERE EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
     WHERE b.id = @binding_id::uuid AND b.generation = @binding_generation::bigint
@@ -6592,7 +6592,7 @@ DO UPDATE SET
   granted_scopes = EXCLUDED.granted_scopes,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
-  last_used_at = EXCLUDED.last_used_at,
+  last_used_at = CASE WHEN @mark_used::boolean THEN EXCLUDED.last_used_at ELSE c.last_used_at END,
   updated_at = clock_timestamp()
 RETURNING id, updated_at;
 
@@ -7298,7 +7298,7 @@ SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
   'speakeasy', @internal_session_issuer_id::uuid, @internal_session_issuer_updated_at::timestamptz, @internal_session_issuer_key_id::uuid,
   @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[],
-  @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, clock_timestamp()
+  @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, CASE WHEN @mark_used::boolean THEN clock_timestamp() ELSE NULL END
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
   JOIN remote_session_clients rc ON rc.id = b.remote_session_client_id AND rc.deleted IS FALSE
@@ -7331,7 +7331,7 @@ DO UPDATE SET
   granted_scopes = EXCLUDED.granted_scopes,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
-  last_used_at = EXCLUDED.last_used_at,
+  last_used_at = CASE WHEN @mark_used::boolean THEN EXCLUDED.last_used_at ELSE c.last_used_at END,
   updated_at = clock_timestamp()
 RETURNING id, updated_at;
 
