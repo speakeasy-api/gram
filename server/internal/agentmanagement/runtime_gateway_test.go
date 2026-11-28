@@ -15,6 +15,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -42,7 +43,11 @@ func enableOrganizationGateway(t *testing.T, service *Service, organizationID st
 func runtimeGatewayService(t *testing.T, organizationID string) (*Service, *feature.InMemory) {
 	t.Helper()
 	conn := newTestDB(t)
-	seedOrganization(t, conn, organizationID)
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Test Organization", Slug: organizationID,
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
 	seedOrganizationUser(t, conn, organizationID, "owner")
 	flags := &feature.InMemory{}
 	base, err := url.Parse("https://runtime.example.test")
