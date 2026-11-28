@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const testAuthenticationHostURL = "https://auth.example.com"
@@ -449,13 +451,229 @@ func TestAuthenticationHost_OptedInIssuerAnnouncesAuthenticationHost(t *testing.
 	require.Equal(t, authIssuer+"/register", meta["registration_endpoint"])
 	require.Equal(t, authIssuer+"/revoke", meta["revocation_endpoint"])
 
-	// The MCP host serves no document naming a different issuer.
-	req := wellKnownRequest(t, "/.well-known/oauth-authorization-server/mcp/", slug)
-	requireNotFound(t, ti.service.HandleGetAuthorizationServer(httptest.NewRecorder(), req))
-
 	prm := fetchProtectedResourceMetadata(t, ti, slug)
 	require.Equal(t, strings.TrimSuffix(ti.serverURL.String(), "/")+"/mcp/"+slug, prm["resource"])
 	require.Equal(t, []any{authIssuer}, prm["authorization_servers"])
+}
+
+// fetchMCPHostAuthorizationServerMetadata reads the RFC 8414 document served
+// on the MCP host.
+func fetchMCPHostAuthorizationServerMetadata(t *testing.T, ti *testInstance, mcpSlug string) map[string]any {
+	t.Helper()
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, wellKnownRequest(t, "/.well-known/oauth-authorization-server/mcp/", mcpSlug)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+	return meta
+}
+
+// After an issuer opts in, the MCP host keeps serving a document under the
+// issuer it announced before, so a client that recorded that issuer can
+// rediscover it. Every URL it names is on the MCP host, and it offers only the
+// grants that work against that issuer.
+func TestAuthenticationHost_OptedInMCPHostServesRecordedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	newAuthenticationHostHarness(t, ti)
+	recordedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
+	require.Equal(t, mcpHostRoot(ti, slug), recordedIssuer)
+
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+
+	meta := fetchMCPHostAuthorizationServerMetadata(t, ti, slug)
+	require.Equal(t, recordedIssuer, meta["issuer"])
+	require.Equal(t, recordedIssuer+"/authorize", meta["authorization_endpoint"])
+	require.Equal(t, recordedIssuer+"/token", meta["token_endpoint"])
+	require.Equal(t, recordedIssuer+"/register", meta["registration_endpoint"])
+	require.Equal(t, recordedIssuer+"/revoke", meta["revocation_endpoint"])
+	require.Equal(t, []any{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}, meta["grant_types_supported"])
+	require.NotContains(t, meta, "authorization_grant_profiles_supported")
+	require.NotEmpty(t, meta["response_types_supported"])
+
+	// Protected resource metadata still sends new clients to the
+	// authentication host.
+	prm := fetchProtectedResourceMetadata(t, ti, slug)
+	require.Equal(t, []any{testAuthenticationHostURL + "/mcp/" + slug}, prm["authorization_servers"])
+}
+
+// A client that signed in before its issuer opted in refreshes at the token
+// endpoint its recorded metadata names, and the session it gets carries the
+// issuer's current issuer.
+func TestAuthenticationHost_OptedInRefreshesAtRecordedTokenEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	newAuthenticationHostHarness(t, ti)
+
+	w := postRefreshGrant(t, ti, slug, client.ClientID, refreshToken, mcpHostRoot(ti, slug))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, testAuthenticationHostURL+"/mcp/"+slug, accessTokenClaims(t, w.Body.Bytes())["iss"])
+}
+
+// A private_key_jwt client holding the MCP host's metadata signs for the issuer
+// it names, which the MCP host's token and revocation endpoints accept. The
+// authentication host issuer is accepted there too.
+func TestAuthenticationHost_OptedInMCPHostAcceptsRecordedIssuerAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	signer := newAssertionSigner(t)
+	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
+	newAuthenticationHostHarness(t, ti)
+	slug := toolset.McpSlug.String
+	recordedIssuer, ok := fetchMCPHostAuthorizationServerMetadata(t, ti, slug)["issuer"].(string)
+	require.True(t, ok)
+
+	for _, aud := range []string{recordedIssuer, testAuthenticationHostURL + "/mcp/" + slug} {
+		form := url.Values{}
+		form.Set("grant_type", oauthwire.GrantTypeRefreshToken)
+		form.Set("refresh_token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+		form.Set("client_id", client.ClientID)
+		w := postForm(t, ti, slug, "token", withAssertion(form, signer.assertion(t, client.ClientID, aud)))
+		require.Equal(t, http.StatusOK, w.Code, "aud %q: %s", aud, w.Body.String())
+	}
+
+	form := url.Values{}
+	form.Set("token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+	form.Set("token_type_hint", "refresh_token")
+	form.Set("client_id", client.ClientID)
+	w := postForm(t, ti, slug, "revoke", withAssertion(form, signer.assertion(t, client.ClientID, recordedIssuer)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// The recorded issuer is the root of the MCP server a request addresses, so an
+// assertion signed for one server's recorded issuer does not authenticate at
+// another server of the same issuer, even for the same client.
+func TestAuthenticationHost_OptedInRecordedIssuerAudienceIsPerServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	first, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	second, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	second = setToolsetIssuer(t, ctx, ti.conn, second.ProjectID, second, issuer.ID)
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	signer := newAssertionSigner(t)
+	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
+	newAuthenticationHostHarness(t, ti)
+
+	form := url.Values{}
+	form.Set("grant_type", oauthwire.GrantTypeRefreshToken)
+	form.Set("refresh_token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+	form.Set("client_id", client.ClientID)
+	w := postForm(t, ti, second.McpSlug.String, "token", withAssertion(form, signer.assertion(t, client.ClientID, mcpHostRoot(ti, first.McpSlug.String))))
+	requireInvalidClient(t, w, http.StatusBadRequest)
+}
+
+// An MCP server moved onto a shared issuer that opts in to the authentication
+// host keeps answering under the issuer its clients recorded, and sessions
+// consolidated onto that issuer refresh there.
+func TestAuthenticationHost_SharedOptedInMCPHostServesRecordedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil)
+	setIssuerMode(t, ctx, ti, issuer.ID, string(authserver.ModeShared), "")
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	newAuthenticationHostHarness(t, ti)
+
+	meta := fetchMCPHostAuthorizationServerMetadata(t, ti, slug)
+	require.Equal(t, mcpHostRoot(ti, slug), meta["issuer"])
+	require.Equal(t, mcpHostRoot(ti, slug)+"/token", meta["token_endpoint"])
+
+	prm := fetchProtectedResourceMetadata(t, ti, slug)
+	require.Equal(t, []any{authenticationHostSharedIssuerURL(issuer.ID.String())}, prm["authorization_servers"])
+
+	w := postRefreshGrant(t, ti, slug, client.ClientID, refreshToken, mcpHostRoot(ti, slug))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A private_key_jwt client of a server moved onto a shared issuer that opts in
+// to the authentication host keeps authenticating at the MCP host token and
+// revocation endpoints its recorded metadata names, signing for the recorded
+// issuer or for the token URL that metadata advertises. Those are the
+// server's own authorization server, not the shared one, so the issuer alias
+// applies.
+func TestAuthenticationHost_SharedOptedInMCPHostAcceptsRecordedIssuerAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	signer := newAssertionSigner(t)
+	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
+	setIssuerMode(t, ctx, ti, issuer.ID, string(authserver.ModeShared), "")
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	newAuthenticationHostHarness(t, ti)
+
+	meta := fetchMCPHostAuthorizationServerMetadata(t, ti, slug)
+	recordedIssuer, ok := meta["issuer"].(string)
+	require.True(t, ok)
+	advertisedTokenURL, ok := meta["token_endpoint"].(string)
+	require.True(t, ok)
+
+	for _, aud := range []string{recordedIssuer, advertisedTokenURL} {
+		form := url.Values{}
+		form.Set("grant_type", oauthwire.GrantTypeRefreshToken)
+		form.Set("refresh_token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+		form.Set("client_id", client.ClientID)
+		form.Set("resource", mcpHostRoot(ti, slug))
+		w := postForm(t, ti, slug, "token", withAssertion(form, signer.assertion(t, client.ClientID, aud)))
+		require.Equal(t, http.StatusOK, w.Code, "aud %q: %s", aud, w.Body.String())
+	}
+
+	form := url.Values{}
+	form.Set("token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+	form.Set("token_type_hint", "refresh_token")
+	form.Set("client_id", client.ClientID)
+	w := postForm(t, ti, slug, "revoke", withAssertion(form, signer.assertion(t, client.ClientID, recordedIssuer)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A client registered with the issuer an MCP server used before it moved to
+// another issuer is unknown to the new one, so its refresh is refused with
+// invalid_client (RFC 6749 §5.2), not invalid_grant. The MCP TypeScript SDK
+// answers invalid_client by clearing its stored registration and discovery,
+// so it registers again from the protected resource metadata, which names the
+// current issuer. On invalid_grant it would keep the recorded metadata and
+// start sign-in there.
+func TestAuthenticationHost_MovedServerRefusesPreviousIssuerClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, previous, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	refreshToken := seedUserSessionWithSelection(t, ctx, ti, previous.ID, client.ID, nil)
+
+	current, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
+		ProjectID:          toolset.ProjectID,
+		OrganizationID:     previous.OrganizationID,
+		Slug:               slug + "-shared-issuer",
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: 3600 * 1e6, Valid: true},
+	})
+	require.NoError(t, err)
+	setIssuerMode(t, ctx, ti, current.ID, string(authserver.ModeShared), "")
+	useAuthenticationHost(t, ctx, ti, current.OrganizationID.String, current.ID)
+	setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, current.ID)
+	newAuthenticationHostHarness(t, ti)
+
+	require.Equal(t, mcpHostRoot(ti, slug), fetchMCPHostAuthorizationServerMetadata(t, ti, slug)["issuer"])
+
+	w := postRefreshGrant(t, ti, slug, client.ClientID, refreshToken, mcpHostRoot(ti, slug))
+	requireInvalidClient(t, w, http.StatusBadRequest)
 }
 
 // A token minted for an opted-in issuer names the authentication host as its
