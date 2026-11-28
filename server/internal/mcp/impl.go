@@ -1140,9 +1140,10 @@ func writeOpenAIAppsChallengeToken(w http.ResponseWriter, token string) error {
 // text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
 // the Streamable HTTP standalone server->client stream (spec § Listening for
 // Messages from the Server) and dispatch through the unified endpoint
-// dispatcher so the proxy relays them upstream. Everything else — including
-// SSE requests against toolset-backed servers, which never send
-// server-initiated messages — keeps the legacy 405.
+// dispatcher so the proxy relays them upstream. SSE requests for a missing
+// or policy-denied slug answer the MCP not-found. Everything else, including
+// SSE requests against toolset-backed servers (which never send
+// server-initiated messages), keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
 	wantsHTML, wantsSSE := getServerAccept(r.Header.Get("Accept"))
 
@@ -1211,9 +1212,9 @@ func getServerAccept(accept string) (wantsHTML, wantsSSE bool) {
 
 // HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
 // HTTP session termination (spec § Session Management). Proxy-backed servers
-// relay it upstream so the remote session is actually torn down;
-// toolset-backed servers hold no upstream session state, so the method stays
-// unsupported there.
+// relay it upstream so the remote session is actually torn down; a missing
+// or policy-denied slug answers the MCP not-found; toolset-backed servers hold
+// no upstream session state, so the method stays unsupported there.
 func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
 	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
 		return err
