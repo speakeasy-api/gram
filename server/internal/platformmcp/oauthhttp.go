@@ -575,6 +575,14 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed", oauthui.ReasonDefault)
 			return
 		}
+		if errors.Is(err, identity.ErrDuplicateEmailAlias) {
+			s.logger.WarnContext(r.Context(), "platform mcp callback: rejected duplicate email alias",
+				attr.SlogAuthUserEmail(idpUser.Email),
+				attr.SlogWorkOSUserID(idpUser.Sub),
+			)
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed", oauthui.ReasonDefault)
+			return
+		}
 		if err != nil {
 			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "login could not be completed", oauthui.ReasonDefault)
 			return

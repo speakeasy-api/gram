@@ -24,3 +24,7 @@ func (e *providerError) Unwrap() error {
 // ErrUserBlocked marks a login refused because staff blocked the user from
 // the platform (users.blacklisted_at).
 var ErrUserBlocked = errors.New("user is blocked from the platform")
+
+// ErrDuplicateEmailAlias marks a sign-up refused because the normalized
+// Gmail or Googlemail address already belongs to another user.
+var ErrDuplicateEmailAlias = errors.New("an account already exists for this email address")

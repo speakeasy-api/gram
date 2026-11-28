@@ -1905,6 +1905,20 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// using the same logic the normal auth callback uses.
 	gramUserID, err := s.invite.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
+		if errors.Is(err, identity.ErrUserBlocked) {
+			// The generic expired-invite refusal, so the page does not reveal the block.
+			userblock.LogRefusal(ctx, s.logger, "org_invite", idpUser.Sub)
+			redirectError("invite already used, revoked, or expired")
+			return
+		}
+		if errors.Is(err, identity.ErrDuplicateEmailAlias) {
+			s.logger.WarnContext(ctx, "invite callback: rejected duplicate email alias",
+				attr.SlogAuthUserEmail(idpUser.Email),
+				attr.SlogWorkOSUserID(idpUser.Sub),
+			)
+			redirectError("an account already exists for this email address")
+			return
+		}
 		s.logger.ErrorContext(ctx, "invite callback: failed to provision user", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create user account")

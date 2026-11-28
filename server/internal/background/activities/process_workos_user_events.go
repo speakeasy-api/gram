@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/emailnorm"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -224,6 +225,37 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 	if err != nil {
 		return nil, err
 	}
+	if !resolved.existing {
+		canonicalEmail := emailnorm.Canonicalize(payload.Email)
+		blocked, err := userQueries.IsEmailBlacklisted(ctx, canonicalEmail)
+		if err != nil {
+			return nil, fmt.Errorf("check user email block: %w", err)
+		}
+		if blocked {
+			logger.WarnContext(ctx, "skipping WorkOS user sync for blacklisted email alias",
+				attr.SlogAuthUserEmail(payload.Email),
+				attr.SlogWorkOSUserID(payload.ID),
+			)
+			return nil, nil
+		}
+		if emailnorm.IsGmailDomain(payload.Email) {
+			other, err := userQueries.GetOtherUserByCanonicalGmailEmail(ctx, usersrepo.GetOtherUserByCanonicalGmailEmailParams{
+				ExcludeUserID:  resolved.userID,
+				CanonicalEmail: canonicalEmail,
+			})
+			switch {
+			case err == nil:
+				logger.WarnContext(ctx, "skipping WorkOS user sync for duplicate email alias",
+					attr.SlogAuthUserEmail(payload.Email),
+					attr.SlogWorkOSUserID(payload.ID),
+					attr.SlogUserID(other.ID),
+				)
+				return nil, nil
+			case !errors.Is(err, pgx.ErrNoRows):
+				return nil, fmt.Errorf("lookup normalized email alias: %w", err)
+			}
+		}
+	}
 	if resolved.needsLink {
 		if err := linkExistingUserToWorkOS(ctx, userQueries, resolved.userID, payload.ID); err != nil {
 			return nil, err
@@ -329,6 +361,7 @@ func (p *ProcessWorkOSUserEvents) handleUserDeleted(ctx context.Context, dbtx pg
 
 type resolvedWorkOSUser struct {
 	userID                string
+	existing              bool
 	needsLink             bool
 	needsExternalIDUpdate bool
 }
@@ -339,6 +372,7 @@ func resolveWorkOSUser(ctx context.Context, logger *slog.Logger, userQueries *us
 	case err == nil:
 		return resolvedWorkOSUser{
 			userID:                existingID,
+			existing:              true,
 			needsLink:             false,
 			needsExternalIDUpdate: payload.ExternalID == "",
 		}, nil
@@ -350,6 +384,7 @@ func resolveWorkOSUser(ctx context.Context, logger *slog.Logger, userQueries *us
 	if payload.ExternalID == "" {
 		return resolvedWorkOSUser{
 			userID:                users.UserIDFromWorkOSID(payload.ID),
+			existing:              false,
 			needsLink:             false,
 			needsExternalIDUpdate: true,
 		}, nil
@@ -361,6 +396,7 @@ func resolveWorkOSUser(ctx context.Context, logger *slog.Logger, userQueries *us
 		if !existingUser.WorkosID.Valid {
 			return resolvedWorkOSUser{
 				userID:                existingUser.ID,
+				existing:              true,
 				needsLink:             true,
 				needsExternalIDUpdate: false,
 			}, nil
@@ -375,6 +411,7 @@ func resolveWorkOSUser(ctx context.Context, logger *slog.Logger, userQueries *us
 	case errors.Is(err, pgx.ErrNoRows):
 		return resolvedWorkOSUser{
 			userID:                payload.ExternalID,
+			existing:              false,
 			needsLink:             false,
 			needsExternalIDUpdate: false,
 		}, nil

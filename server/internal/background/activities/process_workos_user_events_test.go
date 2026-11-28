@@ -887,3 +887,66 @@ func TestProcessWorkOSUserEvents_AppliesDisabledMetadata(t *testing.T) {
 		require.Equal(t, step.blocked, row.BlacklistedAt.Valid, step.name)
 	}
 }
+
+func TestProcessWorkOSUserEvents_SkipsDuplicateAndBlacklistedGmailAliases(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newUserEventsTestConn(t, "workos_user_events_gmail_alias")
+	logger := testenv.NewLogger(t)
+
+	const (
+		existingWorkosID = "user_existing_gmail"
+		dupWorkosID      = "user_dup_gmail_alias"
+		blockedWorkosID  = "user_blocked_gmail"
+		blockedAliasID   = "user_blocked_gmail_alias"
+	)
+
+	existingID := users.UserIDFromWorkOSID(existingWorkosID)
+	blockedID := users.UserIDFromWorkOSID(blockedWorkosID)
+
+	_, err := usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(existingID, existingWorkosID, "alice@gmail.com", "Alice"))
+	require.NoError(t, err)
+	_, err = usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(blockedID, blockedWorkosID, "bob@gmail.com", "Bob"))
+	require.NoError(t, err)
+	require.NoError(t, usersrepo.New(conn).SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
+		Blacklisted: true,
+		ID:          blockedID,
+	}))
+
+	// New WorkOS user colliding with an existing Gmail user via dots/+tag/googlemail.
+	dupClient := workos.NewStubClient()
+	dupClient.SetEventPages([][]events.Event{{
+		{ID: "event_dup_alias", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(dupWorkosID, "A.l.i.c.e+1@googlemail.com", "Puppet", "One", "")},
+	}})
+	res, err := activities.NewProcessWorkOSUserEvents(logger, conn, dupClient).Do(ctx, processWorkOSUserEventsParams(dupWorkosID))
+	require.NoError(t, err)
+	require.Equal(t, "event_dup_alias", res.LastEventID, "cursor should advance past skipped alias event")
+	require.Empty(t, dupClient.UserExternalIDUpdates(), "must not push external_id for rejected alias")
+	_, err = usersrepo.New(conn).GetUser(ctx, users.UserIDFromWorkOSID(dupWorkosID))
+	require.ErrorIs(t, err, pgx.ErrNoRows, "must not insert puppet user row")
+
+	// New WorkOS user colliding with a blacklisted Gmail user.
+	blockedClient := workos.NewStubClient()
+	blockedClient.SetEventPages([][]events.Event{{
+		{ID: "event_blocked_alias", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(blockedAliasID, "b.o.b+2@googlemail.com", "Puppet", "Two", "")},
+	}})
+	res, err = activities.NewProcessWorkOSUserEvents(logger, conn, blockedClient).Do(ctx, processWorkOSUserEventsParams(blockedAliasID))
+	require.NoError(t, err)
+	require.Equal(t, "event_blocked_alias", res.LastEventID)
+	require.Empty(t, blockedClient.UserExternalIDUpdates())
+	_, err = usersrepo.New(conn).GetUser(ctx, users.UserIDFromWorkOSID(blockedAliasID))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// Existing synced Gmail user can still receive profile and blocklist updates.
+	updateClient := workos.NewStubClient()
+	updateClient.SetEventPages([][]events.Event{{
+		{ID: "event_existing_update", Event: "user.updated", CreatedAt: time.Now(), Data: userEventData(existingWorkosID, "alice@gmail.com", "Alice", "Updated", "")},
+	}})
+	res, err = activities.NewProcessWorkOSUserEvents(logger, conn, updateClient).Do(ctx, processWorkOSUserEventsParams(existingWorkosID))
+	require.NoError(t, err)
+	require.Equal(t, "event_existing_update", res.LastEventID)
+	updatedRow, err := usersrepo.New(conn).GetUser(ctx, existingID)
+	require.NoError(t, err)
+	require.Equal(t, "Alice Updated", updatedRow.DisplayName)
+}
