@@ -68,7 +68,7 @@ func TestServePublic_StoredGatewayRejectsAgentKeyScopedToAnotherProject(t *testi
 	require.NoError(t, err)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, memberID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), memberID)
-	token := mintAgentGatewayKeyForProject(t, ctx, ti, agent.ID, uuid.New(), memberID)
+	token := mintAgentKeyForProject(t, ctx, ti, agent.ID, uuid.New(), memberID)
 	ti.features.SetFlag(feature.FlagStoredGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
 
 	_, err = servePublicHTTP(t, ctx, ti, gatewaySlug, makeInitializeBody(), token, nil)
@@ -257,7 +257,7 @@ func TestServePublic_StoredGatewayAgentListsOnlyAdmittedMembers(t *testing.T) {
 	require.NoError(t, err)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, grantedServerID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), grantedServerID)
-	token := mintAgentGatewayKey(t, ctx, ti, agent.ID, grantedServerID)
+	token := mintAgentKey(t, ctx, ti, agent.ID, grantedServerID)
 	ti.features.SetFlag(feature.FlagStoredGatewayMachineAccess, authCtx.ActiveOrganizationID, true)
 
 	w, err := servePublicHTTP(t, ctx, ti, gatewaySlug, makeMetaRPCBody(t, "tools/call", map[string]any{

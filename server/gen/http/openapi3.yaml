@@ -21682,6 +21682,96 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Agent
+    /rpc/agents.getRuntimeGateway:
+        get:
+            description: Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.
+            operationId: getAgentRuntimeGateway
+            parameters:
+                - allowEmptyValue: true
+                  description: First-class agent identifier
+                  in: query
+                  name: agent_id
+                  required: true
+                  schema:
+                    description: First-class agent identifier
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentRuntimeGateway'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRuntimeGateway agents
+            tags:
+                - agents
+            x-speakeasy-name-override: getRuntimeGateway
+            x-speakeasy-react-hook:
+                name: AgentRuntimeGateway
     /rpc/agents.list:
         get:
             operationId: listAgents
@@ -108055,6 +108145,29 @@ components:
             required:
                 - id
                 - name
+        AgentRuntimeGateway:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: Whether the agent runtime may use its bound project's gateway.
+                unavailable_reason:
+                    type: string
+                    description: Why runtime setup is unavailable. Set only when not available.
+                    enum:
+                        - project_assignment_required
+                        - machine_access_disabled
+                        - no_organization_issuer
+                        - multiple_organization_issuers
+                        - custom_domain_only
+                        - organization_disabled
+                        - turned_off
+                url:
+                    type: string
+                    description: The bound project's gateway MCP URL. Set only when available.
+            description: The project gateway an agent runtime must call, resolved from the agent's bound project under agent credential-management authorization.
+            required:
+                - available
         AgentServerConnection:
             type: object
             properties:

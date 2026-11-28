@@ -145,7 +145,7 @@ func TestMCPProtocolVersionTelemetryMatchesSlugsResemblingSiblingRoutes(t *testi
 func TestMCPProtocolVersionTelemetryIgnoresNonMCPRoutes(t *testing.T) {
 	t.Parallel()
 
-	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/mcp/my-server", "/x/other/slug", "/agent-mcp"} {
+	for _, path := range []string{"/rpc/toolsets.list", "/healthz", "/", "/mcp", "/x/mcp", "/x/mcp/my-server", "/x/other/slug"} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
 	}
@@ -242,7 +242,6 @@ func TestMCPProtocolVersionTelemetry_TrailingSlashScope(t *testing.T) {
 		{path: "/.well-known/oauth-protected-resource/mcp/server/"},
 		{path: "/platform/mcp/server/"},
 		{path: "/platform-mcp/", want: true},
-		{path: "/agent-mcp/agent/"},
 		{path: "/approvals-mcp/", want: true},
 	} {
 		t.Run(tc.path, func(t *testing.T) {

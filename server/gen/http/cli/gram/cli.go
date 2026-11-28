@@ -126,7 +126,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff|list-pending-access-requests|list-requestable-access|request-access)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|get-runtime-gateway|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-org-units|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -424,6 +424,10 @@ func ParseEndpoint(
 		agentsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
 		agentsGetIDFlag           = agentsGetFlags.String("id", "REQUIRED", "")
 		agentsGetSessionTokenFlag = agentsGetFlags.String("session-token", "", "")
+
+		agentsGetRuntimeGatewayFlags            = flag.NewFlagSet("get-runtime-gateway", flag.ExitOnError)
+		agentsGetRuntimeGatewayAgentIDFlag      = agentsGetRuntimeGatewayFlags.String("agent-id", "REQUIRED", "")
+		agentsGetRuntimeGatewaySessionTokenFlag = agentsGetRuntimeGatewayFlags.String("session-token", "", "")
 
 		agentsRenameFlags            = flag.NewFlagSet("rename", flag.ExitOnError)
 		agentsRenameBodyFlag         = agentsRenameFlags.String("body", "REQUIRED", "")
@@ -5914,6 +5918,7 @@ func ParseEndpoint(
 	agentsListFlags.Usage = agentsListUsage
 	agentsCreateFlags.Usage = agentsCreateUsage
 	agentsGetFlags.Usage = agentsGetUsage
+	agentsGetRuntimeGatewayFlags.Usage = agentsGetRuntimeGatewayUsage
 	agentsRenameFlags.Usage = agentsRenameUsage
 	agentsListDelegableGrantsFlags.Usage = agentsListDelegableGrantsUsage
 	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
@@ -7465,6 +7470,9 @@ func ParseEndpoint(
 
 			case "get":
 				epf = agentsGetFlags
+
+			case "get-runtime-gateway":
+				epf = agentsGetRuntimeGatewayFlags
 
 			case "rename":
 				epf = agentsRenameFlags
@@ -11012,6 +11020,9 @@ func ParseEndpoint(
 			case "get":
 				endpoint = c.Get()
 				data, err = agentsc.BuildGetPayload(*agentsGetIDFlag, *agentsGetSessionTokenFlag)
+			case "get-runtime-gateway":
+				endpoint = c.GetRuntimeGateway()
+				data, err = agentsc.BuildGetRuntimeGatewayPayload(*agentsGetRuntimeGatewayAgentIDFlag, *agentsGetRuntimeGatewaySessionTokenFlag)
 			case "rename":
 				endpoint = c.Rename()
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
@@ -15176,6 +15187,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
+	fmt.Fprintln(os.Stderr, `    get-runtime-gateway: Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
 	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
@@ -15314,6 +15326,26 @@ func agentsGetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsGetRuntimeGatewayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents get-runtime-gateway", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get-runtime-gateway --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func agentsRenameUsage() {
