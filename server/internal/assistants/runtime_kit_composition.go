@@ -268,6 +268,11 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		}
 		recovered := *workload
 		workload = &recovered
+	} else if c.ateIdentity != nil {
+		workload, err = s.provisionKitATEWorkload(ctx, r, c, identity, gateway)
+		if err != nil {
+			return zero, err
+		}
 	} else {
 		workload, err = s.provisionKitWorkload(ctx, r, c, identity, gateway)
 		if err != nil {
@@ -311,7 +316,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		if s.serverURL == nil {
 			return zero, errors.New("ATE inference requires deployment server URL")
 		}
-		inferenceEndpoint = strings.TrimRight(s.serverURL.String(), "/") + "/projects/" + r.ProjectID.String() + "/chat/completions"
+		inferenceEndpoint = strings.TrimRight(s.serverURL.String(), "/") + "/chat/completions"
 	} else {
 		inferenceEndpoint = c.Origin.String() + "/chat/completions"
 	}

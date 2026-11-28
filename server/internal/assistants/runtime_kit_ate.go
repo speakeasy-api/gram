@@ -407,7 +407,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			if err != nil {
 				return fmt.Errorf("save ATE actor workload binding: %w", err)
 			}
-			if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
+			if err := k.ensureEgress(ctx, entry.ActorName, entry.ActorUID, bootstrap); err != nil {
 				return err
 			}
 			payload, err := kitATEBootstrapPayload(bootstrap)
@@ -435,7 +435,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			}
 		}
 
-		if entry.Workload == nil || entry.Workload.IssuerID == uuid.Nil || entry.Workload.Subject == "" || !entry.Workload.MCPProjectGateway {
+		if entry.Workload == nil || entry.Workload.Subject == "" || !entry.Workload.MCPProjectGateway {
 			return ErrKitRuntimeBinding
 		}
 

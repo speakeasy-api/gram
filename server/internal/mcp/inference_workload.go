@@ -114,13 +114,7 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 // AuthorizeWorkloadInference implements the completion-only authentication
 // boundary. Unverified claims are used solely to select this validator; every
 // identity, tenant, ceiling and expiry is subsequently verified and read live.
-// Direct-bearer workload JWTs are accepted only when projectID is non-nil
-// (from the project-scoped completions route) and are rejected without fallback
-// on the unscoped /chat/completions route.
-func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string, projectID uuid.UUID) (context.Context, bool, error) {
-	if isDirectWorkloadBearer(token) {
-		return s.authorizeDirectWorkloadInference(ctx, token, projectID)
-	}
+func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string) (context.Context, bool, error) {
 	claims := &jwt.RegisteredClaims{} //nolint:exhaustruct_v5 // ParseUnverified populates routing hints; validation below establishes authority
 	if _, _, err := jwt.NewParser().ParseUnverified(token, claims); err != nil {
 		return ctx, false, nil
@@ -178,17 +172,14 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string, 
 	if !row.OrganizationID.Valid || row.OrganizationID.String != issuer.ResolvedOrganizationID || !row.Resource.Valid || !strings.HasPrefix(row.Resource.String, InferenceResource+":") || row.UserSessionClientID.Valid || !row.ExpiresAt.Valid || !time.Now().Before(row.ExpiresAt.Time) || !row.RefreshExpiresAt.Valid || !time.Now().Before(row.RefreshExpiresAt.Time) {
 		return denied()
 	}
-	resolvedProjectID, err := uuid.Parse(strings.TrimPrefix(row.Resource.String, InferenceResource+":"))
-	if err != nil || resolvedProjectID == uuid.Nil || (row.ProjectID.Valid && row.ProjectID.UUID != resolvedProjectID) {
+	projectID, err := uuid.Parse(strings.TrimPrefix(row.Resource.String, InferenceResource+":"))
+	if err != nil || projectID == uuid.Nil || (row.ProjectID.Valid && row.ProjectID.UUID != projectID) {
 		return denied()
 	}
-	if projectID != uuid.Nil && resolvedProjectID != projectID {
+	if shared.projectID != uuid.Nil && shared.projectID != projectID {
 		return denied()
 	}
-	if shared.projectID != uuid.Nil && shared.projectID != resolvedProjectID {
-		return denied()
-	}
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, resolvedProjectID)
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return denied()
 	}
@@ -199,12 +190,12 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string, 
 		return denied()
 	}
 	credential, err := checkWorkloadSessionCredential(issuer.ResolvedOrganizationID, session.Subject(), row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion, func(version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
-		return encodeInferenceWorkloadPolicy(resolvedProjectID, version)
+		return encodeInferenceWorkloadPolicy(projectID, version)
 	})
 	if err != nil {
 		return denied()
 	}
-	authCtx, err := s.sessionAuthContext(ctx, issuer.ResolvedOrganizationID, &resolvedProjectID, session.JTI())
+	authCtx, err := s.sessionAuthContext(ctx, issuer.ResolvedOrganizationID, &projectID, session.JTI())
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
@@ -213,7 +204,7 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string, 
 	if err != nil {
 		return denied()
 	}
-	admitted, err := workloadidentity.IsAdmitted(ctx, s.db, workloadidentity.AdmissionParams{OrganizationID: issuer.ResolvedOrganizationID, ProjectID: uuid.NullUUID{UUID: resolvedProjectID, Valid: true}, WorkloadIssuerID: workloadIssuerID, Subject: externalSubject})
+	admitted, err := workloadidentity.IsAdmitted(ctx, s.db, workloadidentity.AdmissionParams{OrganizationID: issuer.ResolvedOrganizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, WorkloadIssuerID: workloadIssuerID, Subject: externalSubject})
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
@@ -225,7 +216,7 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string, 
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
-	if err := s.authz.Require(ctx, authz.InferenceExecuteCheck(resolvedProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.InferenceExecuteCheck(projectID.String())); err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
 	return ctx, true, nil

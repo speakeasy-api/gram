@@ -525,6 +525,10 @@ type ServiceCore struct {
 	managedCeilingsRepaired sync.Map
 
 	projectGatewayEvaluator ProjectGatewayEvaluator
+
+	// ateAtespace pins the single configured ATE atespace permitted to mint
+	// on-demand actor credentials on this process. Empty fails closed.
+	ateAtespace string
 }
 
 func NewServiceCore(
@@ -588,7 +592,14 @@ func NewServiceCore(
 		outboundOrigin:              nil,
 		managedCeilingsRepaired:     sync.Map{},
 		projectGatewayEvaluator:     nil,
+		ateAtespace:                 "",
 	}
+}
+
+// SetATEAtespace configures the single ATE atespace allowed to mint on-demand
+// egress turn credentials on this server process.
+func (s *ServiceCore) SetATEAtespace(atespace string) {
+	s.ateAtespace = strings.TrimSpace(atespace)
 }
 
 // SetWakeCanceller is set after construction to break an import cycle:
