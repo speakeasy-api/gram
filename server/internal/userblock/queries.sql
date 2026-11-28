@@ -29,11 +29,12 @@ WHERE rel.deleted IS FALSE
 ORDER BY om.id;
 
 -- name: DisableSoleNonStaffOrganizationsForUser :many
--- Disables organizations where the blocked user is an active member and no
--- other active non-staff member remains. Staff are identified by either
+-- Disables organizations where the blocked user is an active non-staff member
+-- and no other active non-staff member remains. Staff are identified by either
 -- users.admin = true (and not soft-deleted) or an active membership in the
--- deployment's configured staff organization. Shared organizations, already
--- disabled organizations, the shared demo workspace, and the staff
+-- deployment's configured staff organization. If the blocked user is itself
+-- soft-deleted or staff, no organizations are disabled. Shared organizations,
+-- already disabled organizations, the shared demo workspace, and the staff
 -- organization itself are never modified.
 WITH target_orgs AS (
   SELECT om.id
@@ -41,6 +42,26 @@ WITH target_orgs AS (
   WHERE om.disabled_at IS NULL
     AND om.id <> @demo_organization_id
     AND (sqlc.narg('staff_organization_id')::text IS NULL OR om.id <> sqlc.narg('staff_organization_id')::text)
+    AND EXISTS (
+      SELECT 1
+      FROM users AS blocked_u
+      WHERE blocked_u.id = @user_id
+        AND blocked_u.deleted_at IS NULL
+        AND blocked_u.admin IS FALSE
+    )
+    AND NOT (
+      sqlc.narg('staff_organization_id')::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM organization_user_relationships AS blocked_staff_rel
+        WHERE blocked_staff_rel.organization_id = sqlc.narg('staff_organization_id')::text
+          AND blocked_staff_rel.deleted IS FALSE
+          AND (
+            blocked_staff_rel.user_id = @user_id
+            OR (sqlc.narg('workos_user_id')::text IS NOT NULL AND blocked_staff_rel.workos_user_id = sqlc.narg('workos_user_id')::text)
+          )
+      )
+    )
     AND EXISTS (
       SELECT 1
       FROM organization_user_relationships AS mine

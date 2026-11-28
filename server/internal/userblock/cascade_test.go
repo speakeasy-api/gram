@@ -1,6 +1,7 @@
 package userblock_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	channelsauthnrepo "github.com/speakeasy-api/gram/server/internal/channels/authn/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -114,10 +116,12 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	// Blocked user belongs to all 8 orgs (to verify each inclusion/exclusion rule).
+	// Blocked user is a normal non-staff user belonging to 7 orgs (excluding orgStaffID,
+	// because staff-org membership exempts a user from disabling any organization — tested
+	// separately in TestBlacklist_StaffOrDeletedUserDoesNotDisableOrganizations).
 	for _, orgID := range []string{
 		orgSoleID, orgWithAdminID, orgWithStaffID, orgWithDeletedPeerID,
-		orgSharedID, orgAlreadyDisabledID, orgStaffID, constants.DemoOrganizationID,
+		orgSharedID, orgAlreadyDisabledID, constants.DemoOrganizationID,
 	} {
 		addMember(orgID, blockedUserID)
 	}
@@ -515,6 +519,25 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 		OrganizationID: orgSharedID,
 		ProjectID:      sharedProject.ID,
 	}))
+	// Second grant on the same sole-owned Channels client in the same org to verify
+	// audit metadata counts distinct revoked clients per org rather than grants.
+	blockedChGrantID2, err := chRepo.CreateGrant(ctx, channelsauthnrepo.CreateGrantParams{
+		ID:             uuid.New(),
+		ClientID:       "ch-client-owned",
+		OrganizationID: orgSharedID,
+		ProjectID:      sharedProject.ID,
+		Principal:      blockedPrincipal,
+		Resource:       "https://channels.example.invalid/mcp-2",
+		ExpiresAt:      future,
+	})
+	require.NoError(t, err)
+	require.NoError(t, chRepo.CreateAccessToken(ctx, channelsauthnrepo.CreateAccessTokenParams{
+		Jti:            "ch-jti-blocked-2",
+		ExpiresAt:      future,
+		GrantID:        blockedChGrantID2,
+		OrganizationID: orgSharedID,
+		ProjectID:      sharedProject.ID,
+	}))
 	blockedSharedChGrantID, err := chRepo.CreateGrant(ctx, channelsauthnrepo.CreateGrantParams{
 		ID:             uuid.New(),
 		ClientID:       "ch-client-shared",
@@ -778,7 +801,7 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 
 	// 6. Channels OAuth grants and sole-owned client revoked; shared client and peer grant preserved.
 	require.ElementsMatch(t, []string{"ch-client-owned"}, res.RevokedChannelsOAuthClients)
-	require.ElementsMatch(t, []uuid.UUID{blockedChGrantID, blockedSharedChGrantID}, res.RevokedChannelsOAuthGrantIDs)
+	require.ElementsMatch(t, []uuid.UUID{blockedChGrantID, blockedChGrantID2, blockedSharedChGrantID}, res.RevokedChannelsOAuthGrantIDs)
 	_, err = chRepo.GetClient(ctx, "ch-client-owned")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	_, err = chRepo.GetClient(ctx, "ch-client-shared")
@@ -809,7 +832,7 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 	assertAuditCount(audit.ActionUserSessionRevoke, 5)
 	assertAuditCount(audit.ActionUserSessionConsentRevoke, 1)
 	assertAuditCount(audit.ActionUserSessionClientRevoke, 2)
-	assertAuditCount(audit.ActionAccessMemberBlock, 8) // all 8 orgs the user belonged to
+	assertAuditCount(audit.ActionAccessMemberBlock, 7) // all 7 orgs the blocked user belonged to
 
 	blockAudit, err := audittest.LatestAuditLogByActionAndSubject(ctx, conn, audit.ActionAccessMemberBlock, blockedUserID)
 	require.NoError(t, err)
@@ -818,6 +841,64 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 	blockMeta, err := audittest.DecodeAuditData(blockAudit.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, "abuse", blockMeta["reason"])
+
+	listBlockAuditsForOrg := func(orgID string) []auditrepo.ListAuditLogsRow {
+		t.Helper()
+		rows, err := auditrepo.New(conn).ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{
+			OrganizationID:         orgID,
+			ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
+			ActorID:                pgtype.Text{String: "", Valid: false},
+			Action:                 conv.ToPGText(string(audit.ActionAccessMemberBlock)),
+			SubjectType:            pgtype.Text{String: "", Valid: false},
+			IncludeAssistantEvents: false,
+			IncludeInternalEvents:  true,
+			SubjectID:              conv.ToPGText(blockedUserID),
+			SubjectIds:             nil,
+			ActingSurface:          pgtype.Text{String: "", Valid: false},
+			Origin:                 pgtype.Text{String: "", Valid: false},
+			CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		})
+		require.NoError(t, err)
+		return rows
+	}
+
+	type blockAuditMeta struct {
+		Reason                                string `json:"reason"`
+		OrganizationDisabled                  bool   `json:"organization_disabled"`
+		RevokedPlatformMCPConnections         int    `json:"revoked_platform_mcp_connections"`
+		RevokedPlatformMCPSessions            int    `json:"revoked_platform_mcp_sessions"`
+		RevokedPlatformMCPAuthorizationGrants int    `json:"revoked_platform_mcp_authorization_grants"`
+		RevokedPlatformMCPOAuthClients        int    `json:"revoked_platform_mcp_oauth_clients"`
+		RevokedChannelsOAuthGrants            int    `json:"revoked_channels_oauth_grants"`
+		RevokedChannelsOAuthClients           int    `json:"revoked_channels_oauth_clients"`
+	}
+	decodeBlockMeta := func(raw []byte) blockAuditMeta {
+		t.Helper()
+		var m blockAuditMeta
+		require.NoError(t, json.Unmarshal(raw, &m))
+		return m
+	}
+
+	// Verify distinct OAuth client counting per org: two grants on ch-client-owned + one
+	// grant on ch-client-shared => 3 revoked grants, 1 distinct revoked sole-user client.
+	sharedBlockLogs := listBlockAuditsForOrg(orgSharedID)
+	require.Len(t, sharedBlockLogs, 1)
+	sharedBlockMeta := decodeBlockMeta(sharedBlockLogs[0].Metadata)
+	require.Equal(t, 3, sharedBlockMeta.RevokedChannelsOAuthGrants)
+	require.Equal(t, 1, sharedBlockMeta.RevokedChannelsOAuthClients)
+	require.Zero(t, sharedBlockMeta.RevokedPlatformMCPOAuthClients)
+
+	// Verify Platform MCP authorization grant count and client count are audited on orgSoleID.
+	soleBlockLogs := listBlockAuditsForOrg(orgSoleID)
+	require.Len(t, soleBlockLogs, 1)
+	soleBlockMeta := decodeBlockMeta(soleBlockLogs[0].Metadata)
+	require.True(t, soleBlockMeta.OrganizationDisabled)
+	require.Equal(t, 1, soleBlockMeta.RevokedPlatformMCPConnections)
+	require.Equal(t, 1, soleBlockMeta.RevokedPlatformMCPSessions)
+	require.Equal(t, 1, soleBlockMeta.RevokedPlatformMCPAuthorizationGrants)
+	require.Equal(t, 1, soleBlockMeta.RevokedPlatformMCPOAuthClients)
 
 	// 8. Re-running Blacklist on the already-blacklisted user is idempotent and writes no duplicate audit rows.
 	totalAuditsBeforeRerun, err := audittest.AuditLogCount(ctx, conn)
@@ -845,6 +926,7 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 	require.Empty(t, second.RevokedUserSessionClientIDs)
 	require.Empty(t, second.RevokedPlatformMCPConnectionID)
 	require.Empty(t, second.RevokedPlatformMCPSessionIDs)
+	require.Empty(t, second.RevokedPlatformMCPGrantIDs)
 	require.Empty(t, second.RevokedPlatformMCPOAuthClients)
 	require.Empty(t, second.RevokedChannelsOAuthGrantIDs)
 	require.Empty(t, second.RevokedChannelsOAuthClients)
@@ -852,6 +934,153 @@ func TestBlacklist_CascadesAllResourcesAndWritesAuditLogs(t *testing.T) {
 	totalAuditsAfterRerun, err := audittest.AuditLogCount(ctx, conn)
 	require.NoError(t, err)
 	require.Equal(t, totalAuditsBeforeRerun, totalAuditsAfterRerun, "idempotent re-run must not emit duplicate audit rows")
+
+	// 9. A repeat run that revokes only a pending Platform MCP authorization grant
+	// must emit an access_member:block audit entry recording that grant revocation.
+	_, err = pmRepo.CreatePlatformMCPAuthorizationGrant(ctx, platformrepo.CreatePlatformMCPAuthorizationGrantParams{
+		OrganizationID:        orgSoleID,
+		AuthorizationCodeHash: "pmcp-code-hash-blocked-repeat",
+		OauthClientID:         platformOwnedClient.ID,
+		ConnectionID:          blockedPlatformConnOwned.ID,
+		ConnectionGeneration:  genOwned,
+		RedirectUri:           "http://127.0.0.1:5000/cb",
+		CodeChallenge:         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		ExpiresAt:             future,
+	})
+	require.NoError(t, err)
+
+	third, err := userblock.Blacklist(ctx, conn, userblock.BlacklistParams{
+		UserID: blockedUserID,
+		Actor: userblock.Actor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, "staff-operator-oidc"),
+			DisplayName: &actorDisplay,
+		},
+		Reason:            "abuse-followup",
+		StaffOrganization: staff.NewOrganization(orgStaffID),
+		AuditLogger:       audit.NewLogger(),
+		Logger:            logger,
+	})
+	require.NoError(t, err)
+	require.True(t, third.AlreadyBlacklisted)
+	require.Len(t, third.RevokedPlatformMCPGrantIDs, 1)
+	assertAuditCount(audit.ActionAccessMemberBlock, 8)
+
+	soleBlockLogsAfterGrant := listBlockAuditsForOrg(orgSoleID)
+	require.Len(t, soleBlockLogsAfterGrant, 2)
+	repeatMeta := decodeBlockMeta(soleBlockLogsAfterGrant[0].Metadata)
+	require.Equal(t, "abuse-followup", repeatMeta.Reason)
+	require.Equal(t, 1, repeatMeta.RevokedPlatformMCPAuthorizationGrants)
+	require.Zero(t, repeatMeta.RevokedPlatformMCPConnections)
+}
+
+func TestBlacklist_StaffOrDeletedUserDoesNotDisableOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "userblock_cascade_staff_deleted")
+	require.NoError(t, err)
+
+	uRepo := usersrepo.New(conn)
+	oRepo := orgrepo.New(conn)
+	kRepo := keysrepo.New(conn)
+
+	const (
+		adminUserID      = "user-block-guard-admin"
+		staffOrgUserID   = "user-block-guard-staff-member"
+		deletedUserID    = "user-block-guard-deleted"
+		staffHomeOrgID   = "org-block-guard-staff-home"
+		adminSoleOrgID   = "org-block-guard-admin-sole"
+		staffMemberOrgID = "org-block-guard-staff-member-sole"
+		deletedUserOrgID = "org-block-guard-deleted-sole"
+	)
+
+	for _, u := range []usersrepo.UpsertUserParams{
+		{ID: adminUserID, Email: "guard-admin@example.invalid", DisplayName: "Admin User", PhotoUrl: conv.ToPGTextEmpty(""), Admin: true},
+		{ID: staffOrgUserID, Email: "guard-staff@example.invalid", DisplayName: "Staff Org Member", PhotoUrl: conv.ToPGTextEmpty(""), Admin: false},
+		{ID: deletedUserID, Email: "guard-deleted@example.invalid", DisplayName: "Deleted User", PhotoUrl: conv.ToPGTextEmpty(""), Admin: false},
+	} {
+		_, err := uRepo.UpsertUser(ctx, u)
+		require.NoError(t, err)
+	}
+
+	for _, org := range []orgrepo.CreateOrganizationMetadataParams{
+		{ID: staffHomeOrgID, Name: "Staff Home", Slug: "guard-staff-home"},
+		{ID: adminSoleOrgID, Name: "Admin Sole Org", Slug: "guard-admin-sole"},
+		{ID: staffMemberOrgID, Name: "Staff Member Sole Org", Slug: "guard-staff-member-sole"},
+		{ID: deletedUserOrgID, Name: "Deleted User Sole Org", Slug: "guard-deleted-sole"},
+	} {
+		require.NoError(t, oRepo.CreateOrganizationMetadata(ctx, org))
+	}
+
+	addMember := func(orgID, userID string) {
+		t.Helper()
+		_, err := oRepo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: orgID,
+			UserID:         conv.ToPGText(userID),
+		})
+		require.NoError(t, err)
+	}
+	addMember(adminSoleOrgID, adminUserID)
+	addMember(staffHomeOrgID, staffOrgUserID)
+	addMember(staffMemberOrgID, staffOrgUserID)
+	addMember(deletedUserOrgID, deletedUserID)
+
+	require.NoError(t, uRepo.SoftDeleteOrganizationUserFixture(ctx, usersrepo.SoftDeleteOrganizationUserFixtureParams{
+		UserID:         deletedUserID,
+		OrganizationID: deletedUserOrgID,
+	}))
+
+	// Give the admin user an API key so we prove credential revocation still cascades
+	// even though organization disabling is skipped for staff users.
+	adminKey, err := kRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  adminSoleOrgID,
+		ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CreatedByUserID: adminUserID,
+		Name:            "Admin Key",
+		KeyPrefix:       "sk_adm01",
+		KeyHash:         "hash-guard-admin-key",
+		Scopes:          []string{"mcp:read"},
+	})
+	require.NoError(t, err)
+
+	staffOrg := staff.NewOrganization(staffHomeOrgID)
+
+	for _, tc := range []struct {
+		name           string
+		userID         string
+		preservedOrgID string
+	}{
+		{name: "platform admin", userID: adminUserID, preservedOrgID: adminSoleOrgID},
+		{name: "staff org member", userID: staffOrgUserID, preservedOrgID: staffMemberOrgID},
+		{name: "soft-deleted user", userID: deletedUserID, preservedOrgID: deletedUserOrgID},
+	} {
+		res, err := userblock.Blacklist(ctx, conn, userblock.BlacklistParams{
+			UserID: tc.userID,
+			Actor: userblock.Actor{
+				Principal:   urn.NewSystemPrincipal("user-block-test"),
+				DisplayName: nil,
+			},
+			Reason:            "guard-check",
+			StaffOrganization: staffOrg,
+			AuditLogger:       audit.NewLogger(),
+			Logger:            logger,
+		})
+		require.NoError(t, err, tc.name)
+		require.Empty(t, res.DisabledOrganizations, "%s must not disable organizations", tc.name)
+
+		meta, err := oRepo.GetOrganizationMetadata(ctx, tc.preservedOrgID)
+		require.NoError(t, err, tc.name)
+		require.False(t, meta.DisabledAt.Valid, "org %s must stay enabled when blocking %s", tc.preservedOrgID, tc.name)
+	}
+
+	staffHomeMeta, err := oRepo.GetOrganizationMetadata(ctx, staffHomeOrgID)
+	require.NoError(t, err)
+	require.False(t, staffHomeMeta.DisabledAt.Valid, "staff home organization must stay enabled")
+
+	revokedAdminKey, err := kRepo.GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: adminKey.ID, OrganizationID: adminSoleOrgID})
+	require.NoError(t, err)
+	require.True(t, revokedAdminKey.DeletedAt.Valid, "API key owned by blocked admin must still be revoked")
 }
 
 func TestBlacklist_UnknownUserReturnsNotFound(t *testing.T) {

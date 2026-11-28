@@ -361,51 +361,54 @@ type LogAccessMemberBlockEvent struct {
 	MemberURN   urn.Principal
 	MemberEmail string
 
-	Reason                         string
-	OrganizationDisabled           bool
-	RevokedAPIKeys                 int
-	RevokedSignIns                 int
-	RevokedUserSessions            int
-	RevokedUserSessionConsents     int
-	RevokedUserSessionClients      int
-	RevokedPlatformMCPConnections  int
-	RevokedPlatformMCPSessions     int
-	RevokedPlatformMCPOAuthClients int
-	RevokedChannelsOAuthGrants     int
-	RevokedChannelsOAuthClients    int
+	Reason                                string
+	OrganizationDisabled                  bool
+	RevokedAPIKeys                        int
+	RevokedSignIns                        int
+	RevokedUserSessions                   int
+	RevokedUserSessionConsents            int
+	RevokedUserSessionClients             int
+	RevokedPlatformMCPConnections         int
+	RevokedPlatformMCPSessions            int
+	RevokedPlatformMCPAuthorizationGrants int
+	RevokedPlatformMCPOAuthClients        int
+	RevokedChannelsOAuthGrants            int
+	RevokedChannelsOAuthClients           int
 }
 
 type accessMemberBlockMetadata struct {
-	Reason                         string `json:"reason,omitempty"`
-	OrganizationDisabled           bool   `json:"organization_disabled"`
-	RevokedAPIKeys                 int    `json:"revoked_api_keys"`
-	RevokedSignIns                 int    `json:"revoked_sign_ins"`
-	RevokedUserSessions            int    `json:"revoked_user_sessions"`
-	RevokedUserSessionConsents     int    `json:"revoked_user_session_consents"`
-	RevokedUserSessionClients      int    `json:"revoked_user_session_clients"`
-	RevokedPlatformMCPConnections  int    `json:"revoked_platform_mcp_connections"`
-	RevokedPlatformMCPSessions     int    `json:"revoked_platform_mcp_sessions"`
-	RevokedPlatformMCPOAuthClients int    `json:"revoked_platform_mcp_oauth_clients"`
-	RevokedChannelsOAuthGrants     int    `json:"revoked_channels_oauth_grants"`
-	RevokedChannelsOAuthClients    int    `json:"revoked_channels_oauth_clients"`
+	Reason                                string `json:"reason,omitempty"`
+	OrganizationDisabled                  bool   `json:"organization_disabled"`
+	RevokedAPIKeys                        int    `json:"revoked_api_keys"`
+	RevokedSignIns                        int    `json:"revoked_sign_ins"`
+	RevokedUserSessions                   int    `json:"revoked_user_sessions"`
+	RevokedUserSessionConsents            int    `json:"revoked_user_session_consents"`
+	RevokedUserSessionClients             int    `json:"revoked_user_session_clients"`
+	RevokedPlatformMCPConnections         int    `json:"revoked_platform_mcp_connections"`
+	RevokedPlatformMCPSessions            int    `json:"revoked_platform_mcp_sessions"`
+	RevokedPlatformMCPAuthorizationGrants int    `json:"revoked_platform_mcp_authorization_grants"`
+	RevokedPlatformMCPOAuthClients        int    `json:"revoked_platform_mcp_oauth_clients"`
+	RevokedChannelsOAuthGrants            int    `json:"revoked_channels_oauth_grants"`
+	RevokedChannelsOAuthClients           int    `json:"revoked_channels_oauth_clients"`
 }
 
 func (l *Logger) LogAccessMemberBlock(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberBlockEvent) error {
 	action := ActionAccessMemberBlock
 
 	metadata, err := marshalAuditPayload(accessMemberBlockMetadata{
-		Reason:                         event.Reason,
-		OrganizationDisabled:           event.OrganizationDisabled,
-		RevokedAPIKeys:                 event.RevokedAPIKeys,
-		RevokedSignIns:                 event.RevokedSignIns,
-		RevokedUserSessions:            event.RevokedUserSessions,
-		RevokedUserSessionConsents:     event.RevokedUserSessionConsents,
-		RevokedUserSessionClients:      event.RevokedUserSessionClients,
-		RevokedPlatformMCPConnections:  event.RevokedPlatformMCPConnections,
-		RevokedPlatformMCPSessions:     event.RevokedPlatformMCPSessions,
-		RevokedPlatformMCPOAuthClients: event.RevokedPlatformMCPOAuthClients,
-		RevokedChannelsOAuthGrants:     event.RevokedChannelsOAuthGrants,
-		RevokedChannelsOAuthClients:    event.RevokedChannelsOAuthClients,
+		Reason:                                event.Reason,
+		OrganizationDisabled:                  event.OrganizationDisabled,
+		RevokedAPIKeys:                        event.RevokedAPIKeys,
+		RevokedSignIns:                        event.RevokedSignIns,
+		RevokedUserSessions:                   event.RevokedUserSessions,
+		RevokedUserSessionConsents:            event.RevokedUserSessionConsents,
+		RevokedUserSessionClients:             event.RevokedUserSessionClients,
+		RevokedPlatformMCPConnections:         event.RevokedPlatformMCPConnections,
+		RevokedPlatformMCPSessions:            event.RevokedPlatformMCPSessions,
+		RevokedPlatformMCPAuthorizationGrants: event.RevokedPlatformMCPAuthorizationGrants,
+		RevokedPlatformMCPOAuthClients:        event.RevokedPlatformMCPOAuthClients,
+		RevokedChannelsOAuthGrants:            event.RevokedChannelsOAuthGrants,
+		RevokedChannelsOAuthClients:           event.RevokedChannelsOAuthClients,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

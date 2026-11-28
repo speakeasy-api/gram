@@ -40,6 +40,26 @@ WITH target_orgs AS (
     AND ($2::text IS NULL OR om.id <> $2::text)
     AND EXISTS (
       SELECT 1
+      FROM users AS blocked_u
+      WHERE blocked_u.id = $3
+        AND blocked_u.deleted_at IS NULL
+        AND blocked_u.admin IS FALSE
+    )
+    AND NOT (
+      $2::text IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM organization_user_relationships AS blocked_staff_rel
+        WHERE blocked_staff_rel.organization_id = $2::text
+          AND blocked_staff_rel.deleted IS FALSE
+          AND (
+            blocked_staff_rel.user_id = $3
+            OR ($4::text IS NOT NULL AND blocked_staff_rel.workos_user_id = $4::text)
+          )
+      )
+    )
+    AND EXISTS (
+      SELECT 1
       FROM organization_user_relationships AS mine
       WHERE mine.organization_id = om.id
         AND mine.deleted IS FALSE
@@ -119,7 +139,7 @@ RETURNING om.id, om.name, om.slug, om.disabled_at
 type DisableSoleNonStaffOrganizationsForUserParams struct {
 	DemoOrganizationID  string
 	StaffOrganizationID pgtype.Text
-	UserID              pgtype.Text
+	UserID              string
 	WorkosUserID        pgtype.Text
 }
 
@@ -130,11 +150,12 @@ type DisableSoleNonStaffOrganizationsForUserRow struct {
 	DisabledAt pgtype.Timestamptz
 }
 
-// Disables organizations where the blocked user is an active member and no
-// other active non-staff member remains. Staff are identified by either
+// Disables organizations where the blocked user is an active non-staff member
+// and no other active non-staff member remains. Staff are identified by either
 // users.admin = true (and not soft-deleted) or an active membership in the
-// deployment's configured staff organization. Shared organizations, already
-// disabled organizations, the shared demo workspace, and the staff
+// deployment's configured staff organization. If the blocked user is itself
+// soft-deleted or staff, no organizations are disabled. Shared organizations,
+// already disabled organizations, the shared demo workspace, and the staff
 // organization itself are never modified.
 func (q *Queries) DisableSoleNonStaffOrganizationsForUser(ctx context.Context, arg DisableSoleNonStaffOrganizationsForUserParams) ([]DisableSoleNonStaffOrganizationsForUserRow, error) {
 	rows, err := q.db.Query(ctx, disableSoleNonStaffOrganizationsForUser,

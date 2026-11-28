@@ -17,6 +17,7 @@ export const AUDIT_ACTIONS = [
   "slack-identity-mapping:reconfirm",
   "slack-identity-mapping:unmap",
   "access_challenge:resolve",
+  "access_member:block",
   "access_member:revoke_sign_ins",
   "access_member:update_role",
   "access_role:create",
@@ -437,6 +438,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed the default project for Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
+    case "access_member:block":
+      return "blocked member";
     case "access_member:revoke_sign_ins":
       return "revoked sign-ins for";
     case "access_member:update_role":

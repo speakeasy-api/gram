@@ -94,17 +94,18 @@ type CascadeResult struct {
 }
 
 type orgCascadeCounts struct {
-	organizationDisabled           bool
-	revokedAPIKeys                 int
-	revokedSignIns                 int
-	revokedUserSessions            int
-	revokedUserSessionConsents     int
-	revokedUserSessionClients      int
-	revokedPlatformMCPConnections  int
-	revokedPlatformMCPSessions     int
-	revokedPlatformMCPOAuthClients int
-	revokedChannelsOAuthGrants     int
-	revokedChannelsOAuthClients    int
+	organizationDisabled                  bool
+	revokedAPIKeys                        int
+	revokedSignIns                        int
+	revokedUserSessions                   int
+	revokedUserSessionConsents            int
+	revokedUserSessionClients             int
+	revokedPlatformMCPConnections         int
+	revokedPlatformMCPSessions            int
+	revokedPlatformMCPAuthorizationGrants int
+	revokedPlatformMCPOAuthClients        map[uuid.UUID]struct{}
+	revokedChannelsOAuthGrants            int
+	revokedChannelsOAuthClients           map[string]struct{}
 }
 
 func (c orgCascadeCounts) anyChanges() bool {
@@ -116,9 +117,10 @@ func (c orgCascadeCounts) anyChanges() bool {
 		c.revokedUserSessionClients > 0 ||
 		c.revokedPlatformMCPConnections > 0 ||
 		c.revokedPlatformMCPSessions > 0 ||
-		c.revokedPlatformMCPOAuthClients > 0 ||
+		c.revokedPlatformMCPAuthorizationGrants > 0 ||
+		len(c.revokedPlatformMCPOAuthClients) > 0 ||
 		c.revokedChannelsOAuthGrants > 0 ||
-		c.revokedChannelsOAuthClients > 0
+		len(c.revokedChannelsOAuthClients) > 0
 }
 
 // Blacklist marks the user blacklisted and atomically cascades all database
@@ -241,17 +243,18 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 		counts, ok := countsByOrg[orgID]
 		if !ok {
 			counts = &orgCascadeCounts{
-				organizationDisabled:           false,
-				revokedAPIKeys:                 0,
-				revokedSignIns:                 0,
-				revokedUserSessions:            0,
-				revokedUserSessionConsents:     0,
-				revokedUserSessionClients:      0,
-				revokedPlatformMCPConnections:  0,
-				revokedPlatformMCPSessions:     0,
-				revokedPlatformMCPOAuthClients: 0,
-				revokedChannelsOAuthGrants:     0,
-				revokedChannelsOAuthClients:    0,
+				organizationDisabled:                  false,
+				revokedAPIKeys:                        0,
+				revokedSignIns:                        0,
+				revokedUserSessions:                   0,
+				revokedUserSessionConsents:            0,
+				revokedUserSessionClients:             0,
+				revokedPlatformMCPConnections:         0,
+				revokedPlatformMCPSessions:            0,
+				revokedPlatformMCPAuthorizationGrants: 0,
+				revokedPlatformMCPOAuthClients:        make(map[uuid.UUID]struct{}),
+				revokedChannelsOAuthGrants:            0,
+				revokedChannelsOAuthClients:           make(map[string]struct{}),
 			}
 			countsByOrg[orgID] = counts
 		}
@@ -266,7 +269,7 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 	disabledRows, err := q.DisableSoleNonStaffOrganizationsForUser(ctx, blockrepo.DisableSoleNonStaffOrganizationsForUserParams{
 		DemoOrganizationID:  constants.DemoOrganizationID,
 		StaffOrganizationID: conv.ToPGTextEmpty(params.StaffOrganization.ID()),
-		UserID:              conv.ToPGText(params.UserID),
+		UserID:              params.UserID,
 		WorkosUserID:        marked.WorkosID,
 	})
 	if err != nil {
@@ -653,7 +656,7 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 		if c != nil {
 			c.revokedPlatformMCPConnections++
 			if _, ok := revokedPlatformClientSet[conn.OauthClientID]; ok {
-				c.revokedPlatformMCPOAuthClients++
+				c.revokedPlatformMCPOAuthClients[conn.OauthClientID] = struct{}{}
 			}
 		}
 	}
@@ -665,7 +668,9 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 	result.RevokedPlatformMCPGrantIDs = make([]uuid.UUID, 0, len(revokedPlatformGrants))
 	for _, grant := range revokedPlatformGrants {
 		result.RevokedPlatformMCPGrantIDs = append(result.RevokedPlatformMCPGrantIDs, grant.ID)
-		touchOrg(grant.OrganizationID)
+		if c := touchOrg(grant.OrganizationID); c != nil {
+			c.revokedPlatformMCPAuthorizationGrants++
+		}
 	}
 
 	revokedPlatformSessions, err := q.RevokePlatformMCPSessionsForUser(ctx, platformSubject)
@@ -706,7 +711,7 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 		if c := touchOrg(grant.OrganizationID); c != nil {
 			c.revokedChannelsOAuthGrants++
 			if _, ok := revokedChannelsClientSet[grant.ClientID]; ok {
-				c.revokedChannelsOAuthClients++
+				c.revokedChannelsOAuthClients[grant.ClientID] = struct{}{}
 			}
 		}
 	}
@@ -728,23 +733,24 @@ func BlacklistTx(ctx context.Context, tx pgx.Tx, params BlacklistParams) (Cascad
 			continue
 		}
 		if err := auditLogger.LogAccessMemberBlock(ctx, tx, audit.LogAccessMemberBlockEvent{
-			OrganizationID:                 orgID,
-			Actor:                          actor.Principal,
-			ActorDisplayName:               actor.DisplayName,
-			MemberURN:                      userPrincipal,
-			MemberEmail:                    marked.Email,
-			Reason:                         params.Reason,
-			OrganizationDisabled:           counts.organizationDisabled,
-			RevokedAPIKeys:                 counts.revokedAPIKeys,
-			RevokedSignIns:                 counts.revokedSignIns,
-			RevokedUserSessions:            counts.revokedUserSessions,
-			RevokedUserSessionConsents:     counts.revokedUserSessionConsents,
-			RevokedUserSessionClients:      counts.revokedUserSessionClients,
-			RevokedPlatformMCPConnections:  counts.revokedPlatformMCPConnections,
-			RevokedPlatformMCPSessions:     counts.revokedPlatformMCPSessions,
-			RevokedPlatformMCPOAuthClients: counts.revokedPlatformMCPOAuthClients,
-			RevokedChannelsOAuthGrants:     counts.revokedChannelsOAuthGrants,
-			RevokedChannelsOAuthClients:    counts.revokedChannelsOAuthClients,
+			OrganizationID:                        orgID,
+			Actor:                                 actor.Principal,
+			ActorDisplayName:                      actor.DisplayName,
+			MemberURN:                             userPrincipal,
+			MemberEmail:                           marked.Email,
+			Reason:                                params.Reason,
+			OrganizationDisabled:                  counts.organizationDisabled,
+			RevokedAPIKeys:                        counts.revokedAPIKeys,
+			RevokedSignIns:                        counts.revokedSignIns,
+			RevokedUserSessions:                   counts.revokedUserSessions,
+			RevokedUserSessionConsents:            counts.revokedUserSessionConsents,
+			RevokedUserSessionClients:             counts.revokedUserSessionClients,
+			RevokedPlatformMCPConnections:         counts.revokedPlatformMCPConnections,
+			RevokedPlatformMCPSessions:            counts.revokedPlatformMCPSessions,
+			RevokedPlatformMCPAuthorizationGrants: counts.revokedPlatformMCPAuthorizationGrants,
+			RevokedPlatformMCPOAuthClients:        len(counts.revokedPlatformMCPOAuthClients),
+			RevokedChannelsOAuthGrants:            counts.revokedChannelsOAuthGrants,
+			RevokedChannelsOAuthClients:           len(counts.revokedChannelsOAuthClients),
 		}); err != nil {
 			return result, fmt.Errorf("audit user block for organization %q: %w", orgID, err)
 		}
