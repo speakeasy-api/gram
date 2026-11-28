@@ -156,6 +156,8 @@ type Resolver struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations membership sync creates.
 	newOrganizationDefaultHost pgtype.Text
+
+	orgCreations *orgprovision.CreationRecorder
 }
 
 func NewResolver(
@@ -189,7 +191,14 @@ func NewResolver(
 		growth:        growth,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		orgCreations:               nil,
 	}
+}
+
+// SetOrganizationCreationRecorder wires the counter for organizations
+// membership sync creates. Unset records none.
+func (r *Resolver) SetOrganizationCreationRecorder(recorder *orgprovision.CreationRecorder) {
+	r.orgCreations = recorder
 }
 
 // SetNewOrganizationDefaultHost sets the default host recorded on
@@ -758,7 +767,7 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		if err != nil {
 			return fmt.Errorf("find unique slug for workos organization %q: %w", m.OrganizationID, err)
 		}
-		if _, err := r.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		synced, created, err := r.orgRepo.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 			ID:          gramOrgID,
 			Name:        org.Name,
 			Slug:        uniqueSlug,
@@ -769,8 +778,12 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			// inserts first is filled in by the flow that did know.
 			CreationSource: pgtype.Text{String: "", Valid: false},
 			DefaultHost:    r.newOrganizationDefaultHost,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
+		}
+		if created {
+			r.orgCreations.RecordCreated(ctx, synced)
 		}
 	default:
 		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)

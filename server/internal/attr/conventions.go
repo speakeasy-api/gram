@@ -3362,6 +3362,22 @@ func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPu
 
 func OutboxBatchSize(v int) attribute.KeyValue { return OutboxBatchSizeKey.Int(v) }
 
+// OrganizationCreatedSourceKey and OrganizationCreatedAccountTypeKey label the
+// gram.organizations.created counter. They are unprefixed because monitors
+// query them by these exact names.
+const (
+	OrganizationCreatedSourceKey      = attribute.Key("creation_source")
+	OrganizationCreatedAccountTypeKey = attribute.Key("account_type")
+)
+
+func OrganizationCreatedSource(v string) attribute.KeyValue {
+	return OrganizationCreatedSourceKey.String(v)
+}
+
+func OrganizationCreatedAccountType(v string) attribute.KeyValue {
+	return OrganizationCreatedAccountTypeKey.String(v)
+}
+
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
 }

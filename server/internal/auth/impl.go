@@ -172,6 +172,7 @@ type Service struct {
 	transferManager      *authsessions.TransferManager
 	tokens               signins.TokenRevoker
 	deliverer            *signins.Deliverer
+	orgCreations         *orgprovision.CreationRecorder
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -237,8 +238,15 @@ func NewService(
 		transferManager:      authsessions.NewTransferManager(nonceStore),
 		tokens:               nil,
 		deliverer:            signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
+		orgCreations:         nil,
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
+}
+
+// SetOrganizationCreationRecorder wires the counter for organizations this
+// service creates. Unset records none.
+func (s *Service) SetOrganizationCreationRecorder(recorder *orgprovision.CreationRecorder) {
+	s.orgCreations = recorder
 }
 
 func FormSignInRedirectURL(siteURL string) string {
@@ -1100,7 +1108,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	}
 	authCtx.ActiveOrganizationID = selectedOrg
 
-	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	switched, created, err := s.orgRepo.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          selected.ID,
 		Name:        selected.Name,
 		Slug:        selected.Slug,
@@ -1110,8 +1118,12 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		// and null leaves whatever was recorded alone.
 		CreationSource: pgtype.Text{String: "", Valid: false},
 		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
+	}
+	if created {
+		s.orgCreations.RecordCreated(ctx, switched)
 	}
 
 	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
@@ -1492,7 +1504,7 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []auth
 		}
 	}
 
-	whitelisted, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	whitelisted, created, err := s.orgRepo.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          orgMetadata.ID,
 		Name:        orgMetadata.Name,
 		Slug:        orgMetadata.Slug,
@@ -1505,6 +1517,9 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []auth
 	})
 	if err != nil {
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
+	}
+	if created {
+		s.orgCreations.RecordCreated(ctx, whitelisted)
 	}
 	return whitelisted.ID, whitelisted, nil
 }
@@ -1736,6 +1751,9 @@ func (s *Service) persistProvisionedOrganization(
 	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("recheck organization cap: %w", err)
 	}
+	// The partner path inserts with a create-only statement, so the upsert
+	// below only updates that row and does not report it as created.
+	created := opts.StripePromotionCodeID != ""
 	if opts.StripePromotionCodeID != "" {
 		// The existing create-only primitive rejects a row already inserted by
 		// identity sync (or a concurrent signup). Attribution never adopts an org.
@@ -1746,7 +1764,7 @@ func (s *Service) persistProvisionedOrganization(
 		}
 	}
 
-	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, upsertCreated, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          provisionedOrg.GramOrganizationID,
 		Name:        orgName,
 		Slug:        slug,
@@ -1760,6 +1778,7 @@ func (s *Service) persistProvisionedOrganization(
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
 	}
+	created = created || upsertCreated
 
 	if _, err := queries.UpsertOrganizationUserRelationship(ctx, orgRepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: org.ID,
@@ -1796,6 +1815,9 @@ func (s *Service) persistProvisionedOrganization(
 
 	if err := tx.Commit(ctx); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("commit organization provisioning transaction: %w", err)
+	}
+	if created {
+		s.orgCreations.RecordCreated(ctx, org)
 	}
 
 	return org, nil

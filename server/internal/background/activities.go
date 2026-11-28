@@ -68,6 +68,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -417,6 +418,7 @@ func NewActivities(
 
 	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+	processWorkOSOrganizationEvents.SetOrganizationCreationRecorder(orgprovision.NewCreationRecorder(meterProvider))
 	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 
 	// Built here rather than threaded in: this constructor already holds every
