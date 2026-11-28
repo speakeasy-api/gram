@@ -35,7 +35,7 @@ func NewCreationRecorder(meterProvider metric.MeterProvider) *CreationRecorder {
 	}
 	created, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/organizations/orgprovision").Int64Counter(
 		meterOrganizationsCreated,
-		metric.WithDescription("Organizations created, by creation source and account type."),
+		metric.WithDescription("Organizations created, by creation source, account type, and email domain class."),
 		metric.WithUnit("{organization}"),
 	)
 	if err != nil {
