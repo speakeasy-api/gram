@@ -178,19 +178,6 @@ function ExpiredTrialEnded(): JSX.Element {
             </RadioCardGroup>
           </div>
         </Card.Content>
-        <Card.Footer>
-          <div className="flex w-full justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="md"
-              icon="arrow-right"
-              iconAfter
-              href="/explore-demo"
-            >
-              Explore a Live Demo
-            </Button>
-          </div>
-        </Card.Footer>
       </Card>
 
       <BookingCalendarModal {...modalProps} />

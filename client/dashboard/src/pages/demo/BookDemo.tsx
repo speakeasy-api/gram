@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/Button";
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { logoutToLogin } from "@/lib/logout-to-login";
@@ -36,15 +35,6 @@ export default function BookDemo(): JSX.Element {
       }
     >
       <DemoBookingFlow />
-      <Button
-        variant="secondary"
-        size="md"
-        icon="arrow-right"
-        iconAfter
-        href="/explore-demo"
-      >
-        Explore a Live Demo
-      </Button>
     </AuthShell>
   );
 }
