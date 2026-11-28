@@ -493,6 +493,86 @@ func startFakeATEStack(t *testing.T, atespace string) (*fakeATECluster, *ateclie
 	return cluster, client
 }
 
+type fakeKitATEActorStore struct {
+	mu     sync.Mutex
+	actors map[uuid.UUID]kitATEThreadActor
+}
+
+func newFakeKitATEActorStore() *fakeKitATEActorStore {
+	return &fakeKitATEActorStore{actors: map[uuid.UUID]kitATEThreadActor{}}
+}
+
+func (s *fakeKitATEActorStore) GetForThread(_ context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (kitATEThreadActor, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.actors {
+		if a.RuntimeID == r.ID && a.ThreadID == threadID {
+			return a, true, nil
+		}
+	}
+	return kitATEThreadActor{}, false, nil
+}
+
+func (s *fakeKitATEActorStore) Insert(_ context.Context, r assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	actor.ID = uuid.New()
+	actor.RuntimeID = r.ID
+	s.actors[actor.ID] = actor
+	return actor, nil
+}
+
+func (s *fakeKitATEActorStore) UpdateBootstrap(_ context.Context, _ assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.actors[actor.ID] = actor
+	return actor, nil
+}
+
+func (s *fakeKitATEActorStore) UpdateState(_ context.Context, _ assistantRuntimeRecord, actorID uuid.UUID, state string, warmUntil *time.Time) (kitATEThreadActor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	actor, ok := s.actors[actorID]
+	if !ok {
+		return kitATEThreadActor{}, ErrKitRuntimeBinding
+	}
+	actor.State = state
+	actor.WarmUntil = warmUntil
+	s.actors[actorID] = actor
+	return actor, nil
+}
+
+func (s *fakeKitATEActorStore) SoftDelete(_ context.Context, _ assistantRuntimeRecord, actorID uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.actors, actorID)
+	return nil
+}
+
+func (s *fakeKitATEActorStore) ListForRuntime(_ context.Context, r assistantRuntimeRecord) ([]kitATEThreadActor, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []kitATEThreadActor
+	for _, a := range s.actors {
+		if a.RuntimeID == r.ID {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+func (s *fakeKitATEActorStore) CountForRuntime(_ context.Context, r assistantRuntimeRecord) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int64
+	for _, a := range s.actors {
+		if a.RuntimeID == r.ID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	t.Parallel()
 	const (
@@ -510,6 +590,7 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 		revoked        []*KitWorkloadBinding
 		protoDriver    *fakeATEProtocol
 		bootstrapCount int
+		store          = newFakeKitATEActorStore()
 	)
 
 	runtimeID := uuid.New()
@@ -531,18 +612,19 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 			mu.Lock()
 			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
 			mu.Unlock()
-			progressCtx := context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(_ context.Context, raw []byte) error {
-				mu.Lock()
-				storedMetadata = append([]byte(nil), raw...)
-				mu.Unlock()
-				return nil
-			}))
-			return op(progressCtx, r)
+			return op(ctx, r)
 		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			mu.Lock()
+			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+			mu.Unlock()
+			return op(ctx, r)
+		},
+		Store: store,
 		Token: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) (string, error) {
 			return kitATEActorToken("root-secret", thread.String()), nil
 		},
-		Bootstrap: func(_ context.Context, r assistantRuntimeRecord, thread uuid.UUID, actorName string) (KitLocalBootstrap, error) {
+		Bootstrap: func(_ context.Context, r assistantRuntimeRecord, thread uuid.UUID, actorName string, _ *KitWorkloadBinding) (KitLocalBootstrap, error) {
 			bootstrapCount++
 			mcpJSON := []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://tools.speakeasy.test/mcp/gateway/org/projects/proj","headers":{}}}}`)
 			return KitLocalBootstrap{
@@ -634,6 +716,14 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.Equal(t, []int32{443}, rule.GetTlsPassthrough().GetPorts().GetNumbers())
 	cluster.mu.Unlock()
 
+	storedRow, ok, err := store.GetForThread(t.Context(), record, threadID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, originalUID, storedRow.ActorUID)
+	require.Equal(t, ateActorStateRunning, storedRow.State)
+	require.True(t, storedRow.Configured)
+	require.NotNil(t, storedRow.WarmUntil)
+
 	// 3. Stop settles the native thread session and suspends the actor synchronously.
 	require.NoError(t, backend.Stop(t.Context(), record))
 	require.Equal(t, []uuid.UUID{threadID}, protoDriver.closedThread)
@@ -641,6 +731,12 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	cluster.mu.Lock()
 	require.Equal(t, ateapiv1.ActorState_ACTOR_STATE_SUSPENDED, actorEntry.actor.GetStatus().GetState())
 	cluster.mu.Unlock()
+
+	storedRow, ok, err = store.GetForThread(t.Context(), record, threadID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, ateActorStateSuspended, storedRow.State)
+	require.Nil(t, storedRow.WarmUntil)
 
 	// 4. Non-retired ReapStoppedMachine refuses to discard suspended workspace.
 	err = backend.ReapStoppedMachine(t.Context(), record)
@@ -663,7 +759,13 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.Equal(t, originalUID, actorEntry.actor.GetMetadata().GetUid())
 	cluster.mu.Unlock()
 
-	// 6. Reap withdraws workload binding and deletes the actor by exact UID.
+	storedRow, ok, err = store.GetForThread(t.Context(), record, threadID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, ateActorStateRunning, storedRow.State)
+	require.NotNil(t, storedRow.WarmUntil)
+
+	// 6. Reap withdraws workload binding, deletes the actor by exact UID, and soft-deletes the row.
 	record.Retired = true
 	require.NoError(t, backend.ReapStoppedMachine(t.Context(), record))
 	require.Len(t, revoked, 1)
@@ -673,6 +775,14 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	require.Equal(t, []string{originalUID}, cluster.deletedActorUIDs)
 	require.Empty(t, cluster.actors)
 	cluster.mu.Unlock()
+
+	_, ok, err = store.GetForThread(t.Context(), record, threadID)
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	exists, err := backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, exists, "retired runtime with no remaining actors must report non-existent")
 
 	// Reap is idempotent once the actor is gone.
 	require.NoError(t, backend.Reap(t.Context(), record))
@@ -765,8 +875,12 @@ func TestKitATEEnsureFailsWhenAtespaceMissing(t *testing.T) {
 		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
 			return op(ctx, r)
 		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		Store: newFakeKitATEActorStore(),
 		Token: func(context.Context, assistantRuntimeRecord, uuid.UUID) (string, error) { return "tok", nil },
-		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
+		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *KitWorkloadBinding) (KitLocalBootstrap, error) {
 			return KitLocalBootstrap{}, nil
 		},
 		Protocol: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
@@ -802,6 +916,7 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 	var (
 		mu             sync.Mutex
 		storedMetadata = []byte("{}")
+		store          = newFakeKitATEActorStore()
 	)
 	runtimeID := uuid.New()
 	assistantID := uuid.New()
@@ -825,18 +940,19 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 				mu.Lock()
 				r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
 				mu.Unlock()
-				progressCtx := context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(_ context.Context, raw []byte) error {
-					mu.Lock()
-					storedMetadata = append([]byte(nil), raw...)
-					mu.Unlock()
-					return nil
-				}))
-				return op(progressCtx, r)
+				return op(ctx, r)
 			},
+			ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+				mu.Lock()
+				r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+				mu.Unlock()
+				return op(ctx, r)
+			},
+			Store: store,
 			Token: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) (string, error) {
 				return kitATEActorToken("root-secret", thread.String()), nil
 			},
-			Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string) (KitLocalBootstrap, error) {
+			Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string, _ *KitWorkloadBinding) (KitLocalBootstrap, error) {
 				return KitLocalBootstrap{
 					Model:              "openai/gpt-4.1-mini",
 					ReasoningEffort:    "medium",
@@ -1080,20 +1196,38 @@ func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
 		Atespace:    recordedAtespace,
 		Template:    recordedTemplate,
 		EgressHosts: []string{"legacy.speakeasy.test"},
-		Threads: map[string]kitATEThread{
-			"not-a-uuid": {
-				ActorName: "corrupted-actor-name",
-				ActorUID:  "",
-			},
-			validThread.String(): {
-				ActorName:  validActorName,
-				ActorUID:   validUID,
-				Configured: true,
-				Workload:   validBinding,
-			},
-		},
 	}
 	rawMeta, err := json.Marshal(meta)
+	require.NoError(t, err)
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		Retired:             true,
+		BackendMetadataJSON: rawMeta,
+	}
+
+	store := newFakeKitATEActorStore()
+	_, err = store.Insert(t.Context(), record, kitATEThreadActor{
+		RuntimeID: runtimeID,
+		ThreadID:  uuid.Nil,
+		ActorName: "corrupted-actor-name",
+		ActorUID:  "",
+		State:     ateActorStateRunning,
+	})
+	require.NoError(t, err)
+	_, err = store.Insert(t.Context(), record, kitATEThreadActor{
+		RuntimeID:  runtimeID,
+		ThreadID:   validThread,
+		ActorName:  validActorName,
+		ActorUID:   validUID,
+		State:      ateActorStateRunning,
+		Configured: true,
+		Workload:   validBinding,
+	})
 	require.NoError(t, err)
 
 	serverURL, err := url.Parse("https://api.speakeasy.test")
@@ -1110,8 +1244,12 @@ func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
 		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
 			return op(ctx, r)
 		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		Store: store,
 		Token: func(context.Context, assistantRuntimeRecord, uuid.UUID) (string, error) { return "tok", nil },
-		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
+		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *KitWorkloadBinding) (KitLocalBootstrap, error) {
 			return KitLocalBootstrap{}, nil
 		},
 		Protocol: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
@@ -1124,16 +1262,6 @@ func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
 		CheckSettled: func(context.Context, assistantRuntimeRecord) error { return nil },
 	})
 	require.NoError(t, err)
-
-	record := assistantRuntimeRecord{
-		ID:                  runtimeID,
-		AssistantID:         assistantID,
-		ProjectID:           projectID,
-		RuntimeVersion:      3,
-		Backend:             runtimeBackendATE,
-		Retired:             true,
-		BackendMetadataJSON: rawMeta,
-	}
 
 	// Non-Reap callers (like Status) still enforce strict live config matching.
 	_, err = backend.Status(t.Context(), record)
@@ -1168,6 +1296,7 @@ func TestKitATEBootstrapConflictRetiresAndRecreatesWhileIdenticalRetryIsIdempote
 		mu             sync.Mutex
 		storedMetadata = []byte("{}")
 		revoked        []*KitWorkloadBinding
+		store          = newFakeKitATEActorStore()
 	)
 	runtimeID := uuid.New()
 	assistantID := uuid.New()
@@ -1205,18 +1334,19 @@ func TestKitATEBootstrapConflictRetiresAndRecreatesWhileIdenticalRetryIsIdempote
 			mu.Lock()
 			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
 			mu.Unlock()
-			progressCtx := context.WithValue(ctx, kitAdmissionProgressKey{}, kitAdmissionProgressWriter(func(_ context.Context, raw []byte) error {
-				mu.Lock()
-				storedMetadata = append([]byte(nil), raw...)
-				mu.Unlock()
-				return nil
-			}))
-			return op(progressCtx, r)
+			return op(ctx, r)
 		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			mu.Lock()
+			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+			mu.Unlock()
+			return op(ctx, r)
+		},
+		Store: store,
 		Token: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) (string, error) {
 			return kitATEActorToken("root-secret", thread.String()), nil
 		},
-		Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string) (KitLocalBootstrap, error) {
+		Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string, _ *KitWorkloadBinding) (KitLocalBootstrap, error) {
 			return makeBootstrap(thread, actorName), nil
 		},
 		Protocol: func(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, endpoint *url.URL, hc *guardian.HTTPClient, token string) (runtimeProtocol, error) {
