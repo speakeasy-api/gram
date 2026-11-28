@@ -211,11 +211,6 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 		return nil, errors.New("set ATE CONNECT deadline")
 	}
 
-	metadata, err := (fileBearer{path: c.config.AudienceJWTFile}).GetRequestMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	request, err := http.NewRequestWithContext(ctx, http.MethodConnect, "http://"+authority, nil)
 	if err != nil {
 		return nil, errors.New("create ATE CONNECT request")
@@ -223,7 +218,6 @@ func (c *Client) connect(ctx context.Context, actor, authority string) (net.Conn
 	request.URL = &url.URL{Opaque: authority}
 	request.Host = authority
 	request.Header.Set("ate-target-actor", c.config.Atespace+"/"+actor)
-	request.Header.Set("Authorization", metadata["authorization"])
 	if err := request.Write(conn); err != nil {
 		return nil, errors.New("write ATE CONNECT")
 	}
