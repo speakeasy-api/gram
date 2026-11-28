@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
@@ -952,4 +953,74 @@ func TestKitATEStoppedTTLRetainsReusableActor(t *testing.T) {
 	err := k.ReapStoppedMachine(t.Context(), assistantRuntimeRecord{Backend: runtimeBackendATE, RuntimeVersion: 3})
 	require.ErrorContains(t, err, "must not be reaped by TTL")
 	require.Equal(t, 1, calls)
+}
+
+func TestKitATETemplateMatchRejectsSecurityRelevantDrift(t *testing.T) {
+	t.Parallel()
+	k := &KitATERuntimeBackend{
+		config: KitATERuntimeConfig{
+			Image:          testKitATEImage,
+			Atespace:       "prod-assistants",
+			Template:       "kit-v1",
+			WorkerSelector: testKitATEWorkerSelector,
+		},
+		imageDigest: testKitATEImageDigestA,
+	}
+	desired := k.desiredTemplate(k.templateVersionName())
+
+	// Identical spec with different mutable tag (same digest) and server-populated metadata/status matches.
+	sameDigest, ok := proto.Clone(desired).(*ateapiv1.ActorTemplate)
+	require.True(t, ok)
+	sameDigest.Metadata.Uid = "server-uid"
+	sameDigest.Metadata.Version = 3
+	sameDigest.Status = &ateapiv1.ActorTemplateStatus{}
+	sameDigest.Containers[0].Image = "gcr.io/example/gram-ate-runtime:sha-other@" + testKitATEImageDigestA
+	require.True(t, matchesKitATETemplate(sameDigest, desired, testKitATEImageDigestA))
+
+	mutations := []struct {
+		name   string
+		mutate func(*ateapiv1.ActorTemplate)
+	}{
+		{"container env", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Env = []*ateapiv1.EnvVar{{Name: "LD_PRELOAD", Value: "/tmp/evil.so"}}
+		}},
+		{"container security context", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].SecurityContext = &ateapiv1.SecurityContext{
+				Capabilities: &ateapiv1.Capabilities{Add: []string{"SYS_ADMIN"}},
+			}
+		}},
+		{"container resources", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Resources = &ateapiv1.ResourceRequirements{
+				Limits: &ateapiv1.Resources{CpuMillicores: 2000, MemoryBytes: 1 << 30},
+			}
+		}},
+		{"container args", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Args = []string{"--extra"}
+		}},
+		{"container volume mounts", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].VolumeMounts = []*ateapiv1.VolumeMount{{Name: "extra", MountPath: "/extra"}}
+		}},
+		{"template volumes", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Volumes = []*ateapiv1.Volume{{Name: "extra"}}
+		}},
+		{"snapshot storage location", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.SnapshotConfig.StorageLocation = "gs://attacker-bucket/snaps"
+		}},
+		{"golden egress policy", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.GoldenEgressPolicy = &ateapiv1.EgressPolicyTemplate{}
+		}},
+		{"extra template resource limits", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Resources.Limits.CpuMillicores = ateKitCPUMillicores + 500
+		}},
+	}
+
+	for _, tc := range mutations {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate, ok := proto.Clone(desired).(*ateapiv1.ActorTemplate)
+			require.True(t, ok)
+			tc.mutate(candidate)
+			require.False(t, matchesKitATETemplate(candidate, desired, testKitATEImageDigestA), tc.name)
+		})
+	}
 }
