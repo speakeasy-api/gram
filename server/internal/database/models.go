@@ -5109,6 +5109,9 @@ type OrganizationMetadatum struct {
 	// Staff-entered link to the adoption dashboard for this organization.
 	// @access: restricted
 	AdoptionDashboardUrl pgtype.Text
+	// Staff-set label for organizations owned by Speakeasy employees for testing and dogfooding.
+	// @access: confidential
+	Internal bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
