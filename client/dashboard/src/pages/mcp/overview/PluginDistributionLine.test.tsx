@@ -5,6 +5,7 @@ import { PluginDistributionLine } from "./PluginDistributionLine";
 
 const state = vi.hoisted(() => ({
   canWrite: true,
+  canReadOrg: true,
   plugins: undefined as
     | {
         plugins: {
@@ -19,6 +20,34 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => state.canWrite,
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => state.canReadOrg, isLoading: false }),
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+  useProject: () => ({ id: "project" }),
+}));
+// The real gate, with its request-access prompt, is covered by
+// require-scope.test.tsx. This stand-in records how the line configures it.
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({
+    check,
+    level,
+    children,
+  }: {
+    check: { scope: string; resourceId: string };
+    level: string;
+    children: React.ReactNode;
+  }) => (
+    <div
+      data-testid="scope-disabled"
+      data-level={level}
+      data-check={`${check.scope}:${check.resourceId}`}
+    >
+      {children}
+    </div>
+  ),
 }));
 vi.mock("@/pages/plugins/usePluginQueryScope", () => ({
   usePluginQueryScope: () => ({ gramProject: "p", gramSession: "s" }),
@@ -52,6 +81,7 @@ function renderLine() {
 afterEach(() => {
   cleanup();
   state.canWrite = true;
+  state.canReadOrg = true;
   state.plugins = undefined;
   state.usePlugins.mockReset();
 });
@@ -110,11 +140,30 @@ describe("PluginDistributionLine", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("renders and reads nothing for people who cannot edit plugins", () => {
+  it("greys the line out, with nothing to click, for people who cannot edit plugins", () => {
     state.canWrite = false;
+    state.plugins = {
+      plugins: [
+        { id: "a", name: "Alpha", servers: [{ mcpServerId: "server-a" }] },
+      ],
+    };
+    renderLine();
+    const disabled = screen.getByTestId("scope-disabled");
+    expect(disabled.getAttribute("data-level")).toBe("component");
+    expect(disabled.getAttribute("data-check")).toBe("plugin:write:project");
+    expect(disabled.textContent).toBe("Distributed in1 plugin·Manage plugins");
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("shows the greyed line without a count, and reads nothing, for people who cannot read plugins", () => {
+    state.canWrite = false;
+    state.canReadOrg = false;
     state.plugins = { plugins: [] };
-    const { container } = renderLine();
-    expect(container.innerHTML).toBe("");
+    renderLine();
+    expect(screen.getByTestId("scope-disabled").textContent).toBe(
+      "Manage plugins",
+    );
     expect(state.usePlugins).not.toHaveBeenCalled();
   });
 });

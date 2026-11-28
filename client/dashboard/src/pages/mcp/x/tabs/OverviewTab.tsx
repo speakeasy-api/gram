@@ -96,20 +96,22 @@ export function OverviewTab({
         name: mcpServer.name ?? "MCP Server",
       };
   const tunneled = !!mcpServer.tunneledMcpServerId;
-  // The usage dashboard is keyed by slug; a tunneled server without one still
-  // gets its tunnel status.
   const pluginLine = (
     <PluginDistributionLine
       server={pluginServerRef(mcpServer, hostedToolset)}
       settingsHref={pluginSettingsHref}
     />
   );
+  // A tunneled server shows the line above its tunnel status, not in the
+  // usage toolbar further down. The usage dashboard is keyed by slug; a
+  // tunneled server without one still gets its tunnel status.
+  const toolbarStart = tunneled ? undefined : pluginLine;
   const usage = hostedToolset ? (
-    <MCPOverviewTab server={server} toolbarStart={pluginLine} />
+    <MCPOverviewTab server={server} toolbarStart={toolbarStart} />
   ) : mcpServer.slug ? (
     <MCPOverviewTab
       server={server}
-      toolbarStart={pluginLine}
+      toolbarStart={toolbarStart}
       // Tool Logs lists no tunneled servers as filter options yet.
       logsTarget={tunneled ? null : { type: "mcp_server", id: mcpServer.id }}
     />
@@ -130,8 +132,7 @@ export function OverviewTab({
     : undefined;
   return (
     <Stack gap={6}>
-      {/* Without a usage dashboard there is no toolbar to carry the line. */}
-      {!usage && pluginLine}
+      {pluginLine}
       <TunneledMcpConnectionsPanel
         tunneledMcpServerId={mcpServer.tunneledMcpServerId}
         agentSetupHref={agentSetupHref}

@@ -4,7 +4,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import { RequireScope } from "@/components/require-scope";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { useRBAC } from "@/hooks/useRBAC";
+import * as authz from "@/lib/authz.gen";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useRoutes } from "@/routes";
 import { usePlugins } from "@gram/client/react-query/plugins";
@@ -17,8 +21,8 @@ const LINK_CLASS =
 
 /**
  * One quiet line on the Overview saying which plugins hand this server to the
- * team, with a link to the Plugins section of the server's settings. Only
- * people who can edit plugins see it, as with that section.
+ * team, with a link to the Plugins section of the server's settings. People
+ * who cannot edit plugins see it greyed out, with the way to ask for access.
  */
 export function PluginDistributionLine({
   server,
@@ -30,26 +34,47 @@ export function PluginDistributionLine({
   settingsHref: string;
 }): React.JSX.Element | null {
   const canWritePlugins = usePluginWriteAccess();
-  return canWritePlugins ? (
-    <WritablePluginDistributionLine
-      server={server}
-      settingsHref={settingsHref}
-    />
-  ) : null;
+  const { hasAnyScope, isLoading } = useRBAC();
+  const organization = useOrganization();
+  const project = useProject();
+  if (canWritePlugins) {
+    return <LoadedPluginDistributionLine server={server} href={settingsHref} />;
+  }
+  // Nothing is known about the viewer yet; don't flash the greyed line.
+  if (isLoading) return null;
+  // The plugin list is open to organization readers; anyone else would only
+  // be refused, so they get the line without a count.
+  const canReadPlugins = hasAnyScope(
+    ["org:read", "org:admin"],
+    organization.id,
+  );
+  return (
+    <RequireScope
+      check={authz.project(project.id).pluginWrite()}
+      level="component"
+      reason="You don't have permission to manage this server's plugins."
+    >
+      {canReadPlugins ? (
+        <LoadedPluginDistributionLine server={server} />
+      ) : (
+        <PluginDistributionRow />
+      )}
+    </RequireScope>
+  );
 }
 
-function WritablePluginDistributionLine({
+/** Reads the project's plugins; without `href` the line is read-only. */
+function LoadedPluginDistributionLine({
   server,
-  settingsHref,
+  href,
 }: {
   server: HostedServerRef;
-  settingsHref: string;
+  href?: string;
 }): React.JSX.Element | null {
-  const routes = useRoutes();
   const scope = usePluginQueryScope();
-  // A failed read leaves the line out rather than failing the Overview.
+  // A failed read leaves the count out rather than failing the Overview.
   const { data } = usePlugins(scope, undefined, { throwOnError: false });
-  if (!data) return null;
+  if (!data) return href ? null : <PluginDistributionRow />;
 
   // Alphabetical, as in the Settings picker.
   const memberPlugins = data.plugins
@@ -59,50 +84,75 @@ function WritablePluginDistributionLine({
     .sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
     );
-  const count = memberPlugins.length;
+  return <PluginDistributionRow memberPlugins={memberPlugins} href={href} />;
+}
+
+function PluginDistributionRow({
+  memberPlugins,
+  href,
+}: {
+  /** Left out when the viewer cannot read the project's plugins. */
+  memberPlugins?: { id: string; name: string }[];
+  /** Left out for people who cannot edit plugins: nothing is clickable. */
+  href?: string;
+}): React.JSX.Element {
+  const routes = useRoutes();
+  const count = memberPlugins?.length;
+  const countLabel = `${count} ${count === 1 ? "plugin" : "plugins"}`;
+  const action = count === 0 ? "Add to a plugin" : "Manage plugins";
 
   return (
     <div className="text-muted-foreground flex min-w-0 items-center gap-2 text-sm">
       <Icon name="puzzle" className="size-3.5 shrink-0" />
-      {count === 0 ? (
+      {memberPlugins === undefined ? null : count === 0 ? (
         <span>Not in a plugin yet</span>
       ) : (
         <span className="flex items-center gap-1.5">
           Distributed in
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="text-foreground decoration-muted-foreground hover:decoration-foreground data-[state=open]:decoration-foreground cursor-pointer underline decoration-dotted decoration-[1.5px] underline-offset-4"
-              >
-                {count} {count === 1 ? "plugin" : "plugins"}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-56 p-1">
-              <ul aria-label="Plugins this server is in">
-                {memberPlugins.map((plugin) => (
-                  <li key={plugin.id}>
-                    <Link
-                      to={routes.plugins.detail.href(plugin.id)}
-                      className="hover:bg-muted flex items-center justify-between gap-2 px-3 py-1.5 text-sm"
-                    >
-                      <span className="truncate">{plugin.name}</span>
-                      <Icon
-                        name="chevron-right"
-                        className="text-muted-foreground size-3.5 shrink-0"
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </PopoverContent>
-          </Popover>
+          {href ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="text-foreground decoration-muted-foreground hover:decoration-foreground data-[state=open]:decoration-foreground cursor-pointer underline decoration-dotted decoration-[1.5px] underline-offset-4"
+                >
+                  {countLabel}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 p-1">
+                <ul aria-label="Plugins this server is in">
+                  {memberPlugins.map((plugin) => (
+                    <li key={plugin.id}>
+                      <Link
+                        to={routes.plugins.detail.href(plugin.id)}
+                        className="hover:bg-muted flex items-center justify-between gap-2 px-3 py-1.5 text-sm"
+                      >
+                        <span className="truncate">{plugin.name}</span>
+                        <Icon
+                          name="chevron-right"
+                          className="text-muted-foreground size-3.5 shrink-0"
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <span>{countLabel}</span>
+          )}
         </span>
       )}
-      <span aria-hidden="true">·</span>
-      <Link to={settingsHref} className={LINK_CLASS}>
-        {count === 0 ? "Add to a plugin" : "Manage plugins"}
-      </Link>
+      {memberPlugins !== undefined && <span aria-hidden="true">·</span>}
+      {href ? (
+        <Link to={href} className={LINK_CLASS}>
+          {action}
+        </Link>
+      ) : (
+        <span className={LINK_CLASS} aria-disabled="true">
+          {action}
+        </span>
+      )}
     </div>
   );
 }
