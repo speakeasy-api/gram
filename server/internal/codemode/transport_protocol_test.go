@@ -1,6 +1,7 @@
 package codemode
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
@@ -76,6 +77,75 @@ func TestRunnerCallbackProtocolViolations(t *testing.T) {
 			result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
 			require.NotNil(t, result.Error)
 			require.Equal(t, tc.code, result.Error.Code)
+		})
+	}
+}
+
+// pendingHost holds every tool call until its execution ends.
+type pendingHost struct{ idleHost }
+
+func (pendingHost) Call(ctx context.Context, _ string, _ json.RawMessage) (*ToolResult, error) {
+	<-ctx.Done()
+	return &ToolResult{Outcome: "unknown", Error: "tool_call_outcome_unknown"}, nil
+}
+
+// TestConcurrencyLimitRecordsEveryReceivedCall stops a run at its ninth
+// concurrent helper while eight calls are in flight, whether the runner or the
+// server enforces the limit. Every call the server received must appear in
+// ToolCalls, so a caller never replays one blindly.
+func TestConcurrencyLimitRecordsEveryReceivedCall(t *testing.T) {
+	t.Parallel()
+	call := func(id uint32) runnerMessage {
+		return runnerMessage{Type: "callback", ID: id, Method: "call", Arguments: json.RawMessage(`{"path":"remote--write","arguments":{}}`)}
+	}
+	for _, tc := range []struct {
+		name  string
+		last  runnerMessage
+		code  string
+		calls int
+	}{
+		{"runner refuses the ninth", runnerMessage{Type: "error", Code: "execution_failed", Message: "at most eight callbacks may run concurrently; the call over the limit was not dispatched"}, "execution_failed", maxConcurrentCallbacks},
+		{"server refuses the ninth", call(maxConcurrentCallbacks + 1), "callback_limit", maxConcurrentCallbacks + 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// One write delivers every frame at once, as a burst from a remote
+			// runner does, so the run can end before any call is dispatched.
+			endpoint := scriptedRunner(t, "4", nil, func(stream net.Conn) {
+				defer func() { _ = stream.Close() }()
+				frame, err := readRunnerFrame(stream)
+				if err != nil {
+					return
+				}
+				var start runnerStart
+				if json.Unmarshal(frame, &start) != nil {
+					return
+				}
+				var burst bytes.Buffer
+				_ = writeRunnerFrame(&burst, runnerMessage{Type: "started", ExecutionID: start.ExecutionID})
+				for id := range uint32(maxConcurrentCallbacks) {
+					_ = writeRunnerFrame(&burst, call(id+1))
+				}
+				_ = writeRunnerFrame(&burst, tc.last)
+				if _, err := stream.Write(burst.Bytes()); err != nil {
+					return
+				}
+				_, _ = readRunnerFrame(stream)
+			})
+			client, err := NewRunnerClient(endpoint, strings.Repeat("t", 32), &net.Dialer{})
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = client.Close() })
+			result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return pendingHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, tc.code, result.Error.Code)
+			require.Len(t, result.ToolCalls, tc.calls)
+			for _, outcome := range result.ToolCalls {
+				require.Equal(t, "remote--write", outcome.Path)
+				require.Contains(t, []string{"unknown", "not_dispatched"}, outcome.Outcome)
+			}
+			if tc.calls > maxConcurrentCallbacks {
+				require.Equal(t, "not_dispatched", result.ToolCalls[maxConcurrentCallbacks].Outcome, "the refused call never reaches its backend")
+			}
 		})
 	}
 }

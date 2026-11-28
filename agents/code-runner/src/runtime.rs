@@ -154,9 +154,11 @@ pub async fn execute(
                 } else {
                     callbacks += 1;
                     ensure!(callbacks <= MAX_CALLS, "callback attempt limit exceeded");
+                    // The callbacks already issued still reach the host ahead
+                    // of this error, so it records each of those calls.
                     ensure!(
                         pending.len() < MAX_PENDING,
-                        "at most eight callbacks may run concurrently"
+                        "at most eight callbacks may run concurrently; the call over the limit was not dispatched"
                     );
                     ensure!(issued.insert(call_id), "duplicate runtime callback ID");
                     ensure!(
