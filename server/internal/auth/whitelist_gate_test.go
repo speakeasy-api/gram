@@ -48,6 +48,10 @@ func TestAuthorizeSessionRefusesNonWhitelistedOrganization(t *testing.T) {
 	// Billing stays reachable so a user whose trial expired can pay.
 	_, err = instance.authorizer.Authorize(goaCtx(t.Context(), "usage", "createStripeCheckout"), session.SessionID, sessionScheme)
 	require.NoError(t, err)
+	_, err = instance.authorizer.Authorize(goaCtx(t.Context(), "access", "listGrants"), session.SessionID, sessionScheme)
+	require.NoError(t, err)
+	_, err = instance.authorizer.Authorize(goaCtx(t.Context(), "access", "listRoles"), session.SessionID, sessionScheme)
+	require.ErrorAs(t, err, &oopsErr)
 
 	// Access returns on the next request once staff whitelist the organization.
 	setWhitelisted(t, ctx, instance, orgID, true)

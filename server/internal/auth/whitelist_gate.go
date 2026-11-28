@@ -19,6 +19,13 @@ var whitelistExemptServices = map[string]bool{
 	"usage": true,
 }
 
+// whitelistExemptMethods are single methods outside those services that the
+// billing recovery pages need. The dashboard reads the caller's own grants to
+// decide whether they may set up billing.
+var whitelistExemptMethods = map[string]bool{
+	"access.listGrants": true,
+}
+
 // requireWhitelistedSession refuses session-authenticated requests for an
 // organization that has not been granted access to Speakeasy. The auth service
 // authenticates sessions itself, so sign-in, session info, logout and
@@ -33,11 +40,11 @@ func (s *Auth) requireWhitelistedSession(ctx context.Context) error {
 		return nil
 	}
 	service, _ := ctx.Value(goa.ServiceKey).(string)
-	if whitelistExemptServices[service] {
+	method, _ := ctx.Value(goa.MethodKey).(string)
+	if whitelistExemptServices[service] || whitelistExemptMethods[service+"."+method] {
 		return nil
 	}
 
-	method, _ := ctx.Value(goa.MethodKey).(string)
 	return oops.E(oops.CodeForbidden, nil, notWhitelistedMessage).LogWarn(ctx, s.logger,
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogReason("organization_not_whitelisted"),
