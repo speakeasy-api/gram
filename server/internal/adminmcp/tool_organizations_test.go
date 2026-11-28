@@ -183,3 +183,52 @@ func TestOrganizationReadsUnavailableWithoutService(t *testing.T) {
 		require.Contains(t, body, `"isError":true`)
 	}
 }
+
+func TestOrganizationTrialReportsCardSharing(t *testing.T) {
+	t.Parallel()
+	secret := "private-provider-id"
+	state := "running"
+	addedAt := "2026-02-01T00:00:00Z"
+	used := "card_used"
+	sharing := make([]*gen.AdminTrialCardSharingOrganization, 0, maxTrialCardSharingOrganizations+1)
+	for i := range maxTrialCardSharingOrganizations + 1 {
+		suffix := string(rune('a' + i))
+		var rejection *string
+		if i > 0 {
+			rejection = &used
+		}
+		sharing = append(sharing, &gen.AdminTrialCardSharingOrganization{
+			ID: "org-shared-" + suffix, Name: "Shared " + suffix, Slug: "shared-" + suffix, CardAddedAt: addedAt,
+			RejectionReason: rejection,
+		})
+	}
+	reads := &recordingOrganizationReader{org: &gen.AdminOrganization{
+		ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "free",
+		TrialState: &state, TrialCardAddedAt: &addedAt, TrialCardRejectionReason: &used,
+		OrganizationsSharingTrialCard: sharing, StripeCustomerID: &secret,
+	}}
+	status, body, data := callStaffReadTool(t, reads, "get_organization_trial", `{"organization_id":"org-a"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, secret)
+	var output OrganizationTrial
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Equal(t, &addedAt, output.CardAddedAt)
+	require.Equal(t, &used, output.CardRejectionReason)
+	require.Len(t, output.OrganizationsSharingCard, maxTrialCardSharingOrganizations)
+	require.Equal(t, TrialCardSharingOrganization{ID: "org-shared-a", Name: "Shared a", Slug: "shared-a", CardAddedAt: addedAt, RejectionReason: nil}, output.OrganizationsSharingCard[0])
+	require.Equal(t, TrialCardSharingOrganization{ID: "org-shared-b", Name: "Shared b", Slug: "shared-b", CardAddedAt: addedAt, RejectionReason: &used}, output.OrganizationsSharingCard[1])
+	require.True(t, output.MoreOrganizationsSharingCard)
+}
+
+func TestOrganizationTrialOmitsCardWithoutOne(t *testing.T) {
+	t.Parallel()
+	reads := &recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "free"}}
+	status, _, data := callStaffReadTool(t, reads, "get_organization_trial", `{"organization_id":"org-a"}`)
+	require.Equal(t, http.StatusOK, status)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &fields))
+	require.NotContains(t, fields, "card_added_at")
+	require.NotContains(t, fields, "card_rejection_reason")
+	require.NotContains(t, fields, "organizations_sharing_card")
+	require.NotContains(t, fields, "more_organizations_sharing_card")
+}

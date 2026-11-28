@@ -3,6 +3,7 @@ package assistants
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,26 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-func TestLegacyTurnUserID(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name, source, payload, creator, want string
-	}{
-		{name: "dashboard sender", source: sourceKindDashboard, payload: `{"user_id":"sender"}`, creator: "owner", want: "sender"},
-		{name: "dashboard without sender", source: sourceKindDashboard, payload: `{}`, creator: "owner", want: "owner"},
-		{name: "slack", source: sourceKindSlack, payload: `{"team_id":"T","user_id":"U"}`, creator: "owner", want: "owner"},
-		{name: "wake with captured requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, creator: "owner", want: "owner"},
-		{name: "no creator", source: sourceKindCron, payload: `{}`, creator: "", want: ""},
-		{name: "OAuth continuation", source: sourceKindDashboard, payload: `{"gram_event_kind":"assistant_mcp_auth","_gram_resume_user_id":"initiator"}`, creator: "owner", want: "owner"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := legacyTurnUserID(assistantRecord{CreatedByUserID: tc.creator}, assistantThreadRecord{SourceKind: tc.source}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(tc.payload)})
-			require.Equal(t, tc.want, got)
-		})
-	}
-}
 
 func TestSelectTurnUser(t *testing.T) {
 	t.Parallel()
@@ -99,29 +80,29 @@ func seedProjectRead(t *testing.T, db *pgxpool.Pool, user string, project uuid.U
 	require.NoError(t, err)
 }
 
-func TestTurnUserIDLegacyAssistantRunsWithoutCreator(t *testing.T) {
+func TestProcessThreadEventsFailsUnconfiguredAssistantTerminally(t *testing.T) {
 	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_legacy")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_unconfigured_terminal")
 	require.NoError(t, err)
-	project, assistantID, _, _ := insertAssistantFixture(t, db)
-	core := newProvisioningCore(t, db)
-	assistant := assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test", CreatedByUserID: ""}
-	identity, err := core.resolveTurnIdentity(t.Context(), assistant, assistantThreadRecord{SourceKind: sourceKindWake}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"identity_version":1,"requester_user_id":"not-a-member"}`)})
-	require.NoError(t, err)
-	require.Empty(t, identity.UserID)
-	require.False(t, identity.AgentBacked)
-}
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	logger := testenv.NewLogger(t)
+	var dispatched atomic.Pointer[string]
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
-func TestTurnIdentityLegacySpeakeasySlackRefusesUnlinkedSender(t *testing.T) {
-	t.Parallel()
-	db, err := assistantsInfra.CloneTestDatabase(t, "turn_identity_speakeasy_slack")
+	_, err = core.AdmitPendingThreads(t.Context(), assistantID)
 	require.NoError(t, err)
-	project, assistantID, _, _ := insertAssistantFixture(t, db)
-	core := newProvisioningCore(t, db)
-	assistant := assistantRecord{ID: assistantID, ProjectID: project, OrganizationID: "org-test", CreatedByUserID: "owner"}
-	_, err = core.resolveTurnIdentity(t.Context(), assistant, assistantThreadRecord{SourceKind: sourceKindSpeakeasySlack}, assistantThreadEventRecord{NormalizedPayloadJSON: []byte(`{"team_id":"T1","user_id":"U1"}`)})
-	require.ErrorIs(t, err, ErrTurnIdentity)
-	require.ErrorIs(t, err, ErrSlackSenderUnlinked)
+	result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+	require.NoError(t, err)
+	require.True(t, result.RetryAdmission)
+	require.False(t, result.ProcessedAnyEvent)
+	require.Nil(t, dispatched.Load(), "a turn without an agent identity must fail before dispatching to the runtime")
+
+	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, eventStatusFailed, event.Status)
+	require.EqualValues(t, 1, event.Attempts)
+	require.True(t, event.LastError.Valid)
+	require.Contains(t, event.LastError.String, "not configured")
 }
 
 func TestTurnUserIDAgentBackedRequiresMembershipAndProjectAccess(t *testing.T) {
@@ -224,27 +205,4 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "user-1", identity.UserID, "an ingress payload must not select the turn user")
 	require.False(t, identity.HumanKnown, "the owner fallback is not a known human")
-}
-
-func TestTurnEventSourcePrefersStampedSource(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name    string
-		thread  string
-		payload string
-		want    string
-	}{
-		{name: "stamped", thread: sourceKindSlack, payload: `{"_gram_source_kind":"speakeasy_slack"}`, want: sourceKindSpeakeasySlack},
-		{name: "unstamped", thread: sourceKindSlack, payload: `{"text":"hi"}`, want: sourceKindSlack},
-		{name: "non-object", thread: sourceKindSpeakeasySlack, payload: `"hi"`, want: sourceKindSpeakeasySlack},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := turnEventSource(tc.thread, []byte(tc.payload))
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
-		})
-	}
-	_, err := turnEventSource(sourceKindSlack, []byte(`{"_gram_source_kind":1}`))
-	require.Error(t, err)
 }

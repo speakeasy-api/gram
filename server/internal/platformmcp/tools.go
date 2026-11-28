@@ -53,6 +53,9 @@ type PlatformContext struct {
 	Overview             string   `json:"overview"`
 	AvailableWorkflows   []string `json:"available_workflows"`
 	RequestableWorkflows []string `json:"requestable_workflows"`
+	// FreeTrial is present only while the organization's free trial waits for
+	// an organization admin to add a card.
+	FreeTrial *PendingFreeTrial `json:"free_trial,omitempty"`
 }
 
 // platformOverview explains capability-filtered discovery and denial behavior,
@@ -326,7 +329,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		connectionMutationService = connectionMutations[0]
 	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerWhoamiTool(reg, NewWhoamiService(postgresReader.db))
+		registerWhoamiTool(reg, NewWhoamiService(postgresReader.db).WithFreeTrialStatus(postgresReader.freeTrial))
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerAgentIdentityReadTools(reg, postgresReader.agentIdentityReads)
@@ -603,7 +606,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 }
 
 func registerReadTools(reg *Registrar, reader Reader, cursorKeyMaterial string) {
-	registerGetPlatformContextTool(reg)
+	var freeTrial *FreeTrialStatus
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		freeTrial = postgresReader.freeTrial
+	}
+	registerGetPlatformContextTool(reg, freeTrial)
 	registerListProjectsTool(reg, reader)
 	registerFindMCPTool(reg, reader, cursorKeyMaterial)
 	registerGetMCPTool(reg, reader)

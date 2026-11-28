@@ -1930,6 +1930,17 @@ type AdminOrganization struct {
 	TrialConvertedAt *string
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganization
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string
@@ -2681,6 +2692,23 @@ type AdminTailscaleOAuthMigrationOrganizations struct {
 	Organizations []*AdminTailscaleOAuthMigrationOrganization
 	// How long an organization must stay in dual_write before it can be finalized.
 	MinimumDualWriteSeconds int64
+}
+
+// Another organization that offered the same card to start its self-serve
+// trial. Carries no card or Stripe identifiers.
+type AdminTrialCardSharingOrganization struct {
+	// The ID of the other organization.
+	ID string
+	// The name of the other organization.
+	Name string
+	// The slug of the other organization.
+	Slug string
+	// The time at which the other organization last offered a card to start its
+	// trial.
+	CardAddedAt string
+	// Why the card could not start the other organization's trial. Absent when the
+	// card started that organization's trial.
+	RejectionReason *string
 }
 
 // AdminUploadImageResult is the result type of the admin service

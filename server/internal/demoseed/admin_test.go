@@ -1,10 +1,13 @@
 package demoseed
 
 import (
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/trials"
 )
 
 func TestAdminSeedGuard(t *testing.T) {
@@ -118,4 +121,49 @@ func TestAdminSeedCalendarBoundaries(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdminSeedTrialFixtures(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 15, 13, 20, 0, 0, time.FixedZone("offset", 3600))
+	fixtures := adminSeedTrialFixtures(now)
+	require.Len(t, fixtures, 4)
+
+	listIDs := map[string]bool{}
+	for _, fixture := range adminSeedFixtures(now) {
+		listIDs[fixture.ID] = true
+	}
+	pending, started := 0, 0
+	rejections := map[string]string{}
+	for _, fixture := range fixtures {
+		require.False(t, listIDs[fixture.ID], "trial fixtures do not reuse admin-list fixture ids")
+		require.Contains(t, fixture.Name, "Fictional")
+		require.False(t, fixture.CreatedAt.After(now))
+		if fixture.Card == nil {
+			pending++
+			continue
+		}
+		for _, id := range []string{fixture.Card.CustomerID, fixture.Card.PaymentMethodID, fixture.Card.CheckoutSessionID, fixture.Card.Fingerprint} {
+			require.Contains(t, id, "_admin_seed_example_", "card and Stripe identifiers are obviously fictional")
+		}
+		require.Contains(t, []string{"credit", "debit", "prepaid", "unknown"}, fixture.Card.Funding)
+		if fixture.Card.StartedTrial() {
+			started++
+			require.Equal(t, AdminSeedSharedCardFingerprint, fixture.Card.Fingerprint)
+			require.NotEqual(t, "prepaid", fixture.Card.Funding)
+			require.True(t, fixture.Card.TrialEndsAt.After(now), "the started trial is running")
+			continue
+		}
+		require.True(t, fixture.Card.TrialEndsAt.IsZero(), "a rejected card starts no trial")
+		rejections[fixture.Card.RejectionReason] = fixture.Card.Fingerprint
+		if fixture.Card.RejectionReason == trials.CardRejectionPrepaid {
+			require.Equal(t, "prepaid", fixture.Card.Funding)
+		}
+	}
+	require.Equal(t, 1, pending)
+	require.Equal(t, 1, started)
+	require.Equal(t, map[string]string{
+		trials.CardRejectionUsed:    AdminSeedSharedCardFingerprint,
+		trials.CardRejectionPrepaid: AdminSeedPrepaidCardFingerprint,
+	}, rejections)
 }

@@ -69,6 +69,10 @@ type Client struct {
 	// createStripeCheckout endpoint.
 	CreateStripeCheckoutDoer goahttp.Doer
 
+	// CreateTrialPaymentMethodCheckout Doer is the HTTP client used to make
+	// requests to the createTrialPaymentMethodCheckout endpoint.
+	CreateTrialPaymentMethodCheckoutDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -113,30 +117,31 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPeriodUsageDoer:            doer,
-		GetMeterUsageDoer:             doer,
-		GetSpendBreakdownDoer:         doer,
-		GetTokensUnderManagementDoer:  doer,
-		SetBillingMetadataDoer:        doer,
-		GetBillingEmailDoer:           doer,
-		SetBillingEmailDoer:           doer,
-		SetSpendCapDoer:               doer,
-		GetInferenceSpendCapsDoer:     doer,
-		GetUsageTiersDoer:             doer,
-		CreateCustomerSessionDoer:     doer,
-		GetStripeCheckoutStatusDoer:   doer,
-		CreateStripeCheckoutDoer:      doer,
-		GetStripeSubscriptionDoer:     doer,
-		GetPaygBillingSummaryDoer:     doer,
-		CreateStripePortalSessionDoer: doer,
-		CancelStripeSubscriptionDoer:  doer,
-		ResumeStripeSubscriptionDoer:  doer,
-		CreateTopUpCheckoutDoer:       doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		GetPeriodUsageDoer:                   doer,
+		GetMeterUsageDoer:                    doer,
+		GetSpendBreakdownDoer:                doer,
+		GetTokensUnderManagementDoer:         doer,
+		SetBillingMetadataDoer:               doer,
+		GetBillingEmailDoer:                  doer,
+		SetBillingEmailDoer:                  doer,
+		SetSpendCapDoer:                      doer,
+		GetInferenceSpendCapsDoer:            doer,
+		GetUsageTiersDoer:                    doer,
+		CreateCustomerSessionDoer:            doer,
+		GetStripeCheckoutStatusDoer:          doer,
+		CreateStripeCheckoutDoer:             doer,
+		CreateTrialPaymentMethodCheckoutDoer: doer,
+		GetStripeSubscriptionDoer:            doer,
+		GetPaygBillingSummaryDoer:            doer,
+		CreateStripePortalSessionDoer:        doer,
+		CancelStripeSubscriptionDoer:         doer,
+		ResumeStripeSubscriptionDoer:         doer,
+		CreateTopUpCheckoutDoer:              doer,
+		RestoreResponseBody:                  restoreBody,
+		scheme:                               scheme,
+		host:                                 host,
+		decoder:                              dec,
+		encoder:                              enc,
 	}
 }
 
@@ -442,6 +447,30 @@ func (c *Client) CreateStripeCheckout() goa.Endpoint {
 		resp, err := c.CreateStripeCheckoutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "createStripeCheckout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateTrialPaymentMethodCheckout returns an endpoint that makes HTTP
+// requests to the usage service createTrialPaymentMethodCheckout server.
+func (c *Client) CreateTrialPaymentMethodCheckout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateTrialPaymentMethodCheckoutRequest(c.encoder)
+		decodeResponse = DecodeCreateTrialPaymentMethodCheckoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateTrialPaymentMethodCheckoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateTrialPaymentMethodCheckoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createTrialPaymentMethodCheckout", err)
 		}
 		return decodeResponse(resp)
 	}

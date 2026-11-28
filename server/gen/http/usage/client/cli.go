@@ -357,6 +357,35 @@ func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutTheme string, usa
 	return v, nil
 }
 
+// BuildCreateTrialPaymentMethodCheckoutPayload builds the payload for the
+// usage createTrialPaymentMethodCheckout endpoint from CLI flags.
+func BuildCreateTrialPaymentMethodCheckoutPayload(usageCreateTrialPaymentMethodCheckoutTheme string, usageCreateTrialPaymentMethodCheckoutSessionToken string) (*usage.CreateTrialPaymentMethodCheckoutPayload, error) {
+	var err error
+	var theme string
+	{
+		if usageCreateTrialPaymentMethodCheckoutTheme != "" {
+			theme = usageCreateTrialPaymentMethodCheckoutTheme
+			if !(theme == "light" || theme == "dark") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("theme", theme, []any{"light", "dark"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if usageCreateTrialPaymentMethodCheckoutSessionToken != "" {
+			sessionToken = &usageCreateTrialPaymentMethodCheckoutSessionToken
+		}
+	}
+	v := &usage.CreateTrialPaymentMethodCheckoutPayload{}
+	v.Theme = theme
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionPayload builds the payload for the usage
 // getStripeSubscription endpoint from CLI flags.
 func BuildGetStripeSubscriptionPayload(usageGetStripeSubscriptionSessionToken string) (*usage.GetStripeSubscriptionPayload, error) {
