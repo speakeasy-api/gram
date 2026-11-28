@@ -1,4 +1,4 @@
-// Copies the project templates from the speakeasy CLI, which embeds them, into
+// Copies the project templates from the speakeasy-ai CLI, which embeds them, into
 // this package so the published scaffolder ships the same templates.
 import { cpSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";

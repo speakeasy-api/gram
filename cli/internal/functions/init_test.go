@@ -64,8 +64,8 @@ func TestInit_Templates(t *testing.T) {
 
 			scripts, ok := pkg["scripts"].(map[string]any)
 			require.True(t, ok)
-			require.Equal(t, "speakeasy functions build", scripts["build"])
-			require.Equal(t, "speakeasy functions push", scripts["push"])
+			require.Equal(t, "speakeasy-ai functions build", scripts["build"])
+			require.Equal(t, "speakeasy-ai functions push", scripts["push"])
 			require.NotContains(t, scripts, "_:build")
 
 			require.Contains(t, out.String(), "All done! Jump in with `cd "+dir+"`")

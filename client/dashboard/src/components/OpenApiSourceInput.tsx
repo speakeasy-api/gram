@@ -166,7 +166,7 @@ export function OpenApiSourceInput({
               Direct upload
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`speakeasy upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml`}
+              {`speakeasy-ai upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
           <div>
@@ -174,7 +174,7 @@ export function OpenApiSourceInput({
               Or stage and push (useful for CI/CD)
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`speakeasy stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\nspeakeasy push`}
+              {`speakeasy-ai stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\nspeakeasy-ai push`}
             </CodeBlock>
             {cliServerURL && (
               <p className="text-muted-foreground mt-1.5 text-xs">

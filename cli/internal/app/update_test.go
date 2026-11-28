@@ -80,3 +80,24 @@ func TestHomebrewFormulaFor(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionHint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		arg0 string
+		want string
+	}{
+		{name: "speakeasy-ai", arg0: "/opt/homebrew/bin/speakeasy-ai", want: "speakeasy-ai"},
+		{name: "speakeasy keeps its name", arg0: "/usr/local/bin/speakeasy", want: "speakeasy"},
+		{name: "legacy gram keeps its name", arg0: "/opt/homebrew/bin/gram", want: "gram"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, "  Run '"+tc.want+" --version' to verify the new version", versionHint(tc.arg0))
+		})
+	}
+}

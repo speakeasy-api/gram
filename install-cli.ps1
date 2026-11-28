@@ -3,9 +3,9 @@
 
 <#
 .SYNOPSIS
-    Installs the speakeasy CLI on Windows
+    Installs the speakeasy-ai CLI on Windows
 .DESCRIPTION
-    Downloads and installs the latest version of the speakeasy CLI from GitHub releases
+    Downloads and installs the latest version of the speakeasy-ai CLI from GitHub releases
 .EXAMPLE
     .\install-cli.ps1
 .EXAMPLE
@@ -20,8 +20,9 @@ param()
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-# Printed by `speakeasy --control-plane-cli`. The Speakeasy SDK generator CLI
-# also installs a `speakeasy` binary and rejects that flag.
+# Printed by `speakeasy-ai --control-plane-cli`. The Speakeasy SDK generator
+# CLI installs a binary named `speakeasy` and rejects that flag, and releases
+# of this CLI from before it became speakeasy-ai also installed as `speakeasy`.
 $ControlPlaneMarker = "speakeasy-ai-control-plane-cli"
 
 # Functions
@@ -121,14 +122,6 @@ function Test-ControlPlaneCli {
     return ($null -ne $output) -and ($output -ccontains $ControlPlaneMarker)
 }
 
-# Reports whether the binary at $Path is a build of this CLI from before the
-# rename. Those builds have no marker flag and print "gram version ...".
-function Test-LegacyCli {
-    param([string]$Path)
-    $output = Invoke-Quietly -Path $Path -Arguments @("--version")
-    return ($null -ne $output) -and [bool]($output | Where-Object { $_ -clike "gram version *" })
-}
-
 # Downloads a release asset. Returns $true on success and $false when the
 # server answers 404. Any other failure stops the script with the real error.
 function Get-ReleaseAsset {
@@ -185,8 +178,8 @@ function Install-Binary {
         [string]$InstallDir
     )
 
-    $installPath = Join-Path $InstallDir "speakeasy.exe"
-    Write-Info "Installing speakeasy to $installPath..."
+    $installPath = Join-Path $InstallDir "speakeasy-ai.exe"
+    Write-Info "Installing speakeasy-ai to $installPath..."
 
     # Create install directory if it doesn't exist
     if (-not (Test-Path $InstallDir)) {
@@ -210,7 +203,7 @@ function Install-Binary {
 }
 
 function Main {
-    Write-Info "Installing the speakeasy CLI..."
+    Write-Info "Installing the speakeasy-ai CLI..."
 
     # This script is Windows-only
     $os = "windows"
@@ -228,20 +221,17 @@ function Main {
     if (-not $installDir) {
         $installDir = Join-Path $env:LOCALAPPDATA "Programs\speakeasy"
     }
-    $installPath = Join-Path $installDir "speakeasy.exe"
+    $installPath = Join-Path $installDir "speakeasy-ai.exe"
 
-    # Never overwrite the Speakeasy SDK generator CLI, which installs a binary
-    # with the same name.
-    if ((Test-Path $installPath) -and -not (Test-ControlPlaneCli $installPath) -and -not (Test-LegacyCli $installPath)) {
-        Write-ErrorMsg "$installPath already exists and is not the Speakeasy AI Control Plane CLI. It looks like the Speakeasy SDK CLI, which also installs a 'speakeasy' binary. Install to another directory by setting INSTALL_DIR, for example: `$env:INSTALL_DIR = `"`$env:USERPROFILE\bin`"; iwr -useb https://raw.githubusercontent.com/speakeasy-api/gram/main/install-cli.ps1 | iex"
+    # Never overwrite a speakeasy-ai binary that is not this CLI.
+    if ((Test-Path $installPath) -and -not (Test-ControlPlaneCli $installPath)) {
+        Write-ErrorMsg "$installPath already exists and is not the Speakeasy AI Control Plane CLI. Install to another directory by setting INSTALL_DIR, for example: `$env:INSTALL_DIR = `"`$env:USERPROFILE\bin`"; iwr -useb https://raw.githubusercontent.com/speakeasy-api/gram/main/install-cli.ps1 | iex"
     }
 
-    # Construct download URLs. Releases made before the CLI was renamed only
-    # publish gram archives, so fall back to those when the speakeasy archive
-    # does not exist.
+    # Construct download URLs. Older releases only publish the archives the
+    # CLI shipped under before, speakeasy and then gram, so fall back to those
+    # when the speakeasy-ai archive does not exist.
     $releaseUrl = "https://github.com/speakeasy-api/gram/releases/download/${tagName}"
-    $archiveName = "speakeasy"
-    $filename = "${archiveName}_${os}_${arch}.zip"
     $checksumsUrl = "${releaseUrl}/checksums.txt"
 
     # Create temporary directory
@@ -250,16 +240,19 @@ function Main {
 
     try {
         # Download binary archive
-        Write-Info "Downloading: ${releaseUrl}/${filename}"
-        $zipPath = Join-Path $tmpDir $filename
-        if (-not (Get-ReleaseAsset -Url "${releaseUrl}/${filename}" -Output $zipPath)) {
-            $archiveName = "gram"
-            $filename = "${archiveName}_${os}_${arch}.zip"
+        $archiveName = $null
+        foreach ($candidate in @("speakeasy-ai", "speakeasy", "gram")) {
+            $filename = "${candidate}_${os}_${arch}.zip"
             $zipPath = Join-Path $tmpDir $filename
-            Write-Info "No speakeasy archive in ${tagName}. Downloading: ${releaseUrl}/${filename}"
-            if (-not (Get-ReleaseAsset -Url "${releaseUrl}/${filename}" -Output $zipPath)) {
-                Write-ErrorMsg "No CLI archive for ${os}/${arch} in ${tagName}"
+            Write-Info "Downloading: ${releaseUrl}/${filename}"
+            if (Get-ReleaseAsset -Url "${releaseUrl}/${filename}" -Output $zipPath) {
+                $archiveName = $candidate
+                break
             }
+            Write-Info "No ${candidate} archive in ${tagName}."
+        }
+        if (-not $archiveName) {
+            Write-ErrorMsg "No CLI archive for ${os}/${arch} in ${tagName}"
         }
 
         # Download checksums
@@ -301,28 +294,35 @@ function Main {
         # Reload PATH for verification
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-        # Verify the binary just installed, not whichever speakeasy is first on
-        # PATH. Builds from before the rename have no marker flag.
+        # Verify the binary just installed, not whichever one is first on PATH.
+        # Builds from before the gram rename have no marker flag.
         Write-Host ""
         & $installPath --version
-        if (($archiveName -eq "speakeasy") -and -not (Test-ControlPlaneCli $installPath)) {
+        if (($archiveName -ne "gram") -and -not (Test-ControlPlaneCli $installPath)) {
             Write-ErrorMsg "$installPath did not identify as the Speakeasy AI Control Plane CLI"
         }
         Write-Host ""
         Write-Host "Success! " -ForegroundColor Green -NoNewline
-        Write-Host "The speakeasy CLI has been installed to $installPath."
+        Write-Host "The speakeasy-ai CLI has been installed to $installPath."
 
-        $onPath = (Get-Command speakeasy -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+        # This CLI used to install as speakeasy, the name the Speakeasy SDK
+        # generator uses. Leave an old copy in place, but say how to free the name.
+        $oldPath = Join-Path $installDir "speakeasy.exe"
+        if ((Test-Path $oldPath) -and (Test-ControlPlaneCli $oldPath)) {
+            Write-Warning "An older copy of this CLI is still installed as $oldPath. It is now called speakeasy-ai. Remove the old copy so 'speakeasy' is free for the Speakeasy SDK generator: Remove-Item `"$oldPath`""
+        }
+
+        $onPath = (Get-Command speakeasy-ai -ErrorAction SilentlyContinue | Select-Object -First 1).Source
         if (-not $onPath) {
             Write-Host "Note: " -ForegroundColor Yellow -NoNewline
             Write-Host "Please restart your terminal for the installation to take effect."
-            Write-Host "Then run 'speakeasy --help' to get started."
+            Write-Host "Then run 'speakeasy-ai --help' to get started."
         }
         elseif ($onPath -ne $installPath) {
-            Write-Warning "'speakeasy' on your PATH resolves to $onPath, not $installPath. That may be the Speakeasy SDK CLI. Put $installDir earlier on your PATH or run $installPath directly."
+            Write-Warning "'speakeasy-ai' on your PATH resolves to $onPath, not $installPath. Put $installDir earlier on your PATH or run $installPath directly."
         }
         else {
-            Write-Host "Run 'speakeasy --help' to get started."
+            Write-Host "Run 'speakeasy-ai --help' to get started."
         }
     }
     finally {

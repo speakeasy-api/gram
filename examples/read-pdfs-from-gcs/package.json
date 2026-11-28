@@ -21,10 +21,10 @@
   "scripts": {
     "dev": "mcp-inspector nodemon -q --watch src --exec node --experimental-strip-types ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "speakeasy functions push",
+    "push": "speakeasy-ai functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "speakeasy functions build"
+    "build": "speakeasy-ai functions build"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.14.0",

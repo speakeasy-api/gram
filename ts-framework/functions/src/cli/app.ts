@@ -88,7 +88,7 @@ const routes = buildRouteMap({
 });
 
 function deprecationNotice(command: "build" | "push"): string {
-  return `gf ${command} is deprecated and will be removed in a future release. Run \`speakeasy functions ${command}\` instead.`;
+  return `gf ${command} is deprecated and will be removed in a future release. Run \`speakeasy-ai functions ${command}\` instead.`;
 }
 
 async function build(

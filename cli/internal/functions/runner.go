@@ -1,5 +1,5 @@
 // Package functions implements the project-side work behind the
-// `speakeasy functions` commands: scaffolding a project from the embedded
+// `speakeasy-ai functions` commands: scaffolding a project from the embedded
 // templates and driving the project's own functions SDK through Node.js.
 package functions
 
