@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -136,4 +137,27 @@ func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, result.MessageIDs, 2)
+}
+
+func TestFetchUnanalyzed_DisabledOrganizationLeavesMessagesUnanalyzed(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	seedMessages(t, conn, td, 2)
+
+	_, err := adminrepo.New(conn).AdminDisableOrganization(t.Context(), td.orgID)
+	require.NoError(t, err)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	args := risk_analysis.FetchUnanalyzedArgs{ProjectID: td.projectID, IDLowerBound: zeroLowerBound, BatchLimit: 100}
+	result, err := activity.Do(t.Context(), args)
+	require.NoError(t, err)
+	require.Empty(t, result.MessageIDs)
+	require.Empty(t, result.Policies)
+
+	_, err = adminrepo.New(conn).AdminEnableOrganization(t.Context(), td.orgID)
+	require.NoError(t, err)
+	result, err = activity.Do(t.Context(), args)
+	require.NoError(t, err)
+	require.Len(t, result.MessageIDs, 2, "re-enabling scans what was captured before the disable")
 }

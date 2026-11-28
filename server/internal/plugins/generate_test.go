@@ -2836,7 +2836,7 @@ const config = {
   mcp: {
     servers: {
       speakeasy: {
-        url: "https://user:pass@app.example.com/agent-mcp/agent-1?token=secret#frag",
+        url: "https://user:pass@app.example.com/mcp/gateway/example?token=secret#frag",
         transport: "streamable-http",
         headers: { Authorization: "Bearer gram_agent_secret" },
       },
@@ -2858,7 +2858,7 @@ handlers.session_start({ sessionId: "s1" }, ctx)
 setTimeout(() => process.exit(0), 500)
 `)
 	byHook := framesByHook(frames)
-	want := []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/agent-mcp/agent-1"}}
+	want := []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/mcp/gateway/example"}}
 	for _, hook := range []string{"before_tool_call", "after_tool_call"} {
 		frame, ok := byHook[hook]
 		require.True(t, ok, "%s frame missing", hook)
@@ -2950,7 +2950,7 @@ func TestGenerateOpenClawShimMCPServersFallBackAndNeverBreakHooks(t *testing.T) 
 	frames := runOpenClawShim(t, `import plugin from "./index.js"
 const fallback = {}
 plugin.register({
-  config: { mcp: { servers: { speakeasy: { url: "https://app.example.com/agent-mcp/agent-1" } } } },
+  config: { mcp: { servers: { speakeasy: { url: "https://app.example.com/mcp/gateway/example" } } } },
   on(name, fn) { fallback[name] = fn },
 })
 const throwing = {}
@@ -2970,7 +2970,7 @@ setTimeout(() => process.exit(0), 500)
 		callID, _ := event["toolCallId"].(string)
 		byCall[callID] = frame
 	}
-	require.Equal(t, []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/agent-mcp/agent-1"}}, byCall["fallback"]["mcpServers"])
+	require.Equal(t, []any{map[string]any{"name": "speakeasy", "url": "https://app.example.com/mcp/gateway/example"}}, byCall["fallback"]["mcpServers"])
 	throwing, ok := byCall["throwing"]
 	require.True(t, ok, "the hook is still forwarded when the config read throws")
 	_, ok = throwing["mcpServers"]

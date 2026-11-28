@@ -693,7 +693,7 @@ func BuildListUserOrganizationsPayload(adminListUserOrganizationsUserID string, 
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsWhitelisted string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -734,6 +734,17 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 			if err != nil {
 				return nil, err
+			}
+		}
+	}
+	var whitelisted *bool
+	{
+		if adminListOrganizationsWhitelisted != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListOrganizationsWhitelisted)
+			whitelisted = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for whitelisted, must be BOOL")
 			}
 		}
 	}
@@ -835,6 +846,7 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
 	v.DisabledStatus = disabledStatus
+	v.Whitelisted = whitelisted
 	v.MinMembers = minMembers
 	v.MaxMembers = maxMembers
 	v.CreatedFrom = createdFrom
@@ -3330,6 +3342,46 @@ func BuildUpdateSignupOfferPayload(adminUpdateSignupOfferBody string, adminUpdat
 		SignupFlow:            body.SignupFlow,
 		ID:                    body.ID,
 		Enabled:               body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetSelfServeStatusPayload builds the payload for the admin
+// getSelfServeStatus endpoint from CLI flags.
+func BuildGetSelfServeStatusPayload(adminGetSelfServeStatusAdminSessionToken string) (*admin.GetSelfServeStatusPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSelfServeStatusAdminSessionToken != "" {
+			adminSessionToken = &adminGetSelfServeStatusAdminSessionToken
+		}
+	}
+	v := &admin.GetSelfServeStatusPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetSelfServeDisabledPayload builds the payload for the admin
+// setSelfServeDisabled endpoint from CLI flags.
+func BuildSetSelfServeDisabledPayload(adminSetSelfServeDisabledBody string, adminSetSelfServeDisabledAdminSessionToken string) (*admin.SetSelfServeDisabledPayload, error) {
+	var err error
+	var body SetSelfServeDisabledRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetSelfServeDisabledBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"disabled\": false\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetSelfServeDisabledAdminSessionToken != "" {
+			adminSessionToken = &adminSetSelfServeDisabledAdminSessionToken
+		}
+	}
+	v := &admin.SetSelfServeDisabledPayload{
+		Disabled: body.Disabled,
 	}
 	v.AdminSessionToken = adminSessionToken
 

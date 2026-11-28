@@ -34,6 +34,10 @@ type Client struct {
 	// Get Doer is the HTTP client used to make requests to the get endpoint.
 	GetDoer goahttp.Doer
 
+	// GetRuntimeGateway Doer is the HTTP client used to make requests to the
+	// getRuntimeGateway endpoint.
+	GetRuntimeGatewayDoer goahttp.Doer
+
 	// Rename Doer is the HTTP client used to make requests to the rename endpoint.
 	RenameDoer goahttp.Doer
 
@@ -119,6 +123,7 @@ func NewClient(
 		ListDoer:                   doer,
 		CreateDoer:                 doer,
 		GetDoer:                    doer,
+		GetRuntimeGatewayDoer:      doer,
 		RenameDoer:                 doer,
 		ListDelegableGrantsDoer:    doer,
 		ListPolicyGrantsDoer:       doer,
@@ -258,6 +263,30 @@ func (c *Client) Get() goa.Endpoint {
 		resp, err := c.GetDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "get", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRuntimeGateway returns an endpoint that makes HTTP requests to the agents
+// service getRuntimeGateway server.
+func (c *Client) GetRuntimeGateway() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRuntimeGatewayRequest(c.encoder)
+		decodeResponse = DecodeGetRuntimeGatewayResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRuntimeGatewayRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRuntimeGatewayDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "getRuntimeGateway", err)
 		}
 		return decodeResponse(resp)
 	}

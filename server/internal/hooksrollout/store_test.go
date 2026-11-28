@@ -22,7 +22,7 @@ func TestStore_NoPinsIsUnset(t *testing.T) {
 	require.Nil(t, pins.Override)
 	require.Nil(t, pins.Default)
 
-	pin, source := pins.Effective()
+	pin, source := pins.Effective(orgID)
 	require.Nil(t, pin)
 	require.Equal(t, hooksrollout.SourceUnset, source)
 }
@@ -39,7 +39,7 @@ func TestStore_DefaultPinAppliesToEveryOrganization(t *testing.T) {
 
 	pins, err := store.OrganizationPins(t.Context(), orgID)
 	require.NoError(t, err)
-	pin, source := pins.Effective()
+	pin, source := pins.Effective(orgID)
 	require.Equal(t, hooksrollout.SourceDefault, source)
 	require.NotNil(t, pin)
 	require.Equal(t, 42, pin.Version, "the newest default pin wins")
@@ -60,13 +60,13 @@ func TestStore_OverrideWinsUntilCleared(t *testing.T) {
 
 	pins, err := store.OrganizationPins(t.Context(), orgID)
 	require.NoError(t, err)
-	pin, source := pins.Effective()
+	pin, source := pins.Effective(orgID)
 	require.Equal(t, hooksrollout.SourceOrganization, source)
 	require.Equal(t, 40, pin.Version)
 
 	otherPins, err := store.OrganizationPins(t.Context(), otherOrgID)
 	require.NoError(t, err)
-	otherPin, otherSource := otherPins.Effective()
+	otherPin, otherSource := otherPins.Effective(otherOrgID)
 	require.Equal(t, hooksrollout.SourceDefault, otherSource, "an override applies to its own organization only")
 	require.Equal(t, 42, otherPin.Version)
 
@@ -74,7 +74,7 @@ func TestStore_OverrideWinsUntilCleared(t *testing.T) {
 	pins, err = store.OrganizationPins(t.Context(), orgID)
 	require.NoError(t, err)
 	require.Nil(t, pins.Override)
-	pin, source = pins.Effective()
+	pin, source = pins.Effective(orgID)
 	require.Equal(t, hooksrollout.SourceDefault, source)
 	require.Equal(t, 42, pin.Version)
 

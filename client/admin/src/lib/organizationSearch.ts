@@ -11,7 +11,9 @@ import {
   DISABLED_STATES,
   trialStates,
   statusSelection,
+  whitelistState,
   type DisabledState,
+  type WhitelistState,
 } from "@/lib/organizationFilters";
 import { type TrialState } from "@/lib/gramAdminApi";
 
@@ -39,6 +41,7 @@ export type OrganizationsSearch = {
   type?: string[];
   trial?: TrialState[];
   disabledStatus?: DisabledState;
+  whitelisted?: WhitelistState;
   /** Read-only aliases are cleared after validation and never written. */
   disabled?: never;
   disabledOnly?: never;
@@ -110,6 +113,7 @@ export function organizationsSearchSchema(
     ...createdRange(search),
     createdPreset: createdPresetMetadata(search),
     disabledStatus,
+    whitelisted: whitelistState(search["whitelisted"]),
     // Router search merges validated fields with raw fields. Clear read aliases
     // explicitly so invalid/raw values cannot reappear or survive new writes.
     disabled: undefined,
