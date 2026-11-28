@@ -21,8 +21,7 @@ Verify the required environment variables are set on both the `server` and
 - `GRAM_ASSISTANT_ATE_ENABLED=true`
 - `GRAM_ASSISTANT_ATE_IMAGE=<DIGEST_PINNED_ATE_IMAGE>` (e.g. `gcr.io/<PROJECT>/ate-runtime@sha256:<64_HEX>`)
 - `GRAM_ASSISTANT_ATE_WORKER_SELECTOR=<KEY=VALUE>` (e.g. `workload-type=ate-assistants`)
-- `GRAM_ASSISTANT_ATE_ISSUER_URL=<ATE_ISSUER_HTTPS_URL>` (matches `ate-api-server` `ACTOR_JWT_ISSUER`)
-- `GRAM_ASSISTANT_ATE_JWKS_URL=<OPTIONAL_JWKS_HTTPS_URL>` (defaults to `<ISSUER>/openid/v1/jwks`)
+- `GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT=<CRED_PROVIDER_GCP_SA_EMAIL>` (GCP service account email of the `gram ate-credential-provider` deployment in `ate-system`, authenticating via GKE Workload Identity Google OIDC ID tokens)
 - `GRAM_ASSISTANT_ATE_API_ADDRESS=<ATE_API_HOST:PORT>`
 - `GRAM_ASSISTANT_ATE_ROUTER_ADDRESS=<ATE_ROUTER_HOST:PORT>`
 - `GRAM_ASSISTANT_ATE_API_SERVER_NAME=<OPTIONAL_TLS_SERVER_NAME>`

@@ -214,9 +214,6 @@ type Service struct {
 	// workloadGrant runs the workload assertion grant's stages. Nil on a
 	// surface without Redis, which refuses the grant.
 	workloadGrant *workloadGrant
-	// directWorkloadCache memoizes Stage-1 direct-bearer workload verification
-	// across repeated MCP and inference requests within a short TTL.
-	directWorkloadCache *directWorkloadCache
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
@@ -690,7 +687,6 @@ func NewService(aiCatalog *aivendors.Store,
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
-		directWorkloadCache:       newDirectWorkloadCache(time.Now),
 		idJAGValidator:            idJAGValidator,
 		idJAGTrust:                idJAGTrust,
 		aiToolBlockReads:          defaultAIToolBlockReads(),

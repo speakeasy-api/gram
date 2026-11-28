@@ -46,6 +46,7 @@ func newApp() *cli.App {
 			newTailnetGatewayCommand(),
 			newNetingressLocalTokenCommand(),
 			newNetworkIngressWorkerCommand(),
+			newATECredentialProviderCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),
