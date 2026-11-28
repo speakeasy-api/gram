@@ -71,6 +71,19 @@ describe("organizationsSearchSchema", () => {
       { disabled: "active" },
       { disabledStatus: "active" },
     ],
+    ["reads whitelisted yes", { whitelisted: "yes" }, { whitelisted: "yes" }],
+    ["reads whitelisted no", { whitelisted: "no" }, { whitelisted: "no" }],
+    [
+      "reads a hand-written whitelisted true",
+      { whitelisted: true },
+      { whitelisted: "yes" },
+    ],
+    [
+      "reads a hand-written whitelisted false",
+      { whitelisted: false },
+      { whitelisted: "no" },
+    ],
+    ["drops an unknown whitelisted value", { whitelisted: "maybe" }, {}],
     ["reads a hand-written type", { type: "free" }, { type: ["free"] }],
     [
       "keeps a type the picker does not offer",

@@ -26,6 +26,7 @@ import {
   MessageSquareIcon,
   FlaskConicalIcon,
   RocketIcon,
+  PowerIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -77,6 +78,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "Support matrix",
         keywords: "support matrix products capabilities integrations",
         icon: Grid2X2Icon,
+      },
+      {
+        to: "/self-serve",
+        label: "Self-serve signup",
+        keywords: "self serve signup kill switch disable trial abuse",
+        icon: PowerIcon,
       },
       {
         to: "/signup-offers",

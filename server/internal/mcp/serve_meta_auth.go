@@ -116,6 +116,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		securityKeys:          nil,
 		Token:                 "gateway-oauth-capability",
 		shared:                false,
+		presented:             false,
 	}}
 	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	return satisfied, satisfied, err

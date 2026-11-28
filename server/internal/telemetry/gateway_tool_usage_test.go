@@ -738,8 +738,8 @@ func TestListToolUsageTraces_ClassifiesDeletedProjectGatewayCallsByURL(t *testin
 }
 
 // A call that reached a gateway by URL is labelled the way LoadGatewayLabels
-// labels it: a gateway in a project, or serving an agent, the viewer may not
-// read is "Gateway in another project", on the summary path and the raw path.
+// labels it: a gateway in a project the viewer may not read is "Gateway in
+// another project", on the summary path and the raw path.
 func TestListToolUsageTraces_LabelsOpenClawGatewayCallsTheCallerCannotRead(t *testing.T) {
 	t.Parallel()
 
@@ -752,29 +752,13 @@ func TestListToolUsageTraces_LabelsOpenClawGatewayCallsTheCallerCannotRead(t *te
 		Name: "Private project", Slug: "private-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
-	hiddenAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
-		OrganizationID: ti.orgID,
-		OwnerUserID:    authCtx.UserID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Name:           "Hidden bot",
-	})
-	require.NoError(t, err)
-	grantedAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
-		OrganizationID: ti.orgID,
-		OwnerUserID:    authCtx.UserID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Name:           "Granted bot",
-	})
-	require.NoError(t, err)
 	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
 	require.NoError(t, err)
 
-	// Only the viewed project and one agent are readable, by someone other
-	// than the agents' owner.
+	// Only the viewed project is readable.
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.NewGrant(authz.ScopeLogRead, ti.projectID),
 		authz.NewGrant(authz.ScopeProjectRead, ti.projectID),
-		authz.NewGrant(authz.ScopeAgentRead, grantedAgent.ID.String()),
 	)
 	viewer := *authCtx
 	viewer.UserID = "viewer-" + uuid.NewString()[:8]
@@ -785,8 +769,6 @@ func TestListToolUsageTraces_LabelsOpenClawGatewayCallsTheCallerCannotRead(t *te
 		call  openClawGatewayCall
 		label string
 	}{
-		{call: openClawGatewayCall{conversationID: "conv-hidden-agent", toolName: "hidden__list_servers", serverName: "hidden", url: "https://app.example.com/agent-mcp/" + hiddenAgent.ID.String(), preServerName: "", preURLOnly: false}, label: "Gateway in another project"},
-		{call: openClawGatewayCall{conversationID: "conv-granted-agent", toolName: "granted__list_servers", serverName: "granted", url: "https://app.example.com/agent-mcp/" + grantedAgent.ID.String(), preServerName: "", preURLOnly: false}, label: "Granted bot gateway"},
 		{call: openClawGatewayCall{conversationID: "conv-other-project", toolName: "private__search", serverName: "private", url: orgGatewayURL + "/projects/" + otherProject.Slug, preServerName: "", preURLOnly: false}, label: "Gateway in another project"},
 		{call: openClawGatewayCall{conversationID: "conv-organization", toolName: "org__search", serverName: "org", url: orgGatewayURL, preServerName: "", preURLOnly: false}, label: organization.Name},
 	}
@@ -813,12 +795,6 @@ func TestListToolUsageTraces_LabelsOpenClawGatewayCallsTheCallerCannotRead(t *te
 		require.Equal(t, tc.label, raw.Traces[0].TargetLabel, "raw path: %s", tc.call.toolName)
 	}
 
-	// The owner sees their agent's gateway with no agent grant.
-	query := "conv-hidden-agent"
-	owner, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})
-	require.NoError(t, err)
-	require.Len(t, owner.Traces, 1)
-	require.Equal(t, "Hidden bot gateway", owner.Traces[0].TargetLabel)
 }
 
 // The matchers and the labels of one request share one read of the

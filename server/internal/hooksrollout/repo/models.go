@@ -28,3 +28,29 @@ type HooksRolloutPin struct {
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }
+
+type HooksRolloutStage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Seq int64
+	// Hooks generator version being rolled out.
+	// @access: confidential
+	Version int32
+	// Share of organizations following the default pin, from 0 to 100, cleared for version.
+	// @access: confidential
+	Percent int32
+	// running, paused, completed or cancelled.
+	// @access: confidential
+	State string
+	// Why the rollout was paused or cancelled, when it was. Free text from staff or the rollout workflow.
+	// @access: opaque-restricted
+	Reason pgtype.Text
+	// Email of the staff operator who made the change, or the rollout workflow.
+	// @access: confidential-pii
+	SetBy string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
