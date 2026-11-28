@@ -605,9 +605,16 @@ describe("plugin detail permission boundary", () => {
       state.pluginWrite = true;
       renderAdmin(section);
       if (section === "overview" || section === "servers") {
-        expect(screen.getByText("Overview")).toBeTruthy();
+        expect(
+          screen
+            .getByRole("link", { name: "Overview" })
+            .getAttribute("aria-current"),
+        ).toBe("page");
         expect(screen.getByText("Example server")).toBeTruthy();
       }
+      // Writers get Settings; Assignments stays with org admins.
+      expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Assignments" })).toBeNull();
       expect(adminQuery).toHaveBeenCalled();
       expect(features).not.toHaveBeenCalled();
       expect(screen.queryByText("Distribution-only skills")).toBeNull();

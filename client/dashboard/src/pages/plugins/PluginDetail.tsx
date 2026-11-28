@@ -10,6 +10,12 @@ import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { useOrganization } from "@/contexts/Auth";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
+import {
+  DetailFrame,
+  DetailHeaderLayout,
+  DetailHeaderTitle,
+  type DetailFrameTab,
+} from "@/components/detail/detail-frame";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { RequireScope } from "@/components/require-scope";
@@ -104,6 +110,7 @@ import {
   PLUGIN_OVERVIEW_SECTION_ID,
   PLUGIN_SETTINGS_SECTION_ID,
   PLUGIN_SKILLS_SECTION_ID,
+  type PluginSection,
 } from "./plugin-detail-sections";
 import { countPluginInstalls } from "./plugin-reach";
 import {
@@ -664,7 +671,7 @@ function PluginDetailContent({
   const isDefaultPlugin = plugin.isDefault ?? false;
   const description =
     plugin.description ??
-    (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : "No description");
+    (isDefaultPlugin ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
 
   const servers = plugin.servers ?? [];
   const assignments = plugin.assignments ?? [];
@@ -821,523 +828,547 @@ function PluginDetailContent({
     );
   }
 
+  const sectionTab = (key: PluginSection, title: string): DetailFrameTab => ({
+    key,
+    title,
+    href: pluginSectionHref(routes, pluginId!, key),
+  });
+  const tabs: DetailFrameTab[] = [
+    sectionTab(PLUGIN_OVERVIEW_SECTION_ID, "Overview"),
+    sectionTab(PLUGIN_SKILLS_SECTION_ID, "Skills"),
+    ...(showAssignments
+      ? [sectionTab(PLUGIN_ASSIGNMENTS_SECTION_ID, "Assignments")]
+      : []),
+    ...(canPublish ? [sectionTab(PLUGIN_SETTINGS_SECTION_ID, "Settings")] : []),
+  ];
+
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ [pluginId ?? ""]: plugin.name }}
-        />
-      </Page.Header>
-      <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8">
-          {section === PLUGIN_OVERVIEW_SECTION_ID && (
-            <section className="space-y-8">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Overview</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    {description}
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <Stack
-                  direction="horizontal"
-                  gap={2}
-                  align="center"
-                  className="shrink-0"
-                >
-                  {canPublish && (
-                    <MarketplaceSyncButton
-                      publishStatus={publishStatus}
-                      isPending={publishMutation.isPending}
-                      onSync={() => handlePublish([])}
-                    />
+    <DetailFrame
+      breadcrumbs={{ substitutions: { [pluginId ?? ""]: plugin.name } }}
+      tabsLabel="Plugin sections"
+      tabs={tabs}
+      activeTab={section}
+      header={
+        <DetailHeaderLayout
+          title={
+            <DetailHeaderTitle
+              eyebrow="Distribute · Plugin"
+              name={plugin.name}
+              below={
+                <div className="flex flex-col gap-2">
+                  {description && (
+                    <p className="text-muted-foreground text-sm">
+                      {description}
+                    </p>
                   )}
-                  <PluginInstallControl
-                    plugin={{
-                      name: plugin.name,
-                      slug: plugin.slug,
-                      description: plugin.description,
-                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
-                    }}
-                    publishStatus={canAdmin ? publishStatus : undefined}
-                    isDownloadMenuOpen={isDownloadMenuOpen}
-                    onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                    onDownload={(platform) => void download(platform)}
-                    isDownloading={isDownloading}
-                    isInstallSheetOpen={isInstallSheetOpen}
-                    onInstallSheetOpenChange={setIsInstallSheetOpen}
-                  />
-                </Stack>
-              </div>
-
-              <StatTileGroup>
-                <StatTile
-                  title="MCP servers"
-                  value={plugin.serverCount ?? servers.length}
-                  tone="information"
-                  format="number"
-                  icon="network"
-                />
-                <StatTile
-                  title="Skills"
-                  value={plugin.skillCount ?? 0}
-                  tone="information"
-                  format="number"
-                  icon="sparkles"
-                  link={pluginSectionHref(
-                    routes,
-                    pluginId!,
-                    PLUGIN_SKILLS_SECTION_ID,
-                  )}
-                />
-                {showAssignments && (
-                  <>
-                    <StatTile
-                      title="Assignments"
-                      value={plugin.assignmentCount ?? assignments.length}
-                      tone="information"
-                      format="number"
-                      icon="users"
-                      subtext="Roles, users, and emails"
-                      link={pluginSectionHref(
-                        routes,
-                        pluginId!,
-                        PLUGIN_ASSIGNMENTS_SECTION_ID,
-                      )}
-                    />
-                    <StatTile
-                      title="Installs"
-                      value={installs}
-                      tone="information"
-                      displayValue={installsUnavailable ? "—" : undefined}
-                      format="number"
-                      icon="download"
-                      isRefreshing={isLoadingSynced}
-                      subtext={
-                        installsUnavailable
-                          ? "Requires admin access"
-                          : "Running the device agent"
-                      }
-                      tooltip={
-                        installsUnavailable
-                          ? "Install counts require organization admin access."
-                          : undefined
-                      }
-                    />
-                  </>
-                )}
-              </StatTileGroup>
-
-              <PublishFreshnessIndicator
-                publishStatus={publishStatus}
-                pluginSlug={plugin?.slug}
-              />
-            </section>
-          )}
-
-          {section === PLUGIN_OVERVIEW_SECTION_ID && (
-            <SettingsSection>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <SettingsSection.Header>
-                  <div className="flex items-center gap-2">
-                    <SettingsSection.Title>MCP servers</SettingsSection.Title>
-                    {servers.length > 0 && (
-                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
-                        {servers.length}
-                      </span>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <span
+                      className="text-muted-foreground max-w-[320px] truncate font-mono text-xs leading-6"
+                      title={plugin.slug}
+                    >
+                      {plugin.slug}
+                    </span>
+                    {isDefaultPlugin && (
+                      <Badge variant="information">
+                        <Badge.Text>Default</Badge.Text>
+                      </Badge>
                     )}
                   </div>
-                  <SettingsSection.Description>
-                    MCP servers bundled in this plugin. Everyone who installs
-                    the plugin gets these servers.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <div className="flex items-center gap-2">
-                  {canPublish && canReadServers && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setIsAddServerOpen(true)}
-                    >
-                      <Button.LeftIcon>
-                        <Icon name="plus" className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Add Server</Button.Text>
-                    </Button>
-                  )}
                 </div>
-              </div>
-              {servers.length > 0 && (
-                <Page.Toolbar>
-                  <Page.Toolbar.Search
-                    value={serverSearch}
-                    onChange={setServerSearch}
-                    placeholder="Search servers"
-                  />
-                </Page.Toolbar>
+              }
+            />
+          }
+          controls={
+            <Stack direction="horizontal" gap={2} align="center">
+              {canPublish && (
+                <MarketplaceSyncButton
+                  publishStatus={publishStatus}
+                  isPending={publishMutation.isPending}
+                  onSync={() => handlePublish([])}
+                />
               )}
-              {serversContent}
-            </SettingsSection>
-          )}
-
-          {section === PLUGIN_SKILLS_SECTION_ID && (
-            <RequireScope
-              scope="skill:read"
-              resourceId={project.id}
-              level="page"
-            >
-              <PluginSkillsSection
-                key={pluginId!}
-                pluginId={pluginId!}
-                onMutated={(message) => offerPublish(message)}
+              <PluginInstallControl
+                plugin={{
+                  name: plugin.name,
+                  slug: plugin.slug,
+                  description: plugin.description,
+                  agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
+                }}
+                publishStatus={canAdmin ? publishStatus : undefined}
+                isDownloadMenuOpen={isDownloadMenuOpen}
+                onDownloadMenuOpenChange={setIsDownloadMenuOpen}
+                onDownload={(platform) => void download(platform)}
+                isDownloading={isDownloading}
+                isInstallSheetOpen={isInstallSheetOpen}
+                onInstallSheetOpenChange={setIsInstallSheetOpen}
               />
-            </RequireScope>
-          )}
-
-          {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
-            <SettingsSection>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <SettingsSection.Header>
-                  <div className="flex items-center gap-2">
-                    <SettingsSection.Title>Assignments</SettingsSection.Title>
-                    {assignments.length > 0 && (
-                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
-                        {assignments.length}
-                      </span>
+            </Stack>
+          }
+        />
+      }
+    >
+      <div className="space-y-10">
+        {section === PLUGIN_OVERVIEW_SECTION_ID && (
+          <section className="space-y-8">
+            <StatTileGroup>
+              <StatTile
+                title="MCP servers"
+                value={plugin.serverCount ?? servers.length}
+                tone="information"
+                format="number"
+                icon="network"
+              />
+              <StatTile
+                title="Skills"
+                value={plugin.skillCount ?? 0}
+                tone="information"
+                format="number"
+                icon="sparkles"
+                link={pluginSectionHref(
+                  routes,
+                  pluginId!,
+                  PLUGIN_SKILLS_SECTION_ID,
+                )}
+              />
+              {showAssignments && (
+                <>
+                  <StatTile
+                    title="Assignments"
+                    value={plugin.assignmentCount ?? assignments.length}
+                    tone="information"
+                    format="number"
+                    icon="users"
+                    subtext="Roles, users, and emails"
+                    link={pluginSectionHref(
+                      routes,
+                      pluginId!,
+                      PLUGIN_ASSIGNMENTS_SECTION_ID,
                     )}
-                  </div>
-                  <SettingsSection.Description>
-                    Controls delivery to devices running the Speakeasy agent.
-                    Marketplace installs receive every published plugin
-                    regardless.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <div className="flex items-center gap-2">
-                  {assignments.length > 0 && (
-                    <SearchBar
-                      value={assignmentSearch}
-                      onChange={setAssignmentSearch}
-                      placeholder="Search assignments"
-                      className="h-9 w-56"
-                    />
-                  )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAssignmentsOpen(true)}
-                  >
-                    <Button.LeftIcon>
-                      <Icon name="users" className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Manage assignments</Button.Text>
-                  </Button>
-                </div>
-              </div>
-              {assignmentsContent}
-            </SettingsSection>
-          )}
-
-          {section === PLUGIN_SETTINGS_SECTION_ID && canPublish && (
-            <>
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>Plugin details</SettingsSection.Title>
-                  <SettingsSection.Description>
-                    Registry identity and presentation metadata.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <SettingsSection.Panel>
-                  <SettingsSection.Body>
-                    <dl className="grid gap-4 sm:grid-cols-3">
-                      <div>
-                        <dt className="text-muted-foreground text-xs">Name</dt>
-                        <dd className="mt-1 text-sm">{plugin.name}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground text-xs">Slug</dt>
-                        <dd className="mt-1 font-mono text-sm">
-                          {plugin.slug}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground text-xs">
-                          Description
-                        </dt>
-                        <dd className="mt-1 text-sm">
-                          {plugin.description || "None"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </SettingsSection.Body>
-                  <SettingsSection.Footer>
-                    <SettingsSection.FooterHint>
-                      {autoSyncOff
-                        ? "Edits wait until someone clicks Sync changes."
-                        : "Edits sync to your marketplace automatically."}
-                    </SettingsSection.FooterHint>
-                    <SettingsSection.FooterActions>
-                      <Button size="sm" onClick={() => setIsEditOpen(true)}>
-                        Edit details
-                      </Button>
-                    </SettingsSection.FooterActions>
-                  </SettingsSection.Footer>
-                </SettingsSection.Panel>
-              </SettingsSection>
-
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>
-                    Marketplace sync
-                  </SettingsSection.Title>
-                </SettingsSection.Header>
-                <SettingsSection.Panel>
-                  <SettingsSection.Body className="space-y-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <Label id="plugin-auto-sync-label">
-                          Sync changes automatically
-                        </Label>
-                        <Text small muted className="max-w-xl">
-                          {autoSyncOff
-                            ? "Changes to this plugin wait until someone clicks Sync changes. Everyone keeps the version last published."
-                            : "Changes to this plugin publish to your marketplace on their own."}
-                        </Text>
-                      </div>
-                      <Switch
-                        aria-labelledby="plugin-auto-sync-label"
-                        checked={!autoSyncOff}
-                        onCheckedChange={handleAutoSyncChange}
-                        disabled={autoSyncMutation.isPending}
-                      />
-                    </div>
-                    {autoSyncError && (
-                      <Alert variant="warning" title={null}>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <span>{autoSyncError}</span>
-                          {publishStatus?.connected && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handlePublish([])}
-                              disabled={publishMutation.isPending}
-                            >
-                              Sync changes
-                            </Button>
-                          )}
-                        </div>
-                      </Alert>
-                    )}
-                  </SettingsSection.Body>
-                </SettingsSection.Panel>
-              </SettingsSection>
-
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <SettingsSection.Title>MCP servers</SettingsSection.Title>
-                </SettingsSection.Header>
-                <SettingsSection.Panel>
-                  <SettingsSection.Body>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <Label id="plugin-auto-add-servers-label">
-                          Add MCP servers automatically
-                        </Label>
-                        <Text small muted className="max-w-xl">
-                          {plugin.autoAddServersEnabled
-                            ? "Role and access changes add or remove this plugin's MCP servers, including when you share it with a new role. Turning this off keeps the current list."
-                            : "Only people who edit this plugin change its MCP servers. Turning this on adds the servers this plugin's roles can use now, then keeps the list in step with role and access changes."}
-                        </Text>
-                      </div>
-                      <Switch
-                        aria-labelledby="plugin-auto-add-servers-label"
-                        checked={plugin.autoAddServersEnabled === true}
-                        onCheckedChange={handleAutoAddServersChange}
-                        disabled={autoAddServersMutation.isPending}
-                      />
-                    </div>
-                  </SettingsSection.Body>
-                </SettingsSection.Panel>
-              </SettingsSection>
-
-              <DangerSettingsSection>
-                <DangerSettingsSection.Header>
-                  <DangerSettingsSection.Title>
-                    Danger zone
-                  </DangerSettingsSection.Title>
-                </DangerSettingsSection.Header>
-                <DangerSettingsSection.Panel>
-                  <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <Text className="text-sm font-semibold">
-                        Delete this plugin
-                      </Text>
-                      <Text small muted className="max-w-xl">
-                        {isDefaultPlugin
-                          ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
-                          : "Deleting removes this plugin from all assigned users on the next publish."}
-                      </Text>
-                    </div>
-                    <Button
-                      variant="destructive-primary"
-                      onClick={() => setIsDeleteOpen(true)}
-                    >
-                      Delete plugin
-                    </Button>
-                  </DangerSettingsSection.Body>
-                </DangerSettingsSection.Panel>
-              </DangerSettingsSection>
-            </>
-          )}
-        </div>
-
-        {canPublish && (
-          <>
-            {/* Edit Dialog */}
-            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Edit Plugin</Dialog.Title>
-                </Dialog.Header>
-                <form onSubmit={handleUpdate} className="flex flex-col gap-4">
-                  <InputField
-                    label="Name"
-                    name="name"
-                    defaultValue={plugin.name}
-                    required
                   />
-                  <InputField
-                    label="Slug"
-                    name="slug"
-                    defaultValue={plugin.slug}
-                    required
-                    readOnly={autoSyncOff}
-                    hint={
-                      autoSyncOff
-                        ? "Turn on auto sync to change the slug."
+                  <StatTile
+                    title="Installs"
+                    value={installs}
+                    tone="information"
+                    displayValue={installsUnavailable ? "—" : undefined}
+                    format="number"
+                    icon="download"
+                    isRefreshing={isLoadingSynced}
+                    subtext={
+                      installsUnavailable
+                        ? "Requires admin access"
+                        : "Running the device agent"
+                    }
+                    tooltip={
+                      installsUnavailable
+                        ? "Install counts require organization admin access."
                         : undefined
                     }
                   />
-                  <InputField
-                    label="Description"
-                    name="description"
-                    defaultValue={plugin.description ?? ""}
-                  />
-                  <Dialog.Footer>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setIsEditOpen(false)}
-                      type="button"
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={updateMutation.isPending}>
-                      Save
-                    </Button>
-                  </Dialog.Footer>
-                </form>
-              </Dialog.Content>
-            </Dialog>
+                </>
+              )}
+            </StatTileGroup>
 
-            {/* Delete Confirmation Dialog */}
-            <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-              <Dialog.Content>
-                <Dialog.Header>
-                  <Dialog.Title>Delete Plugin</Dialog.Title>
-                  <Dialog.Description>
-                    Are you sure you want to delete &quot;{plugin.name}&quot;?
-                    This will remove it from all assigned users on the next
-                    publish.
-                  </Dialog.Description>
-                </Dialog.Header>
+            <PublishFreshnessIndicator
+              publishStatus={publishStatus}
+              pluginSlug={plugin?.slug}
+            />
+          </section>
+        )}
+
+        {section === PLUGIN_OVERVIEW_SECTION_ID && (
+          <SettingsSection>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <SettingsSection.Header>
+                <div className="flex items-center gap-2">
+                  <SettingsSection.Title>MCP servers</SettingsSection.Title>
+                  {servers.length > 0 && (
+                    <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
+                      {servers.length}
+                    </span>
+                  )}
+                </div>
+                <SettingsSection.Description>
+                  MCP servers bundled in this plugin. Everyone who installs the
+                  plugin gets these servers.
+                </SettingsSection.Description>
+              </SettingsSection.Header>
+              <div className="flex items-center gap-2">
+                {canPublish && canReadServers && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsAddServerOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Icon name="plus" className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Server</Button.Text>
+                  </Button>
+                )}
+              </div>
+            </div>
+            {servers.length > 0 && (
+              <Page.Toolbar>
+                <Page.Toolbar.Search
+                  value={serverSearch}
+                  onChange={setServerSearch}
+                  placeholder="Search servers"
+                />
+              </Page.Toolbar>
+            )}
+            {serversContent}
+          </SettingsSection>
+        )}
+
+        {section === PLUGIN_SKILLS_SECTION_ID && (
+          <RequireScope scope="skill:read" resourceId={project.id} level="page">
+            <PluginSkillsSection
+              key={pluginId!}
+              pluginId={pluginId!}
+              onMutated={(message) => offerPublish(message)}
+            />
+          </RequireScope>
+        )}
+
+        {section === PLUGIN_ASSIGNMENTS_SECTION_ID && showAssignments && (
+          <SettingsSection>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <SettingsSection.Header>
+                <div className="flex items-center gap-2">
+                  <SettingsSection.Title>Assignments</SettingsSection.Title>
+                  {assignments.length > 0 && (
+                    <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
+                      {assignments.length}
+                    </span>
+                  )}
+                </div>
+                <SettingsSection.Description>
+                  Controls delivery to devices running the Speakeasy agent.
+                  Marketplace installs receive every published plugin
+                  regardless.
+                </SettingsSection.Description>
+              </SettingsSection.Header>
+              <div className="flex items-center gap-2">
+                {assignments.length > 0 && (
+                  <SearchBar
+                    value={assignmentSearch}
+                    onChange={setAssignmentSearch}
+                    placeholder="Search assignments"
+                    className="h-9 w-56"
+                  />
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsAssignmentsOpen(true)}
+                >
+                  <Button.LeftIcon>
+                    <Icon name="users" className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Manage assignments</Button.Text>
+                </Button>
+              </div>
+            </div>
+            {assignmentsContent}
+          </SettingsSection>
+        )}
+
+        {section === PLUGIN_SETTINGS_SECTION_ID && canPublish && (
+          <>
+            <SettingsSection>
+              <SettingsSection.Header>
+                <SettingsSection.Title>Plugin details</SettingsSection.Title>
+                <SettingsSection.Description>
+                  Registry identity and presentation metadata.
+                </SettingsSection.Description>
+              </SettingsSection.Header>
+              <SettingsSection.Panel>
+                <SettingsSection.Body>
+                  <dl className="grid gap-4 sm:grid-cols-3">
+                    <div>
+                      <dt className="text-muted-foreground text-xs">Name</dt>
+                      <dd className="mt-1 text-sm">{plugin.name}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground text-xs">Slug</dt>
+                      <dd className="mt-1 font-mono text-sm">{plugin.slug}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground text-xs">
+                        Description
+                      </dt>
+                      <dd className="mt-1 text-sm">
+                        {plugin.description || "None"}
+                      </dd>
+                    </div>
+                  </dl>
+                </SettingsSection.Body>
+                <SettingsSection.Footer>
+                  <SettingsSection.FooterHint>
+                    {autoSyncOff
+                      ? "Edits wait until someone clicks Sync changes."
+                      : "Edits sync to your marketplace automatically."}
+                  </SettingsSection.FooterHint>
+                  <SettingsSection.FooterActions>
+                    <Button size="sm" onClick={() => setIsEditOpen(true)}>
+                      Edit details
+                    </Button>
+                  </SettingsSection.FooterActions>
+                </SettingsSection.Footer>
+              </SettingsSection.Panel>
+            </SettingsSection>
+
+            <SettingsSection>
+              <SettingsSection.Header>
+                <SettingsSection.Title>Marketplace sync</SettingsSection.Title>
+              </SettingsSection.Header>
+              <SettingsSection.Panel>
+                <SettingsSection.Body className="space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label id="plugin-auto-sync-label">
+                        Sync changes automatically
+                      </Label>
+                      <Text small muted className="max-w-xl">
+                        {autoSyncOff
+                          ? "Changes to this plugin wait until someone clicks Sync changes. Everyone keeps the version last published."
+                          : "Changes to this plugin publish to your marketplace on their own."}
+                      </Text>
+                    </div>
+                    <Switch
+                      aria-labelledby="plugin-auto-sync-label"
+                      checked={!autoSyncOff}
+                      onCheckedChange={handleAutoSyncChange}
+                      disabled={autoSyncMutation.isPending}
+                    />
+                  </div>
+                  {autoSyncError && (
+                    <Alert variant="warning" title={null}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span>{autoSyncError}</span>
+                        {publishStatus?.connected && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handlePublish([])}
+                            disabled={publishMutation.isPending}
+                          >
+                            Sync changes
+                          </Button>
+                        )}
+                      </div>
+                    </Alert>
+                  )}
+                </SettingsSection.Body>
+              </SettingsSection.Panel>
+            </SettingsSection>
+
+            <SettingsSection>
+              <SettingsSection.Header>
+                <SettingsSection.Title>MCP servers</SettingsSection.Title>
+              </SettingsSection.Header>
+              <SettingsSection.Panel>
+                <SettingsSection.Body>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label id="plugin-auto-add-servers-label">
+                        Add MCP servers automatically
+                      </Label>
+                      <Text small muted className="max-w-xl">
+                        {plugin.autoAddServersEnabled
+                          ? "Role and access changes add or remove this plugin's MCP servers, including when you share it with a new role. Turning this off keeps the current list."
+                          : "Only people who edit this plugin change its MCP servers. Turning this on adds the servers this plugin's roles can use now, then keeps the list in step with role and access changes."}
+                      </Text>
+                    </div>
+                    <Switch
+                      aria-labelledby="plugin-auto-add-servers-label"
+                      checked={plugin.autoAddServersEnabled === true}
+                      onCheckedChange={handleAutoAddServersChange}
+                      disabled={autoAddServersMutation.isPending}
+                    />
+                  </div>
+                </SettingsSection.Body>
+              </SettingsSection.Panel>
+            </SettingsSection>
+
+            <DangerSettingsSection>
+              <DangerSettingsSection.Header>
+                <DangerSettingsSection.Title>
+                  Danger zone
+                </DangerSettingsSection.Title>
+              </DangerSettingsSection.Header>
+              <DangerSettingsSection.Panel>
+                <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <Text className="text-sm font-semibold">
+                      Delete this plugin
+                    </Text>
+                    <Text small muted className="max-w-xl">
+                      {isDefaultPlugin
+                        ? "This is the default plugin new MCP servers publish to. Deleting it removes the plugin from all assigned users on the next publish."
+                        : "Deleting removes this plugin from all assigned users on the next publish."}
+                    </Text>
+                  </div>
+                  <Button
+                    variant="destructive-primary"
+                    onClick={() => setIsDeleteOpen(true)}
+                  >
+                    Delete plugin
+                  </Button>
+                </DangerSettingsSection.Body>
+              </DangerSettingsSection.Panel>
+            </DangerSettingsSection>
+          </>
+        )}
+      </div>
+
+      {canPublish && (
+        <>
+          {/* Edit Dialog */}
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <Dialog.Content>
+              <Dialog.Header>
+                <Dialog.Title>Edit Plugin</Dialog.Title>
+              </Dialog.Header>
+              <form onSubmit={handleUpdate} className="flex flex-col gap-4">
+                <InputField
+                  label="Name"
+                  name="name"
+                  defaultValue={plugin.name}
+                  required
+                />
+                <InputField
+                  label="Slug"
+                  name="slug"
+                  defaultValue={plugin.slug}
+                  required
+                  readOnly={autoSyncOff}
+                  hint={
+                    autoSyncOff
+                      ? "Turn on auto sync to change the slug."
+                      : undefined
+                  }
+                />
+                <InputField
+                  label="Description"
+                  name="description"
+                  defaultValue={plugin.description ?? ""}
+                />
                 <Dialog.Footer>
                   <Button
                     variant="secondary"
-                    onClick={() => setIsDeleteOpen(false)}
+                    onClick={() => setIsEditOpen(false)}
+                    type="button"
                   >
                     Cancel
                   </Button>
-                  <Button
-                    variant="destructive-primary"
-                    onClick={handleDelete}
-                    disabled={deleteMutation.isPending}
-                  >
-                    Delete
+                  <Button type="submit" disabled={updateMutation.isPending}>
+                    Save
                   </Button>
                 </Dialog.Footer>
-              </Dialog.Content>
-            </Dialog>
+              </form>
+            </Dialog.Content>
+          </Dialog>
 
-            <ServerPickerSheet
-              key={pluginId}
-              open={isAddServerOpen}
-              onOpenChange={setIsAddServerOpen}
-              title="Add servers to plugin"
-              description="Everyone who installs this plugin gets the servers you add."
-              options={pickerOptions}
-              isLoading={isLoadingServers}
-              loadFailed={
-                !!toolsetsQuery.error ||
-                !!serversQuery.error ||
-                !!endpointsQuery.error
+          {/* Delete Confirmation Dialog */}
+          <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+            <Dialog.Content>
+              <Dialog.Header>
+                <Dialog.Title>Delete Plugin</Dialog.Title>
+                <Dialog.Description>
+                  Are you sure you want to delete &quot;{plugin.name}&quot;?
+                  This will remove it from all assigned users on the next
+                  publish.
+                </Dialog.Description>
+              </Dialog.Header>
+              <Dialog.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsDeleteOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive-primary"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete
+                </Button>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog>
+
+          <ServerPickerSheet
+            key={pluginId}
+            open={isAddServerOpen}
+            onOpenChange={setIsAddServerOpen}
+            title="Add servers to plugin"
+            description="Everyone who installs this plugin gets the servers you add."
+            options={pickerOptions}
+            isLoading={isLoadingServers}
+            loadFailed={
+              !!toolsetsQuery.error ||
+              !!serversQuery.error ||
+              !!endpointsQuery.error
+            }
+            onRetryLoad={() => {
+              // Only retry what failed; a refetch ignores `enabled`, so
+              // never touch a query the user can't read.
+              for (const query of [
+                toolsetsQuery,
+                serversQuery,
+                endpointsQuery,
+              ]) {
+                if (query.error) void query.refetch();
               }
-              onRetryLoad={() => {
-                // Only retry what failed; a refetch ignores `enabled`, so
-                // never touch a query the user can't read.
-                for (const query of [
-                  toolsetsQuery,
-                  serversQuery,
-                  endpointsQuery,
-                ]) {
-                  if (query.error) void query.refetch();
-                }
-              }}
-              emptyMessage={
-                serverOptions.length === 0
-                  ? "No MCP servers available. Create an MCP server in this project first."
-                  : "All available MCP servers have already been added to this plugin."
+            }}
+            emptyMessage={
+              serverOptions.length === 0
+                ? "No MCP servers available. Create an MCP server in this project first."
+                : "All available MCP servers have already been added to this plugin."
+            }
+            canWrite={canPublish}
+            permissionMessage="Only people who can edit this plugin can add servers."
+            onSubmit={handleAddServers}
+            announceAdded={(count) => {
+              const message = `${count} ${count === 1 ? "server" : "servers"} added to plugin`;
+              if (canPublish && publishStatus?.configured) {
+                offerPublish(message);
+              } else {
+                toast.success(message);
               }
-              canWrite={canPublish}
-              permissionMessage="Only people who can edit this plugin can add servers."
-              onSubmit={handleAddServers}
-              announceAdded={(count) => {
-                const message = `${count} ${count === 1 ? "server" : "servers"} added to plugin`;
-                if (canPublish && publishStatus?.configured) {
-                  offerPublish(message);
-                } else {
-                  toast.success(message);
-                }
+            }}
+          />
+          <PublishDialog
+            open={isPublishDialogOpen}
+            onOpenChange={setIsPublishDialogOpen}
+            onPublish={handlePublish}
+            isPending={publishMutation.isPending}
+          />
+          <PublishDialog
+            mode="manage"
+            open={isManageCollaboratorsOpen}
+            onOpenChange={setIsManageCollaboratorsOpen}
+            onPublish={handleAddCollaborators}
+            isPending={publishMutation.isPending}
+          />
+          {showAssignments && (
+            <PluginAssignmentsSheet
+              pluginId={pluginId!}
+              pluginName={plugin.name}
+              assignments={assignments}
+              open={isAssignmentsOpen}
+              onOpenChange={setIsAssignmentsOpen}
+              onSaved={() => {
+                void invalidateAll();
+                offerPublish("Assignments updated");
               }}
             />
-            <PublishDialog
-              open={isPublishDialogOpen}
-              onOpenChange={setIsPublishDialogOpen}
-              onPublish={handlePublish}
-              isPending={publishMutation.isPending}
-            />
-            <PublishDialog
-              mode="manage"
-              open={isManageCollaboratorsOpen}
-              onOpenChange={setIsManageCollaboratorsOpen}
-              onPublish={handleAddCollaborators}
-              isPending={publishMutation.isPending}
-            />
-            {showAssignments && (
-              <PluginAssignmentsSheet
-                pluginId={pluginId!}
-                pluginName={plugin.name}
-                assignments={assignments}
-                open={isAssignmentsOpen}
-                onOpenChange={setIsAssignmentsOpen}
-                onSaved={() => {
-                  void invalidateAll();
-                  offerPublish("Assignments updated");
-                }}
-              />
-            )}
-          </>
-        )}
-      </Page.Body>
-    </Page>
+          )}
+        </>
+      )}
+    </DetailFrame>
   );
 }
 

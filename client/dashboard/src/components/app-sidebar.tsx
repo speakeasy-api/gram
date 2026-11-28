@@ -21,7 +21,6 @@ import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
-import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -32,7 +31,6 @@ import {
 import { sidebarNavLayout } from "@/components/sidebar-nav-layout";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
-import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { TrialStatusCard } from "./trial-status-card";
@@ -295,10 +293,6 @@ export function AppSidebar({
         </SidebarMenuItem>
       </SidebarMenu>
     );
-  } else if (routes.skills.detail.active) {
-    sidebarContent = <SkillDetailSidebarNav />;
-  } else if (routes.plugins.detail.active) {
-    sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
       <NavGroupProvider

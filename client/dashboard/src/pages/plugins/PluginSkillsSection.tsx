@@ -288,9 +288,16 @@ function PluginSkillCard({
   onRemove: () => void;
 }): JSX.Element {
   const routes = useRoutes();
+  const href = routes.skills.detail.href(distribution.skillId);
 
   return (
-    <Card.Entity icon={<Sparkles className="text-muted-foreground h-8 w-8" />}>
+    // The name's link stretches over the whole card, so any click on the card
+    // opens the skill, as the table row does. The card stays a plain element,
+    // so the Remove button keeps its own keyboard behavior.
+    <Card.Entity
+      icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
+      className="relative"
+    >
       <div className="mb-2 flex items-start justify-between gap-2">
         <Text
           variant="subheading"
@@ -299,8 +306,8 @@ function PluginSkillCard({
           title={distribution.skillDisplayName}
         >
           <Link
-            to={routes.skills.detail.href(distribution.skillId)}
-            onClick={(e) => e.stopPropagation()}
+            to={href}
+            className="after:absolute after:inset-0 hover:no-underline"
           >
             {distribution.skillDisplayName}
           </Link>
@@ -314,7 +321,7 @@ function PluginSkillCard({
         {distribution.skillName}
       </Text>
 
-      <div className="mt-auto flex items-center justify-end gap-2 pt-2">
+      <div className="relative z-10 mt-auto flex items-center justify-end gap-2 pt-2">
         <RequirePluginWrite>
           <UiButton
             type="button"
