@@ -32,7 +32,6 @@ func testConfigForRoot(rootDir, probeAddr string) config {
 		rootDir:   rootDir,
 		probeAddr: probeAddr,
 		listen:    defaultListenAddr,
-		marker:    defaultMarkerRelPath,
 		command:   []string{"/bin/true"},
 	}
 }
@@ -100,15 +99,26 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"APP_ENDPOINT=https://api.example.test/v1", "APP_TOKEN=placeholder-value"}, s.childEnv())
 
-	// Write-once: subsequent bootstrap attempts are rejected.
-	require.Equal(t, http.StatusConflict, post("/bootstrap", payload).Code)
+	// Identical re-POST is idempotent (204); a different body is rejected (409).
+	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
 
-	// Files and generic marker exist on disk with exact content and permissions.
+	diffPayload := testPayloadJSON(t, bootstrapPayload{
+		Version: wireVersion,
+		Dirs: []bootstrapDir{
+			{Path: "conf", Mode: 0o700},
+		},
+		Files: []bootstrapFile{
+			{Path: "conf/app.toml", Mode: 0o600, Content: []byte("model = 'other'\n")},
+		},
+	})
+	require.Equal(t, http.StatusConflict, post("/bootstrap", diffPayload).Code)
+
+	// Files exist on disk with exact content and permissions; no on-disk init marker is written.
 	data, err := os.ReadFile(filepath.Join(rootDir, "conf/app.toml"))
 	require.NoError(t, err)
 	require.Equal(t, "model = 'test'\n", string(data))
-	_, err = os.Stat(filepath.Join(rootDir, defaultMarkerRelPath))
-	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(rootDir, ".ate-initialized"))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	// Generic /app-readyz probes the configured --probe-addr.
 	req := httptest.NewRequest(http.MethodGet, "/app-readyz", nil)
@@ -117,19 +127,42 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, strconv.Itoa(wireVersion), rec.Header().Get(wireVersionHeader))
 
-	// Resuming from a durable rootfs snapshot launches immediately without /bootstrap
-	// and restores the persisted bootstrap environment variables.
+	// Simulate sandbox-writable tampering before suspend (including planting a
+	// forged marker file) and restarting init on a rootfs-only resume:
+	// init must NOT launch from on-disk state and must wait for POST /bootstrap
+	// to overwrite the tampered files first.
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "conf/app.toml"), []byte("model = 'tampered'\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, ".ate-initialized"), []byte("1"), 0o600))
+
 	restored, err := newInitializer(cfg)
 	require.NoError(t, err)
+	require.Empty(t, restored.childEnv())
+	select {
+	case <-restored.launch:
+		t.Fatal("resumed actor must not launch before POST /bootstrap rewrites provisioned files")
+	default:
+	}
+
+	statusRec := httptest.NewRecorder()
+	restored.ServeHTTP(statusRec, httptest.NewRequest(http.MethodGet, "/status", nil))
+	require.Equal(t, http.StatusOK, statusRec.Code)
+	var st statusResponse
+	require.NoError(t, json.NewDecoder(statusRec.Body).Decode(&st))
+	require.False(t, st.Started)
+
+	rec = httptest.NewRecorder()
+	restored.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/bootstrap", bytes.NewReader(payload)))
+	require.Equal(t, http.StatusNoContent, rec.Code)
 	require.ElementsMatch(t, []string{"APP_ENDPOINT=https://api.example.test/v1", "APP_TOKEN=placeholder-value"}, restored.childEnv())
 	select {
 	case <-restored.launch:
 	default:
-		t.Fatal("resumed actor did not launch workload immediately")
+		t.Fatal("resumed actor did not launch after re-POST /bootstrap")
 	}
-	rec = httptest.NewRecorder()
-	restored.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/bootstrap", bytes.NewReader(payload)))
-	require.Equal(t, http.StatusConflict, rec.Code)
+
+	data, err = os.ReadFile(filepath.Join(rootDir, "conf/app.toml"))
+	require.NoError(t, err)
+	require.Equal(t, "model = 'test'\n", string(data), "re-bootstrap on resume must overwrite tampered files")
 }
 
 func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T) {
@@ -144,7 +177,6 @@ func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T)
 	}{
 		{name: "parent traversal file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}}},
 		{name: "absolute file path", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}}},
-		{name: "reserved marker file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: defaultMarkerRelPath, Mode: 0o600, Content: []byte("x")}}}},
 		{name: "reserved env file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: defaultEnvRelPath, Mode: 0o600, Content: []byte("x")}}}},
 		{name: "empty env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"": "v"}}},
 		{name: "env key with equals", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"A=B": "v"}}},
@@ -162,14 +194,6 @@ func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T)
 		})
 	}
 
-	t.Run("marker collides with env file", func(t *testing.T) {
-		t.Parallel()
-		cfg := testConfigForRoot(t.TempDir(), "127.0.0.1:8081")
-		cfg.marker = defaultEnvRelPath
-		_, initErr := newInitializer(cfg)
-		require.Error(t, initErr)
-	})
-
 	outside := t.TempDir()
 	require.NoError(t, os.Symlink(outside, filepath.Join(rootDir, "conf")))
 	require.Error(t, s.install(testPayloadJSON(t, bootstrapPayload{
@@ -186,7 +210,6 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(rootDir, defaultMarkerRelPath), []byte("1"), 0o600))
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -217,16 +240,26 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 		return out
 	}
 
-	var childPID int
 	require.Eventually(t, func() bool {
 		resp, err := http.Get("http://" + addr + "/readyz")
 		if err != nil {
 			return false
 		}
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false
-		}
+		return resp.StatusCode == http.StatusOK
+	}, 3*time.Second, 10*time.Millisecond)
+
+	bootBody := testPayloadJSON(t, bootstrapPayload{
+		Version: wireVersion,
+		Files:   []bootstrapFile{{Path: "conf/app.toml", Mode: 0o600, Content: []byte("ok\n")}},
+	})
+	bootResp, err := http.Post("http://"+addr+"/bootstrap", "application/json", bytes.NewReader(bootBody))
+	require.NoError(t, err)
+	_ = bootResp.Body.Close()
+	require.Equal(t, http.StatusNoContent, bootResp.StatusCode)
+
+	var childPID int
+	require.Eventually(t, func() bool {
 		raw, err := os.ReadFile(pidFile)
 		if err != nil {
 			return false
