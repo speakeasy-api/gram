@@ -2,6 +2,7 @@ package runtimepolicy
 
 import (
 	"encoding/json"
+	"maps"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -180,9 +181,7 @@ func TestDelegatedPolicyLimitsOnViewAreStoredOnly(t *testing.T) {
 		{authz.SelectorKeyDisposition: authz.DispositionReadOnly},
 	} {
 		selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
-		for key, value := range limit {
-			selector[key] = value
-		}
+		maps.Copy(selector, limit)
 		_, err := NewDelegatedPolicyV1([]authz.Grant{{Scope: authz.ScopeMCPRead, Selector: selector}})
 		require.ErrorContains(t, err, "is not allowed for scope")
 

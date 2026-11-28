@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -370,12 +371,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Speakeasy-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(
-		context.WithoutCancel(ctx),
-		canonicalSessionID(payload),
-		mcpInventory,
-		canonicalMCPInventoryRead(payload),
-	)
+	cacheCtx := context.WithoutCancel(ctx)
+	if s.cacheCanonicalMCPList(cacheCtx, canonicalSessionID(payload), mcpInventory, canonicalMCPInventoryRead(payload)) {
+		// The device copy is what the Shadow MCP guard falls back to for the
+		// first seconds of this device's next session, before its own
+		// inventory arrives.
+		s.cacheDeviceMCPList(cacheCtx, s.canonicalDeviceMCPListScope(cacheCtx, authCtx, actor.UserID, payload), mcpInventory)
+	}
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -985,19 +987,17 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	}
 
 	toolName := toolref.MCPFunctionOf(rawToolName)
-	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
-	// A Codex meta-tool names its target in tool_input.server, so nothing above
-	// can derive an identity from the tool name. Resolving that name against the
-	// session's inventory is what lets a Speakeasy-hosted target be allowed at all —
-	// without a URL the guard can only reach its generic "not Speakeasy-hosted" deny,
-	// which would block legitimate reads the legacy endpoint permits. A name we
-	// cannot resolve still denies: unproven is not absent.
-	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
-		if server, isMetaTool := codexMetaToolServer(rawToolName, toolInput); isMetaTool {
-			evidence.ServerIdentity = server
-			s.resolveEvidenceFromSessionInventory(ctx, &evidence, canonicalSessionID(payload))
-		}
+	// When the payload states no URL or launch command (always so for a Codex
+	// meta-tool, which names its target in tool_input.server), the session or
+	// device inventory supplies it, which is what lets a Speakeasy-hosted target
+	// be allowed. A coding agent's own built-in server is never enforced on.
+	target := s.classifyCanonicalShadowMCP(ctx, payload, rawToolName, toolInput, func() deviceMCPListScope {
+		return s.canonicalDeviceMCPListScope(ctx, authCtx, actor.UserID, payload)
+	})
+	if target.classification.IsBuiltin() {
+		return "", ""
 	}
+	evidence := target.evidence
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
@@ -1042,33 +1042,18 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	return "", ""
 }
 
-// resolveEvidenceFromSessionInventory upgrades evidence carrying only a server
-// name to the target that name resolves to in the session's inventory: the URL
-// for HTTP servers, the launch command for stdio ones. Mirrors the legacy
-// codexShadowMCPEvidence resolution — stdio identity is pinned to the command
-// so a bypass grant cannot follow a renamed config alias.
-func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evidence *shadowmcp.AccessEvidence, sessionID string) {
-	if evidence.ServerIdentity == "" || sessionID == "" {
-		return
-	}
-	entries, err := s.getCachedMCPList(ctx, sessionID)
-	if err != nil {
-		return
-	}
-	applyMCPEntryToEvidence(evidence, matchCodexCachedMCPServerEntry(entries, evidence.ServerIdentity))
-}
-
 // cacheCanonicalMCPList stores a session's MCP inventory under the same key
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
-// resolve a later tool call's target to a configured server. Best-effort: a
-// cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
+// resolve a later tool call's target to a configured server, and reports
+// whether it stored a complete inventory. Best-effort: a cache miss only
+// leaves the guard without install evidence.
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) bool {
 	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
 	defer span.End()
 
 	projectID := s.mcpListProjectID(ctx, sessionID)
 	if sessionID == "" || projectID == "" {
-		return
+		return false
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
@@ -1083,15 +1068,21 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	}
 
 	// Only a successful inventory read is authoritative, even when the
-	// inventory is empty or omitted. Partial reads only refresh an existing
-	// snapshot so they cannot downgrade complete evidence.
+	// inventory is empty or omitted. A partial read is kept apart as install
+	// evidence for the servers it names, so it can never downgrade complete
+	// evidence.
+	if !inventoryRead {
+		s.cachePartialMCPList(ctx, projectID, sessionID, entries)
+		return false
+	}
+
 	// Write the entries before the read status. The status is what licenses the
 	// guard to treat an empty inventory as proof no servers exist, so recording
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
-		return
+	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
+		return false
 	}
 	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
@@ -1099,7 +1090,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)
-		return
+		return false
 	}
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
@@ -1107,6 +1098,96 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
+	s.clearPartialMCPList(ctx, projectID, sessionID)
+	return true
+}
+
+// cachePartialMCPList adds the servers a partial inventory names to the
+// session's partial list, under the snapshot's owner binding and TTL. A
+// partial list only ever adds install evidence, so each delivery is merged
+// into the stored list rather than replacing it: an older delivery that
+// arrives late cannot erase servers a newer one named. A partial list carries
+// no proof of absence, so an empty one is not stored, and none is stored once
+// the session holds a complete snapshot, which always wins. Best-effort.
+func (s *Service) cachePartialMCPList(ctx context.Context, projectID, sessionID string, entries []MCPServerEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	if _, err := s.getCachedMCPList(ctx, sessionID); err == nil {
+		return
+	}
+	if !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
+		return
+	}
+	key := sessionPartialMCPListCacheKey(projectID, sessionID)
+	var stored []MCPServerEntry
+	switch err := s.cache.Get(ctx, key, &stored); {
+	case err == nil:
+		entries = mergePartialMCPLists(stored, entries)
+	case !errors.Is(err, redisCache.ErrCacheMiss):
+		// The stored list could not be read, so writing now would replace
+		// the evidence it holds rather than add to it.
+		s.logger.WarnContext(ctx, "failed to read partial MCP list; skipping write",
+			attr.SlogEvent("hook_partial_mcp_list_cache_get_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+		return
+	}
+	if err := s.cache.Set(ctx, key, entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache partial MCP list",
+			attr.SlogEvent("hook_partial_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+	}
+}
+
+// mergePartialMCPLists returns the entries of both partial lists, newer
+// entries first, without repeating a server reported with the same transport.
+// Two entries for one server with different transports are both kept, which
+// the inventory lookup reads as listed with no trusted transport.
+func mergePartialMCPLists(stored, newer []MCPServerEntry) []MCPServerEntry {
+	type entryKey struct {
+		source, pluginName, name, url, command, connectorUUID, toolPrefix string
+	}
+	keyOf := func(entry MCPServerEntry) entryKey {
+		return entryKey{
+			source:        entry.Source,
+			pluginName:    entry.PluginName,
+			name:          entry.Name,
+			url:           entry.URL,
+			command:       entry.Command,
+			connectorUUID: entry.ConnectorUUID,
+			toolPrefix:    entry.ToolPrefix,
+		}
+	}
+	merged := make([]MCPServerEntry, 0, len(newer)+len(stored))
+	seen := make(map[entryKey]struct{}, len(newer)+len(stored))
+	for _, list := range [][]MCPServerEntry{newer, stored} {
+		for _, entry := range list {
+			k := keyOf(entry)
+			if _, dup := seen[k]; dup {
+				continue
+			}
+			seen[k] = struct{}{}
+			merged = append(merged, entry)
+		}
+	}
+	return merged
+}
+
+// clearPartialMCPList removes the session's partial list once its complete
+// snapshot is stored. Readers already prefer the snapshot, but a partial list
+// left behind could stand in as install evidence if the snapshot is later
+// lost. Best-effort.
+func (s *Service) clearPartialMCPList(ctx context.Context, projectID, sessionID string) {
+	if err := s.cache.Delete(ctx, sessionPartialMCPListCacheKey(projectID, sessionID)); err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+		s.logger.DebugContext(ctx, "failed to clear partial MCP list",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)
@@ -1515,6 +1596,7 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.MCPMatchKey] = command
 		}
 	}
+	s.applyCanonicalShadowMCPAttrs(ctx, attrs, payload, authCtx, metadata.UserID)
 	skill := canonicalSkillName(payload)
 	if skill != "" && isExplicitSkillActivation(payload) {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})

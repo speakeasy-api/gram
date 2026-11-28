@@ -38,6 +38,15 @@ func sessionMCPListCacheKey(projectID, sessionID string) string {
 	return fmt.Sprintf("session:mcp-list:v2:%s:%s", projectID, sessionID)
 }
 
+// sessionPartialMCPListCacheKey returns the Redis key for the latest partial
+// MCP inventory of a session: the servers the sender could read before its
+// complete list was ready. It lives apart from the snapshot so a partial list
+// can never overwrite or downgrade a complete one, and it shares the
+// snapshot's TTL and owner binding.
+func sessionPartialMCPListCacheKey(projectID, sessionID string) string {
+	return fmt.Sprintf("session:mcp-list-partial:v1:%s:%s", projectID, sessionID)
+}
+
 // sessionMCPInventoryReadCacheKey returns the Redis key recording whether a
 // session's sender managed to read its MCP server list. It rides beside the
 // snapshot rather than inside it because an empty-but-read list has no entries
