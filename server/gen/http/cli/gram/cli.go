@@ -37193,7 +37193,7 @@ func adminApplyPluginRepositoryMigrationsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin apply-plugin-repository-migrations --body '{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin apply-plugin-repository-migrations --body '{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminReprovisionPluginRepositoryUsage() {

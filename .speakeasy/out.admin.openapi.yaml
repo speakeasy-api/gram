@@ -16707,6 +16707,7 @@ components:
           items:
             $ref: '#/components/schemas/AdminPluginRepositoryMigrationEntry'
           description: Repository bindings to verify or apply.
+          minItems: 1
           maxItems: 50
       required:
         - entries

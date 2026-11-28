@@ -174,7 +174,7 @@ func (s *Service) applyPluginRepositoryMigration(ctx context.Context, entry *gen
 	}
 	defer rollbackPluginRepositoryMigration(ctx, tx)
 	q, bindings := repo.New(tx), pluginsrepo.New(tx)
-	if err := q.AdminLockPluginRepositoryMigration(ctx, projectID); err != nil {
+	if err := bindings.LockPluginRepositoryBinding(ctx, projectID); err != nil {
 		return s.pluginRepositoryMigrationUnavailable(ctx, err)
 	}
 	existing, err := bindings.GetPluginRepositoryBinding(ctx, projectID)
@@ -218,6 +218,12 @@ func (s *Service) applyPluginRepositoryMigration(ctx context.Context, entry *gen
 	if dryRun {
 		return "verified", "GitHub verified this repository; no binding was written."
 	}
+	if err := lockPluginRepositoryMigrationConnection(ctx, q, projectID, connection); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "conflict", "The stored repository destination changed during verification."
+		}
+		return s.pluginRepositoryMigrationUnavailable(ctx, err)
+	}
 	binding := pluginsrepo.InsertPluginRepositoryBindingParams{
 		ProjectID: projectID, RepositoryID: repositoryID, RepoOwner: owner,
 		RepoName: name, InstallationID: config.InstallationID,
@@ -235,6 +241,16 @@ func (s *Service) applyPluginRepositoryMigration(ctx context.Context, entry *gen
 		return s.pluginRepositoryMigrationUnavailable(ctx, err)
 	}
 	return "bound", "Repository binding recorded."
+}
+
+func lockPluginRepositoryMigrationConnection(ctx context.Context, q *repo.Queries, projectID uuid.UUID, connection repo.AdminGetPluginRepositoryMigrationRow) error {
+	_, err := q.AdminLockPluginRepositoryMigrationConnection(ctx, repo.AdminLockPluginRepositoryMigrationConnectionParams{
+		ProjectID: projectID, InstallationID: connection.InstallationID, RepoOwner: connection.RepoOwner, RepoName: connection.RepoName,
+	})
+	if err != nil {
+		return fmt.Errorf("lock current repository connection: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) pluginRepositoryMigrationUnavailable(ctx context.Context, err error) (string, string) {
@@ -287,7 +303,7 @@ func (s *Service) ReprovisionPluginRepository(ctx context.Context, payload *gen.
 	}
 	defer rollbackPluginRepositoryMigration(ctx, tx)
 	q, bindings := repo.New(tx), pluginsrepo.New(tx)
-	if err := q.AdminLockPluginRepositoryMigration(ctx, projectID); err != nil {
+	if err := bindings.LockPluginRepositoryBinding(ctx, projectID); err != nil {
 		return nil, s.pluginRepositoryRecoveryFailure(ctx, err)
 	}
 	if _, err := bindings.GetPluginRepositoryBinding(ctx, projectID); err == nil {
@@ -303,6 +319,12 @@ func (s *Service) ReprovisionPluginRepository(ctx context.Context, payload *gen.
 		return nil, s.pluginRepositoryRecoveryFailure(ctx, err)
 	}
 
+	if err := lockPluginRepositoryMigrationConnection(ctx, q, projectID, connection); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, nil, "the stored repository destination changed before recovery")
+		}
+		return nil, s.pluginRepositoryRecoveryFailure(ctx, err)
+	}
 	owner := strings.ToLower(config.Org)
 	name := "plugins-" + projectID.String() + "-recovery-" + uuid.NewString()[:8]
 	// Do not query the old repository. A name collision (including after a

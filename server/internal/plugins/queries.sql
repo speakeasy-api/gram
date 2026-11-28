@@ -1004,6 +1004,10 @@ WHERE (
    )
 LIMIT 1;
 
+-- name: LockPluginRepositoryBinding :exec
+-- Serialize first publish provisioning and staff migration for a project.
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-repository:' || CAST(sqlc.arg(project_id) AS uuid)::text, 0));
+
 -- name: GetPluginRepositoryBinding :one
 SELECT *
 FROM plugin_repository_bindings

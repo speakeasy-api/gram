@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
@@ -44,6 +45,36 @@ func TestPublishRefusesUnverifiedRepositoryNames(t *testing.T) {
 			require.ErrorIs(t, err, pgx.ErrNoRows)
 		})
 	}
+}
+
+func TestPublishFirstProvisioningReusesConcurrentBinding(t *testing.T) {
+	t.Parallel()
+	pushErr := errors.New("stop after checking the selected repository")
+	mock := &mockGitHubPublisher{pushFilesErr: pushErr}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	f := newAutoSyncFixtureFor(t, ctx, ti, mock)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Bound plugin"})
+	require.NoError(t, err)
+	f.addServer(t, ctx, plugin, "binding-server", "Test Server", 0)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	q := repo.New(tx)
+	require.NoError(t, q.LockPluginRepositoryBinding(ctx, f.projectID))
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+		done <- err
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%pg_advisory_xact_lock%")
+
+	require.NoError(t, q.InsertPluginRepositoryBinding(ctx, repo.InsertPluginRepositoryBindingParams{
+		ProjectID: f.projectID, RepositoryID: 987, RepoOwner: "test-org", RepoName: "already-created", InstallationID: 12345,
+	}))
+	require.NoError(t, tx.Commit(ctx))
+	require.ErrorIs(t, <-done, pushErr)
+	require.Empty(t, mock.createRepoNames)
+	require.Equal(t, int64(987), mock.scopedRepoID)
+	require.Equal(t, "already-created", mock.pushedRepoName)
 }
 
 func TestPublishNameFallbackRetriedFromBinding(t *testing.T) {

@@ -4769,10 +4769,13 @@ func BuildApplyPluginRepositoryMigrationsPayload(adminApplyPluginRepositoryMigra
 	{
 		err = json.Unmarshal([]byte(adminApplyPluginRepositoryMigrationsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }'")
 		}
 		if body.Entries == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+		}
+		if len(body.Entries) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 1, true))
 		}
 		if len(body.Entries) > 50 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 50, false))

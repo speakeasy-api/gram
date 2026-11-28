@@ -120,11 +120,12 @@ func (p *InMemoryGitHubPublisher) ForRepository(_ context.Context, installationI
 	if repositoryID != fixtureRepositoryID(installationID, key) {
 		return nil, ghclient.ErrRepoNotFound
 	}
+	scoped := &localGitHubRepository{publisher: p, installationID: installationID, owner: owner, repo: repo}
 	if p.root == "" {
 		if _, ok := p.files[key]; !ok {
 			return nil, ghclient.ErrRepoNotFound
 		}
-		return p, nil
+		return scoped, nil
 	}
 	if _, err := os.Stat(p.snapshotPath("repositories", key)); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -132,7 +133,53 @@ func (p *InMemoryGitHubPublisher) ForRepository(_ context.Context, installationI
 		}
 		return nil, fmt.Errorf("find local fixture repository: %w", err)
 	}
-	return p, nil
+	return scoped, nil
+}
+
+type localGitHubRepository struct {
+	publisher      *InMemoryGitHubPublisher
+	installationID int64
+	owner          string
+	repo           string
+}
+
+func (s *localGitHubRepository) matches(installationID int64, owner, repo string) bool {
+	return installationID == s.installationID && strings.EqualFold(owner, s.owner) && strings.EqualFold(repo, s.repo)
+}
+
+func (s *localGitHubRepository) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, message string, files map[string][]byte) (string, error) {
+	if !s.matches(installationID, owner, repo) {
+		return "", ghclient.ErrRepositoryConflict
+	}
+	return s.publisher.PushFiles(ctx, installationID, owner, repo, branch, message, files)
+}
+
+func (s *localGitHubRepository) AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error {
+	if !s.matches(installationID, owner, repo) {
+		return ghclient.ErrRepositoryConflict
+	}
+	return s.publisher.AddCollaborator(ctx, installationID, owner, repo, username, permission)
+}
+
+func (s *localGitHubRepository) HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error) {
+	if !s.matches(installationID, owner, repo) {
+		return false, ghclient.ErrRepositoryConflict
+	}
+	return s.publisher.HasDirectCollaborator(ctx, installationID, owner, repo)
+}
+
+func (s *localGitHubRepository) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(string) bool) (map[string][]byte, error) {
+	if !s.matches(installationID, owner, repo) {
+		return nil, ghclient.ErrRepositoryConflict
+	}
+	return s.publisher.GetRepoFiles(ctx, installationID, owner, repo, branch, include)
+}
+
+func (s *localGitHubRepository) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
+	if !s.matches(installationID, owner, repo) {
+		return nil, ghclient.ErrRepositoryConflict
+	}
+	return s.publisher.GetFileContent(ctx, installationID, owner, repo, branch, path)
 }
 
 // A deterministic ID lets local server and worker processes share a fixture

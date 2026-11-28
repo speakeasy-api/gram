@@ -978,7 +978,6 @@ SELECT p.organization_id, c.installation_id, c.repo_owner, c.repo_name
 FROM plugin_github_connections c
 JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
 WHERE c.project_id = $1
-FOR UPDATE OF c, p
 `
 
 type AdminGetPluginRepositoryMigrationRow struct {
@@ -3491,14 +3490,35 @@ func (q *Queries) AdminLockAssistantAgentNames(ctx context.Context, organization
 	return err
 }
 
-const adminLockPluginRepositoryMigration = `-- name: AdminLockPluginRepositoryMigration :exec
-SELECT pg_advisory_xact_lock(hashtextextended('plugin-repository:' || CAST($1 AS uuid)::text, 0))
+const adminLockPluginRepositoryMigrationConnection = `-- name: AdminLockPluginRepositoryMigrationConnection :one
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = $1
+  AND c.installation_id = $2
+  AND c.repo_owner = $3
+  AND c.repo_name = $4
+FOR UPDATE OF c, p
 `
 
-// Serialize staff binding and replacement decisions for the same project.
-func (q *Queries) AdminLockPluginRepositoryMigration(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, adminLockPluginRepositoryMigration, projectID)
-	return err
+type AdminLockPluginRepositoryMigrationConnectionParams struct {
+	ProjectID      uuid.UUID
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+// Verify that the destination attested against GitHub is still current and lock it until commit.
+func (q *Queries) AdminLockPluginRepositoryMigrationConnection(ctx context.Context, arg AdminLockPluginRepositoryMigrationConnectionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminLockPluginRepositoryMigrationConnection,
+		arg.ProjectID,
+		arg.InstallationID,
+		arg.RepoOwner,
+		arg.RepoName,
+	)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
 }
 
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one

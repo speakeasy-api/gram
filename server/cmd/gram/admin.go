@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -571,7 +572,11 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("configure plugin GitHub recovery: %w", err)
 			}
 			if serviceEnv == "local" && pluginGitHub == nil {
-				publisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(c.String("assets-uri"), "local-plugin-marketplaces"))
+				assetsURI := strings.TrimSpace(c.String("assets-uri"))
+				if assetsURI == "" {
+					return errors.New("local plugin repository recovery requires assets-uri")
+				}
+				publisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(assetsURI, "local-plugin-marketplaces"))
 				if err != nil {
 					return fmt.Errorf("create local plugin publisher: %w", err)
 				}

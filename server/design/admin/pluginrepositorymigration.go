@@ -73,7 +73,7 @@ func pluginRepositoryMigrationMethods() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Meta("openapi:typename", "ApplyPluginRepositoryMigrationsRequestBody")
-			Attribute("entries", ArrayOf(AdminPluginRepositoryMigrationEntry), "Repository bindings to verify or apply.", func() { MaxLength(50) })
+			Attribute("entries", ArrayOf(AdminPluginRepositoryMigrationEntry), "Repository bindings to verify or apply.", func() { MinLength(1); MaxLength(50) })
 			Attribute("dry_run", Boolean, "Verify bindings without recording them.")
 			Required("entries", "dry_run")
 		})

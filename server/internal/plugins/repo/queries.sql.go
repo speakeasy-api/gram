@@ -3277,6 +3277,16 @@ func (q *Queries) LockPluginPackageContentShared(ctx context.Context, projectID 
 	return err
 }
 
+const lockPluginRepositoryBinding = `-- name: LockPluginRepositoryBinding :exec
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-repository:' || CAST($1 AS uuid)::text, 0))
+`
+
+// Serialize first publish provisioning and staff migration for a project.
+func (q *Queries) LockPluginRepositoryBinding(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockPluginRepositoryBinding, projectID)
+	return err
+}
+
 const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
 SELECT id FROM plugins
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE

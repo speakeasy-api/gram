@@ -1854,15 +1854,21 @@ JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
 ORDER BY c.project_id
 LIMIT @page_size;
 
--- name: AdminLockPluginRepositoryMigration :exec
--- Serialize staff binding and replacement decisions for the same project.
-SELECT pg_advisory_xact_lock(hashtextextended('plugin-repository:' || CAST(sqlc.arg(project_id) AS uuid)::text, 0));
-
 -- name: AdminGetPluginRepositoryMigration :one
 SELECT p.organization_id, c.installation_id, c.repo_owner, c.repo_name
 FROM plugin_github_connections c
 JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = @project_id;
+
+-- name: AdminLockPluginRepositoryMigrationConnection :one
+-- Verify that the destination attested against GitHub is still current and lock it until commit.
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
 WHERE c.project_id = @project_id
+  AND c.installation_id = @installation_id
+  AND c.repo_owner = @repo_owner
+  AND c.repo_name = @repo_name
 FOR UPDATE OF c, p;
 
 -- name: AdminFindPluginRepositoryID :one

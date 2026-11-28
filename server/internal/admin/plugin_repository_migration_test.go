@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -231,7 +230,7 @@ func TestPluginRepositoryMigrationReprovision(t *testing.T) {
 	// binding while reprovision waits. Recovery must recheck before creation.
 	locked := seedPluginRepositoryMigration(t, ctx, db, "plugin-recovery-locked")
 	tx := testenv.BeginTx(t, ctx, db)
-	require.NoError(t, repo.New(tx).AdminLockPluginRepositoryMigration(ctx, locked.projectID))
+	require.NoError(t, pluginsrepo.New(tx).LockPluginRepositoryBinding(ctx, locked.projectID))
 	pending := make(chan error, 1)
 	go func() {
 		_, err := svc.ReprovisionPluginRepository(staff, &gen.ReprovisionPluginRepositoryPayload{ProjectID: locked.projectID.String(), Reason: payload.Reason})

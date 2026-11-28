@@ -35,6 +35,10 @@ func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
 	has, err := repo.HasDirectCollaborator(t.Context(), 1, "LOCAL", "FIXTURE")
 	require.NoError(t, err)
 	require.True(t, has)
+	_, err = repo.PushFiles(t.Context(), 1, "local", "other-fixture", "main", "publish", nil)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryConflict)
+	_, err = repo.GetRepoFiles(t.Context(), 2, "local", "fixture", "main", nil)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryConflict)
 }
 
 func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {

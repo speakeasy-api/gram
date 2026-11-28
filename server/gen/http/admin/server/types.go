@@ -63975,6 +63975,9 @@ func ValidateApplyPluginRepositoryMigrationsRequestBody(body *ApplyPluginReposit
 	if body.DryRun == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dry_run", "body"))
 	}
+	if len(body.Entries) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 1, true))
+	}
 	if len(body.Entries) > 50 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 50, false))
 	}
