@@ -1,5 +1,12 @@
 # admin
 
+## 0.15.0
+
+### Minor Changes
+
+- cb64547: Add a bulk disable to the admin organizations page. Upload a CSV with an `id` or `slug` column, review the matched organizations (id, slug, name, account type, and whether each is already disabled) along with any the file named that could not be found, then confirm. Each confirmed organization is removed from the whitelist and disabled in a single transaction, with the same audit events as disabling one at a time.
+- 68d18fa: Add a staff switch in the admin dashboard that turns self-serve signup off across all organizations. While it is off, new self-serve organizations and self-serve trials are refused with a message pointing to sales.
+
 ## 0.14.3
 
 ### Patch Changes
