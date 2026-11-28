@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -615,6 +617,53 @@ func TestInviteCallback_RevokedInviteDoesNotNotifyTrialAdminAdded(t *testing.T) 
 	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
 	require.NoError(t, err)
 	require.Equal(t, "revoked", storedInvite.State)
+}
+
+func TestInviteCallback_UpsertRefusalsRedirectCleanly(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		upsertErr error
+		wantError string
+	}{
+		{
+			name:      "blocked user returns opaque expired-invite refusal",
+			upsertErr: identity.ErrUserBlocked,
+			wantError: "invite already used, revoked, or expired",
+		},
+		{
+			name:      "duplicate email alias returns clear refusal",
+			upsertErr: identity.ErrDuplicateEmailAlias,
+			wantError: "an account already exists for this email address",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestOrganizationsServiceWithInviteIdentityProvider(t, failingUpsertInviteIdentityProvider{
+				upsertErr: tc.upsertErr,
+			})
+			authCtx := requireAuthContext(t, ctx)
+			rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "upsert-refusal", authCtx.ActiveOrganizationID, authCtx.UserID, authz.SystemRoleMember)
+
+			recorder := serveInviteCallback(t, ti, rawToken)
+			require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+
+			loc, err := url.Parse(recorder.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, tc.wantError, loc.Query().Get("signin_error"))
+			if errors.Is(tc.upsertErr, identity.ErrUserBlocked) {
+				require.NotContains(t, loc.Query().Get("signin_error"), "block")
+			}
+
+			storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+			require.NoError(t, err)
+			require.Equal(t, "pending", storedInvite.State)
+		})
+	}
 }
 
 func requireAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

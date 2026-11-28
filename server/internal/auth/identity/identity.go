@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/emailnorm"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
@@ -323,14 +324,46 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		span.End()
 	}()
 
-	gramUserID, admin, reactivated := r.resolveGramUserID(ctx, idpUser)
+	tx, err := r.userRepo.Begin(ctx)
+	if err != nil {
+		return UpsertUserResult{}, fmt.Errorf("begin user upsert transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := userRepo.New(tx)
+
+	canonicalEmail := emailnorm.Canonicalize(idpUser.Email)
+	if emailnorm.IsGmailDomain(idpUser.Email) {
+		if err := qtx.LockCanonicalGmailEmail(ctx, canonicalEmail); err != nil {
+			return UpsertUserResult{}, fmt.Errorf("lock canonical email: %w", err)
+		}
+	}
+
+	blockedEmail, err := qtx.IsEmailBlacklisted(ctx, canonicalEmail)
+	if err != nil {
+		return UpsertUserResult{}, fmt.Errorf("check user email block: %w", err)
+	}
+	if blockedEmail {
+		return UpsertUserResult{}, ErrUserBlocked
+	}
+
+	resolved, err := r.resolveUser(ctx, qtx, idpUser)
+	if err != nil {
+		return UpsertUserResult{}, err
+	}
+	if err := r.rejectCollidingGmailAlias(ctx, qtx, idpUser, resolved); err != nil {
+		return UpsertUserResult{}, err
+	}
+
+	gramUserID := resolved.userID
+	admin := resolved.admin
+	reactivated := resolved.reactivated
 	span.SetAttributes(
 		attr.AuthUserID(gramUserID),
 		attr.WorkOSUserID(idpUser.Sub),
 		attr.ExternalUserID(idpUser.ExternalID),
 	)
 
-	user, err := r.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
+	user, err := qtx.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          gramUserID,
 		Email:       idpUser.Email,
 		DisplayName: idpUser.Name,
@@ -341,11 +374,15 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		return UpsertUserResult{}, fmt.Errorf("upsert user: %w", err)
 	}
 
-	if err := r.userRepo.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
+	if err := qtx.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       gramUserID,
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
 		return UpsertUserResult{}, fmt.Errorf("set workos_id on user: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return UpsertUserResult{}, fmt.Errorf("commit user upsert transaction: %w", err)
 	}
 	if err := r.reassignWorkOSIdentity(ctx, gramUserID, idpUser.Sub); err != nil {
 		return UpsertUserResult{}, err
@@ -415,14 +452,88 @@ func (r *Resolver) reassignWorkOSIdentity(ctx context.Context, gramUserID, newWo
 	return nil
 }
 
-func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) (string, bool, bool) {
-	if existing, err := r.userRepo.GetUserByEmail(ctx, idpUser.Email); err == nil {
-		return existing.ID, existing.Admin, existing.WorkosDeletedAt.Valid
+type resolvedUser struct {
+	userID      string
+	admin       bool
+	reactivated bool
+	existing    bool
+	prevEmail   string
+}
+
+func (r *Resolver) resolveUser(ctx context.Context, userQueries *userRepo.Queries, idpUser *IDPUserInfo) (resolvedUser, error) {
+	existing, err := userQueries.GetUserByEmail(ctx, idpUser.Email)
+	switch {
+	case err == nil:
+		return resolvedUser{
+			userID:      existing.ID,
+			admin:       existing.Admin,
+			reactivated: existing.WorkosDeletedAt.Valid,
+			existing:    true,
+			prevEmail:   existing.Email,
+		}, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return resolvedUser{}, fmt.Errorf("lookup user by email: %w", err)
 	}
+
+	candidateID := users.UserIDFromWorkOSID(idpUser.Sub)
 	if idpUser.ExternalID != "" {
-		return idpUser.ExternalID, false, false
+		candidateID = idpUser.ExternalID
 	}
-	return users.UserIDFromWorkOSID(idpUser.Sub), false, false
+
+	existingByID, err := userQueries.GetUser(ctx, candidateID)
+	switch {
+	case err == nil:
+		return resolvedUser{
+			userID:      existingByID.ID,
+			admin:       existingByID.Admin,
+			reactivated: existingByID.WorkosDeletedAt.Valid,
+			existing:    true,
+			prevEmail:   existingByID.Email,
+		}, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return resolvedUser{}, fmt.Errorf("lookup user by id: %w", err)
+	}
+
+	return resolvedUser{
+		userID:      candidateID,
+		admin:       false,
+		reactivated: false,
+		existing:    false,
+		prevEmail:   "",
+	}, nil
+}
+
+func (r *Resolver) rejectCollidingGmailAlias(ctx context.Context, userQueries *userRepo.Queries, idpUser *IDPUserInfo, resolved resolvedUser) error {
+	if !emailnorm.IsGmailDomain(idpUser.Email) {
+		return nil
+	}
+
+	canonicalEmail := emailnorm.Canonicalize(idpUser.Email)
+	if resolved.existing && emailnorm.Canonicalize(resolved.prevEmail) == canonicalEmail {
+		return nil
+	}
+
+	other, err := userQueries.GetOtherUserByCanonicalGmailEmail(ctx, userRepo.GetOtherUserByCanonicalGmailEmailParams{
+		ExcludeUserID:  resolved.userID,
+		CanonicalEmail: canonicalEmail,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("lookup normalized email alias: %w", err)
+	}
+
+	if other.BlacklistedAt.Valid {
+		return ErrUserBlocked
+	}
+
+	r.logger.WarnContext(ctx, "rejected sign-up matching existing normalized email alias",
+		attr.SlogAuthUserEmail(idpUser.Email),
+		attr.SlogWorkOSUserID(idpUser.Sub),
+		attr.SlogUserID(other.ID),
+	)
+	return ErrDuplicateEmailAlias
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and
@@ -541,16 +652,10 @@ type IDPMembershipRole struct {
 func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, opts IDPLoginOptions) (IDPLoginResult, error) {
 	// A user staff blocked from the platform gets no session on any login
 	// surface, and nothing is written for them: not the user upsert, not the
-	// membership sync. Checked by email before the upsert, then by user ID in
-	// case the identity provider changed the email. Read uncached so a fresh
-	// block applies at once.
-	blockedEmail, err := r.userRepo.IsEmailBlacklisted(ctx, idpUser.Email)
-	if err != nil {
-		return IDPLoginResult{}, fmt.Errorf("check user email block: %w", err)
-	}
-	if blockedEmail {
-		return IDPLoginResult{}, ErrUserBlocked
-	}
+	// membership sync. upsertUserFromIDP checks canonical email blocklist and
+	// Gmail/Googlemail alias collisions before writing; then we check by user
+	// ID in case the identity provider changed the email. Read uncached so a
+	// fresh block applies at once.
 	upserted, err := r.upsertUserFromIDP(ctx, idpUser, opts.Attribution)
 	if err != nil {
 		return IDPLoginResult{}, err

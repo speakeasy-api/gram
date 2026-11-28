@@ -85,3 +85,81 @@ func TestGateFailsClosedWithoutALoadedSet(t *testing.T) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeUnexpected, shareable.Code)
 }
+
+func TestBlockedEmail_NormalizesGmailAliases(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "userblock_gmail_aliases")
+	require.NoError(t, err)
+
+	users := usersrepo.New(conn)
+	seeded := []struct {
+		id    string
+		email string
+	}{
+		{id: "blocked-plain-gmail", email: "alice@gmail.com"},
+		{id: "blocked-googlemail-alias", email: "B.o.b+orig@googlemail.com"},
+		{id: "blocked-non-gmail", email: "carol.smith+work@example.com"},
+		{id: "blocked-leading-v-gmail", email: "victor@gmail.com"},
+		{id: "blocked-trailing-v-domain", email: "dev@company.dev"},
+	}
+	for _, u := range seeded {
+		_, err := users.UpsertUser(ctx, usersrepo.UpsertUserParams{
+			ID:          u.id,
+			Email:       u.email,
+			DisplayName: u.id,
+			PhotoUrl:    conv.ToPGTextEmpty(""),
+			Admin:       false,
+		})
+		require.NoError(t, err)
+		require.NoError(t, users.SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
+			Blacklisted: true,
+			ID:          u.id,
+		}))
+	}
+	userblock.Forget(conn)
+
+	cases := []struct {
+		name    string
+		email   string
+		blocked bool
+	}{
+		{name: "exact gmail", email: "alice@gmail.com", blocked: true},
+		{name: "dotted gmail", email: "a.l.i.c.e@gmail.com", blocked: true},
+		{name: "plus-tagged gmail", email: "alice+tag@gmail.com", blocked: true},
+		{name: "dotted plus googlemail uppercase whitespace", email: "  A.L.I.C.E+puppet@GoogleMail.COM  ", blocked: true},
+		{name: "googlemail blocked matches plain gmail", email: "bob@gmail.com", blocked: true},
+		{name: "googlemail blocked matches other alias", email: "b.ob+new@gmail.com", blocked: true},
+		{name: "gmail subdomain does not match", email: "alice@sub.gmail.com", blocked: false},
+		{name: "different gmail user does not match", email: "dave@gmail.com", blocked: false},
+		{name: "non-gmail exact match case-insensitive", email: "CAROL.SMITH+WORK@Example.com", blocked: true},
+		{name: "non-gmail dots stripped does not match", email: "carolsmith+work@example.com", blocked: false},
+		{name: "non-gmail plus stripped does not match", email: "carol.smith@example.com", blocked: false},
+		{name: "leading v gmail alias matches", email: "v.i.c.t.o.r+tag@googlemail.com", blocked: true},
+		{name: "leading v gmail is not stripped to ictor", email: "ictor@gmail.com", blocked: false},
+		{name: "vertical tab whitespace still trims cleanly", email: "\v  victor@gmail.com  \v", blocked: true},
+		{name: "trailing v domain exact matches", email: "DEV@company.dev", blocked: true},
+		{name: "trailing v domain is not stripped to de", email: "dev@company.de", blocked: false},
+	}
+
+	type directDBTX struct {
+		usersrepo.DBTX
+	}
+
+	gate := userblock.NewGate(conn)
+	direct := directDBTX{DBTX: conn}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotGate, err := gate.BlockedEmail(ctx, tc.email)
+			require.NoError(t, err)
+			require.Equal(t, tc.blocked, gotGate, "in-memory gate mismatch for %q", tc.email)
+
+			gotDirect, err := userblock.BlockedEmailIn(ctx, direct, tc.email)
+			require.NoError(t, err)
+			require.Equal(t, tc.blocked, gotDirect, "direct SQL check mismatch for %q", tc.email)
+		})
+	}
+}

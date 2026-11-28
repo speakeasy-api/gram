@@ -15,13 +15,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/emailnorm"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -126,7 +126,7 @@ func Forget(db *pgxpool.Pool) {
 	snap.mu.Unlock()
 }
 
-// blockedSet holds blocked user IDs and their lowercased emails.
+// blockedSet holds blocked user IDs and their canonicalized emails.
 type blockedSet struct {
 	userIDs map[string]struct{}
 	emails  map[string]struct{}
@@ -161,9 +161,10 @@ func (g *Gate) Blocked(ctx context.Context, userID string) (bool, error) {
 }
 
 // BlockedEmail reports whether a blocked user holds email, matched
-// case-insensitively. It covers paths that know a person only by email.
+// case-insensitively and across Gmail/Googlemail alias variations. It covers
+// paths that know a person only by email.
 func (g *Gate) BlockedEmail(ctx context.Context, email string) (bool, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = emailnorm.Canonicalize(email)
 	if g == nil || email == "" {
 		return false, nil
 	}
@@ -221,8 +222,8 @@ func (s *snapshot) current(ctx context.Context, now time.Time) (blockedSet, erro
 	fresh := blockedSet{userIDs: make(map[string]struct{}, len(rows)), emails: make(map[string]struct{}, len(rows))}
 	for _, row := range rows {
 		fresh.userIDs[row.ID] = struct{}{}
-		if row.Email != "" {
-			fresh.emails[row.Email] = struct{}{}
+		if canonical := emailnorm.Canonicalize(row.Email); canonical != "" {
+			fresh.emails[canonical] = struct{}{}
 		}
 	}
 	s.mu.Lock()
@@ -237,10 +238,11 @@ func BlockedEmailIn(ctx context.Context, db repo.DBTX, email string) (bool, erro
 	if pool, ok := db.(*pgxpool.Pool); ok {
 		return NewGate(pool).BlockedEmail(ctx, email)
 	}
-	if strings.TrimSpace(email) == "" {
+	canonical := emailnorm.Canonicalize(email)
+	if canonical == "" {
 		return false, nil
 	}
-	blocked, err := repo.New(db).IsEmailBlacklisted(ctx, email)
+	blocked, err := repo.New(db).IsEmailBlacklisted(ctx, canonical)
 	if err != nil {
 		return false, fmt.Errorf("read email block state: %w", err)
 	}

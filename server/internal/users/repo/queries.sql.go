@@ -315,6 +315,49 @@ func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetCo
 	return items, nil
 }
 
+const getOtherUserByCanonicalGmailEmail = `-- name: GetOtherUserByCanonicalGmailEmail :one
+SELECT id, email, blacklisted_at
+FROM users
+WHERE id <> $1::text
+  AND (
+    lower(btrim(email, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+    OR lower(btrim(email, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
+  )
+  AND strpos(lower(btrim(email, E' \t\n\r\f\013')), '@') > 1
+  AND strpos(
+    substr(
+      lower(btrim(email, E' \t\n\r\f\013')),
+      strpos(lower(btrim(email, E' \t\n\r\f\013')), '@') + 1
+    ),
+    '@'
+  ) = 0
+  AND replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+  AND (replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com') = $2::text
+ORDER BY (blacklisted_at IS NOT NULL) DESC, created_at ASC, id ASC
+LIMIT 1
+`
+
+type GetOtherUserByCanonicalGmailEmailParams struct {
+	ExcludeUserID  string
+	CanonicalEmail string
+}
+
+type GetOtherUserByCanonicalGmailEmailRow struct {
+	ID            string
+	Email         string
+	BlacklistedAt pgtype.Timestamptz
+}
+
+// Finds another user whose email normalizes to the same canonical Gmail
+// address (collapsing dots, +tags, and googlemail.com). Used on new-user
+// creation to reject duplicate accounts created with Gmail/Googlemail aliases.
+func (q *Queries) GetOtherUserByCanonicalGmailEmail(ctx context.Context, arg GetOtherUserByCanonicalGmailEmailParams) (GetOtherUserByCanonicalGmailEmailRow, error) {
+	row := q.db.QueryRow(ctx, getOtherUserByCanonicalGmailEmail, arg.ExcludeUserID, arg.CanonicalEmail)
+	var i GetOtherUserByCanonicalGmailEmailRow
+	err := row.Scan(&i.ID, &i.Email, &i.BlacklistedAt)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, blacklisted_at, created_at, updated_at FROM users
 WHERE id = $1
@@ -463,16 +506,56 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 }
 
 const isEmailBlacklisted = `-- name: IsEmailBlacklisted :one
+WITH target AS (
+  SELECT CASE
+    WHEN lower(btrim($1::text, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+      OR lower(btrim($1::text, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
+    THEN CASE
+      WHEN strpos(lower(btrim($1::text, E' \t\n\r\f\013')), '@') > 1
+       AND strpos(
+         substr(
+           lower(btrim($1::text, E' \t\n\r\f\013')),
+           strpos(lower(btrim($1::text, E' \t\n\r\f\013')), '@') + 1
+         ),
+         '@'
+       ) = 0
+       AND replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+      THEN replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com'
+      ELSE lower(btrim($1::text, E' \t\n\r\f\013'))
+    END
+    ELSE lower(btrim($1::text, E' \t\n\r\f\013'))
+  END AS canonical_email
+)
 SELECT EXISTS (
   SELECT 1
-  FROM users
-  WHERE lower(email) = lower($1::text)
-    AND blacklisted_at IS NOT NULL
+  FROM users, target
+  WHERE blacklisted_at IS NOT NULL
+    AND (
+      CASE
+        WHEN lower(btrim(users.email, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+          OR lower(btrim(users.email, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
+        THEN CASE
+          WHEN strpos(lower(btrim(users.email, E' \t\n\r\f\013')), '@') > 1
+           AND strpos(
+             substr(
+               lower(btrim(users.email, E' \t\n\r\f\013')),
+               strpos(lower(btrim(users.email, E' \t\n\r\f\013')), '@') + 1
+             ),
+             '@'
+           ) = 0
+           AND replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+          THEN replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com'
+          ELSE lower(btrim(users.email, E' \t\n\r\f\013'))
+        END
+        ELSE lower(btrim(users.email, E' \t\n\r\f\013'))
+      END
+    ) = target.canonical_email
 )::boolean AS blacklisted
 `
 
-// Whether a blocked user holds this email, read uncached, matched
-// case-insensitively. Login checks it before writing anything for the user.
+// Whether a blocked user holds this email or a Gmail/Googlemail alias of it,
+// read uncached. Login and invite paths check it before writing anything for
+// the user.
 func (q *Queries) IsEmailBlacklisted(ctx context.Context, email string) (bool, error) {
 	row := q.db.QueryRow(ctx, isEmailBlacklisted, email)
 	var blacklisted bool
@@ -553,6 +636,18 @@ func (q *Queries) ListBlacklistedUsers(ctx context.Context) ([]ListBlacklistedUs
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCanonicalGmailEmail = `-- name: LockCanonicalGmailEmail :exec
+SELECT pg_advisory_xact_lock(hashtextextended('emailnorm:' || $1::text, 0))
+`
+
+// Acquires a transaction-scoped advisory lock for one canonical Gmail mailbox
+// so concurrent sign-ups or WorkOS user-sync events using different aliases of
+// the same mailbox serialize their duplicate check and insert.
+func (q *Queries) LockCanonicalGmailEmail(ctx context.Context, canonicalEmail string) error {
+	_, err := q.db.Exec(ctx, lockCanonicalGmailEmail, canonicalEmail)
+	return err
 }
 
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one

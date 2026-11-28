@@ -421,6 +421,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
 			return oops.E(oops.CodeBadRequest, nil, "failed to exchange IDP code")
 		}
+		if errors.Is(err, identity.ErrDuplicateEmailAlias) {
+			logger.WarnContext(ctx, "mcp callback: rejected duplicate email alias",
+				attr.SlogAuthUserEmail(idpUser.Email),
+				attr.SlogWorkOSUserID(idpUser.Sub),
+			)
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
+			return oops.E(oops.CodeBadRequest, nil, "failed to exchange IDP code")
+		}
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

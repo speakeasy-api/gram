@@ -460,6 +460,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		userblock.LogRefusal(ctx, s.logger, "dashboard_login", idpUser.Sub)
 		return redirectWithError(authErrInit, err)
 	}
+	if errors.Is(err, identity.ErrDuplicateEmailAlias) {
+		logger.WarnContext(ctx, "dashboard callback: rejected duplicate email alias",
+			attr.SlogAuthUserEmail(idpUser.Email),
+			attr.SlogWorkOSUserID(idpUser.Sub),
+		)
+		return redirectWithError(authErrInit, err)
+	}
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
