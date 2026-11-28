@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -133,11 +135,17 @@ type WorkerOptions struct {
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
-	ChatClient                   *chat.Client
-	OpenRouter                   openrouter.Provisioner
-	OpenRouterSpend              openrouter.SpendClient
-	K8sClient                    *k8s.KubernetesClients
-	ExpectedTargetCNAME          string
+	// TranscriptShadow opens encrypted chat transcript shadows. Nil reads
+	// plaintext for every project.
+	TranscriptShadow *transcriptstore.Store
+	// TranscriptShadowProjectIDs are the projects that capture encrypted
+	// shadows. Their background chat reads open shadows instead of plaintext.
+	TranscriptShadowProjectIDs []uuid.UUID
+	ChatClient                 *chat.Client
+	OpenRouter                 openrouter.Provisioner
+	OpenRouterSpend            openrouter.SpendClient
+	K8sClient                  *k8s.KubernetesClients
+	ExpectedTargetCNAME        string
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
@@ -287,6 +295,8 @@ func ForDeploymentProcessing(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
+		TranscriptShadow:               nil,
+		TranscriptShadowProjectIDs:     nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		OpenRouterSpend:                nil,
@@ -390,6 +400,8 @@ func NewTemporalWorker(
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
 		ChatMessageWriter:              nil,
+		TranscriptShadow:               nil,
+		TranscriptShadowProjectIDs:     nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		OpenRouterSpend:                nil,
@@ -459,6 +471,8 @@ func NewTemporalWorker(
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
 			SlackDirectoryTokenRefresher:   conv.Default(o.SlackDirectoryTokenRefresher, opts.SlackDirectoryTokenRefresher),
 			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			TranscriptShadow:               conv.Default(o.TranscriptShadow, opts.TranscriptShadow),
+			TranscriptShadowProjectIDs:     conv.DefaultSlice(o.TranscriptShadowProjectIDs, opts.TranscriptShadowProjectIDs),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			OpenRouterSpend:                conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
 			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
@@ -639,6 +653,9 @@ func NewTemporalWorker(
 		opts.StaffOrganization,
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
+	if activities.analyzeBatch != nil {
+		activities.analyzeBatch.WithTranscriptShadowReads(opts.TranscriptShadow, opts.TranscriptShadowProjectIDs...)
+	}
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
