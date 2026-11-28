@@ -115,6 +115,8 @@ type Server struct {
 	ListSignupOffers                           http.Handler
 	CreateSignupOffer                          http.Handler
 	UpdateSignupOffer                          http.Handler
+	GetSelfServeStatus                         http.Handler
+	SetSelfServeDisabled                       http.Handler
 	ListPlatformMcpFeedback                    http.Handler
 	GetStripeSubscriptionCandidate             http.Handler
 	SetStripeSubscription                      http.Handler
@@ -286,6 +288,8 @@ func New(
 			{"ListSignupOffers", "GET", "/admin/signupOffers"},
 			{"CreateSignupOffer", "POST", "/admin/signupOffers.create"},
 			{"UpdateSignupOffer", "POST", "/admin/signupOffers.update"},
+			{"GetSelfServeStatus", "GET", "/admin/selfServe"},
+			{"SetSelfServeDisabled", "POST", "/admin/selfServe.set"},
 			{"ListPlatformMcpFeedback", "GET", "/admin/platformMcpFeedback.list"},
 			{"GetStripeSubscriptionCandidate", "GET", "/admin/organization.stripeSubscriptionCandidate"},
 			{"SetStripeSubscription", "POST", "/admin/organization.setStripeSubscription"},
@@ -429,6 +433,8 @@ func New(
 		ListSignupOffers:                           NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
 		CreateSignupOffer:                          NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
 		UpdateSignupOffer:                          NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		GetSelfServeStatus:                         NewGetSelfServeStatusHandler(e.GetSelfServeStatus, mux, decoder, encoder, errhandler, formatter),
+		SetSelfServeDisabled:                       NewSetSelfServeDisabledHandler(e.SetSelfServeDisabled, mux, decoder, encoder, errhandler, formatter),
 		ListPlatformMcpFeedback:                    NewListPlatformMcpFeedbackHandler(e.ListPlatformMcpFeedback, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscriptionCandidate:             NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
 		SetStripeSubscription:                      NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
@@ -579,6 +585,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSignupOffers = m(s.ListSignupOffers)
 	s.CreateSignupOffer = m(s.CreateSignupOffer)
 	s.UpdateSignupOffer = m(s.UpdateSignupOffer)
+	s.GetSelfServeStatus = m(s.GetSelfServeStatus)
+	s.SetSelfServeDisabled = m(s.SetSelfServeDisabled)
 	s.ListPlatformMcpFeedback = m(s.ListPlatformMcpFeedback)
 	s.GetStripeSubscriptionCandidate = m(s.GetStripeSubscriptionCandidate)
 	s.SetStripeSubscription = m(s.SetStripeSubscription)
@@ -728,6 +736,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSignupOffersHandler(mux, h.ListSignupOffers)
 	MountCreateSignupOfferHandler(mux, h.CreateSignupOffer)
 	MountUpdateSignupOfferHandler(mux, h.UpdateSignupOffer)
+	MountGetSelfServeStatusHandler(mux, h.GetSelfServeStatus)
+	MountSetSelfServeDisabledHandler(mux, h.SetSelfServeDisabled)
 	MountListPlatformMcpFeedbackHandler(mux, h.ListPlatformMcpFeedback)
 	MountGetStripeSubscriptionCandidateHandler(mux, h.GetStripeSubscriptionCandidate)
 	MountSetStripeSubscriptionHandler(mux, h.SetStripeSubscription)
@@ -5820,6 +5830,112 @@ func NewUpdateSignupOfferHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSignupOffer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSelfServeStatusHandler configures the mux to serve the "admin"
+// service "getSelfServeStatus" endpoint.
+func MountGetSelfServeStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/selfServe", f)
+}
+
+// NewGetSelfServeStatusHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSelfServeStatus" endpoint.
+func NewGetSelfServeStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSelfServeStatusRequest(mux, decoder)
+		encodeResponse = EncodeGetSelfServeStatusResponse(encoder)
+		encodeError    = EncodeGetSelfServeStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSelfServeStatus")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSelfServeDisabledHandler configures the mux to serve the "admin"
+// service "setSelfServeDisabled" endpoint.
+func MountSetSelfServeDisabledHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/selfServe.set", f)
+}
+
+// NewSetSelfServeDisabledHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setSelfServeDisabled" endpoint.
+func NewSetSelfServeDisabledHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSelfServeDisabledRequest(mux, decoder)
+		encodeResponse = EncodeSetSelfServeDisabledResponse(encoder)
+		encodeError    = EncodeSetSelfServeDisabledError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSelfServeDisabled")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

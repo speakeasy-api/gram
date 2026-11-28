@@ -32,6 +32,11 @@ func GetAgentsPath() string {
 	return "/rpc/agents.get"
 }
 
+// GetRuntimeGatewayAgentsPath returns the URL path to the agents service getRuntimeGateway HTTP endpoint.
+func GetRuntimeGatewayAgentsPath() string {
+	return "/rpc/agents.getRuntimeGateway"
+}
+
 // RenameAgentsPath returns the URL path to the agents service rename HTTP endpoint.
 func RenameAgentsPath() string {
 	return "/rpc/agents.rename"

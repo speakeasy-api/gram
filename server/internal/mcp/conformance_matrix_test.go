@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -465,6 +464,7 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
+	setMCPNotFoundHandler(t, router)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -480,6 +480,10 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 		missing,
 		denied,
 		{router: router, path: "/platform/mcp/conformance-missing-target", supported: mcpversions.SupportedPlatformToolset()},
+		// URLs no route matches answer through the not-found hook with the
+		// same shapes as a missing slug.
+		{router: router, path: "/mcp/conformance-missing-target/extra", supported: mcpversions.SupportedHostedToolset()},
+		{router: router, path: "/mcp", supported: mcpversions.SupportedHostedToolset()},
 	} {
 		for _, row := range missingTargetRows {
 			t.Run(target.path+"/modern-meta-without-header/"+row.name, func(t *testing.T) {
@@ -652,12 +656,8 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	managedID := createAssistant(t, ti, authCtx, "Managed")
-	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
-		ProjectID:   *authCtx.ProjectID,
-		AssistantID: managedID,
-	})
-	require.NoError(t, err)
+	managedID, managedAgentID := managedAssistantWithAgent(t, ti, authCtx)
+	grantProjectRead(t, ti, authCtx)
 
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
@@ -665,26 +665,8 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 	runConformanceMatrix(t, conformanceTarget{
 		router:          router,
 		path:            "/platform/mcp/" + platformtools.PlatformMCPReadToolsetSlug,
-		authorization:   "Bearer " + mintAssistantToken(t, ti, authCtx, managedID),
+		authorization:   "Bearer " + mintAgentTurnCredential(t, ti, authCtx, managedID, managedAgentID),
 		supported:       mcpversions.SupportedPlatformToolset(),
 		assignsSessions: false,
-	})
-}
-
-func TestConformanceMatrix_AgentGateway(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fixture := seedAgentGateway(t, ctx, ti)
-
-	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service.Service, nil)
-
-	runConformanceMatrix(t, conformanceTarget{
-		router:          router,
-		path:            "/agent-mcp/" + fixture.agent.ID.String(),
-		authorization:   "Bearer " + fixture.token,
-		supported:       mcpversions.SupportedMetaServer(),
-		assignsSessions: true,
 	})
 }

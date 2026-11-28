@@ -188,6 +188,72 @@ describe("AuthProvider organization telemetry group", () => {
     },
   );
 
+  it("sends an organization waiting on a card to the start-trial gate", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({ trialPendingPaymentMethod: true }),
+    );
+
+    renderGate("/test-org");
+
+    expect(screen.getByTestId("location").textContent).toBe("/start-trial");
+    expect(screen.queryByTestId("book-demo")).toBeNull();
+    expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
+  });
+
+  it.each(["/start-trial", "/start-trial?session_id=cs_test_example"])(
+    "renders the start-trial gate in place at %s",
+    (path) => {
+      mocks.sessionData.mockReturnValue(
+        gatedSession({ trialPendingPaymentMethod: true }),
+      );
+
+      renderGate(path);
+
+      expect(screen.getByTestId("location").textContent).toBe(path);
+      expect(screen.getByTestId("app")).toBeTruthy();
+      expect(screen.queryByTestId("book-demo")).toBeNull();
+    },
+  );
+
+  it("keeps the demo booking gate when no card is awaited", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({ trialPendingPaymentMethod: false }),
+    );
+
+    renderGate("/start-trial");
+
+    expect(screen.getByTestId("book-demo")).toBeTruthy();
+    expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it.each(["/explore-demo", "/test-org/billing/setup"])(
+    "keeps %s reachable while a card is awaited",
+    (path) => {
+      mocks.sessionData.mockReturnValue(
+        gatedSession({ trialPendingPaymentMethod: true }),
+      );
+
+      renderGate(path);
+
+      expect(screen.getByTestId("location").textContent).toBe(path);
+      expect(screen.getByTestId("app")).toBeTruthy();
+    },
+  );
+
+  it("shows the switcher before the start-trial gate for multi-org users", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        organizations: [ORG, OTHER_ORG],
+        trialPendingPaymentMethod: true,
+      }),
+    );
+
+    renderGate("/start-trial");
+
+    expect(screen.getByTestId("switch-org")).toBeTruthy();
+    expect(screen.queryByTestId("app")).toBeNull();
+  });
+
   it("registers the organization when the switcher takes precedence", () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({ organizations: [ORG, OTHER_ORG] }),

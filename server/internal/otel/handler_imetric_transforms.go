@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -22,12 +23,14 @@ type MetricTransformHandler struct {
 	instruments     *enrich.Instruments
 	metricPublisher gcp.Publisher[*otelv1.Metric]
 	enrichers       []enrich.MetricEnricher
+	orgs            *orgDisabledChecker
 }
 
 func NewMetricTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	metricPublisher gcp.Publisher[*otelv1.Metric],
+	replicaDB database.DBTX,
 ) *MetricTransformHandler {
 	logger = logger.With(attr.SlogComponent("metric-transform-handler"))
 
@@ -36,10 +39,15 @@ func NewMetricTransformHandler(
 		instruments:     enrich.NewInstruments(logger, meterProvider),
 		metricPublisher: metricPublisher,
 		enrichers:       nil,
+		orgs:            newOrgDisabledChecker(replicaDB),
 	}
 }
 
 func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.InboundMetric, _ gcp.MessageMetadata) error {
+	if drop, err := h.orgs.Drop(ctx, h.logger, item.GetProvenance().GetOrganizationId()); err != nil || drop {
+		return err
+	}
+
 	out, err := transformInboundMetric(ctx, h.instruments, item, h.enrichers)
 	if err != nil {
 		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound metric")

@@ -111,6 +111,8 @@ type Endpoints struct {
 	ListSignupOffers                           goa.Endpoint
 	CreateSignupOffer                          goa.Endpoint
 	UpdateSignupOffer                          goa.Endpoint
+	GetSelfServeStatus                         goa.Endpoint
+	SetSelfServeDisabled                       goa.Endpoint
 	ListPlatformMcpFeedback                    goa.Endpoint
 	GetStripeSubscriptionCandidate             goa.Endpoint
 	SetStripeSubscription                      goa.Endpoint
@@ -278,6 +280,8 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSignupOffers:                           NewListSignupOffersEndpoint(s, a.APIKeyAuth),
 		CreateSignupOffer:                          NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
 		UpdateSignupOffer:                          NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		GetSelfServeStatus:                         NewGetSelfServeStatusEndpoint(s, a.APIKeyAuth),
+		SetSelfServeDisabled:                       NewSetSelfServeDisabledEndpoint(s, a.APIKeyAuth),
 		ListPlatformMcpFeedback:                    NewListPlatformMcpFeedbackEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:             NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                      NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -425,6 +429,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSignupOffers = m(e.ListSignupOffers)
 	e.CreateSignupOffer = m(e.CreateSignupOffer)
 	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
+	e.GetSelfServeStatus = m(e.GetSelfServeStatus)
+	e.SetSelfServeDisabled = m(e.SetSelfServeDisabled)
 	e.ListPlatformMcpFeedback = m(e.ListPlatformMcpFeedback)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
@@ -2596,6 +2602,52 @@ func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.UpdateSignupOffer(ctx, p)
+	}
+}
+
+// NewGetSelfServeStatusEndpoint returns an endpoint function that calls the
+// method "getSelfServeStatus" of service "admin".
+func NewGetSelfServeStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSelfServeStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSelfServeStatus(ctx, p)
+	}
+}
+
+// NewSetSelfServeDisabledEndpoint returns an endpoint function that calls the
+// method "setSelfServeDisabled" of service "admin".
+func NewSetSelfServeDisabledEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSelfServeDisabledPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSelfServeDisabled(ctx, p)
 	}
 }
 

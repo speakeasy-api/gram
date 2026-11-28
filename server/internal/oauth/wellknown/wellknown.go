@@ -44,6 +44,12 @@ const OAuthAuthorizationServerPath = "/.well-known/oauth-authorization-server"
 // https://datatracker.ietf.org/doc/html/rfc9728
 const OAuthProtectedResourcePath = "/.well-known/oauth-protected-resource"
 
+// OpenIDConfigurationPath is the well-known URI path for OpenID Provider
+// Metadata as defined by OpenID Connect Discovery 1.0.
+//
+// https://openid.net/specs/openid-connect-discovery-1_0.html
+const OpenIDConfigurationPath = "/.well-known/openid-configuration"
+
 // OAuthProtectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
 //
 // Used for both serving Speakeasy's own metadata documents and decoding metadata

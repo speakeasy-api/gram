@@ -30,10 +30,10 @@ func (s *ServiceCore) executionTrigger(ctx context.Context, assistant assistantR
 	return s.resolveDashboardTriggerInstance(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, assistant.Name)
 }
 
-// mintTurnCredential issues the principal credential an agent-backed turn runs
-// with. A turn whose event identified its user runs as the agent acting for
-// that user; any other turn runs as the workload identity of its trigger, with
-// no user recorded. The credential carries no grants: admission bounds every
+// mintTurnCredential issues the principal credential a turn runs with.
+// A turn whose event identified its user runs as the agent acting for that
+// user; any other turn runs as the workload identity of its trigger, with no
+// user recorded. The credential carries no grants: admission bounds every
 // request by the live policies of the agent, its owner, and that user.
 // Identity rejections wrap ErrTurnIdentity.
 func (s *ServiceCore) mintTurnCredential(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, identity turnIdentity) (string, error) {

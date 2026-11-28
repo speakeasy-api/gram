@@ -135,6 +135,7 @@ trackedFiles:
   src/funcs/agentsDelete.ts: {}
   src/funcs/agentsDeletePolicyGrant.ts: {}
   src/funcs/agentsGet.ts: {}
+  src/funcs/agentsGetRuntimeGateway.ts: {}
   src/funcs/agentsList.ts: {}
   src/funcs/agentsListConnectionBlocks.ts: {}
   src/funcs/agentsListDelegableGrants.ts: {}
@@ -868,6 +869,7 @@ trackedFiles:
   src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateStripePortalSession.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
+  src/funcs/usageCreateTrialPaymentMethodCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
   src/funcs/usageGetInferenceSpendCaps.ts: {}
   src/funcs/usageGetMeterUsage.ts: {}
@@ -998,6 +1000,7 @@ trackedFiles:
   src/models/components/agentrequestableproject.ts: {}
   src/models/components/agentrequestaccessform.ts: {}
   src/models/components/agentrequestaccessresult.ts: {}
+  src/models/components/agentruntimegateway.ts: {}
   src/models/components/agentserverconnection.ts: {}
   src/models/components/agentsession.ts: {}
   src/models/components/agentsessionmeta.ts: {}
@@ -2232,6 +2235,7 @@ trackedFiles:
   src/models/components/toolvariationgroup.ts: {}
   src/models/components/toolvariationgroupresult.ts: {}
   src/models/components/topserver.ts: {}
+  src/models/components/trialcardrejection.ts: {}
   src/models/components/triggeranalysisrequestbody.ts: {}
   src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
@@ -2526,6 +2530,7 @@ trackedFiles:
   src/models/operations/createtemporarygrant.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
+  src/models/operations/createtrialpaymentmethodcheckout.ts: {}
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createtunneledmcpserver.ts: {}
   src/models/operations/createunproxiedmcpserver.ts: {}
@@ -2647,6 +2652,7 @@ trackedFiles:
   src/models/operations/getagentclaudeobservabilityplugin.ts: {}
   src/models/operations/getagentmyconnections.ts: {}
   src/models/operations/getagentplugins.ts: {}
+  src/models/operations/getagentruntimegateway.ts: {}
   src/models/operations/getagentsessionmeta.ts: {}
   src/models/operations/getaiintegrationconfig.ts: {}
   src/models/operations/getanthropicinferenceconfig.ts: {}
@@ -3340,6 +3346,8 @@ trackedFiles:
   src/react-query/agentRequestAccess.ts: {}
   src/react-query/agentRequestableAccess.core.ts: {}
   src/react-query/agentRequestableAccess.ts: {}
+  src/react-query/agentRuntimeGateway.core.ts: {}
+  src/react-query/agentRuntimeGateway.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
   src/react-query/agentSessions.core.ts: {}
@@ -3500,6 +3508,7 @@ trackedFiles:
   src/react-query/createTemporaryGrant.ts: {}
   src/react-query/createToolset.ts: {}
   src/react-query/createTopUpCheckout.ts: {}
+  src/react-query/createTrialPaymentMethodCheckout.ts: {}
   src/react-query/createTrigger.ts: {}
   src/react-query/createTunneledMcpServer.ts: {}
   src/react-query/createUnproxiedMcpServer.ts: {}
@@ -6191,6 +6200,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createTrialPaymentMethodCheckout:
+    speakeasy-default-create-trial-payment-method-checkout:
+      parameters:
+        query:
+          theme: "light"
+      responses:
+        "200":
+          application/json: {"client_secret": "<value>", "publishable_key": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createTriggerInstance:
     speakeasy-default-create-trigger-instance:
       requestBody:
@@ -7693,6 +7714,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getAgentRuntimeGateway:
+    speakeasy-default-get-agent-runtime-gateway:
+      parameters:
+        query:
+          agent_id: "65ad1a91-336c-4473-8df7-662b7cb85f30"
+      responses:
+        "200":
+          application/json: {"available": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getAgentSessionMeta:
     speakeasy-default-get-agent-session-meta:
       parameters:
@@ -8154,11 +8187,11 @@ examples:
     speakeasy-default-get-intent-guardrail:
       responses:
         "200":
-          application/json: {"contracts": [{"conditions": [{"join": "and", "label": "<value>", "op": "includes", "values": ["<value 1>"]}], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "block", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
+          application/json: {"contracts": [{"conditions": [], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "clarify", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": [], "version": "<value>"}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getInternalSessionIssuer:
     speakeasy-default-get-internal-session-issuer:
       responses:
@@ -8397,9 +8430,9 @@ examples:
         "200":
           application/json: {"found": true, "logging_enabled": true, "viewer_scope": "own"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getMetaMcpServer:
     speakeasy-default-get-meta-mcp-server:
       parameters:
@@ -11008,11 +11041,11 @@ examples:
         application/json: {"user_session_issuer_id": "3a5c8124-c801-4f27-8efc-d863b859804a"}
       responses:
         "200":
-          application/json: {"logging_enabled": false, "problems": [], "problems_total": 218600, "viewer_scope": "own"}
+          application/json: {"logging_enabled": false, "problems": [], "problems_total": 873889, "viewer_scope": "all"}
         "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listMembers:
     speakeasy-default-list-members:
       responses:

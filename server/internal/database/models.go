@@ -5867,6 +5867,20 @@ type PlatformMcpSetupHandoff struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PlatformSwitch struct {
+	// @access: confidential
+	Key string
+	// @access: confidential
+	Engaged bool
+	// Email of the staff member who last changed the switch.
+	// @access: confidential-pii
+	UpdatedBy pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Plugin struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -8656,6 +8670,27 @@ type Trial struct {
 	ConvertedAt pgtype.Timestamptz
 	// @access: confidential
 	DemotedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type TrialPaymentMethod struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	StripeCustomerID string
+	// @access: restricted
+	StripePaymentMethodID string
+	// @access: restricted
+	CardFingerprint string
+	// @access: confidential
+	CardFunding string
+	// @access: restricted
+	StripeCheckoutSessionID string
+	// @access: confidential
+	RejectionReason pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

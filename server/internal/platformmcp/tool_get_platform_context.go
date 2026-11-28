@@ -9,11 +9,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-func registerGetPlatformContextTool(reg *Registrar) {
+func registerGetPlatformContextTool(reg *Registrar, freeTrial *FreeTrialStatus) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_platform_context",
 		Title:       "Show the Current Organization",
-		Description: "Show which organization this session is working in, explain how live RBAC affects the shared Platform MCP catalogue, and identify unsupported issuer and identity-chaining remediation workflows. Call this first in a new conversation before choosing a permitted workflow. To see which user and roles this session is connected as, call whoami.",
+		Description: "Show which organization this session is working in, explain how live RBAC affects the shared Platform MCP catalogue, and identify unsupported issuer and identity-chaining remediation workflows. Call this first in a new conversation before choosing a permitted workflow. When the result includes free_trial, the organization's free trial has not started: tell the user it starts once an organization admin adds a card, and show free_trial.start_url as a clickable link. To see which user and roles this session is connected as, call whoami.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -35,6 +35,7 @@ func registerGetPlatformContextTool(reg *Registrar) {
 			Overview:             platformOverview,
 			AvailableWorkflows:   available,
 			RequestableWorkflows: requestable,
+			FreeTrial:            freeTrial.Pending(ctx, principal.OrganizationID),
 		}, nil
 	})
 }

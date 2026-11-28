@@ -99,8 +99,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		})
 	} else {
 		authedCtx, workloadPlatform, err = s.authorizeWorkloadPlatform(ctx, token, platformtools.PlatformToolsetURL(s.serverURL, slug))
-		if !workloadPlatform {
-			authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		if !workloadPlatform && err == nil {
+			err = oops.C(oops.CodeUnauthorized)
 		}
 	}
 	if err != nil {
@@ -471,10 +471,11 @@ func (s *Service) callPlatformToolsetTool(
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")
 	toolCallEnv := toolconfig.ToolCallEnv{
-		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		GramEmail:  gramEmail,
-		GramChatID: chatIDHeader,
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+		GramEmail:   gramEmail,
+		GramChatID:  chatIDHeader,
 		// Platform toolsets serve Speakeasy's own tools, never customer functions.
 		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		Credentials: nil,

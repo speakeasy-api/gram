@@ -183,14 +183,13 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
-		agentMembership:  false,
 		caller:           emptyGatewayCaller(),
 		fromRequest:      mcpconnectionattempts.FromRequest(r),
 		skippedUpstreams: nil,
 		request:          nil,
 		projectID:        endpoint.ProjectID,
 		metaServerID:     endpoint.MetaMcpServerID.UUID,
-		// Agent gateways reach no consent page.
+		// This consent inventory has no machine caller.
 		agentID:             uuid.Nil,
 		organizationGateway: organizationGateway,
 		organizationID:      endpoint.OrganizationID,

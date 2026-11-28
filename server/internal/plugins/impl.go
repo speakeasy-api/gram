@@ -2397,7 +2397,7 @@ func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug strin
 		)
 		return false
 	}
-	if pin, _ := pins.Effective(); pin != nil {
+	if pin, _ := pins.Effective(orgID); pin != nil {
 		return pin.Version >= current
 	}
 

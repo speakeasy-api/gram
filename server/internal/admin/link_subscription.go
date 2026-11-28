@@ -150,7 +150,11 @@ func (s *Service) linkStripeSubscription(ctx context.Context, payload *gen.SetSt
 			return nil, fmt.Errorf("subscription committed; stop trial notifications: %w", err)
 		}
 	}
-	return s.adminOrganizationFromGetRow(updated), nil
+	detail, err := s.adminOrganizationDetail(ctx, updated)
+	if err != nil {
+		return nil, fmt.Errorf("subscription committed; read organization: %w", err)
+	}
+	return detail, nil
 }
 
 func (s *Service) activateManuallyLinkedPaygTx(ctx context.Context, tx pgx.Tx, org repo.AdminGetOrganizationRow, trial trialsrepo.Trial, hasTrial bool) error {

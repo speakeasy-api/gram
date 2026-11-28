@@ -265,6 +265,22 @@ export const TRIAL_STATES = [
 // every surface that reads it maps the state to a colour.
 export type TrialState = (typeof TRIAL_STATES)[number];
 
+// Why a card could not start a self-serve trial: it is prepaid, or it already
+// started another organization's trial.
+export type TrialCardRejectionReason = "prepaid_card" | "card_used";
+
+// Another organization that offered the same card. The server never sends the
+// card fingerprint or any Stripe identifier.
+export type AdminTrialCardSharingOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  // When that organization last offered a card.
+  card_added_at: string;
+  // Absent when the card started that organization's trial.
+  rejection_reason?: TrialCardRejectionReason;
+};
+
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
 export type AdminOrganization = {
@@ -289,6 +305,17 @@ export type AdminOrganization = {
   trial_tier?: string;
   trial_converted_at?: string;
   trial_demoted_at?: string;
+  // When the organization last offered a card to start its self-serve trial.
+  // Absent when it never offered one, and absent on list rows: only the record
+  // read selects it.
+  trial_card_added_at?: string;
+  // Why that card could not start the trial. Absent when it started the trial,
+  // and absent on list rows.
+  trial_card_rejection_reason?: TrialCardRejectionReason;
+  // Other organizations that offered the same card, oldest first, each with
+  // whether it started their trial. Absent when none did, and absent on list
+  // rows.
+  organizations_sharing_trial_card?: AdminTrialCardSharingOrganization[];
   // The flow that created the organization. Absent when nothing recorded one,
   // and absent on every row the list endpoint returns: only the record read
   // selects it.
@@ -376,6 +403,8 @@ export type ListOrganizationsParams = {
   account_types?: string[];
   trial_states?: string[];
   disabled_status?: "all" | "active" | "disabled";
+  /** Text rather than boolean: omitUnset drops false, which is a real filter. */
+  whitelisted?: "true" | "false";
   /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
   min_members?: number | string;
   /** Nonnegative int64. Unsafe numeric values are rejected before sending. */

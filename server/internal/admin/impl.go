@@ -570,6 +570,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
+	server.GetSelfServeStatus = service.preauthorizeAdmin(server.GetSelfServeStatus)
+	server.SetSelfServeDisabled = service.strictAdminJSON(server.SetSelfServeDisabled, func() any { return new(adminserver.SetSelfServeDisabledRequestBody) })
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
 	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
@@ -1040,6 +1042,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
+		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -1062,6 +1065,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
+		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -2117,7 +2121,7 @@ func (s *Service) readOrganizationAfterWrite(ctx context.Context, id string, err
 		return nil, oops.E(oops.CodeUnexpected, err, "%s", errMsg).LogError(ctx, s.logger)
 	}
 
-	return s.adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationDetail(ctx, row)
 }
 
 func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizationPayload) (*gen.AdminOrganization, error) {
@@ -2131,9 +2135,45 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
-	return s.adminOrganizationFromGetRow(row), nil
+	return s.adminOrganizationDetail(ctx, row)
 }
 
+// adminOrganizationDetail is the record view of one organization: the mapped
+// row plus the other organizations that offered the same card as its latest
+// one, so staff can see a card that is reused across organizations.
+func (s *Service) adminOrganizationDetail(ctx context.Context, row repo.AdminGetOrganizationRow) (*gen.AdminOrganization, error) {
+	organization := s.adminOrganizationFromGetRow(row)
+	if !row.TrialCardAddedAt.Valid {
+		return organization, nil
+	}
+
+	sharing, err := trialsRepo.New(s.db).ListOrganizationsSharingTrialCard(ctx, row.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations sharing trial card").LogError(ctx, s.logger)
+	}
+	organization.OrganizationsSharingTrialCard = trialCardSharingOrganizations(sharing)
+
+	return organization, nil
+}
+
+// trialCardSharingOrganizations projects the sharing rows without the card or
+// Stripe identifiers, which stay server-side.
+func trialCardSharingOrganizations(rows []trialsRepo.ListOrganizationsSharingTrialCardRow) []*gen.AdminTrialCardSharingOrganization {
+	organizations := make([]*gen.AdminTrialCardSharingOrganization, 0, len(rows))
+	for _, row := range rows {
+		organizations = append(organizations, &gen.AdminTrialCardSharingOrganization{
+			ID:              row.OrganizationID,
+			Name:            row.OrganizationName,
+			Slug:            row.OrganizationSlug,
+			CardAddedAt:     row.OfferedAt.Time.Format(time.RFC3339),
+			RejectionReason: conv.FromPGText[string](row.RejectionReason),
+		})
+	}
+	return organizations
+}
+
+// adminOrganizationFromGetRow maps the record row alone. The organizations
+// sharing its trial card need a second read, which adminOrganizationDetail adds.
 func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrganization {
 	return &gen.AdminOrganization{
 		ID:                             row.ID,
@@ -2153,6 +2193,9 @@ func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) 
 		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:               pgTimestampPtr(row.TrialConvertedAt),
 		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
+		TrialCardAddedAt:               pgTimestampPtr(row.TrialCardAddedAt),
+		TrialCardRejectionReason:       conv.FromPGText[string](row.TrialCardRejectionReason),
+		OrganizationsSharingTrialCard:  nil,
 		CreationSource:                 conv.FromPGText[string](row.CreationSource),
 		AdoptionDashboardURL:           conv.FromPGText[string](row.AdoptionDashboardUrl),
 		MemberCount:                    int(row.MemberCount),
@@ -2180,6 +2223,11 @@ func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *
 		TrialEndsAt:                    pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:               nil,
 		TrialDemotedAt:                 nil,
+		// The list reads neither. Each sharing lookup is a second query, so
+		// only the record view pays for it.
+		TrialCardAddedAt:              nil,
+		TrialCardRejectionReason:      nil,
+		OrganizationsSharingTrialCard: nil,
 		// The list does not select it. The record view asks for one organization
 		// and reads it there, like trial_tier above.
 		CreationSource:       nil,
