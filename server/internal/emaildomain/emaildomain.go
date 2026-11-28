@@ -20,40 +20,197 @@ const (
 	Business Class = "business"
 )
 
-// freeWebmailDomains are personal mailbox providers. Their domain names a mail
-// service, not the user's company.
+// freeWebmailDomains are personal mailbox providers, including the regional and
+// country-code domains a provider offers for new mailboxes. Their domain names
+// a mail service, not the user's company. Each domain is listed explicitly
+// rather than matched by provider name, because a provider's name under
+// another suffix is often an unrelated company or a parked domain that hosts
+// no mailboxes.
 var freeWebmailDomains = map[string]struct{}{
-	"126.com":        {},
-	"163.com":        {},
-	"aol.com":        {},
-	"fastmail.com":   {},
+	// Google.
 	"gmail.com":      {},
-	"gmx.com":        {},
-	"gmx.de":         {},
-	"gmx.net":        {},
 	"googlemail.com": {},
-	"hey.com":        {},
-	"hotmail.com":    {},
-	"icloud.com":     {},
-	"live.com":       {},
-	"mac.com":        {},
-	"mail.com":       {},
-	"mail.ru":        {},
-	"me.com":         {},
-	"msn.com":        {},
-	"outlook.com":    {},
-	"pm.me":          {},
-	"proton.me":      {},
-	"protonmail.com": {},
-	"qq.com":         {},
-	"tuta.io":        {},
-	"tutanota.com":   {},
+
+	// Microsoft. Hotmail, Live and Outlook each have regional domains that Microsoft
+	// offered as new personal addresses.
+	"hotmail.com":     {},
+	"hotmail.be":      {},
+	"hotmail.ca":      {},
+	"hotmail.co.jp":   {},
+	"hotmail.co.uk":   {},
+	"hotmail.com.ar":  {},
+	"hotmail.com.au":  {},
+	"hotmail.com.br":  {},
+	"hotmail.de":      {},
+	"hotmail.es":      {},
+	"hotmail.fr":      {},
+	"hotmail.it":      {},
+	"hotmail.nl":      {},
+	"live.com":        {},
+	"live.be":         {},
+	"live.ca":         {},
+	"live.co.uk":      {},
+	"live.com.au":     {},
+	"live.com.mx":     {},
+	"live.de":         {},
+	"live.fr":         {},
+	"live.it":         {},
+	"live.nl":         {},
+	"msn.com":         {},
+	"outlook.com":     {},
+	"outlook.be":      {},
+	"outlook.com.au":  {},
+	"outlook.com.br":  {},
+	"outlook.de":      {},
+	"outlook.es":      {},
+	"outlook.fr":      {},
+	"outlook.ie":      {},
+	"outlook.in":      {},
+	"outlook.it":      {},
+	"outlook.jp":      {},
+	"windowslive.com": {},
+
+	// Yahoo and AOL. yahoo.co.jp is run separately in Japan but is also personal mail.
 	"yahoo.com":      {},
-	"yandex.com":     {},
-	"yandex.ru":      {},
+	"yahoo.ca":       {},
+	"yahoo.co.id":    {},
+	"yahoo.co.in":    {},
+	"yahoo.co.jp":    {},
+	"yahoo.co.uk":    {},
+	"yahoo.com.ar":   {},
+	"yahoo.com.au":   {},
+	"yahoo.com.br":   {},
+	"yahoo.com.hk":   {},
+	"yahoo.com.mx":   {},
+	"yahoo.com.ph":   {},
+	"yahoo.com.sg":   {},
+	"yahoo.com.tw":   {},
+	"yahoo.de":       {},
+	"yahoo.es":       {},
+	"yahoo.fr":       {},
+	"yahoo.ie":       {},
+	"yahoo.in":       {},
+	"yahoo.it":       {},
 	"ymail.com":      {},
-	"zoho.com":       {},
-	"zohomail.com":   {},
+	"rocketmail.com": {},
+	"aol.com":        {},
+	"aim.com":        {},
+
+	// Apple.
+	"icloud.com": {},
+	"me.com":     {},
+	"mac.com":    {},
+
+	// Privacy-focused and independent providers.
+	"fastmail.com":   {},
+	"fastmail.fm":    {},
+	"hey.com":        {},
+	"mailbox.org":    {},
+	"pm.me":          {},
+	"posteo.de":      {},
+	"proton.me":      {},
+	"protonmail.ch":  {},
+	"protonmail.com": {},
+	"tuta.com":       {},
+	"tuta.io":        {},
+	"tutamail.com":   {},
+	"tutanota.com":   {},
+	"tutanota.de":    {},
+
+	// Zoho, including its India and EU data center domains.
+	"zoho.com":     {},
+	"zohomail.com": {},
+	"zohomail.eu":  {},
+	"zohomail.in":  {},
+
+	// United Internet (GMX, WEB.DE, mail.com) and other German providers.
+	"gmx.at":      {},
+	"gmx.ch":      {},
+	"gmx.co.uk":   {},
+	"gmx.com":     {},
+	"gmx.de":      {},
+	"gmx.fr":      {},
+	"gmx.net":     {},
+	"gmx.us":      {},
+	"mail.com":    {},
+	"mail.de":     {},
+	"web.de":      {},
+	"freenet.de":  {},
+	"t-online.de": {},
+
+	// France.
+	"free.fr":     {},
+	"laposte.net": {},
+	"orange.fr":   {},
+	"sfr.fr":      {},
+	"wanadoo.fr":  {},
+
+	// Italy.
+	"alice.it":    {},
+	"libero.it":   {},
+	"tiscali.it":  {},
+	"virgilio.it": {},
+
+	// Switzerland.
+	"bluewin.ch": {},
+
+	// Poland and Czechia.
+	"interia.pl": {},
+	"o2.pl":      {},
+	"onet.pl":    {},
+	"wp.pl":      {},
+	"seznam.cz":  {},
+
+	// Russia, Ukraine and neighbors. Mail.ru also offers bk.ru, inbox.ru and list.ru.
+	"bk.ru":         {},
+	"inbox.ru":      {},
+	"list.ru":       {},
+	"mail.ru":       {},
+	"rambler.ru":    {},
+	"ukr.net":       {},
+	"ya.ru":         {},
+	"yandex.by":     {},
+	"yandex.com":    {},
+	"yandex.com.tr": {},
+	"yandex.kz":     {},
+	"yandex.ru":     {},
+	"yandex.ua":     {},
+
+	// China.
+	"126.com":     {},
+	"139.com":     {},
+	"163.com":     {},
+	"aliyun.com":  {},
+	"foxmail.com": {},
+	"qq.com":      {},
+	"sina.com":    {},
+	"sohu.com":    {},
+	"yeah.net":    {},
+
+	// South Korea.
+	"daum.net":    {},
+	"hanmail.net": {},
+	"naver.com":   {},
+
+	// Japanese mobile carriers.
+	"docomo.ne.jp": {},
+	"ezweb.ne.jp":  {},
+
+	// India.
+	"rediffmail.com": {},
+
+	// Brazil.
+	"bol.com.br": {},
+	"uol.com.br": {},
+
+	// Consumer internet providers in the US, UK and Australia. Their staff use
+	// separate corporate domains.
+	"att.net":        {},
+	"comcast.net":    {},
+	"sbcglobal.net":  {},
+	"verizon.net":    {},
+	"btinternet.com": {},
+	"bigpond.com":    {},
 }
 
 // disposableDomains are well-known throwaway and temporary mail providers.
