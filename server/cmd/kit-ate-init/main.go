@@ -32,9 +32,6 @@ const (
 	// defaultListenAddr is the helper HTTP control address inside the actor sandbox.
 	defaultListenAddr = ":8082"
 
-	// defaultEnvRelPath stores persisted bootstrap process environment variables.
-	defaultEnvRelPath = ".ate-env.json"
-
 	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
 	maxBootstrapBytes = 2 << 20 // 2 MiB
 
@@ -79,7 +76,6 @@ type config struct {
 type initializer struct {
 	rootDir   string
 	probeAddr string
-	envRel    string
 
 	mu          sync.Mutex
 	started     bool
@@ -288,8 +284,16 @@ func atomicWriteUnderRoot(rootDir, rel string, data []byte, mode os.FileMode) er
 	return nil
 }
 
+// allowedBootstrapEnvKeys is the fixed allowlist of workload environment
+// variable names accepted in POST /bootstrap. Process environment is held only
+// in memory and never persisted to or loaded from the sandbox-writable root.
+var allowedBootstrapEnvKeys = map[string]struct{}{
+	"OPENROUTER_BASE_URL": {},
+	"OPENROUTER_API_KEY":  {},
+}
+
 func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
-	if len(env) > maxBootstrapEntries {
+	if len(env) > len(allowedBootstrapEnvKeys) {
 		return nil, errors.New("too many bootstrap environment variables")
 	}
 	if len(env) == 0 {
@@ -297,7 +301,10 @@ func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
 	}
 	clean := make(map[string]string, len(env))
 	for k, v := range env {
-		if k == "" || len(k) > 128 || strings.ContainsAny(k, "=\x00\r\n") || len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
+		if _, allowed := allowedBootstrapEnvKeys[k]; !allowed {
+			return nil, fmt.Errorf("bootstrap environment key %q is not allowlisted", k)
+		}
+		if len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
 			return nil, errors.New("invalid bootstrap environment entry")
 		}
 		clean[k] = v
@@ -340,7 +347,7 @@ func (s *initializer) install(body []byte) error {
 	dirs := make([]cleanDir, 0, len(payload.Dirs))
 	for _, d := range payload.Dirs {
 		rel, err := validateRelativePath(d.Path)
-		if err != nil || rel == s.envRel {
+		if err != nil {
 			return errors.New("invalid bootstrap directory path")
 		}
 		if _, dup := seenDirs[rel]; dup {
@@ -362,7 +369,7 @@ func (s *initializer) install(body []byte) error {
 	totalBytes := 0
 	for _, f := range payload.Files {
 		rel, err := validateRelativePath(f.Path)
-		if err != nil || rel == s.envRel {
+		if err != nil {
 			return errors.New("invalid bootstrap file path")
 		}
 		if _, dup := seenFiles[rel]; dup {
@@ -396,16 +403,7 @@ func (s *initializer) install(body []byte) error {
 			return err
 		}
 	}
-	if len(cleanEnv) > 0 {
-		rawEnv, err := json.Marshal(cleanEnv)
-		if err != nil {
-			return fmt.Errorf("encode bootstrap environment: %w", err)
-		}
-		if err := atomicWriteUnderRoot(s.rootDir, s.envRel, rawEnv, 0o600); err != nil {
-			return err
-		}
-		s.env = cleanEnv
-	}
+	s.env = cleanEnv
 	return nil
 }
 
@@ -420,7 +418,6 @@ func newInitializer(cfg config) (*initializer, error) {
 	return &initializer{
 		rootDir:     filepath.Clean(cfg.rootDir),
 		probeAddr:   cfg.probeAddr,
-		envRel:      defaultEnvRelPath,
 		mu:          sync.Mutex{},
 		started:     false,
 		launched:    false,
