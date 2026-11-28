@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -44,10 +45,12 @@ type kitATEThreadActor struct {
 	Configured bool
 	Workload   *KitWorkloadBinding
 	WarmUntil  *time.Time
+	Initiator  ateThreadInitiator
 }
 
 type kitATEActorStore interface {
 	GetForThread(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (kitATEThreadActor, bool, error)
+	GetThreadInitiator(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (ateThreadInitiator, bool, error)
 	Insert(ctx context.Context, r assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error)
 	UpdateBootstrap(ctx context.Context, r assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error)
 	UpdateState(ctx context.Context, r assistantRuntimeRecord, actorID uuid.UUID, state string, warmUntil *time.Time) (kitATEThreadActor, error)
@@ -97,10 +100,39 @@ func (p *pgKitATEActorStore) GetForThread(ctx context.Context, r assistantRuntim
 	return actor, true, nil
 }
 
+func (p *pgKitATEActorStore) GetThreadInitiator(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (ateThreadInitiator, bool, error) {
+	var zero ateThreadInitiator
+	row, err := assistantrepo.New(p.core.kitLifecycleDB(r)).GetEarliestAssistantATEActorInitiatorForThread(ctx, assistantrepo.GetEarliestAssistantATEActorInitiatorForThreadParams{
+		ProjectID: r.ProjectID,
+		ThreadID:  threadID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, false, nil
+	}
+	if err != nil {
+		return zero, false, fmt.Errorf("load earliest ATE thread initiator: %w", err)
+	}
+	userID := ""
+	if row.InitiatingUserID.Valid {
+		userID = row.InitiatingUserID.String
+	}
+	initiator := ateThreadInitiator{
+		UserID:     userID,
+		Resolution: row.InitiatingUserResolution,
+	}
+	if err := validateATEThreadInitiator(initiator); err != nil {
+		return zero, false, fmt.Errorf("validate earliest ATE thread initiator: %w", err)
+	}
+	return initiator, true, nil
+}
+
 func (p *pgKitATEActorStore) Insert(ctx context.Context, r assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error) {
 	var zero kitATEThreadActor
 	if r.LifecycleTx == nil {
 		return zero, errors.New("ATE actor creation requires a thread lifecycle transaction")
+	}
+	if err := validateATEThreadInitiator(actor.Initiator); err != nil {
+		return zero, err
 	}
 	var workloadRaw []byte
 	if actor.Workload != nil {
@@ -111,16 +143,18 @@ func (p *pgKitATEActorStore) Insert(ctx context.Context, r assistantRuntimeRecor
 		}
 	}
 	row, err := assistantrepo.New(r.LifecycleTx).InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
-		ActorName:           actor.ActorName,
-		ActorUid:            actor.ActorUID,
-		State:               actor.State,
-		Configured:          actor.Configured,
-		WorkloadBindingJson: workloadRaw,
-		WarmUntil:           ateWarmUntilTimestamptz(actor.WarmUntil),
-		RuntimeID:           r.ID,
-		ProjectID:           r.ProjectID,
-		AssistantID:         r.AssistantID,
-		ThreadID:            actor.ThreadID,
+		ActorName:                actor.ActorName,
+		ActorUid:                 actor.ActorUID,
+		State:                    actor.State,
+		Configured:               actor.Configured,
+		WorkloadBindingJson:      workloadRaw,
+		WarmUntil:                ateWarmUntilTimestamptz(actor.WarmUntil),
+		InitiatingUserID:         conv.ToPGTextEmpty(actor.Initiator.UserID),
+		InitiatingUserResolution: actor.Initiator.Resolution,
+		RuntimeID:                r.ID,
+		ProjectID:                r.ProjectID,
+		AssistantID:              r.AssistantID,
+		ThreadID:                 actor.ThreadID,
 	})
 	if err != nil {
 		return zero, fmt.Errorf("insert ATE thread actor: %w", err)
@@ -240,6 +274,10 @@ func kitATEThreadActorFromRow(row assistantrepo.AssistantAteActor) (kitATEThread
 		t := row.WarmUntil.Time
 		warmUntil = &t
 	}
+	initiatingUserID := ""
+	if row.InitiatingUserID.Valid {
+		initiatingUserID = row.InitiatingUserID.String
+	}
 	return kitATEThreadActor{
 		ID:         row.ID,
 		RuntimeID:  row.RuntimeID,
@@ -250,6 +288,10 @@ func kitATEThreadActorFromRow(row assistantrepo.AssistantAteActor) (kitATEThread
 		Configured: row.Configured,
 		Workload:   workload,
 		WarmUntil:  warmUntil,
+		Initiator: ateThreadInitiator{
+			UserID:     initiatingUserID,
+			Resolution: row.InitiatingUserResolution,
+		},
 	}, nil
 }
 

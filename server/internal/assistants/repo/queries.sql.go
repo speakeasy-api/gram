@@ -1898,6 +1898,37 @@ func (q *Queries) GetAssistantTransactionIsolationForTest(ctx context.Context) (
 	return isolation, err
 }
 
+const getEarliestAssistantATEActorInitiatorForThread = `-- name: GetEarliestAssistantATEActorInitiatorForThread :one
+SELECT initiating_user_id, initiating_user_resolution
+FROM assistant_ate_actors
+WHERE project_id = $1
+  AND assistant_thread_id = $2
+ORDER BY created_at ASC, id ASC
+LIMIT 1
+`
+
+type GetEarliestAssistantATEActorInitiatorForThreadParams struct {
+	ProjectID uuid.UUID
+	ThreadID  uuid.UUID
+}
+
+type GetEarliestAssistantATEActorInitiatorForThreadRow struct {
+	InitiatingUserID         pgtype.Text
+	InitiatingUserResolution string
+}
+
+// Returns the thread's earliest recorded ATE actor initiator across all
+// runtimes (including soft-deleted and legacy not_recorded rows) so replacement
+// actors inherit the original initiating user immutably and legacy unrecorded
+// threads fail closed instead of adopting a later sender. Uses
+// assistant_ate_actors_project_thread_idx.
+func (q *Queries) GetEarliestAssistantATEActorInitiatorForThread(ctx context.Context, arg GetEarliestAssistantATEActorInitiatorForThreadParams) (GetEarliestAssistantATEActorInitiatorForThreadRow, error) {
+	row := q.db.QueryRow(ctx, getEarliestAssistantATEActorInitiatorForThread, arg.ProjectID, arg.ThreadID)
+	var i GetEarliestAssistantATEActorInitiatorForThreadRow
+	err := row.Scan(&i.InitiatingUserID, &i.InitiatingUserResolution)
+	return i, err
+}
+
 const getKitInterruptOutcome = `-- name: GetKitInterruptOutcome :one
 SELECT (CASE
  WHEN q.outcome <> 'pending' THEN q.outcome
@@ -2430,31 +2461,35 @@ func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSki
 const insertAssistantATEActor = `-- name: InsertAssistantATEActor :one
 INSERT INTO assistant_ate_actors (
   organization_id, project_id, assistant_id, runtime_id, assistant_thread_id,
-  actor_name, actor_uid, state, configured, workload_binding_json, warm_until
+  actor_name, actor_uid, state, configured, workload_binding_json, warm_until,
+  initiating_user_id, initiating_user_resolution
 )
 SELECT a.organization_id, r.project_id, r.assistant_id, r.id, t.id,
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5, $6,
+  $7, $8
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
-WHERE r.id = $7 AND r.project_id = $8 AND r.assistant_id = $9
-  AND t.id = $10
+WHERE r.id = $9 AND r.project_id = $10 AND r.assistant_id = $11
+  AND t.id = $12
   AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE AND t.deleted IS FALSE
 RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertAssistantATEActorParams struct {
-	ActorName           string
-	ActorUid            string
-	State               string
-	Configured          bool
-	WorkloadBindingJson []byte
-	WarmUntil           pgtype.Timestamptz
-	RuntimeID           uuid.UUID
-	ProjectID           uuid.UUID
-	AssistantID         uuid.UUID
-	ThreadID            uuid.UUID
+	ActorName                string
+	ActorUid                 string
+	State                    string
+	Configured               bool
+	WorkloadBindingJson      []byte
+	WarmUntil                pgtype.Timestamptz
+	InitiatingUserID         pgtype.Text
+	InitiatingUserResolution string
+	RuntimeID                uuid.UUID
+	ProjectID                uuid.UUID
+	AssistantID              uuid.UUID
+	ThreadID                 uuid.UUID
 }
 
 func (q *Queries) InsertAssistantATEActor(ctx context.Context, arg InsertAssistantATEActorParams) (AssistantAteActor, error) {
@@ -2465,6 +2500,8 @@ func (q *Queries) InsertAssistantATEActor(ctx context.Context, arg InsertAssista
 		arg.Configured,
 		arg.WorkloadBindingJson,
 		arg.WarmUntil,
+		arg.InitiatingUserID,
+		arg.InitiatingUserResolution,
 		arg.RuntimeID,
 		arg.ProjectID,
 		arg.AssistantID,

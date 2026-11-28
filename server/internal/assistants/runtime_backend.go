@@ -43,6 +43,11 @@ type runTurnRequest struct {
 	// without re-running the full thread bootstrap.
 	MCPServers []runtimeMCPServer
 
+	// Initiator carries the server-resolved initiating user for this turn
+	// (populated strictly from resolveTurnIdentity). On ATE, it is persisted
+	// once when the thread's first actor row is created and never overwritten.
+	Initiator ateThreadInitiator
+
 	// NextSteerEvent, when non-nil and the Kit gateway advertises
 	// capabilities.session.prompt.delivery.steer, claims and prepares newly
 	// arrived pending events on the same thread for mid-turn delivery.

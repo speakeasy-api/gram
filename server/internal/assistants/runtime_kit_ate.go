@@ -354,7 +354,7 @@ func (k *KitATERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	return RuntimeBackendEnsureResult{ColdStart: count == 0, BackendMetadataJSON: raw}, nil
 }
 
-func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID) (assistantRuntimeRecord, kitATEThreadActor, string, error) {
+func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRecord, thread uuid.UUID, initiator ateThreadInitiator) (assistantRuntimeRecord, kitATEThreadActor, string, error) {
 	var prepared assistantRuntimeRecord
 	var entry kitATEThreadActor
 	var token string
@@ -379,7 +379,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		needBootstrap := false
 		if !known {
 			startupMode = ateStartupModeColdStart
-			entry, err = k.createThreadActor(ctx, locked, thread, kitATEActorName(locked, thread), warmUntil)
+			entry, err = k.createThreadActor(ctx, locked, thread, kitATEActorName(locked, thread), warmUntil, initiator)
 			if err != nil {
 				return err
 			}
@@ -389,7 +389,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 				return err
 			}
 			var resumed bool
-			entry, resumed, err = k.ensureActorRunning(ctx, locked, thread, entry, warmUntil)
+			entry, resumed, err = k.ensureActorRunning(ctx, locked, thread, entry, warmUntil, initiator)
 			if err != nil {
 				return err
 			}
@@ -478,7 +478,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 						}
 						return errors.New("ATE Kit bootstrap conflicted after actor recreation")
 					}
-					entry, err = k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+					entry, err = k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 					if err != nil {
 						return err
 					}
@@ -530,8 +530,21 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 	return prepared, entry, token, err
 }
 
-func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, actorName string, warmUntil time.Time) (kitATEThreadActor, error) {
+func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, actorName string, warmUntil time.Time, turnInitiator ateThreadInitiator) (kitATEThreadActor, error) {
 	var zero kitATEThreadActor
+	// Inherit the thread's original recorded initiating user across crash
+	// recovery, image changes, and runtime replacements so a replacement actor
+	// can never adopt a later message sender's identity.
+	resolvedInitiator, foundPrior, err := k.config.Store.GetThreadInitiator(ctx, locked, thread)
+	if err != nil {
+		return zero, fmt.Errorf("resolve durable ATE thread initiator: %w", err)
+	}
+	if !foundPrior {
+		resolvedInitiator = turnInitiator
+	}
+	if err := validateATEThreadInitiator(resolvedInitiator); err != nil {
+		return zero, fmt.Errorf("validate ATE thread initiator: %w", err)
+	}
 	candidate := kitATEThreadActor{
 		ID:         uuid.Nil,
 		RuntimeID:  locked.ID,
@@ -542,6 +555,7 @@ func (k *KitATERuntimeBackend) createThreadActor(ctx context.Context, locked ass
 		Configured: false,
 		Workload:   nil,
 		WarmUntil:  &warmUntil,
+		Initiator:  resolvedInitiator,
 	}
 	actor, err := k.getActor(ctx, candidate)
 	if status.Code(err) == codes.NotFound {
@@ -620,11 +634,11 @@ func (k *KitATERuntimeBackend) recordActorReadyDuration(ctx context.Context, r a
 // The boolean return reports whether the actor resumed from a non-running state
 // (SUSPENDED, CRASHED, REVERTING, or in-flight transition), which also requires
 // re-bootstrapping provisioned files on SNAPSHOT_FIDELITY_ROOTFS restore.
-func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, bool, error) {
+func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time, initiator ateThreadInitiator) (kitATEThreadActor, bool, error) {
 	var zero kitATEThreadActor
 	actor, err := k.getActor(ctx, entry)
 	if status.Code(err) == codes.NotFound {
-		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 		return replaced, false, recErr
 	}
 	if err != nil {
@@ -636,7 +650,7 @@ func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked as
 		resumed = true
 		actor, err = k.waitForStableActorState(ctx, entry)
 		if status.Code(err) == codes.NotFound {
-			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 			return replaced, false, recErr
 		}
 		if err != nil {
@@ -659,22 +673,22 @@ func (k *KitATERuntimeBackend) ensureActorRunning(ctx context.Context, locked as
 			// transitions the actor to ACTOR_STATE_CRASHED and returns FailedPrecondition.
 			refreshed, getErr := k.getActor(ctx, entry)
 			if status.Code(getErr) == codes.NotFound {
-				replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+				replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 				return replaced, false, recErr
 			}
 			if getErr == nil && (refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_CRASHED || refreshed.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_REVERTING) {
-				return k.recoverCrashedActor(ctx, locked, thread, entry, refreshed, warmUntil)
+				return k.recoverCrashedActor(ctx, locked, thread, entry, refreshed, warmUntil, initiator)
 			}
 		}
 		if status.Code(err) == codes.NotFound {
-			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+			replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 			return replaced, false, recErr
 		}
 		return zero, false, fmt.Errorf("ATE ResumeActor: %w", err)
 	case ateapiv1.ActorState_ACTOR_STATE_CRASHED, ateapiv1.ActorState_ACTOR_STATE_REVERTING:
-		return k.recoverCrashedActor(ctx, locked, thread, entry, actor, warmUntil)
+		return k.recoverCrashedActor(ctx, locked, thread, entry, actor, warmUntil, initiator)
 	case ateapiv1.ActorState_ACTOR_STATE_DELETING:
-		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+		replaced, recErr := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 		return replaced, false, recErr
 	default:
 		return zero, false, fmt.Errorf("unexpected ATE actor state %s", actor.GetStatus().GetState().String())
@@ -703,7 +717,7 @@ func (k *KitATERuntimeBackend) waitForStableActorState(ctx context.Context, entr
 	}
 }
 
-func (k *KitATERuntimeBackend) recoverCrashedActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, actor *ateapiv1.Actor, warmUntil time.Time) (kitATEThreadActor, bool, error) {
+func (k *KitATERuntimeBackend) recoverCrashedActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, actor *ateapiv1.Actor, warmUntil time.Time, initiator ateThreadInitiator) (kitATEThreadActor, bool, error) {
 	if entry.Configured && hasCompletedExternalRootfsSnapshot(actor) {
 		if _, err := k.config.Client.RevertActor(ctx, &ateapiv1.RevertActorRequest{
 			Actor: k.actorRef(entry.ActorName),
@@ -715,7 +729,7 @@ func (k *KitATERuntimeBackend) recoverCrashedActor(ctx context.Context, locked a
 			}
 		}
 	}
-	recreated, err := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+	recreated, err := k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil, initiator)
 	return recreated, false, err
 }
 
@@ -742,12 +756,12 @@ func (k *KitATERuntimeBackend) retireActor(ctx context.Context, locked assistant
 	return nil
 }
 
-func (k *KitATERuntimeBackend) retireAndRecreateActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
+func (k *KitATERuntimeBackend) retireAndRecreateActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time, initiator ateThreadInitiator) (kitATEThreadActor, error) {
 	if err := k.retireActor(ctx, locked, thread, entry); err != nil {
 		return kitATEThreadActor{}, err
 	}
 	replacementName := kitATEActorReplacementName(locked, thread, uuid.New())
-	return k.createThreadActor(ctx, locked, thread, replacementName, warmUntil)
+	return k.createThreadActor(ctx, locked, thread, replacementName, warmUntil, initiator)
 }
 
 func hasCompletedExternalRootfsSnapshot(actor *ateapiv1.Actor) bool {
@@ -952,7 +966,7 @@ func (k *KitATERuntimeBackend) RunTurn(ctx context.Context, r assistantRuntimeRe
 	if turn.ThreadID == uuid.Nil {
 		return ErrKitRuntimeBinding
 	}
-	prepared, t, token, err := k.prepare(ctx, r, turn.ThreadID)
+	prepared, t, token, err := k.prepare(ctx, r, turn.ThreadID, turn.Initiator)
 	if err != nil {
 		return err
 	}

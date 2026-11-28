@@ -579,12 +579,16 @@ func startFakeATEStack(t *testing.T, atespace string) (*fakeATECluster, *ateclie
 }
 
 type fakeKitATEActorStore struct {
-	mu     sync.Mutex
-	actors map[uuid.UUID]kitATEThreadActor
+	mu               sync.Mutex
+	actors           map[uuid.UUID]kitATEThreadActor
+	threadInitiators map[uuid.UUID]ateThreadInitiator
 }
 
 func newFakeKitATEActorStore() *fakeKitATEActorStore {
-	return &fakeKitATEActorStore{actors: map[uuid.UUID]kitATEThreadActor{}}
+	return &fakeKitATEActorStore{
+		actors:           map[uuid.UUID]kitATEThreadActor{},
+		threadInitiators: map[uuid.UUID]ateThreadInitiator{},
+	}
 }
 
 func (s *fakeKitATEActorStore) GetForThread(_ context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (kitATEThreadActor, bool, error) {
@@ -598,12 +602,25 @@ func (s *fakeKitATEActorStore) GetForThread(_ context.Context, r assistantRuntim
 	return kitATEThreadActor{}, false, nil
 }
 
+func (s *fakeKitATEActorStore) GetThreadInitiator(_ context.Context, _ assistantRuntimeRecord, threadID uuid.UUID) (ateThreadInitiator, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	init, ok := s.threadInitiators[threadID]
+	return init, ok, nil
+}
+
 func (s *fakeKitATEActorStore) Insert(_ context.Context, r assistantRuntimeRecord, actor kitATEThreadActor) (kitATEThreadActor, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := validateATEThreadInitiator(actor.Initiator); err != nil {
+		return kitATEThreadActor{}, err
+	}
 	actor.ID = uuid.New()
 	actor.RuntimeID = r.ID
 	s.actors[actor.ID] = actor
+	if _, exists := s.threadInitiators[actor.ThreadID]; !exists {
+		s.threadInitiators[actor.ThreadID] = actor.Initiator
+	}
 	return actor, nil
 }
 
@@ -772,7 +789,7 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 
 	// 2. First turn: cold prepare creates actor, configures egress, uploads
 	// credential-free bootstrap archive, waits for kit-readyz, and runs turn.
-	turn1 := runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}
+	turn1 := runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}
 	require.NoError(t, backend.RunTurn(t.Context(), record, turn1))
 
 	require.Equal(t, 1, bootstrapCount)
@@ -854,7 +871,7 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 	cluster.mu.Lock()
 	firstWorker := actorEntry.actor.GetStatus().GetAssignedNode()
 	cluster.mu.Unlock()
-	turn2 := runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}
+	turn2 := runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}
 	require.NoError(t, backend.RunTurn(t.Context(), record, turn2))
 
 	require.Equal(t, int32(1), cluster.resumeCalls.Load(), "suspended actor must be explicitly resumed before dial")
@@ -1117,7 +1134,7 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 	require.Equal(t, int32(1), cluster.createTemplateCalls.Load())
 	tmplA := kitATETemplateVersionName(template, testKitATEImageDigestA)
 
-	require.NoError(t, b1.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, b1.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	require.NoError(t, b1.Stop(t.Context(), record))
 
 	actor1Key := atespace + "/" + kitATEActorName(record, thread1)
@@ -1166,7 +1183,7 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 	cluster.mu.Unlock()
 
 	// New thread uses the new template version (tmplB).
-	require.NoError(t, b3.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread2, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, b3.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread2, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	actor2Key := atespace + "/" + kitATEActorName(record, thread2)
 	cluster.mu.Lock()
 	require.Equal(t, tmplB, cluster.actors[actor2Key].actor.GetActorTemplate().GetName())
@@ -1336,6 +1353,7 @@ func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
 		ActorName: "corrupted-actor-name",
 		ActorUID:  "",
 		State:     ateActorStateRunning,
+		Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	})
 	require.NoError(t, err)
 	_, err = store.Insert(t.Context(), record, kitATEThreadActor{
@@ -1346,6 +1364,7 @@ func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
 		State:      ateActorStateRunning,
 		Configured: true,
 		Workload:   validBinding,
+		Initiator:  ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	})
 	require.NoError(t, err)
 
@@ -1511,7 +1530,7 @@ func TestKitATEBootstrapConflictRetiresAndRecreatesWhileIdenticalRetryIsIdempote
 	cluster.actors[atespace+"/"+retryActorName].kitReady = true
 	cluster.mu.Unlock()
 
-	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadRetry, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadRetry, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	cluster.mu.Lock()
 	require.Equal(t, retryUID, cluster.actors[atespace+"/"+retryActorName].actor.GetMetadata().GetUid(), "identical crash-retry must keep existing actor UID")
 	require.Empty(t, cluster.deletedActorUIDs)
@@ -1536,7 +1555,7 @@ func TestKitATEBootstrapConflictRetiresAndRecreatesWhileIdenticalRetryIsIdempote
 	cluster.actors[atespace+"/"+conflictActorName].kitReady = true
 	cluster.mu.Unlock()
 
-	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadConflict, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadConflict, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	rowAfter, ok, err := store.GetForThread(t.Context(), record, threadConflict)
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -1683,7 +1702,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster, backend, store, record, revoked, cleared := newTestKitATEHarness(t, nil)
 		threadID := uuid.New()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.NoError(t, backend.Stop(t.Context(), record))
 
 		rowBefore, ok, err := store.GetForThread(t.Context(), record, threadID)
@@ -1691,7 +1710,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		require.True(t, ok)
 
 		// Resume, then crash after a completed durable snapshot exists.
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		actorKey := "prod-assistants/" + rowBefore.ActorName
 		cluster.mu.Lock()
 		cluster.actors[actorKey].actor.Status.State = ateapiv1.ActorState_ACTOR_STATE_CRASHED
@@ -1699,7 +1718,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster.mu.Unlock()
 
 		// Next turn automatically reverts to the last durable snapshot and resumes.
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.Equal(t, int32(1), cluster.revertCalls.Load())
 		require.Equal(t, int32(2), cluster.resumeCalls.Load())
 		require.Empty(t, *revoked)
@@ -1717,7 +1736,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster, backend, store, record, revoked, cleared := newTestKitATEHarness(t, nil)
 		threadID := uuid.New()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 
 		rowBefore, ok, err := store.GetForThread(t.Context(), record, threadID)
 		require.NoError(t, err)
@@ -1730,7 +1749,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster.actors[actorKey].actor.Status.Snapshots = nil
 		cluster.mu.Unlock()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 
 		require.Equal(t, int32(0), cluster.revertCalls.Load())
 		require.Len(t, *revoked, 1)
@@ -1751,9 +1770,9 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster, backend, store, record, revoked, cleared := newTestKitATEHarness(t, nil)
 		threadID := uuid.New()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.NoError(t, backend.Stop(t.Context(), record))
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 
 		rowBefore, ok, err := store.GetForThread(t.Context(), record, threadID)
 		require.NoError(t, err)
@@ -1765,7 +1784,7 @@ func TestKitATECrashedActorRecoveredWithoutManualAction(t *testing.T) {
 		cluster.actors[actorKey].failRevert = true
 		cluster.mu.Unlock()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.Equal(t, int32(1), cluster.revertCalls.Load())
 		require.Len(t, *revoked, 1)
 		require.Equal(t, []uuid.UUID{threadID}, *cleared)
@@ -1785,7 +1804,7 @@ func TestKitATEEvictionDrainLeadsToDurableSuspendAndResume(t *testing.T) {
 		cluster, backend, store, record, _, _ := newTestKitATEHarness(t, nil)
 		threadID := uuid.New()
 
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		row, ok, err := store.GetForThread(t.Context(), record, threadID)
 		require.NoError(t, err)
 		require.True(t, ok)
@@ -1809,7 +1828,7 @@ func TestKitATEEvictionDrainLeadsToDurableSuspendAndResume(t *testing.T) {
 		require.Equal(t, ateActorStateSuspended, row.State)
 
 		// Next turn explicitly resumes the actor onto a healthy worker and re-bootstraps provisioned files.
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.Equal(t, int32(1), cluster.resumeCalls.Load())
 		require.Equal(t, int32(2), cluster.bootstrapCalls.Load(), "resumed actor must re-POST /bootstrap")
 
@@ -1840,6 +1859,7 @@ func TestKitATEEvictionDrainLeadsToDurableSuspendAndResume(t *testing.T) {
 				EventID:         uuid.New(),
 				Model:           "openai/gpt-4.1-mini",
 				ReasoningEffort: "medium",
+				Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 			})
 		}()
 
@@ -1864,7 +1884,7 @@ func TestKitATEEvictionDrainLeadsToDurableSuspendAndResume(t *testing.T) {
 		require.Equal(t, ateActorStateSuspended, row.State)
 
 		// Subsequent turn resumes cleanly on another worker.
-		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 		require.Equal(t, int32(1), cluster.resumeCalls.Load())
 		require.Equal(t, int32(2), cluster.acpRequestCount.Load())
 	})
@@ -1881,6 +1901,7 @@ func TestKitATEInitVersionMismatchFailsClearly(t *testing.T) {
 		ThreadID:        uuid.New(),
 		Model:           "openai/gpt-4.1-mini",
 		ReasoningEffort: "medium",
+		Initiator:       ateThreadInitiator{Resolution: ATEInitiatorNoUser},
 	})
 	require.ErrorContains(t, err, fmt.Sprintf(`ATE init helper version mismatch: got "99", want "%d"`, ateInitWireVersion))
 }
@@ -1983,7 +2004,7 @@ func TestKitATEResumeAndRevertReBootstrapOverwritingTamperedFiles(t *testing.T) 
 	threadID := uuid.New()
 
 	// 1. Initial cold turn populates provisioned files.
-	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	row, ok, err := store.GetForThread(t.Context(), record, threadID)
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -2014,7 +2035,7 @@ func TestKitATEResumeAndRevertReBootstrapOverwritingTamperedFiles(t *testing.T) 
 	// 2. Suspend after tampering, then resume -> server must re-POST /bootstrap and overwrite all provisioned files.
 	tamperFiles()
 	require.NoError(t, backend.Stop(t.Context(), record))
-	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	require.Equal(t, int32(1), cluster.resumeCalls.Load())
 	require.Equal(t, int32(2), cluster.bootstrapCalls.Load())
 	assertRestored()
@@ -2026,7 +2047,7 @@ func TestKitATEResumeAndRevertReBootstrapOverwritingTamperedFiles(t *testing.T) 
 	cluster.actors[actorKey].actor.Status.LastAssignedGeneration++
 	cluster.mu.Unlock()
 
-	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium", Initiator: ateThreadInitiator{Resolution: ATEInitiatorNoUser}}))
 	require.Equal(t, int32(1), cluster.revertCalls.Load())
 	require.Equal(t, int32(2), cluster.resumeCalls.Load())
 	require.Equal(t, int32(3), cluster.bootstrapCalls.Load())

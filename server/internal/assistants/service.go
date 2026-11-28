@@ -4174,6 +4174,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		Prompt:                 prepared.prompt,
 		InputParts:             prepared.inputParts,
 		MCPServers:             mcpServers,
+		Initiator:              identity.Initiator,
 		NextSteerEvent:         nextSteerEvent,
 	}); err != nil {
 		return fmt.Errorf("run assistant turn: %w", err)
