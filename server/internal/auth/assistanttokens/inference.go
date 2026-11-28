@@ -14,8 +14,11 @@ type inferenceRuntimeContextKey struct{}
 
 // InferenceTranscriptOwned reports a trusted runtime whose ACP transcript owns persistence.
 func InferenceTranscriptOwned(ctx context.Context) bool {
-	_, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.RuntimeIdentity)
-	return ok
+	if _, ok := ctx.Value(inferenceContextKey{}).(assistantidentity.RuntimeIdentity); ok {
+		return true
+	}
+	owned, _ := ctx.Value(runtimeTranscriptOwnedKey{}).(bool)
+	return owned
 }
 
 // Invalid identity is an authentication refusal; infrastructure failures must

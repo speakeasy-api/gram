@@ -23,7 +23,7 @@ import (
 
 const (
 	// wireVersion is the version of the HTTP contract between the server and this init helper.
-	wireVersion = 1
+	wireVersion = 2
 
 	// wireVersionHeader advertises wireVersion on every helper HTTP response so a
 	// mismatched runtime image fails fast and clearly.
@@ -35,8 +35,11 @@ const (
 	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
 	maxBootstrapBytes = 2 << 20 // 2 MiB
 
-	// maxBootstrapEntries bounds the number of directories or files in one bootstrap payload.
+	// maxBootstrapEntries bounds the number of directories, files, or env entries in one bootstrap payload.
 	maxBootstrapEntries = 64
+
+	// maxEnvValueBytes bounds a single bootstrapped environment variable value.
+	maxEnvValueBytes = 4 << 10 // 4 KiB
 )
 
 type bootstrapDir struct {
@@ -51,9 +54,10 @@ type bootstrapFile struct {
 }
 
 type bootstrapPayload struct {
-	Version int             `json:"version"`
-	Dirs    []bootstrapDir  `json:"dirs"`
-	Files   []bootstrapFile `json:"files"`
+	Version int               `json:"version"`
+	Dirs    []bootstrapDir    `json:"dirs"`
+	Files   []bootstrapFile   `json:"files"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type statusResponse struct {
@@ -79,7 +83,21 @@ type initializer struct {
 	draining    bool
 	hasBodyHash bool
 	bodyHash    [32]byte
+	env         map[string]string
 	launch      chan struct{}
+}
+
+func (s *initializer) childEnv() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.env) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(s.env))
+	for k, v := range s.env {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
 
 func (s *initializer) signalLaunchLocked() {
@@ -266,6 +284,34 @@ func atomicWriteUnderRoot(rootDir, rel string, data []byte, mode os.FileMode) er
 	return nil
 }
 
+// allowedBootstrapEnvKeys is the fixed allowlist of workload environment
+// variable names accepted in POST /bootstrap. Process environment is held only
+// in memory and never persisted to or loaded from the sandbox-writable root.
+var allowedBootstrapEnvKeys = map[string]struct{}{
+	"OPENROUTER_BASE_URL": {},
+	"OPENROUTER_API_KEY":  {},
+}
+
+func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
+	if len(env) > len(allowedBootstrapEnvKeys) {
+		return nil, errors.New("too many bootstrap environment variables")
+	}
+	if len(env) == 0 {
+		return nil, nil
+	}
+	clean := make(map[string]string, len(env))
+	for k, v := range env {
+		if _, allowed := allowedBootstrapEnvKeys[k]; !allowed {
+			return nil, fmt.Errorf("bootstrap environment key %q is not allowlisted", k)
+		}
+		if len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
+			return nil, errors.New("invalid bootstrap environment entry")
+		}
+		clean[k] = v
+	}
+	return clean, nil
+}
+
 func (s *initializer) install(body []byte) error {
 	var payload bootstrapPayload
 	dec := json.NewDecoder(strings.NewReader(string(body)))
@@ -281,6 +327,10 @@ func (s *initializer) install(body []byte) error {
 	}
 	if len(payload.Dirs) > maxBootstrapEntries || len(payload.Files) == 0 || len(payload.Files) > maxBootstrapEntries {
 		return errors.New("invalid bootstrap entry count")
+	}
+	cleanEnv, err := validateBootstrapEnv(payload.Env)
+	if err != nil {
+		return err
 	}
 
 	type cleanDir struct {
@@ -353,6 +403,7 @@ func (s *initializer) install(body []byte) error {
 			return err
 		}
 	}
+	s.env = cleanEnv
 	return nil
 }
 
@@ -373,6 +424,7 @@ func newInitializer(cfg config) (*initializer, error) {
 		draining:    false,
 		hasBodyHash: false,
 		bodyHash:    [32]byte{},
+		env:         nil,
 		launch:      make(chan struct{}),
 	}, nil
 }
@@ -434,6 +486,13 @@ func run(ctx context.Context, cfg config, listener net.Listener, termCh <-chan o
 	}
 
 	command := childFactory(ctx)
+	if extraEnv := state.childEnv(); len(extraEnv) > 0 {
+		if len(command.Env) == 0 {
+			command.Env = append(os.Environ(), extraEnv...)
+		} else {
+			command.Env = append(command.Env, extraEnv...)
+		}
+	}
 	go func() { errs <- command.Run() }()
 	select {
 	case err := <-errs:

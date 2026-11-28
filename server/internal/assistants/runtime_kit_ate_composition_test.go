@@ -20,27 +20,30 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 
 	binding := &KitWorkloadBinding{
 		MCPProjectGateway: true,
-		IssuerID:          uuid.New(),
+		IssuerID:          uuid.Nil,
 		Subject:           "actor/prod-space/actor-one",
-		Audience:          "https://auth.example.com/oauth/test",
+		Audience:          "",
 		Identity:          assistantidentity.RuntimeIdentity{ProjectID: uuid.New()},
 	}
 
-	ateMCP, err := kitProjectGatewayMCPJSON(resource, nil, nil)
+	ateMCP, err := kitProjectGatewayMCPJSON(resource, map[string]string{"Authorization": "Bearer " + kitATEEgressAuthPlaceholder}, nil)
 	require.NoError(t, err)
 	require.NotContains(t, string(ateMCP), KitWorkloadAssertionPath)
 	require.NotContains(t, string(ateMCP), "tokenFile")
 	require.NotContains(t, string(ateMCP), "workload_identity")
 	require.Contains(t, string(ateMCP), resource.String())
 	require.Contains(t, string(ateMCP), `"`+kitProjectGatewayServerName+`"`)
+	require.Contains(t, string(ateMCP), "Bearer "+kitATEEgressAuthPlaceholder)
 
+	// Egress-injected ATE bootstrap requires no workload issuer or token-exchange Audience.
+	ateBinding := *binding
 	bootstrap := KitLocalBootstrap{
 		Model:              "openai/gpt-4.1-mini",
 		ReasoningEffort:    "medium",
-		Workload:           binding,
+		Workload:           &ateBinding,
 		AssertionFile:      "",
 		EgressInjectedAuth: true,
-		InferenceEndpoint:  "https://ai.speakeasy.com/chat/completions",
+		InferenceEndpoint:  "https://api.speakeasy.test/chat/completions",
 		AgentsMD:           []byte("# Assistant\n"),
 		MCPJSON:            ateMCP,
 		GatewayToken:       []byte(strings.Repeat("a", 43)),
@@ -48,26 +51,35 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 	require.NoError(t, validateKitBootstrap(bootstrap))
 
 	cfg := kitBootstrapConfig(bootstrap)
-	require.Contains(t, cfg, `endpoint = "https://ai.speakeasy.com/chat/completions"`)
+	require.Contains(t, cfg, `provider = "openrouter"`)
 	require.NotContains(t, cfg, "tokenFile")
 	require.NotContains(t, cfg, "jwtBearer")
+	require.NotContains(t, cfg, "[inference_providers.speakeasy.workload]")
 
-	// Egress-injected bootstrap must reject any assertion file path.
+	// Egress-injected bootstrap must reject any assertion file path, workload issuer, or missing placeholder bearer header.
 	bad := bootstrap
 	bad.AssertionFile = "/var/run/speakeasy/workload/assertion"
 	require.Error(t, validateKitBootstrap(bad))
+
+	badIssuer := bootstrap
+	issuerBinding := ateBinding
+	issuerBinding.IssuerID = uuid.New()
+	badIssuer.Workload = &issuerBinding
+	require.Error(t, validateKitBootstrap(badIssuer))
+
+	noAuthMCP, err := kitProjectGatewayMCPJSON(resource, nil, nil)
+	require.NoError(t, err)
+	badNoHeader := bootstrap
+	badNoHeader.MCPJSON = noAuthMCP
+	require.Error(t, validateKitBootstrap(badNoHeader))
 }
 
 func TestKitATEStoredWorkloadRecoveryValidation(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
 	c.Environment, c.nativeIdentity = "production", nil
-	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "https://ATE-ISSUER.example.com:443/", "https://ate-issuer.example.com/jwks"
+	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "", ""
 	c.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"}
-
-	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "actor-generation-one")
-	require.NoError(t, err)
-	require.Equal(t, "actor/prod-space/actor-one", binding.Subject)
 
 	tx := testenv.BeginTx(t, t.Context(), db)
 	r.LifecycleTx = tx
@@ -79,21 +91,27 @@ func TestKitATEStoredWorkloadRecoveryValidation(t *testing.T) {
 	before, err := q.ListWorkloadAdmissions(t.Context(), params)
 	require.NoError(t, err)
 
-	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"))
-	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"))
+	binding, err := core.provisionKitATEWorkload(t.Context(), r, c, identity, "actor-generation-one")
+	require.NoError(t, err)
+	require.Equal(t, "actor/prod-space/actor-one", binding.Subject)
+	require.Equal(t, uuid.Nil, binding.IssuerID)
 
 	after, err := q.ListWorkloadAdmissions(t.Context(), params)
 	require.NoError(t, err)
-	require.Len(t, after, len(before), "stored-workload validation must not change admission count")
+	require.Len(t, after, len(before), "ATE workload provisioning must not create tenant workload admissions")
 
+	require.NoError(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"))
 	require.ErrorIs(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-two"), ErrKitRuntimeBinding)
 
 	foreign := *binding
 	foreign.Subject = "actor/prod-space/other-actor"
 	require.ErrorIs(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, &foreign, identity, "actor-generation-one"), ErrKitRuntimeBinding)
 
+	withIssuer := *binding
+	withIssuer.IssuerID = uuid.New()
+	require.ErrorIs(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, &withIssuer, identity, "actor-generation-one"), ErrKitRuntimeBinding)
+
 	require.NoError(t, core.kitATERevoke(t.Context(), r, binding))
-	require.ErrorIs(t, core.validateKitATEBootstrapWorkload(t.Context(), r, c, binding, identity, "actor-generation-one"), ErrKitRuntimeBinding, "withdrawn admissions cannot recover")
 }
 
 func TestKitATEIdleCheckpointCapability(t *testing.T) {
@@ -118,13 +136,7 @@ func TestKitATEActorTokenIsolation(t *testing.T) {
 
 func TestKitATEWorkloadSubject(t *testing.T) {
 	t.Parallel()
-	r := assistantRuntimeRecord{ID: uuid.New()}
-	c := KitLocalCompositionConfig{
-		Environment: "production",
-		ateIdentity: &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
-	}
-	subject, serviceAccount, err := kitWorkloadSubject(r, c, "actor-gateway-generation")
+	subject, err := kitATEWorkloadSubject(&kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"})
 	require.NoError(t, err)
 	require.Equal(t, "actor/prod-space/actor-one", subject)
-	require.Empty(t, serviceAccount)
 }

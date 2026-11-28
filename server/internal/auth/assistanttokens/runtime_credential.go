@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
@@ -17,18 +18,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// runtimeBindingSkewBuffer extends the Redis runtime-binding TTL past the
+// minted credential's expiry so minor clock skew never orphans a live token.
+const runtimeBindingSkewBuffer = time.Minute
+
 // RuntimeBinding is the assistant thread a turn's principal credential was
 // minted for. The credential itself names only its principal; the runtime
 // routes look the binding up by credential ID.
 type RuntimeBinding struct {
-	OrganizationID string    `json:"organization_id"`
-	ProjectID      uuid.UUID `json:"project_id"`
-	AssistantID    uuid.UUID `json:"assistant_id"`
-	ThreadID       uuid.UUID `json:"thread_id"`
-	ChatID         uuid.UUID `json:"chat_id"`
+	OrganizationID  string    `json:"organization_id"`
+	ProjectID       uuid.UUID `json:"project_id"`
+	AssistantID     uuid.UUID `json:"assistant_id"`
+	ThreadID        uuid.UUID `json:"thread_id"`
+	ChatID          uuid.UUID `json:"chat_id"`
+	TranscriptOwned bool      `json:"transcript_owned,omitempty"`
+	ATEActorUID     string    `json:"ate_actor_uid,omitempty"`
 }
 
 type runtimeChatKey struct{}
+type runtimeTranscriptOwnedKey struct{}
 
 // RuntimeChatID is the chat of the thread a runtime credential is bound to.
 func RuntimeChatID(ctx context.Context) (uuid.UUID, bool) {
@@ -59,17 +67,25 @@ func runtimeBindingKey(credentialID string) string {
 // MintTurnCredential mints the principal credential an assistant turn runs
 // with and records the thread it belongs to for the runtime routes.
 func (m *Manager) MintTurnCredential(ctx context.Context, credential principalcredential.Credential, binding RuntimeBinding) (string, error) {
+	raw, _, err := m.MintTurnCredentialWithLifetime(ctx, credential, binding, principalcredential.Lifetime)
+	return raw, err
+}
+
+// MintTurnCredentialWithLifetime mints a turn principal credential with an
+// explicit lifetime and records its thread binding in cache for lifetime plus
+// runtimeBindingSkewBuffer so the binding always covers the live credential.
+func (m *Manager) MintTurnCredentialWithLifetime(ctx context.Context, credential principalcredential.Credential, binding RuntimeBinding, lifetime time.Duration) (string, time.Time, error) {
 	if binding.OrganizationID != credential.OrganizationID || binding.ProjectID != credential.ProjectID {
-		return "", principalcredential.ErrInvalid
+		return "", time.Time{}, principalcredential.ErrInvalid
 	}
-	raw, id, err := m.credentials.Mint(credential)
+	raw, id, expiresAt, err := m.credentials.MintWithLifetime(credential, lifetime)
 	if err != nil {
-		return "", fmt.Errorf("mint turn credential: %w", err)
+		return "", time.Time{}, fmt.Errorf("mint turn credential: %w", err)
 	}
-	if err := m.runtimeBindings.Set(ctx, runtimeBindingKey(id), binding, principalcredential.Lifetime); err != nil {
-		return "", fmt.Errorf("record turn credential binding: %w", err)
+	if err := m.runtimeBindings.Set(ctx, runtimeBindingKey(id), binding, lifetime+runtimeBindingSkewBuffer); err != nil {
+		return "", time.Time{}, fmt.Errorf("record turn credential binding: %w", err)
 	}
-	return raw, nil
+	return raw, expiresAt, nil
 }
 
 // BindRuntime attaches the assistant thread and chat recorded for an
@@ -161,10 +177,28 @@ func (m *Manager) loadRuntimeBinding(ctx context.Context, credential principalcr
 	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
 		return binding, false, oops.C(oops.CodeUnauthorized)
 	}
+	if binding.ATEActorUID != "" {
+		live, err := m.tokens.IsLiveAssistantATEActor(ctx, tokenrepo.IsLiveAssistantATEActorParams{
+			OrganizationID: binding.OrganizationID,
+			ProjectID:      binding.ProjectID,
+			AssistantID:    binding.AssistantID,
+			ThreadID:       binding.ThreadID,
+			ActorUid:       binding.ATEActorUID,
+		})
+		if err != nil {
+			return binding, false, fmt.Errorf("check ATE actor revocation: %w", err)
+		}
+		if !live {
+			return binding, false, oops.C(oops.CodeUnauthorized)
+		}
+	}
 	return binding, true, nil
 }
 
 func attachRuntimeBinding(ctx context.Context, binding RuntimeBinding) context.Context {
 	ctx = context.WithValue(ctx, runtimeChatKey{}, binding.ChatID)
+	if binding.TranscriptOwned {
+		ctx = context.WithValue(ctx, runtimeTranscriptOwnedKey{}, true)
+	}
 	return contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})
 }

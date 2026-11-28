@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -58,7 +57,7 @@ const (
 	ateDrainSuspendTimeout = 3 * time.Minute
 
 	// ateInitWireVersion is the expected X-ATE-Init-Version header and bootstrap payload version.
-	ateInitWireVersion = 1
+	ateInitWireVersion = 2
 
 	// ateInitVersionHeader carries the init helper wire contract version on every response.
 	ateInitVersionHeader = "X-ATE-Init-Version"
@@ -83,9 +82,6 @@ var _ kitATEControl = (*ateclient.Client)(nil)
 
 // KitATERuntimeConfig configures the ATE-backed Kit runtime.
 type KitATERuntimeConfig struct {
-	// EgressHosts are operator-approved DNS hostnames allowed for actor egress.
-	EgressHosts []string
-
 	// WorkerSelector holds the label selector applied to created ActorTemplates.
 	WorkerSelector map[string]string
 
@@ -149,13 +145,13 @@ type KitATERuntimeBackend struct {
 }
 
 type kitATEMetadata struct {
-	RuntimeID   uuid.UUID `json:"runtime_id"`
-	AssistantID uuid.UUID `json:"assistant_id"`
-	ProjectID   uuid.UUID `json:"project_id"`
-	ImageDigest string    `json:"image_digest"`
-	Atespace    string    `json:"atespace"`
-	Template    string    `json:"template"`
-	EgressHosts []string  `json:"egress_hosts"`
+	RuntimeID         uuid.UUID `json:"runtime_id"`
+	AssistantID       uuid.UUID `json:"assistant_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	ImageDigest       string    `json:"image_digest"`
+	Atespace          string    `json:"atespace"`
+	Template          string    `json:"template"`
+	LegacyEgressHosts []string  `json:"egress_hosts,omitempty"`
 }
 
 var _ RuntimeBackend = (*KitATERuntimeBackend)(nil)
@@ -170,17 +166,6 @@ func NewKitATERuntimeBackend(c KitATERuntimeConfig) (*KitATERuntimeBackend, erro
 		return nil, err
 	}
 	c.WorkerSelector = maps.Clone(c.WorkerSelector)
-
-	c.EgressHosts = append(append([]string(nil), c.EgressHosts...), c.ServerURL.Hostname())
-	for i, host := range c.EgressHosts {
-		host = strings.ToLower(host)
-		if !kitATETrustedDNSHost(host) {
-			return nil, errors.New("ATE egress requires explicit DNS hosts without IPs or wildcards")
-		}
-		c.EgressHosts[i] = host
-	}
-	slices.Sort(c.EgressHosts)
-	c.EgressHosts = slices.Compact(c.EgressHosts)
 
 	if c.HelperPollInterval <= 0 {
 		c.HelperPollInterval = ateHelperPollInterval
@@ -234,16 +219,16 @@ func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadat
 	}
 	if kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		return kitATEMetadata{
-			RuntimeID:   r.ID,
-			AssistantID: r.AssistantID,
-			ProjectID:   r.ProjectID,
-			ImageDigest: k.imageDigest,
-			Atespace:    k.config.Atespace,
-			Template:    k.config.Template,
-			EgressHosts: append([]string(nil), k.config.EgressHosts...),
+			RuntimeID:         r.ID,
+			AssistantID:       r.AssistantID,
+			ProjectID:         r.ProjectID,
+			ImageDigest:       k.imageDigest,
+			Atespace:          k.config.Atespace,
+			Template:          k.config.Template,
+			LegacyEgressHosts: nil,
 		}, nil
 	}
-	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || !ateImageDigestPattern.MatchString(m.ImageDigest) || !slices.Equal(m.EgressHosts, k.config.EgressHosts) {
+	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Atespace != k.config.Atespace || m.Template != k.config.Template || !ateImageDigestPattern.MatchString(m.ImageDigest) || len(m.LegacyEgressHosts) > 0 {
 		return m, ErrKitRuntimeBinding
 	}
 	return m, nil
@@ -266,13 +251,13 @@ func (k *KitATERuntimeBackend) metadataForReap(r assistantRuntimeRecord) (kitATE
 	}
 	if kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		return kitATEMetadata{
-			RuntimeID:   r.ID,
-			AssistantID: r.AssistantID,
-			ProjectID:   r.ProjectID,
-			ImageDigest: "",
-			Atespace:    k.config.Atespace,
-			Template:    "",
-			EgressHosts: nil,
+			RuntimeID:         r.ID,
+			AssistantID:       r.AssistantID,
+			ProjectID:         r.ProjectID,
+			ImageDigest:       "",
+			Atespace:          k.config.Atespace,
+			Template:          "",
+			LegacyEgressHosts: nil,
 		}, nil
 	}
 	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID {
@@ -413,7 +398,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 				if err != nil {
 					return fmt.Errorf("save ATE actor workload binding: %w", err)
 				}
-				if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
+				if err := k.ensureEgress(ctx, entry.ActorName, entry.ActorUID, bootstrap); err != nil {
 					return err
 				}
 				payload, err := kitATEBootstrapPayload(bootstrap)
@@ -469,7 +454,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 			}
 		}
 
-		if entry.Workload == nil || entry.Workload.Audience == "" {
+		if entry.Workload == nil || entry.Workload.Subject == "" || !entry.Workload.MCPProjectGateway {
 			return ErrKitRuntimeBinding
 		}
 
@@ -759,10 +744,11 @@ type kitATEBootstrapRequest struct {
 	Version int                   `json:"version"`
 	Dirs    []kitATEBootstrapDir  `json:"dirs"`
 	Files   []kitATEBootstrapFile `json:"files"`
+	Env     map[string]string     `json:"env,omitempty"`
 }
 
 // kitATEBootstrapPayload builds the versioned generic bootstrap payload for
-// kit-ate-init so all Kit-specific paths and contents stay in server code.
+// kit-ate-init so all Kit-specific paths, contents, and process env stay in server code.
 func kitATEBootstrapPayload(b KitLocalBootstrap) ([]byte, error) {
 	if err := validateKitBootstrap(b); err != nil {
 		return nil, err
@@ -782,6 +768,10 @@ func kitATEBootstrapPayload(b KitLocalBootstrap) ([]byte, error) {
 			{Path: ".kit/config.toml", Mode: 0o600, Content: []byte(kitBootstrapConfig(b))},
 			{Path: ".kit/credentials/mcp.json", Mode: 0o600, Content: b.MCPJSON},
 			{Path: ".kit/credentials/gateway-token", Mode: 0o600, Content: b.GatewayToken},
+		},
+		Env: map[string]string{
+			"OPENROUTER_BASE_URL": b.InferenceEndpoint,
+			"OPENROUTER_API_KEY":  kitATEEgressAuthPlaceholder,
 		},
 	}
 	raw, err := json.Marshal(payload)

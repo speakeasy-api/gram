@@ -85,6 +85,10 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 			{Path: "conf/app.toml", Mode: 0o600, Content: []byte("model = 'test'\n")},
 			{Path: "conf/secret.token", Mode: 0o600, Content: []byte(strings.Repeat("x", 43))},
 		},
+		Env: map[string]string{
+			"OPENROUTER_BASE_URL": "https://api.example.test/v1",
+			"OPENROUTER_API_KEY":  "placeholder-value",
+		},
 	})
 	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
 
@@ -93,6 +97,7 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	default:
 		t.Fatal("workload was not launched after bootstrap")
 	}
+	require.ElementsMatch(t, []string{"OPENROUTER_BASE_URL=https://api.example.test/v1", "OPENROUTER_API_KEY=placeholder-value"}, s.childEnv())
 
 	// Identical re-POST is idempotent (204); a different body is rejected (409).
 	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
@@ -108,11 +113,14 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	})
 	require.Equal(t, http.StatusConflict, post("/bootstrap", diffPayload).Code)
 
-	// Files exist on disk with exact content and permissions; no on-disk init marker is written.
+	// Files exist on disk with exact content and permissions; neither an on-disk
+	// init marker nor .ate-env.json is written.
 	data, err := os.ReadFile(filepath.Join(rootDir, "conf/app.toml"))
 	require.NoError(t, err)
 	require.Equal(t, "model = 'test'\n", string(data))
 	_, err = os.Stat(filepath.Join(rootDir, ".ate-initialized"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = os.Stat(filepath.Join(rootDir, ".ate-env.json"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 
 	// Generic /app-readyz probes the configured --probe-addr.
@@ -120,17 +128,19 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "1", rec.Header().Get(wireVersionHeader))
+	require.Equal(t, strconv.Itoa(wireVersion), rec.Header().Get(wireVersionHeader))
 
-	// Simulate sandbox-writable tampering before suspend (including planting a
-	// forged marker file) and restarting init on a rootfs-only resume:
-	// init must NOT launch from on-disk state and must wait for POST /bootstrap
-	// to overwrite the tampered files first.
+	// Simulate sandbox-writable tampering before suspend (planting both a forged
+	// marker file and a poisoned .ate-env.json) and restarting init on a rootfs-only
+	// resume: init must NOT launch or load env from disk, and must wait for
+	// POST /bootstrap to overwrite the tampered files and supply env in memory.
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "conf/app.toml"), []byte("model = 'tampered'\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, ".ate-initialized"), []byte("1"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, ".ate-env.json"), []byte(`{"LD_PRELOAD":"/tmp/evil.so","OPENROUTER_BASE_URL":"https://attacker.invalid"}`), 0o600))
 
 	restored, err := newInitializer(cfg)
 	require.NoError(t, err)
+	require.Empty(t, restored.childEnv(), "resumed init must never load env from .ate-env.json on disk")
 	select {
 	case <-restored.launch:
 		t.Fatal("resumed actor must not launch before POST /bootstrap rewrites provisioned files")
@@ -147,6 +157,7 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 	rec = httptest.NewRecorder()
 	restored.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/bootstrap", bytes.NewReader(payload)))
 	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.ElementsMatch(t, []string{"OPENROUTER_BASE_URL=https://api.example.test/v1", "OPENROUTER_API_KEY=placeholder-value"}, restored.childEnv())
 	select {
 	case <-restored.launch:
 	default:
@@ -164,14 +175,30 @@ func TestBootstrapRejectsTraversalAbsolutePathsSymlinksAndBadModes(t *testing.T)
 	s, err := newInitializer(testConfigForRoot(rootDir, "127.0.0.1:8081"))
 	require.NoError(t, err)
 
-	for _, bad := range []bootstrapPayload{
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}},
-		{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}},
-		{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}},
-	} {
-		require.Error(t, s.install(testPayloadJSON(t, bad)))
+	cases := []struct {
+		name    string
+		payload bootstrapPayload
+	}{
+		{name: "parent traversal file", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "../outside", Mode: 0o600, Content: []byte("x")}}}},
+		{name: "absolute file path", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "/etc/passwd", Mode: 0o600, Content: []byte("x")}}}},
+		{name: "empty env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"": "v"}}},
+		{name: "env key with equals", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"A=B": "v"}}},
+		{name: "non-allowlisted LD_PRELOAD env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"LD_PRELOAD": "/tmp/evil.so"}}},
+		{name: "non-allowlisted PATH env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"PATH": "/tmp/bin"}}},
+		{name: "non-allowlisted HTTP_PROXY env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"HTTP_PROXY": "http://127.0.0.1:8080"}}},
+		{name: "non-allowlisted SSL_CERT_FILE env key", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"SSL_CERT_FILE": "/tmp/ca.pem"}}},
+		{name: "env value with NUL byte", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}, Env: map[string]string{"OPENROUTER_API_KEY": "bad\x00val"}}},
+		{name: "duplicate file path", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: 0o600, Content: []byte("1")}, {Path: "a/b", Mode: 0o600, Content: []byte("2")}}}},
+		{name: "setuid file mode", payload: bootstrapPayload{Version: wireVersion, Files: []bootstrapFile{{Path: "a/b", Mode: os.ModeSetuid | 0o600, Content: []byte("x")}}}},
+		{name: "parent traversal dir", payload: bootstrapPayload{Version: wireVersion, Dirs: []bootstrapDir{{Path: "../escape", Mode: 0o700}}, Files: []bootstrapFile{{Path: "ok.txt", Mode: 0o600, Content: []byte("x")}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			sub, subErr := newInitializer(testConfigForRoot(t.TempDir(), "127.0.0.1:8081"))
+			require.NoError(t, subErr)
+			require.Error(t, sub.install(testPayloadJSON(t, tc.payload)))
+		})
 	}
 
 	outside := t.TempDir()
@@ -214,7 +241,7 @@ func TestInitTrapsSIGTERMWithoutExitingAndAdvertisesDraining(t *testing.T) {
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, "1", resp.Header.Get(wireVersionHeader))
+		require.Equal(t, strconv.Itoa(wireVersion), resp.Header.Get(wireVersionHeader))
 		var out statusResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 		return out

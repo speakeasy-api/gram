@@ -1,6 +1,8 @@
 package gram
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -8,16 +10,103 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/trace"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
+	"github.com/speakeasy-api/gram/server/internal/atecred"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestATEEgressHostsAreExplicit(t *testing.T) {
+func TestATECredentialProviderAuthFlags(t *testing.T) {
 	t.Parallel()
-	c := kitCLIContext(t, map[string]string{"assistant-ate-egress-host": "tools.example.com"})
-	require.Equal(t, []string{"tools.example.com"}, c.StringSlice("assistant-ate-egress-host"))
+	c := kitCLIContext(t, map[string]string{
+		"assistant-ate-cred-provider-service-account": "ate-cred@proj.iam.gserviceaccount.com",
+		"assistant-ate-cred-provider-local-token":     "local-secret-token",
+	})
+	require.Equal(t, "ate-cred@proj.iam.gserviceaccount.com", c.String("assistant-ate-cred-provider-service-account"))
+	require.Equal(t, "local-secret-token", c.String("assistant-ate-cred-provider-local-token"))
+}
+
+func TestMountATECredentialMintEndpointFromCLI(t *testing.T) {
+	t.Parallel()
+	serverURL, err := url.Parse("https://api.example.com")
+	require.NoError(t, err)
+
+	t.Run("disabled leaves mint endpoint unmounted", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, kitCLIContext(t, nil), &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("non-local fails closed when service account is empty", func(t *testing.T) {
+		t.Parallel()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                             "production",
+			"assistant-ate-enabled":                   "true",
+			"assistant-ate-atespace":                  "prod-assistants",
+			"assistant-ate-cred-provider-local-token": "forbidden-in-prod",
+		})
+		require.Panics(t, func() {
+			_ = mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), goahttp.NewMuxer(), c, &assistants.ServiceCore{}, serverURL)
+		})
+	})
+
+	t.Run("disabled runtime provider leaves mint endpoint unmounted", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                "production",
+			"assistant-runtime-provider": assistants.RuntimeProviderDisabled,
+			"assistant-ate-enabled":      "true",
+		})
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, c, &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("shared service account env without ATE enabled or atespace leaves mint endpoint unmounted", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		c := kitCLIContext(t, map[string]string{
+			"environment": "production",
+			"assistant-ate-cred-provider-service-account": "ate-cred@proj.iam.gserviceaccount.com",
+		})
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, c, &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("local static token mounts mint endpoint and authenticates", func(t *testing.T) {
+		t.Parallel()
+		mux := goahttp.NewMuxer()
+		c := kitCLIContext(t, map[string]string{
+			"environment":                             "local",
+			"assistant-ate-enabled":                   "true",
+			"assistant-ate-atespace":                  "local-assistants",
+			"assistant-ate-cred-provider-local-token": "dev-static-token",
+		})
+		err := mountATECredentialMintEndpointFromCLI(t.Context(), testenv.NewLogger(t), mux, c, &assistants.ServiceCore{}, serverURL)
+		require.NoError(t, err)
+
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil))
+		require.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		authReq := httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, nil)
+		authReq.Header.Set("Authorization", "Bearer dev-static-token")
+		authRec := httptest.NewRecorder()
+		mux.ServeHTTP(authRec, authReq)
+		require.Equal(t, http.StatusBadRequest, authRec.Code)
+	})
 }
 
 func TestATERuntimeConstructionWithoutClusterEndpoint(t *testing.T) {
@@ -104,8 +193,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 				"environment":                     "production",
 				"assistant-ate-enabled":           "true",
 				"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-deadbeef@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-				"assistant-kit-workload-issuer":   "https://ate.example.com",
-				"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
 				"assistant-ate-api-address":       "127.0.0.1:1",
 				"assistant-ate-router-address":    "127.0.0.1:2",
 				"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
@@ -132,8 +219,6 @@ func TestATEStartupValidationAndDisabledProvider(t *testing.T) {
 			"assistant-ate-enabled":           "true",
 			"assistant-ate-image":             "gcr.io/example/gram-ate-runtime:sha-0123456789abcdef0123456789abcdef01234567@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			"assistant-ate-worker-selector":   "workload-type=ate-assistants,tier=prod",
-			"assistant-kit-workload-issuer":   "https://ate.example.com",
-			"assistant-kit-workload-jwks-url": "https://ate.example.com/.well-known/jwks.json",
 			"assistant-ate-api-address":       "127.0.0.1:1",
 			"assistant-ate-router-address":    "127.0.0.1:2",
 			"assistant-ate-service-ca-file":   "/nonexistent/ca.pem",
@@ -160,4 +245,72 @@ func TestATEFlagsHaveNoEnablementDefaults(t *testing.T) {
 			require.Nil(t, f.Value, f.Name)
 		}
 	}
+}
+
+func TestATECredentialProviderAndServerAudienceNormalization(t *testing.T) {
+	t.Parallel()
+	const want = "https://api.speakeasy.com" + atecred.MintEndpointPath
+
+	for _, pair := range []struct {
+		providerRaw string
+		serverRaw   string
+	}{
+		{providerRaw: "https://api.speakeasy.com", serverRaw: "https://api.speakeasy.com/"},
+		{providerRaw: "https://api.speakeasy.com/", serverRaw: "https://api.speakeasy.com"},
+		{providerRaw: "https://api.speakeasy.com/", serverRaw: "https://api.speakeasy.com/"},
+	} {
+		var providerAud string
+		app := &cli.App{
+			Flags: ateCredentialProviderFlags(),
+			Action: func(c *cli.Context) error {
+				_, providerAud = validateATECredentialProviderCLI(c)
+				return nil
+			},
+		}
+		err := app.Run([]string{
+			"ate-credential-provider",
+			"--environment=prod",
+			"--server-cred-bundle=/tmp/bundle.pem",
+			"--client-ca-file=/tmp/ca.pem",
+			"--atespace=prod-assistants",
+			"--speakeasy-server-url=" + pair.providerRaw,
+		})
+		require.NoError(t, err)
+
+		serverURL, err := url.Parse(pair.serverRaw)
+		require.NoError(t, err)
+		serverAud, err := atecred.MintEndpointURL(serverURL)
+		require.NoError(t, err)
+
+		require.Equal(t, want, providerAud)
+		require.Equal(t, want, serverAud)
+		require.Equal(t, serverAud, providerAud)
+	}
+}
+
+func TestWorkerToleratesATECredProviderServiceAccountEnv(t *testing.T) {
+	t.Setenv("GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT", "ate-cred@proj.iam.gserviceaccount.com")
+
+	workerCmd := newWorkerCommand()
+	var found *cli.StringFlag
+	for _, flag := range workerCmd.Flags {
+		if sf, ok := flag.(*cli.StringFlag); ok && sf.Name == "assistant-ate-cred-provider-service-account" {
+			found = sf
+			break
+		}
+	}
+	require.NotNil(t, found, "worker command must register assistant-ate-cred-provider-service-account")
+	require.Contains(t, found.EnvVars, "GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT")
+
+	var gotSA string
+	app := &cli.App{
+		Flags: assistantRuntimeFlags(),
+		Action: func(c *cli.Context) error {
+			gotSA = c.String("assistant-ate-cred-provider-service-account")
+			return nil
+		},
+	}
+	err := app.Run([]string{"worker"})
+	require.NoError(t, err)
+	require.Equal(t, "ate-cred@proj.iam.gserviceaccount.com", gotSA)
 }

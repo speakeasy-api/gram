@@ -77,9 +77,9 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 	localCfg.Environment = "production"
 	localCfg.nativeIdentity = nil
 	localCfg.Origin = origin
-	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
-	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"
-	localCfg.WorkloadIssuerBaseURL = "https://auth.example.com"
+	localCfg.WorkloadIssuerURL = ""
+	localCfg.WorkloadJWKSURL = ""
+	localCfg.WorkloadIssuerBaseURL = ""
 
 	q := assistantrepo.New(db)
 	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
@@ -106,7 +106,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		Atespace:                  atespace,
 		Template:                  template,
 		WorkerSelector:            testKitATEWorkerSelector,
-		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
 	var protoMu sync.Mutex
@@ -120,7 +119,6 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 		WorkerSelector:  testKitATEWorkerSelector,
 		ServerURL:       core.serverURL,
 		Client:          client,
-		EgressHosts:     []string{"ai.speakeasy.com"},
 		Bootstrap:       core.kitATECompositionBootstrap(compCfg),
 		Token:           core.kitATEToken,
 		Lifecycle:       core.kitATELifecycle,
@@ -256,18 +254,18 @@ func TestKitATEConcurrentThreadsDoNotWaitOnEachOther(t *testing.T) {
 	require.NoError(t, json.Unmarshal(row2.WorkloadBindingJson, &binding2))
 	require.Equal(t, "actor/"+atespace+"/"+lockedRow1.ActorName, binding1.Subject)
 	require.Equal(t, "actor/"+atespace+"/"+row2.ActorName, binding2.Subject)
+	require.Equal(t, uuid.Nil, binding1.IssuerID)
+	require.Equal(t, uuid.Nil, binding2.IssuerID)
 
 	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{
 		OrganizationID: identity.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: runtimeSeed.ProjectID, Valid: true},
 	})
 	require.NoError(t, err)
-	subjects := make([]string, 0, len(admissions))
 	for _, a := range admissions {
-		subjects = append(subjects, a.Subject)
+		require.NotEqual(t, binding1.Subject, a.Subject)
+		require.NotEqual(t, binding2.Subject, a.Subject)
 	}
-	require.Contains(t, subjects, binding1.Subject)
-	require.Contains(t, subjects, binding2.Subject)
 	require.Equal(t, int32(3), cluster.acpRequestCount.Load())
 }
 
@@ -420,9 +418,9 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 	localCfg.Environment = "production"
 	localCfg.nativeIdentity = nil
 	localCfg.Origin = origin
-	localCfg.WorkloadIssuerURL = "https://ate-issuer.example.com"
-	localCfg.WorkloadJWKSURL = "https://ate-issuer.example.com/jwks"
-	localCfg.WorkloadIssuerBaseURL = "https://auth.example.com"
+	localCfg.WorkloadIssuerURL = ""
+	localCfg.WorkloadJWKSURL = ""
+	localCfg.WorkloadIssuerBaseURL = ""
 
 	q := assistantrepo.New(db)
 	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
@@ -449,7 +447,6 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		Atespace:                  atespace,
 		Template:                  template,
 		WorkerSelector:            testKitATEWorkerSelector,
-		EgressHosts:               []string{"ai.speakeasy.com"},
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -461,7 +458,6 @@ func TestKitATEPerThreadIdleAndDrainSweep(t *testing.T) {
 		WorkerSelector:     testKitATEWorkerSelector,
 		ServerURL:          core.serverURL,
 		Client:             client,
-		EgressHosts:        []string{"ai.speakeasy.com"},
 		Bootstrap:          core.kitATECompositionBootstrap(compCfg),
 		Token:              core.kitATEToken,
 		Lifecycle:          core.kitATELifecycle,

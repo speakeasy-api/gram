@@ -11,30 +11,24 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/issuerurl"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
 	// maxATEDNSLabelLen is the RFC 1123 DNS-label length limit for ATE names.
 	maxATEDNSLabelLen = 63
-
-	// ateBrokerJWKSTimeout bounds startup verification that the ATE JWKS URL is reachable.
-	ateBrokerJWKSTimeout = 10 * time.Second
 
 	// ateLifecycleCommitTimeout bounds committing the lifecycle advisory transaction.
 	ateLifecycleCommitTimeout = 30 * time.Second
@@ -58,9 +52,6 @@ type KitATECompositionConfig struct {
 
 	// WorkerSelector holds the label selector applied to created ActorTemplates.
 	WorkerSelector map[string]string
-
-	// EgressHosts lists operator-approved extra DNS hostnames for actor egress.
-	EgressHosts []string
 }
 
 type kitATEWorkloadIdentity struct {
@@ -88,7 +79,10 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if _, err := kitATEImageDigest(c.Image); err != nil {
 		return err
 	}
-	return validateKitComposition(c.KitLocalCompositionConfig)
+	if c.TurnStream == nil {
+		return errors.New("assistant ATE requires a turn stream")
+	}
+	return nil
 }
 
 // InstallKitATERuntime installs only the version-3 dispatch branch. The backend
@@ -97,11 +91,8 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	if err := validateKitATEComposition(c); err != nil {
 		return err
 	}
-	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("ATE requires guarded HTTP, transcript, inference, and encrypted gateway credential services")
-	}
-	if err := s.validateKitATEBrokerKeys(ctx, c.WorkloadJWKSURL); err != nil {
-		return err
+	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil || s.serverURL == nil {
+		return errors.New("ATE requires guarded HTTP, transcript, inference, server URL, and encrypted gateway credential services")
 	}
 
 	c.ClientConfig.Atespace = c.Atespace
@@ -117,7 +108,6 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		WorkerSelector:     c.WorkerSelector,
 		ServerURL:          s.serverURL,
 		Client:             client,
-		EgressHosts:        append(slices.Clone(c.EgressHosts), c.Origin.Hostname(), s.serverURL.Hostname()),
 		Bootstrap:          s.kitATECompositionBootstrap(c),
 		Token:              s.kitATEToken,
 		Protocol:           s.kitATEProtocolFactory(c),
@@ -141,6 +131,7 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		return err
 	}
 
+	s.SetATEAtespace(c.Atespace)
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
 	}
@@ -155,26 +146,80 @@ func kitATEActorToken(root, threadID string) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// Use the broker's resolver without private-CA or internal-network overrides.
-// A successful control-plane TLS connection does not establish broker trust.
-func (s *ServiceCore) validateKitATEBrokerKeys(ctx context.Context, raw string) error {
-	source, err := jwks.NewRemoteSource(raw)
+func kitATEWorkloadSubject(identity *kitATEWorkloadIdentity) (string, error) {
+	if identity == nil || identity.Atespace == "" || identity.ActorName == "" || !kitATENamePattern.MatchString(identity.Atespace) || !kitATENamePattern.MatchString(identity.ActorName) {
+		return "", ErrKitRuntimeBinding
+	}
+	return "actor/" + identity.Atespace + "/" + identity.ActorName, nil
+}
+
+// provisionKitATEWorkload validates the assistant's live agent identity, owner
+// eligibility, and inference policy without creating any tenant workload issuer
+// or admission rows. ATE actors authenticate on demand through the credential
+// provider mint endpoint using Speakeasy-minted turn credentials.
+func (s *ServiceCore) provisionKitATEWorkload(ctx context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, identity assistantidentity.RuntimeIdentity, gateway string) (*KitWorkloadBinding, error) {
+	if c.ateIdentity == nil || c.nativeIdentity != nil || r.LifecycleTx == nil || gateway == "" || !kitWorkloadIdentityMatches(r, identity) {
+		return nil, ErrKitRuntimeBinding
+	}
+	subject, err := kitATEWorkloadSubject(c.ateIdentity)
 	if err != nil {
-		return fmt.Errorf("configure ATE broker JWKS: %w", err)
+		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, ateBrokerJWKSTimeout)
-	defer cancel()
-	resolver := jwks.NewResolver(s.guardianPolicy, noop.NewMeterProvider(), s.logger)
-	var initialCache jwks.CacheState
-	if _, err := resolver.Resolve(ctx, source, initialCache); err != nil {
-		return fmt.Errorf("ATE JWKS must be reachable through the broker's public HTTPS trust path: %w", err)
+	db := r.LifecycleTx
+	resolved, err := s.identities.ResolveRuntimeLocked(ctx, db, identity.OrganizationID, r.ProjectID, r.AssistantID)
+	if err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
 	}
-	return nil
+	if resolved != identity {
+		return nil, assistantidentity.ErrInvalidIdentity
+	}
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	agent, err := agents.ResolvePrincipal(ctx, db, identity.OrganizationID, agentPrincipal)
+	if err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
+	}
+	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
+		return nil, assistantidentity.ErrInvalidIdentity
+	}
+	ownerPrincipals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, db, identity.OrganizationID, agent.OwnerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
+	}
+	if !eligible {
+		return nil, assistantidentity.ErrInvalidIdentity
+	}
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, db, identity.OrganizationID, agentPrincipal)
+	if err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
+	}
+	ownerPolicy, err := authz.LoadGrants(ctx, db, identity.OrganizationID, ownerPrincipals)
+	if err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
+	}
+	if err := kitWorkloadInferenceAllowed(r.ProjectID, agentPolicy, ownerPolicy); err != nil {
+		return nil, fmt.Errorf("provision ATE workload: %w", err)
+	}
+	generationHash := sha256.Sum256([]byte(gateway))
+	return &KitWorkloadBinding{
+		MCPProjectGateway: true,
+		IssuerID:          uuid.Nil,
+		Subject:           subject,
+		Identity:          identity,
+		ServiceAccount:    "",
+		Audience:          "",
+		Generation:        fmt.Sprintf("%x", generationHash[:16]),
+	}, nil
 }
 
 func (s *ServiceCore) kitATERevoke(ctx context.Context, r assistantRuntimeRecord, binding *KitWorkloadBinding) error {
 	if binding == nil || r.LifecycleTx == nil {
 		return ErrKitRuntimeBinding
+	}
+	if binding.IssuerID == uuid.Nil {
+		// ATE actors use on-demand Speakeasy turn credentials with no tenant
+		// workload admission rows to withdraw; soft-deleting the actor row is
+		// the revocation boundary.
+		return nil
 	}
 	raw, err := json.Marshal(struct {
 		Workload *KitWorkloadBinding `json:"workload"`
@@ -240,88 +285,16 @@ func (s *ServiceCore) kitATEClearThreadSession(ctx context.Context, r assistantR
 	return nil
 }
 
-func (s *ServiceCore) validateKitATEBootstrapWorkload(ctx context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, b *KitWorkloadBinding, identity assistantidentity.RuntimeIdentity, gateway string) error {
-	if c.ateIdentity == nil || r.LifecycleTx == nil || !kitWorkloadIdentityMatches(r, b.Identity) || b.Identity != identity || b.IssuerID == uuid.Nil {
+func (s *ServiceCore) validateKitATEBootstrapWorkload(_ context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, b *KitWorkloadBinding, identity assistantidentity.RuntimeIdentity, gateway string) error {
+	if c.ateIdentity == nil || r.LifecycleTx == nil || !kitWorkloadIdentityMatches(r, b.Identity) || b.Identity != identity || b.IssuerID != uuid.Nil {
 		return ErrKitRuntimeBinding
 	}
-	subject, _, err := kitWorkloadSubject(r, c, gateway)
+	subject, err := kitATEWorkloadSubject(c.ateIdentity)
 	if err != nil || subject != b.Subject {
 		return ErrKitRuntimeBinding
 	}
 	digest := sha256.Sum256([]byte(gateway))
 	if b.Generation != fmt.Sprintf("%x", digest[:16]) {
-		return ErrKitRuntimeBinding
-	}
-
-	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
-	q := workloadrepo.New(r.LifecycleTx)
-	issuer, err := q.GetWorkloadIssuer(ctx, workloadrepo.GetWorkloadIssuerParams{
-		OrganizationID: identity.OrganizationID,
-		ProjectID:      project,
-		ID:             b.IssuerID,
-	})
-	if err != nil {
-		return fmt.Errorf("load recovered ATE workload issuer: %w", err)
-	}
-	canonicalIssuer, err := issuerurl.ParseHTTPSOnly(c.WorkloadIssuerURL)
-	if err != nil {
-		return fmt.Errorf("canonicalize recovered ATE workload issuer: %w", err)
-	}
-	if issuer.ProjectID != project || !kitOwnedWorkloadIssuer(issuer, canonicalIssuer.String(), c.WorkloadJWKSURL) {
-		return ErrKitRuntimeBinding
-	}
-
-	admissions, err := q.ListWorkloadAdmissions(ctx, workloadrepo.ListWorkloadAdmissionsParams{
-		OrganizationID: identity.OrganizationID,
-		ProjectID:      project,
-	})
-	if err != nil {
-		return fmt.Errorf("load recovered ATE admissions: %w", err)
-	}
-	admitted := false
-	for _, a := range admissions {
-		if a.WorkloadIssuerID == b.IssuerID && a.Subject == b.Subject && a.MatchKind == "exact" && a.ProjectID == project && a.Name.String == "kit-runtime-"+r.ID.String()+"-"+b.Generation {
-			admitted = true
-		}
-	}
-	if !admitted {
-		return ErrKitRuntimeBinding
-	}
-
-	assignments, err := q.GetWorkloadAgentAssignmentForSubject(ctx, workloadrepo.GetWorkloadAgentAssignmentForSubjectParams{
-		OrganizationID:   identity.OrganizationID,
-		WorkloadIssuerID: b.IssuerID,
-		Subject:          b.Subject,
-		MatchKind:        "exact",
-	})
-	if err != nil {
-		return fmt.Errorf("load recovered ATE agent assignments: %w", err)
-	}
-	if len(assignments) == 0 {
-		return ErrKitRuntimeBinding
-	}
-	for _, assignment := range assignments {
-		if assignment.AgentID != identity.AgentID {
-			return ErrKitRuntimeBinding
-		}
-	}
-
-	shared, err := usersessionsrepo.New(r.LifecycleTx).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
-	if err != nil {
-		return fmt.Errorf("load recovered ATE broker issuer: %w", err)
-	}
-	if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
-		return ErrKitRuntimeBinding
-	}
-	audience, err := (authserver.Hosts{
-		ServerURL:                 s.serverURL.String(),
-		AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL,
-		PlatformHosts:             nil,
-	}).SharedIssuerURL(shared.UserSessionIssuer)
-	if err != nil {
-		return fmt.Errorf("resolve recovered ATE broker audience: %w", err)
-	}
-	if b.Audience != audience {
 		return ErrKitRuntimeBinding
 	}
 	return nil

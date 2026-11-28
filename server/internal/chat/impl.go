@@ -2052,7 +2052,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Ordinary callers may supply a chat header; managed workloads cannot.
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
-	if assistanttokens.InferenceTranscriptOwned(ctx) {
+	if _, bound := assistanttokens.RuntimeChatID(ctx); !bound && assistanttokens.InferenceTranscriptOwned(ctx) {
 		id, err := kitCompletionSessionID(reqBody)
 		if err != nil {
 			return oops.C(oops.CodeForbidden)
