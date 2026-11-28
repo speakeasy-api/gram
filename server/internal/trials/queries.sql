@@ -284,3 +284,89 @@ WHERE trials.organization_id = previous.organization_id
   AND previous.ends_at > clock_timestamp()
   AND @ends_at::timestamptz > clock_timestamp()
 RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
+
+-- name: HasAcceptedPlatformAdminInvitation :one
+-- Reports whether a Speakeasy staff member invited someone into the
+-- organization and the invitation was accepted. Staff invitations are how a
+-- prospect created in the admin app is offered a trial.
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations invitation
+  JOIN users inviter ON inviter.id = invitation.inviter_user_id
+  WHERE invitation.organization_id = @organization_id
+    AND invitation.state = 'accepted'
+    AND inviter.admin
+    AND inviter.deleted_at IS NULL
+);
+
+-- name: RecordTrialPaymentMethod :execrows
+-- Records the card an organization offered to start its trial. A later attempt
+-- replaces a rejected card; zero rows means an accepted card is already
+-- recorded, so a replayed or second Checkout keeps the card that started the
+-- trial.
+INSERT INTO trial_payment_methods (
+    organization_id
+  , stripe_customer_id
+  , stripe_payment_method_id
+  , card_fingerprint
+  , card_funding
+  , stripe_checkout_session_id
+  , rejection_reason
+)
+VALUES (
+    @organization_id
+  , @stripe_customer_id
+  , @stripe_payment_method_id
+  , @card_fingerprint
+  , @card_funding
+  , @stripe_checkout_session_id
+  , sqlc.narg('rejection_reason')
+)
+ON CONFLICT (organization_id) DO UPDATE SET
+    stripe_customer_id = EXCLUDED.stripe_customer_id
+  , stripe_payment_method_id = EXCLUDED.stripe_payment_method_id
+  , card_fingerprint = EXCLUDED.card_fingerprint
+  , card_funding = EXCLUDED.card_funding
+  , stripe_checkout_session_id = EXCLUDED.stripe_checkout_session_id
+  , rejection_reason = EXCLUDED.rejection_reason
+  , updated_at = clock_timestamp()
+WHERE trial_payment_methods.rejection_reason IS NOT NULL;
+
+-- name: TrialCardStartedAnotherTrial :one
+-- Reports whether the card already started another organization's trial.
+SELECT EXISTS (
+  SELECT 1
+  FROM trial_payment_methods
+  WHERE card_fingerprint = @card_fingerprint
+    AND organization_id <> @organization_id
+    AND rejection_reason IS NULL
+);
+
+-- name: GetTrialPaymentMethod :one
+-- The latest card the organization offered to start its trial.
+SELECT rejection_reason, card_funding, created_at, updated_at
+FROM trial_payment_methods
+WHERE organization_id = @organization_id;
+
+-- name: ListOrganizationsSharingTrialCard :many
+-- Lists the other organizations that offered the same card as this
+-- organization, oldest first. A NULL rejection_reason means the card started
+-- that organization's trial.
+SELECT
+    other.organization_id
+  , organization.name AS organization_name
+  , organization.slug AS organization_slug
+  , other.rejection_reason
+  , other.updated_at AS offered_at
+FROM trial_payment_methods self
+JOIN trial_payment_methods other
+  ON other.card_fingerprint = self.card_fingerprint
+ AND other.organization_id <> self.organization_id
+JOIN organization_metadata organization ON organization.id = other.organization_id
+WHERE self.organization_id = @organization_id
+ORDER BY other.updated_at, other.organization_id;
+
+-- name: LockTrialCardFingerprint :exec
+-- Serializes trial starts that offer the same card, so two organizations
+-- cannot both start a trial with it.
+SELECT pg_advisory_xact_lock(hashtextextended('trial_card:' || @card_fingerprint::text, 0));

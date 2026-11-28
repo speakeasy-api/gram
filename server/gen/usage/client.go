@@ -15,49 +15,51 @@ import (
 
 // Client is the "usage" service client.
 type Client struct {
-	GetPeriodUsageEndpoint            goa.Endpoint
-	GetMeterUsageEndpoint             goa.Endpoint
-	GetSpendBreakdownEndpoint         goa.Endpoint
-	GetTokensUnderManagementEndpoint  goa.Endpoint
-	SetBillingMetadataEndpoint        goa.Endpoint
-	GetBillingEmailEndpoint           goa.Endpoint
-	SetBillingEmailEndpoint           goa.Endpoint
-	SetSpendCapEndpoint               goa.Endpoint
-	GetInferenceSpendCapsEndpoint     goa.Endpoint
-	GetUsageTiersEndpoint             goa.Endpoint
-	CreateCustomerSessionEndpoint     goa.Endpoint
-	GetStripeCheckoutStatusEndpoint   goa.Endpoint
-	CreateStripeCheckoutEndpoint      goa.Endpoint
-	GetStripeSubscriptionEndpoint     goa.Endpoint
-	GetPaygBillingSummaryEndpoint     goa.Endpoint
-	CreateStripePortalSessionEndpoint goa.Endpoint
-	CancelStripeSubscriptionEndpoint  goa.Endpoint
-	ResumeStripeSubscriptionEndpoint  goa.Endpoint
-	CreateTopUpCheckoutEndpoint       goa.Endpoint
+	GetPeriodUsageEndpoint                   goa.Endpoint
+	GetMeterUsageEndpoint                    goa.Endpoint
+	GetSpendBreakdownEndpoint                goa.Endpoint
+	GetTokensUnderManagementEndpoint         goa.Endpoint
+	SetBillingMetadataEndpoint               goa.Endpoint
+	GetBillingEmailEndpoint                  goa.Endpoint
+	SetBillingEmailEndpoint                  goa.Endpoint
+	SetSpendCapEndpoint                      goa.Endpoint
+	GetInferenceSpendCapsEndpoint            goa.Endpoint
+	GetUsageTiersEndpoint                    goa.Endpoint
+	CreateCustomerSessionEndpoint            goa.Endpoint
+	GetStripeCheckoutStatusEndpoint          goa.Endpoint
+	CreateStripeCheckoutEndpoint             goa.Endpoint
+	CreateTrialPaymentMethodCheckoutEndpoint goa.Endpoint
+	GetStripeSubscriptionEndpoint            goa.Endpoint
+	GetPaygBillingSummaryEndpoint            goa.Endpoint
+	CreateStripePortalSessionEndpoint        goa.Endpoint
+	CancelStripeSubscriptionEndpoint         goa.Endpoint
+	ResumeStripeSubscriptionEndpoint         goa.Endpoint
+	CreateTopUpCheckoutEndpoint              goa.Endpoint
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, getStripeCheckoutStatus, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getMeterUsage, getSpendBreakdown, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, getStripeCheckoutStatus, createStripeCheckout, createTrialPaymentMethodCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
-		GetPeriodUsageEndpoint:            getPeriodUsage,
-		GetMeterUsageEndpoint:             getMeterUsage,
-		GetSpendBreakdownEndpoint:         getSpendBreakdown,
-		GetTokensUnderManagementEndpoint:  getTokensUnderManagement,
-		SetBillingMetadataEndpoint:        setBillingMetadata,
-		GetBillingEmailEndpoint:           getBillingEmail,
-		SetBillingEmailEndpoint:           setBillingEmail,
-		SetSpendCapEndpoint:               setSpendCap,
-		GetInferenceSpendCapsEndpoint:     getInferenceSpendCaps,
-		GetUsageTiersEndpoint:             getUsageTiers,
-		CreateCustomerSessionEndpoint:     createCustomerSession,
-		GetStripeCheckoutStatusEndpoint:   getStripeCheckoutStatus,
-		CreateStripeCheckoutEndpoint:      createStripeCheckout,
-		GetStripeSubscriptionEndpoint:     getStripeSubscription,
-		GetPaygBillingSummaryEndpoint:     getPaygBillingSummary,
-		CreateStripePortalSessionEndpoint: createStripePortalSession,
-		CancelStripeSubscriptionEndpoint:  cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint:  resumeStripeSubscription,
-		CreateTopUpCheckoutEndpoint:       createTopUpCheckout,
+		GetPeriodUsageEndpoint:                   getPeriodUsage,
+		GetMeterUsageEndpoint:                    getMeterUsage,
+		GetSpendBreakdownEndpoint:                getSpendBreakdown,
+		GetTokensUnderManagementEndpoint:         getTokensUnderManagement,
+		SetBillingMetadataEndpoint:               setBillingMetadata,
+		GetBillingEmailEndpoint:                  getBillingEmail,
+		SetBillingEmailEndpoint:                  setBillingEmail,
+		SetSpendCapEndpoint:                      setSpendCap,
+		GetInferenceSpendCapsEndpoint:            getInferenceSpendCaps,
+		GetUsageTiersEndpoint:                    getUsageTiers,
+		CreateCustomerSessionEndpoint:            createCustomerSession,
+		GetStripeCheckoutStatusEndpoint:          getStripeCheckoutStatus,
+		CreateStripeCheckoutEndpoint:             createStripeCheckout,
+		CreateTrialPaymentMethodCheckoutEndpoint: createTrialPaymentMethodCheckout,
+		GetStripeSubscriptionEndpoint:            getStripeSubscription,
+		GetPaygBillingSummaryEndpoint:            getPaygBillingSummary,
+		CreateStripePortalSessionEndpoint:        createStripePortalSession,
+		CancelStripeSubscriptionEndpoint:         cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:         resumeStripeSubscription,
+		CreateTopUpCheckoutEndpoint:              createTopUpCheckout,
 	}
 }
 
@@ -348,6 +350,29 @@ func (c *Client) GetStripeCheckoutStatus(ctx context.Context, p *GetStripeChecko
 func (c *Client) CreateStripeCheckout(ctx context.Context, p *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error) {
 	var ires any
 	ires, err = c.CreateStripeCheckoutEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*StripeEmbeddedCheckout), nil
+}
+
+// CreateTrialPaymentMethodCheckout calls the
+// "createTrialPaymentMethodCheckout" endpoint of the "usage" service.
+// CreateTrialPaymentMethodCheckout may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateTrialPaymentMethodCheckout(ctx context.Context, p *CreateTrialPaymentMethodCheckoutPayload) (res *StripeEmbeddedCheckout, err error) {
+	var ires any
+	ires, err = c.CreateTrialPaymentMethodCheckoutEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

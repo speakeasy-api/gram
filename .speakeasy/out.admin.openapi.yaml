@@ -14296,6 +14296,11 @@ components:
         name:
           type: string
           description: The name of the organization
+        organizations_sharing_trial_card:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminTrialCardSharingOrganization'
+          description: Other organizations that offered the same card as this organization's latest card, oldest first, with whether it started their trial. Absent when none did or no card was offered, and absent on list rows.
         slug:
           type: string
           description: The slug of the organization
@@ -14313,6 +14318,16 @@ components:
         stripe_subscription_id:
           type: string
           description: Current Stripe subscription ID, if subscribed.
+        trial_card_added_at:
+          type: string
+          description: The time at which the organization last offered a card to start its self-serve trial. Absent when it never offered one, and absent on list rows.
+          format: date-time
+        trial_card_rejection_reason:
+          type: string
+          description: Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.
+          enum:
+            - prepaid_card
+            - card_used
         trial_converted_at:
           type: string
           description: The time at which the trial converted to a paid plan, if any.
@@ -15744,6 +15759,34 @@ components:
       required:
         - organizations
         - minimum_dual_write_seconds
+    AdminTrialCardSharingOrganization:
+      type: object
+      properties:
+        card_added_at:
+          type: string
+          description: The time at which the other organization last offered a card to start its trial.
+          format: date-time
+        id:
+          type: string
+          description: The ID of the other organization.
+        name:
+          type: string
+          description: The name of the other organization.
+        rejection_reason:
+          type: string
+          description: Why the card could not start the other organization's trial. Absent when the card started that organization's trial.
+          enum:
+            - prepaid_card
+            - card_used
+        slug:
+          type: string
+          description: The slug of the other organization.
+      description: Another organization that offered the same card to start its self-serve trial. Carries no card or Stripe identifiers.
+      required:
+        - id
+        - name
+        - slug
+        - card_added_at
     AdminUploadImageResult:
       type: object
       properties:

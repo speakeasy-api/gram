@@ -53,6 +53,9 @@ type Service interface {
 	GetStripeCheckoutStatus(context.Context, *GetStripeCheckoutStatusPayload) (res *GetStripeCheckoutStatusResult, err error)
 	// Create an embedded Stripe Checkout session for starting PAYG billing
 	CreateStripeCheckout(context.Context, *CreateStripeCheckoutPayload) (res *StripeEmbeddedCheckout, err error)
+	// Create an embedded Stripe Checkout session that saves a card to start the
+	// organization's free trial
+	CreateTrialPaymentMethodCheckout(context.Context, *CreateTrialPaymentMethodCheckoutPayload) (res *StripeEmbeddedCheckout, err error)
 	// Get the live lifecycle state of the organization's Stripe PAYG subscription
 	GetStripeSubscription(context.Context, *GetStripeSubscriptionPayload) (res *StripeSubscription, err error)
 	// Get exact billable usage and estimated cost for the organization's live paid
@@ -91,7 +94,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "getStripeCheckoutStatus", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [20]string{"getPeriodUsage", "getMeterUsage", "getSpendBreakdown", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "getStripeCheckoutStatus", "createStripeCheckout", "createTrialPaymentMethodCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -131,6 +134,14 @@ type CreateStripePortalSessionPayload struct {
 // createTopUpCheckout method.
 type CreateTopUpCheckoutPayload struct {
 	SessionToken *string
+}
+
+// CreateTrialPaymentMethodCheckoutPayload is the payload type of the usage
+// service createTrialPaymentMethodCheckout method.
+type CreateTrialPaymentMethodCheckoutPayload struct {
+	SessionToken *string
+	// Appearance for the embedded Checkout session.
+	Theme string
 }
 
 // GetBillingEmailPayload is the payload type of the usage service

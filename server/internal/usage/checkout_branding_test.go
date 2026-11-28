@@ -108,7 +108,8 @@ func testCreateStripeCheckoutHistoricalReceipt(t *testing.T, suffix string, embe
 	require.Equal(t, []string{original.ID}, ti.stripe.expiredCheckoutIDs)
 	require.NotEqual(t, key, inputs[2].IdempotencyKey)
 	replacement := expected
-	replacement.IdempotencyKey = fmt.Sprintf("checkout-session:%s:1786752000:1786751940:form-prototype:branding-dark-v1:return-aHR0cHM6Ly9hcHAuZXhhbXBsZS50ZXN0:none", ti.orgID)
+	replacement.IdempotencyKey = fmt.Sprintf("checkout-session:%s:1786752000:1786751940:form-prototype:branding-dark-v1:saved-cards-v1:return-aHR0cHM6Ly9hcHAuZXhhbXBsZS50ZXN0:none", ti.orgID)
+	replacement.RedisplaySavedPaymentMethods = true
 	replacement.ExpiresAt = time.Date(2026, time.August, 14, 23, 59, 0, 0, time.UTC)
 	replacement.ReturnURL = "https://app.example.test/" + ti.orgSlug + "/billing?session_id={CHECKOUT_SESSION_ID}"
 	replacement.SuccessURL = ""

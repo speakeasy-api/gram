@@ -4,6 +4,7 @@ import { useOnUnmount } from "@/hooks/useOnUnmount";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { formatTrialTimeRemaining } from "@/lib/trialDates";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
+import { TrialCard } from "@/pages/organization/TrialCard";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -147,6 +148,7 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
           )}
         </>
       )}
+      <TrialCard org={org} />
     </div>
   );
 }
