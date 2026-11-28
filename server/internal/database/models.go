@@ -5967,7 +5967,9 @@ type PluginGithubConnection struct {
 
 type PluginRepositoryBinding struct {
 	// @access: confidential
-	ProjectID uuid.UUID
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
 	// @access: restricted
 	RepositoryID int64
 	// @access: confidential-pii
