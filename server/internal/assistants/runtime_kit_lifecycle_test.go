@@ -1,9 +1,11 @@
 package assistants
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -24,17 +26,17 @@ func (b kitLifecycleBackend) CheckpointIdleRuntime(ctx context.Context, r assist
 
 func TestKitLifecycleCapabilityIsProductionOnly(t *testing.T) {
 	t.Parallel()
-	r := testRuntimeRecord(runtimeBackendGKE)
+	r := testRuntimeRecord(runtimeBackendATE)
 	r.RuntimeVersion = 3
-	_, err := kitIdleCheckpointCapability(testRuntimeBackend{backend: runtimeBackendGKE}, r)
+	_, err := kitIdleCheckpointCapability(testRuntimeBackend{backend: runtimeBackendATE}, r)
 	require.Error(t, err, "ordinary Stop must not opt into checkpoint expiry")
-	b := kitLifecycleBackend{testRuntimeBackend: testRuntimeBackend{backend: runtimeBackendGKE}}
+	b := kitLifecycleBackend{testRuntimeBackend: testRuntimeBackend{backend: runtimeBackendATE}}
 	_, err = kitIdleCheckpointCapability(&telemetryRuntimeBackend{inner: &versionedRuntimeBackend{kit: b}}, r)
 	require.NoError(t, err)
 	r.Backend = runtimeBackendLocal
 	_, err = kitIdleCheckpointCapability(b, r)
 	require.Error(t, err)
-	r.Backend, r.RuntimeVersion = runtimeBackendGKE, 2
+	r.Backend, r.RuntimeVersion = runtimeBackendATE, 2
 	_, err = kitIdleCheckpointCapability(b, r)
 	require.Error(t, err)
 }
@@ -50,13 +52,13 @@ func TestKitLifecycleCheckpointAdmissionFence(t *testing.T) {
 		stopError   error
 		wantStop    bool
 	}{
-		{name: "settled checkpoint preserves authority", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, wantStop: true},
-		{name: "pending admission", backend: runtimeBackendGKE, eventStatus: eventStatusPending},
-		{name: "processing admission", backend: runtimeBackendGKE, eventStatus: eventStatusProcessing},
-		{name: "idle grace", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, grace: true},
-		{name: "warm process", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, warm: true},
+		{name: "settled checkpoint preserves authority", backend: runtimeBackendATE, eventStatus: eventStatusCompleted, wantStop: true},
+		{name: "pending admission", backend: runtimeBackendATE, eventStatus: eventStatusPending},
+		{name: "processing admission", backend: runtimeBackendATE, eventStatus: eventStatusProcessing},
+		{name: "idle grace", backend: runtimeBackendATE, eventStatus: eventStatusCompleted, grace: true},
+		{name: "warm process", backend: runtimeBackendATE, eventStatus: eventStatusCompleted, warm: true},
 		{name: "local unchanged", backend: runtimeBackendLocal, eventStatus: eventStatusCompleted},
-		{name: "unknown settlement fails closed", backend: runtimeBackendGKE, eventStatus: eventStatusCompleted, stopError: errors.New("settlement unavailable"), wantStop: true},
+		{name: "unknown settlement fails closed", backend: runtimeBackendATE, eventStatus: eventStatusCompleted, stopError: errors.New("settlement unavailable"), wantStop: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -135,4 +137,102 @@ func TestKitLifecycleNewAssistantSelectionOnly(t *testing.T) {
 	row, err := assistantrepo.New(conn).GetAssistant(t.Context(), assistantrepo.GetAssistantParams{ProjectID: project, AssistantID: existing})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, row.RuntimeVersion)
+}
+
+func TestUnservableKitRuntimeBackendRetiresAndReplacesCleanly(t *testing.T) {
+	t.Parallel()
+
+	t.Run("router refuses execution and settles switch", func(t *testing.T) {
+		t.Parallel()
+		v2Backend := &stubRuntimeBackend{name: runtimeBackendGKE}
+		v3Backend := &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}}
+		router := &versionedRuntimeBackend{legacy: v2Backend, kit: v3Backend}
+
+		record := testRuntimeRecord(runtimeBackendGKE)
+		record.RuntimeVersion = 3
+		_, err := router.Ensure(t.Context(), record)
+		require.ErrorIs(t, err, errKitRetiredBackend)
+		require.ErrorIs(t, router.RunTurn(t.Context(), record, runTurnRequest{}), errKitRetiredBackend)
+		require.ErrorIs(t, router.Reap(t.Context(), record), errKitRetiredBackend)
+		require.Zero(t, v2Backend.runTurnCount)
+		require.Zero(t, v3Backend.runTurnCount)
+
+		ready, err := router.PrepareRuntimeSwitch(t.Context(), assistantRecord{}, []assistantRuntimeRecord{record}, 2)
+		require.NoError(t, err)
+		require.True(t, ready.Settled)
+		require.True(t, ready.DestinationReady)
+	})
+
+	t.Run("turn dispatch retires and requests re-admission", func(t *testing.T) {
+		t.Parallel()
+		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_unservable_turn")
+		require.NoError(t, err)
+		project, assistant, _, thread := insertAssistantFixture(t, conn)
+		q := assistantrepo.New(conn)
+		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
+		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox":"unservable-backend"}`)
+
+		var logs bytes.Buffer
+		core := newProvisioningCore(t, conn)
+		core.logger = slog.New(slog.NewTextHandler(&logs, nil))
+		core.runtime = &versionedRuntimeBackend{
+			legacy: &stubRuntimeBackend{name: runtimeBackendGKE},
+			kit:    &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}},
+		}
+
+		res, err := core.ProcessThreadEvents(t.Context(), project, thread)
+		require.NoError(t, err)
+		require.True(t, res.RetryAdmission, "unservable runtime row must trigger re-admission on the active backend")
+		require.False(t, res.RuntimeActive)
+		require.Contains(t, logs.String(), "retiring leftover Kit runtime referencing removed backend")
+
+		row, err := q.GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: project})
+		require.NoError(t, err)
+		require.Equal(t, runtimeStateFailed, row.State)
+		require.True(t, row.Deleted)
+	})
+
+	t.Run("idle sweep and reapers terminally clear row", func(t *testing.T) {
+		t.Parallel()
+		conn, err := assistantsInfra.CloneTestDatabase(t, "kit_unservable_reaper")
+		require.NoError(t, err)
+		project, assistant, _, thread := insertAssistantFixture(t, conn)
+		q := assistantrepo.New(conn)
+		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
+		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"sandbox":"unservable-backend"}`)
+
+		var logs bytes.Buffer
+		core := newProvisioningCore(t, conn)
+		core.logger = slog.New(slog.NewTextHandler(&logs, nil))
+		core.runtime = &versionedRuntimeBackend{
+			legacy: &stubRuntimeBackend{name: runtimeBackendGKE},
+			kit:    &readyKitBackend{stubRuntimeBackend: &stubRuntimeBackend{name: runtimeBackendATE}},
+		}
+
+		stopped := core.sweepIdleKitRuntimes(t.Context(), time.Now())
+		require.EqualValues(t, 1, stopped)
+		require.Contains(t, logs.String(), "retiring leftover Kit runtime referencing removed backend")
+
+		row, err := q.GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: project})
+		require.NoError(t, err)
+		require.Equal(t, runtimeStateFailed, row.State)
+		require.True(t, row.Deleted)
+
+		rec := assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			RuntimeVersion:      row.RuntimeVersion,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+		}
+		require.True(t, core.reapStoppedRuntimeRow(t.Context(), rec))
+		row, err = q.GetAssistantRuntime(t.Context(), assistantrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: project})
+		require.NoError(t, err)
+		require.Equal(t, runtimeStateReaped, row.State)
+
+		require.True(t, core.reapRuntimeRow(t.Context(), rec))
+	})
 }

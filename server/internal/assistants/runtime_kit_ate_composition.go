@@ -73,8 +73,8 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	if err := validateKitATEWorkerSelector(c.WorkerSelector); err != nil {
 		return err
 	}
-	if c.nativeIdentity != nil || c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
-		return errors.New("assistant ATE rejects GKE identity, operator assertions, and local network or TLS overrides")
+	if c.WorkloadSubject != "" || c.WorkloadAssertionFile != "" || c.Network != "" || c.ExtraCACertFile != "" || c.AllowInsecureInference {
+		return errors.New("assistant ATE rejects operator assertions and local network or TLS overrides")
 	}
 	if _, err := kitATEImageDigest(c.Image); err != nil {
 		return err
@@ -158,7 +158,7 @@ func kitATEWorkloadSubject(identity *kitATEWorkloadIdentity) (string, error) {
 // or admission rows. ATE actors authenticate on demand through the credential
 // provider mint endpoint using Speakeasy-minted turn credentials.
 func (s *ServiceCore) provisionKitATEWorkload(ctx context.Context, r assistantRuntimeRecord, c KitLocalCompositionConfig, identity assistantidentity.RuntimeIdentity, gateway string) (*KitWorkloadBinding, error) {
-	if c.ateIdentity == nil || c.nativeIdentity != nil || r.LifecycleTx == nil || gateway == "" || !kitWorkloadIdentityMatches(r, identity) {
+	if c.ateIdentity == nil || r.LifecycleTx == nil || gateway == "" || !kitWorkloadIdentityMatches(r, identity) {
 		return nil, ErrKitRuntimeBinding
 	}
 	subject, err := kitATEWorkloadSubject(c.ateIdentity)

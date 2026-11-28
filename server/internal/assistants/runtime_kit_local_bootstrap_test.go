@@ -23,7 +23,7 @@ func kitTestWorkloadBootstrap() KitLocalBootstrap {
 	if err != nil {
 		panic(err)
 	}
-	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token"), MCPJSON: mcpJSON, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: workload}
+	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token-0123456789abcdef"), MCPJSON: mcpJSON, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: workload}
 }
 
 func TestKitLocalBootstrapContractValidation(t *testing.T) {

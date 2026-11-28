@@ -77,7 +77,7 @@ func TestKitATEEgressInjectedBootstrapOmitsSandboxCredentials(t *testing.T) {
 func TestKitATEStoredWorkloadRecoveryValidation(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	c.Environment, c.nativeIdentity = "production", nil
+	c.Environment = "production"
 	c.WorkloadIssuerURL, c.WorkloadJWKSURL = "", ""
 	c.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"}
 

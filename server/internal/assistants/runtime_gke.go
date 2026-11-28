@@ -49,11 +49,6 @@ const (
 	gkeImageDrainAttempts = 3
 )
 
-// The Kit runtime addresses the same Agent Sandbox resources.
-const gkeClaimUIDLabel = sandbox.ClaimUIDLabel
-
-var gkePodGVR = sandbox.Pods
-
 // GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
 // client targets the (separate) assistant cluster and is built from its endpoint
 // + CA with the process's Google credentials — see k8s.NewRemoteDynamicClient.

@@ -5,26 +5,29 @@ adapter. For configuration and validation steps, see
 [Run Kit assistants locally](../runbooks/kit-assistant-local.md).
 
 The workload configuration requires Kit v0.3.1 or a build containing its MCP
-and inference workload support. Production has a separate
-[GKE lifecycle contract](../runbooks/kit-assistant-production.md). Existing
-hybrid-auth Kit runtimes are invalidated; no credential compatibility is provided.
+and inference workload support, packaged with `kit-ate-init` (see
+`agents/ate-runtime/Dockerfile`). Both deployed ATE runtimes and local Docker
+runtimes share one Kit protocol path: one sandbox/container per thread running
+`kit-ate-init` + `kit serve --remote-acp` on `/acp`. Existing hybrid-auth Kit
+runtimes are invalidated; no credential compatibility is provided.
 
-## Bootstrap files and gateway
+## Bootstrap files and native ACP
 
-Provision files before starting the gateway. Private files are owned by UID/GID
+`kit-ate-init` receives a versioned wire v2 JSON payload on `POST /bootstrap`
+before starting `kit serve --remote-acp`. Private files are owned by UID/GID
 1000 and use mode `0600` under `/home/kit`. Never log their contents.
 
-| Path relative to `/home/kit`                             | Contract                                                                                                                                                              |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.kit/AGENTS.md`                                         | Global assistant instructions, loaded before workspace rules.                                                                                                         |
-| `.kit/config.toml`                                       | Set `provider = "speakeasy"`, `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, and `mcp_config = "/home/kit/.kit/credentials/mcp.json"`. |
-| `.kit/credentials/gateway-token`                         | Gateway bearer credential.                                                                                                                                            |
-| `.kit/credentials/mcp.json` and referenced private files | MCP workload exchange configuration; no client secret or private signing key.                                                                                         |
+| Path relative to `/home/kit`                             | Contract                                                                                                                                                                     |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.kit/AGENTS.md`                                         | Global assistant instructions, loaded before workspace rules.                                                                                                                |
+| `.kit/config.toml`                                       | Sets `credential_store = "file"`, `credential_dir = "/home/kit/.kit/credentials"`, `mcp_config = "/home/kit/.kit/credentials/mcp.json"`, plus backend inference auth config. |
+| `.kit/credentials/gateway-token`                         | Per-thread ACP bearer credential derived from the runtime root secret in `assistant_kit_gateway_credentials`.                                                                |
+| `.kit/credentials/mcp.json` and referenced private files | Project Gateway MCP config: direct-bearer placeholder in ATE (egress-injected), or local workload exchange in local dev; no client secret or private signing key.            |
 
 The persistent workspace is `/home/kit/workspace`; ACP `cwd` must match it
-exactly. The gateway listens on `0.0.0.0:8081` with explicit wildcard permission
-and a credential file. Docker publishes the gateway only on host loopback.
-The protocol endpoint is `/acp/v2`, not a legacy runner endpoint.
+exactly. Each thread process listens on `0.0.0.0:8081` with a credential file
+and serves native ACP at `/acp` (supervised by `kit-ate-init` on `:8082`). In
+local development, Docker publishes both ports only on host loopback (`127.0.0.1`).
 
 The database reservation's absent metadata or valid empty JSON object is an
 unprovisioned sentinel. Nonempty saved metadata must match the runtime's
@@ -33,17 +36,23 @@ records are not equivalent to the empty sentinel.
 
 ## Inference and MCP authority
 
-MCP and inference use the same externally projected, short-lived assertion file.
-Kit exchanges it independently for each resource through its generic workload
-configuration. Inference uses RFC 7523 at `/oauth/usi/<ISSUER_ID>/token`, with
-`resource=urn:speakeasy:inference` and the exact `project_id`; completion uses the
-returned bearer. No API-key record or client secret is bootstrapped.
+- **Deployed ATE runtimes**: sandboxes hold no outbound Speakeasy inference or
+  MCP workload credentials or assertion files (only the inbound per-thread ACP
+  bearer in `.kit/credentials/gateway-token`). `mcp.json` uses a direct-bearer
+  placeholder and inference targets the OpenAI-compatible gateway endpoint; the
+  platform egress proxy replaces the `Authorization` header with the actor's
+  signed workload JWT.
+- **Local Docker runtimes (`--environment=local` only)**: MCP and inference use
+  the same externally projected, short-lived assertion file. Kit exchanges it
+  independently for each resource through its generic workload configuration.
+  Inference uses RFC 7523 at `/oauth/usi/<ISSUER_ID>/token`, with
+  `resource=urn:speakeasy:inference` and the exact `project_id`; completion uses
+  the returned bearer. No API-key record or client secret is bootstrapped.
 
 One workload issuer is shared within the project/cluster trust boundary. Each
-runtime generation has an exact subject admission assigned to the assistant's
-existing agent. Owner and agent inference permission remain mandatory. Retirement
-revokes that admission; restore receives a fresh projected token, never a token
-copied from rootfs or a snapshot.
+runtime generation (or ATE thread actor) has an exact subject admission assigned
+to the assistant's existing agent. Owner and agent inference permission remain
+mandatory. Retirement revokes that admission.
 
 The control plane binds verified issuer/subject identity to persisted runtime
 metadata. Kit's completion body `user` field selects only an existing ACP session
@@ -178,8 +187,10 @@ yet been prompted starts in a conversation with earlier assistant turns, the
 server adds a notice to its first prompt that earlier messages are unavailable,
 and the turn proceeds. Do not import legacy history into the session.
 
-Production GKE restore accepts only rootfs-only checkpoints and starts a fresh
-gateway process with renewed credentials. Whole-pod memory snapshots are rejected:
-updating files cannot revoke credentials cached in restored processes. A matching
-checkpoint marker and authenticated readiness are required before admission.
-Verify the complete lifecycle in the target deployment before rollout.
+Deployed ATE sandboxes receive outbound inference and MCP bearer credentials
+solely via the platform egress proxy and hold no outbound Speakeasy workload
+credentials inside the sandbox (only the inbound per-thread ACP bearer in
+`.kit/credentials/gateway-token`). Local development continues to use
+operator-projected assertions and RFC 7523 token exchange so local Docker
+containers work without an egress proxy; startup validation blocks selecting
+the local backend outside `environment=local`.

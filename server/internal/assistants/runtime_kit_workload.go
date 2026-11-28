@@ -51,21 +51,7 @@ func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, g
 		}
 		return c.WorkloadSubject, "", nil
 	}
-	if c.WorkloadNamespace == "" || strings.ContainsAny(c.WorkloadNamespace, ":/ ") {
-		return "", "", errors.New("kit workload namespace is required")
-	}
-	digest := sha256.Sum256([]byte(gateway))
-	sa := fmt.Sprintf("kit-%s-%x", strings.ReplaceAll(r.ID.String(), "-", ""), digest[:8])
-	if c.nativeIdentity == nil {
-		return "", "", errors.New("kit GKE requires native Agent Identity configuration")
-	}
-	if err := c.nativeIdentity.Validate(); err != nil {
-		return "", "", err
-	}
-	if c.WorkloadIssuerURL != c.nativeIdentity.issuer() || c.WorkloadJWKSURL != c.nativeIdentity.issuer()+"/openid/jwks" {
-		return "", "", ErrKitRuntimeBinding
-	}
-	return c.nativeIdentity.subject(c.WorkloadNamespace, sa), sa, nil
+	return "", "", ErrKitRuntimeBinding
 }
 
 func kitWorkloadIssuerName(issuer string) string {
@@ -168,7 +154,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	admissionName := "kit-runtime-" + r.ID.String() + "-" + generation
 	project := uuid.NullUUID{UUID: r.ProjectID, Valid: true}
 	q := workloadrepo.New(db)
-	if c.Environment == "local" || c.nativeIdentity != nil {
+	if c.Environment == "local" {
 		// Serialize the external subject across projects before taking a project
 		// lock. A project-only lock cannot protect the organization-wide history.
 		key, err := json.Marshal([]string{"kit-local-subject", identity.OrganizationID, c.WorkloadIssuerURL, subject})

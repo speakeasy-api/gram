@@ -13,10 +13,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
 
@@ -37,8 +38,7 @@ type KitLocalCompositionConfig struct {
 	ateIdentity           *kitATEWorkloadIdentity
 	bootstrapGatewayToken string
 	bootstrapWorkload     *KitWorkloadBinding
-	// Set only by the native GKE composition, never from token claims.
-	nativeIdentity                                            *KitGKEIdentityConfig
+
 	OrgHosts                                                  *orghost.Resolver
 	Environment, Image, ExtraCACertFile, Network              string
 	Origin                                                    *url.URL
@@ -46,7 +46,7 @@ type KitLocalCompositionConfig struct {
 	MCPUserSessionIssuerID                                    uuid.UUID
 	WorkloadIssuerURL, WorkloadSubject, WorkloadAssertionFile string
 	WorkloadJWKSURL                                           string
-	WorkloadNamespace, WorkloadIssuerBaseURL                  string
+	WorkloadIssuerBaseURL                                     string
 	TurnStream                                                *chat.TurnStream
 }
 
@@ -82,64 +82,113 @@ func validateKitComposition(c KitLocalCompositionConfig) error {
 	return nil
 }
 
-// InstallKitLocalRuntime composes startup provisioning and ACP transport before
-// serving work. Legacy v1/v2 dispatch remains on the original backend.
+// InstallKitLocalRuntime composes the local-only per-thread Docker Kit backend
+// speaking native Kit ACP (/acp) via kit-ate-init + kit serve --remote-acp.
+// Outbound auth uses the local-only operator-projected workload assertion and
+// RFC 7523 token exchange; deployed Kit runtimes use ATE egress injection.
 func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error {
 	if err := validateKitLocalComposition(c); err != nil {
 		return err
 	}
 	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil {
-		return errors.New("kit requires guarded HTTP, transcript, inference and encrypted gateway credential services")
+		return errors.New("kit requires guarded HTTP, transcript, inference and encrypted ACP credential services")
 	}
-	factory := s.kitProtocolFactory(c, localRuntimeLoopbackCIDRs)
 	env := map[string]string{"SPEAKEASY_ORIGIN": c.Origin.String()}
-	if c.AllowInsecureInference {
-		env["SPEAKEASY_ALLOW_INSECURE_HTTP"] = "1"
-	}
-	command, args := KitGatewayCommand(8081)
+	loopbackClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(localRuntimeLoopbackCIDRs...))
 	backend, err := NewKitLocalRuntimeBackend(KitLocalRuntimeConfig{
-		Environment: c.Environment, Image: c.Image, Command: command, Args: args, Env: env, GuestPort: 8081, ServerURL: s.serverURL,
-		ExtraCACertFile: c.ExtraCACertFile, WorkloadAssertionFile: c.WorkloadAssertionFile, Network: c.Network, CompatibilityGeneration: "kit-project-gateway-v2", HomeOwnedByRuntimeUser: true,
-		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
+		Environment:             c.Environment,
+		Image:                   c.Image,
+		Env:                     env,
+		InitPort:                ateInitPort,
+		GuestPort:               ateACPPort,
+		ServerURL:               s.serverURL,
+		ExtraCACertFile:         c.ExtraCACertFile,
+		WorkloadAssertionFile:   c.WorkloadAssertionFile,
+		Network:                 c.Network,
+		CompatibilityGeneration: "kit-local-acp-v3",
+		HomeOwnedByRuntimeUser:  true,
+		HelperClient:            loopbackClient,
+		ProvisionWorkload: func(ctx context.Context, r assistantRuntimeRecord) (*KitWorkloadBinding, error) {
+			tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
+			if err != nil {
+				return nil, err
+			}
+			defer release()
+			r.LifecycleTx = tx
+			root, err := s.ensureKitRootTokenAlreadyLocked(ctx, r)
+			if err != nil {
+				return nil, err
+			}
+			local := c
+			local.bootstrapGatewayToken = root
+			bootstrap, err := s.kitCompositionBootstrap(ctx, r, local)
+			if err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return nil, fmt.Errorf("commit local kit workload provisioning: %w", err)
+			}
+			return bootstrap.Workload, nil
+		},
+		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID, workload *KitWorkloadBinding) (KitLocalBootstrap, error) {
 			tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
 			if err != nil {
 				return KitLocalBootstrap{}, err
 			}
 			defer release()
 			r.LifecycleTx = tx
-			bootstrap, err := s.kitCompositionBootstrap(ctx, r, c)
+			token, err := s.kitATEToken(ctx, r, threadID)
+			if err != nil {
+				return KitLocalBootstrap{}, err
+			}
+			local := c
+			local.bootstrapGatewayToken = token
+			local.bootstrapWorkload = workload
+			bootstrap, err := s.kitCompositionBootstrap(ctx, r, local)
 			if err != nil {
 				return KitLocalBootstrap{}, err
 			}
 			if err := tx.Commit(ctx); err != nil {
-				return KitLocalBootstrap{}, fmt.Errorf("commit local kit bootstrap: %w", err)
+				return KitLocalBootstrap{}, fmt.Errorf("commit local kit thread bootstrap: %w", err)
 			}
 			return bootstrap, nil
 		},
+		Token: func(ctx context.Context, r assistantRuntimeRecord, threadID uuid.UUID) (string, error) {
+			if r.LifecycleTx != nil {
+				return s.kitATEToken(ctx, r, threadID)
+			}
+			tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
+			if err != nil {
+				return "", err
+			}
+			defer release()
+			r.LifecycleTx = tx
+			token, err := s.kitATEToken(ctx, r, threadID)
+			if err != nil {
+				return "", err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return "", fmt.Errorf("commit local kit token read: %w", err)
+			}
+			return token, nil
+		},
 		Fence: func(ctx context.Context, r assistantRuntimeRecord) error {
+			if r.LifecycleTx != nil {
+				return s.revokeKitWorkload(ctx, r.LifecycleTx, r)
+			}
 			tx, release, err := beginKitLifecycleTransaction(ctx, s.db, r.AssistantID.String())
 			if err != nil {
 				return err
 			}
 			defer release()
-			r.LifecycleTx = tx
-			if err := s.fenceKitRuntimeAlreadyLocked(ctx, r); err != nil {
+			if err := s.revokeKitWorkload(ctx, tx, r); err != nil {
 				return err
 			}
 			return tx.Commit(ctx)
 		},
-		Protocol: factory,
-		Ready: func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) error {
-			p, err := factory(ctx, r, endpoint)
-			if err != nil {
-				return err
-			}
-			_, err = p.Status(ctx, r)
-			if err != nil {
-				return fmt.Errorf("check kit runtime readiness: %w", err)
-			}
-			return nil
-		},
+		Protocol:           s.kitLocalProtocolFactory(c, loopbackClient),
+		Now:                nil,
+		HelperPollInterval: 0,
 	})
 	if err != nil {
 		return err
@@ -154,11 +203,14 @@ func (s *ServiceCore) InstallKitLocalRuntime(c KitLocalCompositionConfig) error 
 	return nil
 }
 
-// kitProtocolFactory shares the canonical transcript projector and persisted
-// session authority across local and production transports.
-func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []string) func(context.Context, assistantRuntimeRecord, *url.URL) (runtimeProtocol, error) {
+func (s *ServiceCore) kitLocalProtocolFactory(c KitLocalCompositionConfig, client *guardian.HTTPClient) func(context.Context, assistantRuntimeRecord, uuid.UUID, *url.URL, string) (runtimeProtocol, error) {
 	projector := NewKitTranscriptProjector(s.db, s.chatWriter, c.TurnStream, func(ctx context.Context, tx pgx.Tx, b KitTranscriptBinding) error {
-		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{ProjectID: b.ProjectID, AssistantID: b.AssistantID, RuntimeID: b.RuntimeID, ThreadID: b.ThreadID}, b.SessionID)
+		bound, err := s.ValidateKitRuntimeSessionInTx(ctx, tx, kitRuntimeSessionKey{
+			ProjectID:   b.ProjectID,
+			AssistantID: b.AssistantID,
+			RuntimeID:   b.RuntimeID,
+			ThreadID:    b.ThreadID,
+		}, b.SessionID)
 		if err != nil {
 			return err
 		}
@@ -167,34 +219,62 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 		}
 		return nil
 	})
-	// Allow runtime network destinations only for this gateway client, not
-	// the global egress policy. Do not enable retries for ACP POSTs.
-	gatewayClient := s.guardianPolicy.PooledClient(guardian.WithAllowedCIDRBlocks(cidrs...))
-	return func(ctx context.Context, r assistantRuntimeRecord, endpoint *url.URL) (runtimeProtocol, error) {
-		if endpoint == nil || (r.Backend == runtimeBackendGKE && endpoint.Scheme != "https") {
+	return func(_ context.Context, _ assistantRuntimeRecord, threadID uuid.UUID, endpoint *url.URL, token string) (runtimeProtocol, error) {
+		if threadID == uuid.Nil || endpoint == nil || endpoint.Path != "/acp" || client == nil || token == "" {
 			return nil, ErrKitRuntimeBinding
 		}
-		token, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
+		p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
+			Core:         s,
+			Endpoint:     endpoint,
+			HTTPClient:   client,
+			Projector:    projector,
+			CWD:          KitWorkspacePath,
+			GatewayToken: token,
+		})
 		if err != nil {
 			return nil, err
 		}
-		client := gatewayClient
-		if endpoint.Scheme == "https" {
-			var metadata kitGKEBackendMetadata
-			if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil || metadata.RuntimeID != r.ID || metadata.AssistantID != r.AssistantID || metadata.ProjectID != r.ProjectID {
-				return nil, ErrKitRuntimeBinding
-			}
-			client, err = kitGKEGatewayClient(s.guardianPolicy, cidrs, metadata.TLSCertificate, kitGKEName(r)+".kit.internal")
-			if err != nil {
-				return nil, err
-			}
-		}
-		protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: s, Endpoint: endpoint, HTTPClient: client, Projector: projector, CWD: KitWorkspacePath, GatewayToken: token})
-		if err != nil {
-			return nil, err
-		}
-		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: protocol}, nil
+		return &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: p}, nil
 	}
+}
+
+func (s *ServiceCore) ensureKitRootTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
+	root, err := s.loadKitGatewayTokenAlreadyLocked(ctx, r)
+	if !errors.Is(err, ErrKitGatewayTokenNotFound) {
+		return root, err
+	}
+	if r.LifecycleTx == nil {
+		return s.ensureKitATEGatewayRootToken(ctx, r)
+	}
+	if s.encryptionClient == nil {
+		return "", errKitGatewayCredential
+	}
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return "", fmt.Errorf("generate kit root gateway secret: %w", err)
+	}
+	plain, err := json.Marshal(kitGatewayTokenEnvelope{
+		ProjectID:   r.ProjectID,
+		AssistantID: r.AssistantID,
+		RuntimeID:   r.ID,
+		Token:       base64.RawURLEncoding.EncodeToString(secret),
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode kit root gateway secret: %w", err)
+	}
+	encrypted, err := s.encryptionClient.Encrypt(plain)
+	if err != nil {
+		return "", errKitGatewayCredential
+	}
+	if _, err := assistantrepo.New(r.LifecycleTx).StoreKitGatewayCredentialIfAbsent(ctx, assistantrepo.StoreKitGatewayCredentialIfAbsentParams{
+		ProjectID:       r.ProjectID,
+		AssistantID:     r.AssistantID,
+		RuntimeID:       r.ID,
+		TokenCiphertext: encrypted,
+	}); err != nil {
+		return "", fmt.Errorf("store kit root gateway credential: %w", err)
+	}
+	return s.loadKitGatewayTokenAlreadyLocked(ctx, r)
 }
 
 var errKitMCPConfigurationUnverified = fmt.Errorf("%w: kit runtime MCP configuration is unverified", errKitRuntimeUnrecoverable)
@@ -246,8 +326,6 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	if err != nil {
 		return zero, fmt.Errorf("compose kit runtime: %w", err)
 	}
-	// GKE commits cleanup evidence even when startup fails. Keep trust provisioning
-	// atomic so a failed bootstrap cannot leave an admission without metadata.
 	tx, err := r.LifecycleTx.Begin(ctx)
 	if err != nil {
 		return zero, fmt.Errorf("begin kit bootstrap savepoint: %w", err)
@@ -256,15 +334,21 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	r.LifecycleTx = tx
 	gateway := c.bootstrapGatewayToken
 	if gateway == "" {
-		gateway, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
+		gateway, err = s.ensureKitRootTokenAlreadyLocked(ctx, r)
 		if err != nil {
 			return zero, err
 		}
 	}
 	workload := c.bootstrapWorkload
 	if workload != nil {
-		if err := s.validateKitATEBootstrapWorkload(ctx, r, c, workload, identity, gateway); err != nil {
-			return zero, err
+		if c.ateIdentity != nil {
+			if err := s.validateKitATEBootstrapWorkload(ctx, r, c, workload, identity, gateway); err != nil {
+				return zero, err
+			}
+		} else {
+			if c.Environment != "local" || !kitWorkloadIdentityMatches(r, workload.Identity) || workload.Identity != identity || workload.IssuerID == uuid.Nil || workload.Subject == "" {
+				return zero, ErrKitRuntimeBinding
+			}
 		}
 		recovered := *workload
 		workload = &recovered
@@ -351,7 +435,7 @@ func renderKitAgentsMD(baseInstructions string) string {
 
 // kitProjectGatewayMCPJSON builds Kit's backend-agnostic mcp.json containing
 // the single Project Gateway entry. Backends inject their own transport headers
-// (for example a proxy-swapped bearer header) or auth block (for example GKE
+// (for example a proxy-swapped bearer header) or auth block (for example local
 // workload_identity) without duplicating the MCP configuration shape.
 func kitProjectGatewayMCPJSON(gatewayURL *url.URL, headers map[string]string, auth map[string]any) ([]byte, error) {
 	if gatewayURL == nil || gatewayURL.Scheme != "https" || gatewayURL.Host == "" || gatewayURL.User != nil || gatewayURL.RawQuery != "" || gatewayURL.Fragment != "" {
@@ -380,7 +464,7 @@ func kitProjectGatewayMCPJSON(gatewayURL *url.URL, headers map[string]string, au
 	return data, nil
 }
 
-// kitWorkloadIdentityMCPAuth constructs the GKE/local workload_identity
+// kitWorkloadIdentityMCPAuth constructs the local-only workload_identity
 // (jwtBearer) auth block for the Project Gateway entry.
 func kitWorkloadIdentityMCPAuth(binding *KitWorkloadBinding, resource *url.URL) (map[string]any, error) {
 	if binding == nil || binding.Audience == "" || resource == nil {
@@ -405,33 +489,6 @@ func kitCompositionMCP(gatewayURL *url.URL, binding *KitWorkloadBinding) ([]byte
 	return kitProjectGatewayMCPJSON(gatewayURL, nil, auth)
 }
 
-// These helpers deliberately do not acquire an advisory lock on a second
-// connection: Bootstrap/Ready execute inside the lifecycle caller's lock. The
-// SQL still fences the exact live runtime; ciphertext has the same envelope as
-// the public session helpers. A stopped process always gets a fresh gateway key.
-func (s *ServiceCore) rotateKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
-	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
-		return "", fmt.Errorf("compose local kit runtime: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(secret)
-	plain, err := json.Marshal(kitGatewayTokenEnvelope{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID, Token: token})
-	if err != nil {
-		return "", fmt.Errorf("compose local kit runtime: %w", err)
-	}
-	encrypted, err := s.encryptionClient.Encrypt(plain)
-	if err != nil {
-		return "", errKitGatewayCredential
-	}
-	rows, err := assistantrepo.New(s.kitLifecycleDB(r)).StoreKitGatewayCredential(ctx, assistantrepo.StoreKitGatewayCredentialParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID, TokenCiphertext: encrypted})
-	if err != nil {
-		return "", fmt.Errorf("store Kit gateway credential: %w", err)
-	}
-	if rows != 1 {
-		return "", ErrKitRuntimeBinding
-	}
-	return token, nil
-}
 func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r assistantRuntimeRecord) (string, error) {
 	queries := runtimeSwitchQueries(ctx, s.kitLifecycleDB(r))
 	if _, err := queries.GetKitRuntimeControlAuthority(ctx, assistantrepo.GetKitRuntimeControlAuthorityParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeID: r.ID}); err != nil {
@@ -445,7 +502,7 @@ func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r as
 		return "", ErrKitGatewayTokenNotFound
 	}
 	if err != nil {
-		return "", fmt.Errorf("compose local kit runtime: %w", err)
+		return "", fmt.Errorf("load Kit ACP root credential: %w", err)
 	}
 	plain, err := s.encryptionClient.Decrypt(ciphertext)
 	if err != nil {
@@ -459,11 +516,45 @@ func (s *ServiceCore) loadKitGatewayTokenAlreadyLocked(ctx context.Context, r as
 }
 
 // kitLifecycleDB keeps credential and attachment queries on the connection that
-// owns the assistant admission fence. Local callers without a transaction keep
-// their existing pool-backed behavior.
+// owns the assistant admission fence.
 func (s *ServiceCore) kitLifecycleDB(r assistantRuntimeRecord) assistantrepo.DBTX {
 	if r.LifecycleTx != nil {
 		return r.LifecycleTx
 	}
 	return s.db
+}
+
+// kitAssistantEligible reports whether the project's Project Gateway is served
+// for machine access, retaining the legacy default otherwise. This predicate
+// itself does not read tool assignments or backing-agent grants (CreateAssistant
+// keeps creates with initial legacy attachments on Default before calling it).
+func (s *ServiceCore) kitAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, hosts *orghost.Resolver) (bool, error) {
+	_, _, err := s.kitProjectGateway(ctx, tx, assistant, hosts)
+	if errors.Is(err, errKitMCPIneligible) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+var errKitMCPIneligible = errors.New("assistant project gateway is unavailable")
+
+// kitProjectGateway resolves the Project Gateway URL and shared organization
+// user-session issuer for a Kit assistant through the shared orggateway
+// availability predicate.
+func (s *ServiceCore) kitProjectGateway(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord, hosts *orghost.Resolver) (*url.URL, uuid.UUID, error) {
+	availability, err := orggateway.ResolveProjectGateway(ctx, db, orggateway.ResolveProjectGatewayParams{
+		OrganizationID:          assistant.OrganizationID,
+		ProjectID:               assistant.ProjectID,
+		ServerURL:               s.serverURL,
+		OrgHosts:                hosts,
+		Features:                s.featureFlags,
+		RequireSharedIssuerMode: true,
+	})
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("resolve Kit project gateway: %w", err)
+	}
+	if !availability.Available {
+		return nil, uuid.Nil, fmt.Errorf("%w: %s", errKitMCPIneligible, availability.Reason)
+	}
+	return availability.GatewayURL, availability.IssuerID, nil
 }

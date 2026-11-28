@@ -33,7 +33,7 @@ func TestKitProductionTurnFailureRetiresUnusableRuntime(t *testing.T) {
 			require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant, RuntimeVersion: 3}))
 			var stops atomic.Int64
 			logger := testenv.NewLogger(t)
-			backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: tc.failure, stopCalls: &stops}
+			backend := testRuntimeBackend{backend: runtimeBackendATE, runTurnErr: tc.failure, stopCalls: &stops}
 			core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, nil, nil, backend, nil, newTurnReadyTokens(t, db), mustParseURLForServiceTest(t, "https://api.example"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, db))
 			require.NoError(t, core.installKitRuntime(backend))
 			admitted, err := core.AdmitPendingThreads(t.Context(), assistant)

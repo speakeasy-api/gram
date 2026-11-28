@@ -208,7 +208,7 @@ func setupKitSteerOrchestration(t *testing.T, serverURL string) (*ServiceCore, *
 		_, err := core.ValidateKitRuntimeSessionInTx(ctx, tx, key, b.SessionID)
 		return err
 	})
-	endpoint, err := url.Parse(serverURL + "/acp/v2")
+	endpoint, err := url.Parse(serverURL + "/acp")
 	require.NoError(t, err)
 	protocol, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{
 		Core:         core,
@@ -265,6 +265,8 @@ func TestKitSteerMidTurnAbsorbsAndSettlesAllEvents(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				mu.Lock()
 				newSessions++
@@ -430,6 +432,8 @@ func TestKitSteerIdempotentRetryAfterSettlement(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"retry-steer-session"}`)
 			case "session/resume":
@@ -606,6 +610,8 @@ func TestKitSteerInterruptWithdrawsHeldSteerAndSettlesAllEvents(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"cancel-steer-session"}`)
 			case "session/prompt":
@@ -750,6 +756,8 @@ func TestKitSteerInterruptAfterInsertionSettlesAllEvents(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"cancel-inserted-session"}`)
 			case "session/prompt":
@@ -885,6 +893,8 @@ func TestKitWithoutSteerCapabilityKeepsOneTurnPerEvent(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"single-turn-session"}`)
 			case "session/resume":
@@ -1023,6 +1033,8 @@ func TestKitSteerSlackThreadPersistsOrderedUserMessagesAndSettlesAll(t *testing.
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"slack-steer-session"}`)
 			case "session/prompt":
@@ -1204,6 +1216,8 @@ func TestKitSteerRejectsIneligibleSenderOnNonSlackThread(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			switch msg.Method {
+			case "session/close":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n\n", msg.ID)
 			case "session/new":
 				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"elig-steer-session"}`)
 			case "session/prompt":

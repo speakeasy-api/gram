@@ -2388,7 +2388,18 @@ func TestServiceCoreReapInactiveAssistantRuntimesCollectsRetiredKitRuntimeOnBusy
 	now := time.Now().UTC()
 	insertKitRow := func(state string) uuid.UUID {
 		const metadata = `{"runtime_version":3}`
-		runtimeID := insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, metadata, now)
+		runtimeID := uuid.New()
+		require.NoError(t, queries.CreateAssistantRuntime(t.Context(), assistantsrepo.CreateAssistantRuntimeParams{
+			ID:                  runtimeID,
+			AssistantThreadID:   threadID,
+			AssistantID:         assistantID,
+			ProjectID:           projectID,
+			Backend:             runtimeBackendATE,
+			BackendMetadataJson: []byte(metadata),
+			State:               state,
+			UpdatedAt:           pgtype.Timestamptz{Time: now, Valid: true},
+			EndedAt:             endedAtFor(state, now),
+		}))
 		require.NoError(t, queries.SetKitRuntimeMetadataFixture(t.Context(), assistantsrepo.SetKitRuntimeMetadataFixtureParams{
 			RuntimeVersion: 3, Metadata: []byte(metadata), ProjectID: projectID, RuntimeID: runtimeID,
 		}))
@@ -2399,7 +2410,7 @@ func TestServiceCoreReapInactiveAssistantRuntimesCollectsRetiredKitRuntimeOnBusy
 	liveID := insertKitRow(runtimeStateActive)
 
 	reapCalls := &atomic.Int64{}
-	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
+	backend := testRuntimeBackend{backend: runtimeBackendATE, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	require.NoError(t, core.installKitRuntime(backend))
 
@@ -2983,7 +2994,7 @@ func TestServiceCoreProcessThreadEventsRetiresUnrecoverableKitRuntime(t *testing
 			tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 			legacy := testRuntimeBackend{backend: runtimeBackendGKE}
 			core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, legacy, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-			require.NoError(t, core.installKitRuntime(testRuntimeBackend{backend: runtimeBackendGKE, ensureErr: tc.err}))
+			require.NoError(t, core.installKitRuntime(testRuntimeBackend{backend: runtimeBackendATE, ensureErr: tc.err}))
 
 			admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
 			require.NoError(t, err)

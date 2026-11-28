@@ -5765,40 +5765,6 @@ func (q *Queries) StopAssistantRuntime(ctx context.Context, arg StopAssistantRun
 	return err
 }
 
-const storeKitGatewayCredential = `-- name: StoreKitGatewayCredential :execrows
-INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
-SELECT r.project_id, r.assistant_id, r.id, $1
-FROM assistant_runtimes r
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE r.id = $2 AND r.project_id = $3 AND r.assistant_id = $4
-  AND r.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND a.runtime_version = 3 AND a.deleted IS FALSE
-ON CONFLICT (runtime_id) DO UPDATE
-SET token_ciphertext = EXCLUDED.token_ciphertext, updated_at = clock_timestamp()
-WHERE assistant_kit_gateway_credentials.project_id = EXCLUDED.project_id
-  AND assistant_kit_gateway_credentials.assistant_id = EXCLUDED.assistant_id
-`
-
-type StoreKitGatewayCredentialParams struct {
-	TokenCiphertext string
-	RuntimeID       uuid.UUID
-	ProjectID       uuid.UUID
-	AssistantID     uuid.UUID
-}
-
-func (q *Queries) StoreKitGatewayCredential(ctx context.Context, arg StoreKitGatewayCredentialParams) (int64, error) {
-	result, err := q.db.Exec(ctx, storeKitGatewayCredential,
-		arg.TokenCiphertext,
-		arg.RuntimeID,
-		arg.ProjectID,
-		arg.AssistantID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const storeKitGatewayCredentialIfAbsent = `-- name: StoreKitGatewayCredentialIfAbsent :execrows
 INSERT INTO assistant_kit_gateway_credentials (project_id, assistant_id, runtime_id, token_ciphertext)
 SELECT r.project_id, r.assistant_id, r.id, $1

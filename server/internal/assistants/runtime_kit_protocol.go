@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 )
 
-// KitRuntimeProtocolConfig binds a protocol instance to a provisioned gateway.
+// KitRuntimeProtocolConfig binds a protocol instance to a provisioned Kit ACP server.
 // This is internal transport plumbing, not a new Platform MCP capability.
 type KitRuntimeProtocolConfig struct {
 	Core         *ServiceCore
@@ -33,7 +33,6 @@ type KitRuntimeProtocolConfig struct {
 type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
-var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
 const (
 	// kitHistoryDroppedNotice tells a fresh Kit session that the conversation it
@@ -60,7 +59,7 @@ func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, err
 	return &KitRuntimeProtocol{config: c}, nil
 }
 
-// Both routes use ACP v2 messages; /acp opts into native Kit session ownership.
+// Native Kit ACP serves exclusively on /acp.
 func kitProtocolEndpoint(u *url.URL, hc *guardian.HTTPClient) bool {
 	if u == nil {
 		return false
@@ -73,16 +72,12 @@ func kitProtocolEndpoint(u *url.URL, hc *guardian.HTTPClient) bool {
 		secureOrigin = ok && confidential.ConfidentialOrigin(u)
 	}
 	return secureOrigin && u.Host != "" &&
-		(u.Path == "/acp" || u.Path == "/acp/v2") && u.RawPath == "" &&
+		u.Path == "/acp" && u.RawPath == "" &&
 		u.RawQuery == "" && !u.ForceQuery && u.Fragment == "" && u.RawFragment == "" && u.User == nil && u.Opaque == ""
 }
 
 // Native close awaits durable session cleanup before releasing transport ownership.
-// The gateway retains its resident actor across connections, so leave it untouched.
 func (p *KitRuntimeProtocol) closeSettledSession(ctx context.Context, c *kitacp.Client, session string) error {
-	if p.config.Endpoint.Path != "/acp" {
-		return nil
-	}
 	if _, err := c.Call(ctx, "session/close", map[string]string{"sessionId": session}, session); err != nil {
 		return fmt.Errorf("close settled Kit session: %w", err)
 	}
@@ -892,85 +887,7 @@ func (p *KitRuntimeProtocol) Status(ctx context.Context, r assistantRuntimeRecor
 		return RuntimeBackendStatus{}, err
 	}
 	defer closeKitTransport(c)
-	// Gateway reachability is not an idle duration or all-session settlement.
 	return RuntimeBackendStatus{Configured: true, IdleSeconds: nil}, nil
-}
-
-// PrepareRuntimeSwitch requires the caller's shared assistant admission lock.
-// The caller has checked queued/claimed events and pending wakeups under that
-// lock. Thus session/new cannot race this observation: an in-flight admission
-// remains an unsettled event until RunTurn finishes, including persistence.
-func (p *KitRuntimeProtocol) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, runtimes []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
-	result := runtimeSwitchReadiness{DestinationReady: false, Settled: false, Release: func() {}}
-	// Destination provisioning is checked by the enclosing backend router.
-	if p.config.Core == nil || p.config.Core.db == nil || len(runtimes) != 1 || (destination != 2 && destination != 3) {
-		return result, errRuntimeSwitchUnavailable
-	}
-	r := runtimes[0]
-	if r.AssistantID != assistant.ID || r.ProjectID != assistant.ProjectID || r.RuntimeVersion != 3 {
-		return result, ErrKitRuntimeBinding
-	}
-	// Plain SELECT only: the caller holds the advisory and runtime row locks.
-	// Do not use the session helpers, which acquire another advisory lock.
-	sessions, err := runtimeSwitchQueries(ctx, p.config.Core.db).ListKitProtocolSessions(ctx, assistantrepo.ListKitProtocolSessionsParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, AssistantID: uuid.NullUUID{UUID: r.AssistantID, Valid: true}, RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}})
-	if err != nil {
-		return result, fmt.Errorf("list Kit sessions for switch: %w", err)
-	}
-	c, _, err := p.dial(ctx, r)
-	if err != nil {
-		return result, fmt.Errorf("kit protocol operation: %w", err)
-	}
-	defer closeKitTransport(c)
-	// Discard observation-only notifications: projection would reacquire the
-	// caller's lock. Normal turn completion has already drained its projector.
-	drainCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go func() {
-		for {
-			select {
-			case <-drainCtx.Done():
-				return
-			case _, ok := <-c.Notifications():
-				if !ok {
-					return
-				}
-			}
-		}
-	}()
-	for _, session := range sessions {
-		if !session.ChatID.Valid || session.ChatID.UUID == uuid.Nil {
-			return result, ErrKitRuntimeBinding
-		}
-		if err = c.AttachSession(ctx, session.AcpSessionID); err != nil {
-			return result, fmt.Errorf("attach Kit switch session: %w", err)
-		}
-		// The admission fence excludes foreground controllers. Resume replaces
-		// transport control, not autonomous work. Omit replayFrom and mcpServers:
-		// this is observation, not transcript replay or overlay replacement.
-		_, err = c.Call(ctx, "session/resume", map[string]any{
-			"sessionId": session.AcpSessionID,
-			"cwd":       p.config.CWD,
-		}, session.AcpSessionID)
-		if err != nil {
-			return result, fmt.Errorf("resume Kit switch session: %w", err)
-		}
-		raw, e := c.Call(ctx, "kit/session/status", map[string]string{"sessionId": session.AcpSessionID}, session.AcpSessionID)
-		if e != nil {
-			return result, fmt.Errorf("observe kit settlement: %w", e)
-		}
-		settled, e := kitSettled(raw, session.AcpSessionID)
-		if e != nil {
-			return result, fmt.Errorf("observe kit settlement: %w", e)
-		}
-		if !settled {
-			return result, nil
-		}
-		if err := p.closeSettledSession(ctx, c, session.AcpSessionID); err != nil {
-			return result, err
-		}
-	}
-	result.Settled = true
-	return result, nil
 }
 
 func flushKitNotifications(ctx context.Context, flush chan<- chan error) error {

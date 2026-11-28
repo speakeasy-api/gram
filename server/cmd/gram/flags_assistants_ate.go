@@ -73,7 +73,6 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 			OrgHosts:               orgHosts,
 			AllowInsecureInference: false,
 			MCPUserSessionIssuerID: uuid.Nil,
-			WorkloadNamespace:      "",
 			Environment:            c.String("environment"),
 			Image:                  c.String("assistant-ate-image"),
 			Origin:                 nil,

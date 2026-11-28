@@ -19,7 +19,7 @@ func TestKitIdleSweepProgressAcrossBatches(t *testing.T) {
 	q := assistantrepo.New(conn)
 	core := newProvisioningCore(t, conn)
 	calls := map[uuid.UUID]int{}
-	core.runtime = &versionedRuntimeBackend{kit: kitLifecycleBackend{testRuntimeBackend: testRuntimeBackend{backend: runtimeBackendGKE}, stop: func(_ context.Context, r assistantRuntimeRecord) error {
+	core.runtime = &versionedRuntimeBackend{kit: kitLifecycleBackend{testRuntimeBackend: testRuntimeBackend{backend: runtimeBackendLocal}, stop: func(_ context.Context, r assistantRuntimeRecord) error {
 		calls[r.ID]++
 		return nil
 	}}}
@@ -28,7 +28,7 @@ func TestKitIdleSweepProgressAcrossBatches(t *testing.T) {
 	for i := range runtimeIdleSweepBatch + 1 {
 		project, assistant, thread := insertReapableProject(t, conn, fmt.Sprintf("kit-sweep-%d", i))
 		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
-		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"test":true}`)
+		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendLocal, runtimeStateActive, `{"test":true}`)
 		require.NoError(t, q.SetAssistantRuntimeActive(t.Context(), assistantrepo.SetAssistantRuntimeActiveParams{ActiveState: runtimeStateActive, RuntimeID: runtimeID, ProjectID: project, WarmUntil: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}}))
 		if i == 0 {
 			firstProject, firstRuntime, firstThread = project, runtimeID, thread
