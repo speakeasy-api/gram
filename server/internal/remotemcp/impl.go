@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -63,6 +64,9 @@ type Service struct {
 	// serverURL is the public Speakeasy origin that platform-domain MCP
 	// endpoint URLs resolve under; nil omits those URLs.
 	serverURL *url.URL
+
+	// probeLimiter bounds URL probes per organization; nil applies no limit.
+	probeLimiter *ratelimit.Limiter
 
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
@@ -100,6 +104,7 @@ func NewService(
 		distributionAdmission: admission.NewGuard(),
 		features:              features,
 		serverURL:             nil,
+		probeLimiter:          nil,
 		beforeClaim:           nil,
 		beforeScopePinLock:    nil,
 	}
@@ -108,6 +113,32 @@ func NewService(
 func (s *Service) WithServerURL(serverURL *url.URL) *Service {
 	s.serverURL = serverURL
 	return s
+}
+
+// WithProbeLimiter bounds how many URL probes one organization may run. Each
+// probe makes the server send requests to a URL the caller chose, so an
+// unbounded caller could use it to scan other hosts from Speakeasy's network.
+func (s *Service) WithProbeLimiter(limiter *ratelimit.Limiter) *Service {
+	s.probeLimiter = limiter
+	return s
+}
+
+// allowProbe spends one probe from the organization's allowance. It fails
+// closed: when the limiter cannot be checked, no request is sent.
+func (s *Service) allowProbe(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	if s.probeLimiter == nil {
+		return nil
+	}
+
+	result, err := s.probeLimiter.Allow(ctx, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "URL checks are unavailable right now; retry shortly").LogError(ctx, logger)
+	}
+	if !result.Allowed {
+		return oops.E(oops.CodeRateLimitExceeded, nil, "too many URL checks were run just now; retry shortly").LogWarn(ctx, logger)
+	}
+
+	return nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -419,6 +450,10 @@ func (s *Service) ProbeURL(ctx context.Context, payload *gen.ProbeURLPayload) (*
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	if err := s.allowProbe(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
+
 	probeCtx, cancel := context.WithTimeout(ctx, probeURLTimeout)
 	defer cancel()
 
@@ -468,6 +503,9 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	if err := s.allowProbe(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+		return nil, err
+	}
 
 	if _, err := proxy.ValidateRemoteMCPURL(ctx, s.policy, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)

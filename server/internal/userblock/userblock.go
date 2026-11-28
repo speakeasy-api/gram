@@ -126,7 +126,43 @@ func Forget(db *pgxpool.Pool) {
 	snap.mu.Unlock()
 }
 
-// blockedSet holds blocked user IDs and their lowercased emails.
+// gmailDomain is the domain Gmail delivers to; googlemailDomain is its alias
+// for the same mailboxes.
+const (
+	gmailDomain      = "gmail.com"
+	googlemailDomain = "googlemail.com"
+)
+
+// CanonicalEmail returns the form of email that block checks compare, so one
+// mailbox cannot pass as a new person under another spelling. It lowercases
+// the address and drops a plus-tag from the local part ("a+x@corp.com" is
+// "a@corp.com"). For Gmail it also drops dots in the local part and treats
+// googlemail.com as gmail.com, since Gmail delivers all of those to one inbox.
+// An address without a local part and a domain is only trimmed and lowercased.
+func CanonicalEmail(email string) string {
+	email = strings.ToLower(strings.TrimSpace(email))
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return email
+	}
+
+	local, domain := email[:at], email[at+1:]
+	if tagged, _, ok := strings.Cut(local, "+"); ok && tagged != "" {
+		local = tagged
+	}
+	if domain == googlemailDomain {
+		domain = gmailDomain
+	}
+	if domain == gmailDomain {
+		if undotted := strings.ReplaceAll(local, ".", ""); undotted != "" {
+			local = undotted
+		}
+	}
+
+	return local + "@" + domain
+}
+
+// blockedSet holds blocked user IDs and their canonical emails.
 type blockedSet struct {
 	userIDs map[string]struct{}
 	emails  map[string]struct{}
@@ -160,10 +196,11 @@ func (g *Gate) Blocked(ctx context.Context, userID string) (bool, error) {
 	return blocked, nil
 }
 
-// BlockedEmail reports whether a blocked user holds email, matched
-// case-insensitively. It covers paths that know a person only by email.
+// BlockedEmail reports whether a blocked user holds email or another spelling
+// of the same mailbox, compared by [CanonicalEmail]. It covers paths that know
+// a person only by email.
 func (g *Gate) BlockedEmail(ctx context.Context, email string) (bool, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = CanonicalEmail(email)
 	if g == nil || email == "" {
 		return false, nil
 	}
@@ -222,7 +259,7 @@ func (s *snapshot) current(ctx context.Context, now time.Time) (blockedSet, erro
 	for _, row := range rows {
 		fresh.userIDs[row.ID] = struct{}{}
 		if row.Email != "" {
-			fresh.emails[row.Email] = struct{}{}
+			fresh.emails[CanonicalEmail(row.Email)] = struct{}{}
 		}
 	}
 	s.mu.Lock()
@@ -231,20 +268,37 @@ func (s *snapshot) current(ctx context.Context, now time.Time) (blockedSet, erro
 	return fresh, nil
 }
 
-// BlockedEmailIn reports whether a blocked user holds email, through the
-// in-memory snapshot when db is a pool and with a direct read otherwise.
+// BlockedEmailIn reports whether a blocked user holds email or another
+// spelling of the same mailbox, through the in-memory snapshot when db is a
+// pool and with a direct read otherwise.
 func BlockedEmailIn(ctx context.Context, db repo.DBTX, email string) (bool, error) {
 	if pool, ok := db.(*pgxpool.Pool); ok {
 		return NewGate(pool).BlockedEmail(ctx, email)
 	}
-	if strings.TrimSpace(email) == "" {
+	return BlockedEmailUncached(ctx, repo.New(db), email)
+}
+
+// BlockedEmailUncached reports whether a blocked user holds email or another
+// spelling of the same mailbox, read straight from the database so a fresh
+// block applies at once. Login uses it before writing anything for the user.
+// It loads every blocked user, which stays cheap because almost none are.
+func BlockedEmailUncached(ctx context.Context, queries *repo.Queries, email string) (bool, error) {
+	email = CanonicalEmail(email)
+	if email == "" {
 		return false, nil
 	}
-	blocked, err := repo.New(db).IsEmailBlacklisted(ctx, email)
+
+	rows, err := queries.ListBlacklistedUsers(ctx)
 	if err != nil {
 		return false, fmt.Errorf("read email block state: %w", err)
 	}
-	return blocked, nil
+	for _, row := range rows {
+		if row.Email != "" && CanonicalEmail(row.Email) == email {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // BlockedIn reports whether userID is blocked, through the in-memory snapshot

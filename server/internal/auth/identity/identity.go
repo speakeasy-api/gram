@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -542,9 +543,11 @@ func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, o
 	// A user staff blocked from the platform gets no session on any login
 	// surface, and nothing is written for them: not the user upsert, not the
 	// membership sync. Checked by email before the upsert, then by user ID in
-	// case the identity provider changed the email. Read uncached so a fresh
-	// block applies at once.
-	blockedEmail, err := r.userRepo.IsEmailBlacklisted(ctx, idpUser.Email)
+	// case the identity provider changed the email. The email check also
+	// catches another spelling of a blocked mailbox, such as a plus-tag or
+	// Gmail dots, so a blocked person cannot sign up again under an alias.
+	// Read uncached so a fresh block applies at once.
+	blockedEmail, err := userblock.BlockedEmailUncached(ctx, r.userRepo, idpUser.Email)
 	if err != nil {
 		return IDPLoginResult{}, fmt.Errorf("check user email block: %w", err)
 	}
