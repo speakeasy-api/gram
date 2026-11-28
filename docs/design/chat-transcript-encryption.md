@@ -7,8 +7,9 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Only the dashboard chat load (`chat.load`) can read through shadows, and only
-for projects that capture shadows; messages without a shadow fall back to
+**Only the dashboard chat load (`chat.load`) and assistant history (replay and
+self-heal) can read through shadows, and only for projects that capture
+shadows; messages without a shadow fall back to
 plaintext. Every other reader still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
@@ -113,6 +114,14 @@ exists but is stale or fails authentication fails the whole page with an
 unexpected error: it means capture or the data is broken, and plaintext must not
 hide that. Its codec uses the process's committed data key cache, so a warm page
 makes no KMS call, and a page with no shadows makes no key lookup at all.
+
+Assistant history uses the same `LoadMany` semantics. The runtime bootstrap
+replays the opened bodies, and a stale or unauthentic shadow fails the
+bootstrap. Self-heal opens only the user messages it keeps, the same way, and
+never reads the replies and tool messages it drops. If it cannot open a kept
+message, it fails the event and writes no new generation, so a broken shadow
+never erases history. Kit transcript projection still merges new updates into
+the plaintext row inside the chat writer's transaction.
 
 Direct SQL writers (see the scope table below) do not seal yet. If one edits a
 message that already has a shadow, that shadow goes stale and the read fails
