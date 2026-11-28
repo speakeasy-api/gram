@@ -175,14 +175,14 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 	req.Header.Set("Accept", "text/event-stream")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
-	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
-	require.Contains(t, rr.Body.String(), "compatibility probe", "GET must be routed to HandleGetServer")
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Contains(t, rr.Body.String(), mcpNotFoundDashboardHint, "GET must be routed to HandleGetServer")
 
 	req = httptest.NewRequest(http.MethodDelete, "/mcp/no-such-slug-"+uuid.NewString(), nil).WithContext(ctx)
 	rr = httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
-	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
-	require.Contains(t, rr.Body.String(), "session termination is not supported", "DELETE must be routed to HandleDeleteServer")
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Contains(t, rr.Body.String(), mcpNotFoundDashboardHint, "DELETE must be routed to HandleDeleteServer")
 }
 
 func TestRuntimeMethods_ToolsetBacked_Keep405(t *testing.T) {
@@ -204,7 +204,7 @@ func TestRuntimeMethods_ToolsetBacked_Keep405(t *testing.T) {
 	_, err = serveRuntimeMethod(t, ctx, ti, http.MethodDelete, endpointSlug, "", nil)
 	requireMethodNotAllowed(t, err)
 
-	// Unknown slugs fall through the endpoint lookup and keep the 405 too.
+	// Unknown slugs answer not found rather than the toolset-backed 405.
 	_, err = serveRuntimeMethod(t, ctx, ti, http.MethodGet, "no-such-slug-"+uuid.NewString(), "", map[string]string{"Accept": "text/event-stream"})
-	requireMethodNotAllowed(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

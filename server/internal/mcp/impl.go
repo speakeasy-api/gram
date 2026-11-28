@@ -941,6 +941,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/.well-known/mcp-registry-auth", oops.ErrHandle(service.logger, service.HandleMCPRegistryAuth).ServeHTTP)
 	// Gateway prefix rewrites append a slash to custom-domain root requests.
 	// Mount both runtime paths directly so POST bodies never depend on redirects.
+	routingMiss := NotFoundHandler(service.logger)
 	for _, route := range []struct {
 		method  string
 		handler http.Handler
@@ -954,9 +955,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 		o11y.AttachHandler(mux, route.method, PublicServerRoute, route.handler.ServeHTTP)
 		o11y.AttachHandler(mux, route.method, PublicServerRoute+"/", func(w http.ResponseWriter, r *http.Request) {
 			// chi also matches empty parameters, even with a nonempty regex.
-			// /mcp// is not a runtime alias and must remain a routing miss.
+			// /mcp// is not a runtime alias and must remain a routing miss,
+			// answered exactly as the mux's not-found handler would.
 			if chi.URLParam(r, "mcpSlug") == "" {
-				http.NotFound(w, r)
+				routingMiss(w, r)
 				return
 			}
 
@@ -1112,9 +1114,10 @@ func writeOpenAIAppsChallengeToken(w http.ResponseWriter, token string) error {
 // text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
 // the Streamable HTTP standalone server->client stream (spec § Listening for
 // Messages from the Server) and dispatch through the unified endpoint
-// dispatcher so the proxy relays them upstream. Everything else — including
-// SSE requests against toolset-backed servers, which never send
-// server-initiated messages — keeps the legacy 405.
+// dispatcher so the proxy relays them upstream. SSE requests for a missing
+// or policy-denied slug answer the MCP not-found. Everything else, including
+// SSE requests against toolset-backed servers (which never send
+// server-initiated messages), keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
 	wantsHTML, wantsSSE := getServerAccept(r.Header.Get("Accept"))
 
@@ -1183,9 +1186,9 @@ func getServerAccept(accept string) (wantsHTML, wantsSSE bool) {
 
 // HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
 // HTTP session termination (spec § Session Management). Proxy-backed servers
-// relay it upstream so the remote session is actually torn down;
-// toolset-backed servers hold no upstream session state, so the method stays
-// unsupported there.
+// relay it upstream so the remote session is actually torn down; a missing
+// or policy-denied slug answers the MCP not-found; toolset-backed servers hold
+// no upstream session state, so the method stays unsupported there.
 func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
 	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
 		return err
@@ -1197,9 +1200,9 @@ func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) err
 // proxy-backed (remote or tunneled) mcp_server, dispatches the request
 // through the unified endpoint dispatcher — the same issuer gate + backend
 // switch the POST path uses. handled=true means an authoritative outcome was
-// reached (dispatched, or failed in a way the caller must propagate);
-// handled=false means the slug does not resolve or resolves to a non-proxy
-// backend, so callers fall back to their legacy behavior.
+// reached (dispatched, not found, or failed in a way the caller must
+// propagate); handled=false means the slug resolves to a non-proxy backend,
+// so callers fall back to their legacy behavior.
 func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
 	ctx := r.Context()
 
@@ -1213,8 +1216,9 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	mcpEndpoint, mcpServer, metaServer := resolved.Endpoint, resolved.Server, resolved.MetaServer
 	switch {
 	case err == nil:
-	case mcpendpoints.IsAddressMiss(err):
-		return false, nil
+	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return true, oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage)
 	default:
 		// Unavailable addresses are terminal, never the legacy behavior.
 		return true, err
@@ -1274,9 +1278,11 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
-// publicMCPNotFoundMessage is the one message ServePublic answers for an
-// address miss and a policy denial alike, so neither reveals the other.
-const publicMCPNotFoundMessage = "mcp server not found"
+// publicMCPNotFoundMessage is the one message ServePublic and the per-server
+// metadata handlers answer for an address miss and a policy denial alike, so
+// neither reveals the other. It names no server and tells the user where to
+// find the URL that does resolve.
+const publicMCPNotFoundMessage = "mcp server not found: no MCP server is served at this URL. If it was renamed or moved, copy its current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
 
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
 // first — a slug bound to a custom-domain request resolves only against
