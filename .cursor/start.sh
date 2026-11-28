@@ -1,7 +1,9 @@
 set -euo pipefail
 unset DOCKER_HOST || true
 export PATH="$HOME/.local/bin:$PATH"
-cd /workspace
+# Resolve the repo root from this script so it works wherever the checkout
+# lives (single-repo environments use /workspace; multi-repo ones may not).
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if ! docker info >/dev/null 2>&1; then
   if [ -S /var/run/docker.sock ]; then
