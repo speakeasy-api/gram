@@ -263,17 +263,6 @@ func (s *Service) JWTAuth(ctx context.Context, token string, schema *security.JW
 // like KeyType, never from client-claimed headers — so a caller cannot pick
 // another slot's customer key.
 func (s *Service) directAuthorize(ctx context.Context, r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
-	if token := r.Header.Get("Authorization"); token != "" {
-		authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
-		if err == nil {
-			authCtx, ok := contextvalues.GetAuthContext(authorizedCtx)
-			if !ok || authCtx == nil || authCtx.ProjectID == nil {
-				return authorizedCtx, nil, "", oops.C(oops.CodeUnauthorized)
-			}
-			return authorizedCtx, authCtx, billing.ModelUsageSourceAssistants, nil
-		}
-	}
-
 	// Try session auth first
 	sc := security.APIKeyScheme{
 		Name:           constants.SessionSecurityScheme,

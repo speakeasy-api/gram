@@ -30971,6 +30971,24 @@ func EncodeFinalizeOrganizationEncryptionError(encoder func(context.Context, htt
 	}
 }
 
+// marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody
+// builds a value of type *AdminTrialCardSharingOrganizationResponseBody from a
+// value of type *admin.AdminTrialCardSharingOrganization.
+func marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(v *admin.AdminTrialCardSharingOrganization) *AdminTrialCardSharingOrganizationResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AdminTrialCardSharingOrganizationResponseBody{
+		ID:              v.ID,
+		Name:            v.Name,
+		Slug:            v.Slug,
+		CardAddedAt:     v.CardAddedAt,
+		RejectionReason: v.RejectionReason,
+	}
+
+	return res
+}
+
 // marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody
 // builds a value of type *AdminOrganizationMemberResponseBody from a value of
 // type *admin.AdminOrganizationMember.
@@ -31116,11 +31134,23 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		TrialEndsAt:                    v.TrialEndsAt,
 		TrialConvertedAt:               v.TrialConvertedAt,
 		TrialDemotedAt:                 v.TrialDemotedAt,
+		TrialCardAddedAt:               v.TrialCardAddedAt,
+		TrialCardRejectionReason:       v.TrialCardRejectionReason,
 		AdoptionDashboardURL:           v.AdoptionDashboardURL,
 		MemberCount:                    v.MemberCount,
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      v.CreatedAt,
 		UpdatedAt:                      v.UpdatedAt,
+	}
+	if v.OrganizationsSharingTrialCard != nil {
+		res.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(v.OrganizationsSharingTrialCard))
+		for i, val := range v.OrganizationsSharingTrialCard {
+			if val == nil {
+				res.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			res.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 
 	return res

@@ -56,6 +56,7 @@ const SLUG_EXEMPT_PATHS = [
   "/explore-demo",
   "/guide",
   "/trial-ended",
+  "/start-trial",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
@@ -272,7 +273,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
     const trialLifecycle = getTrialLifecycleFromDates(session.trial, trialNow);
 
-    if (trialLifecycle === "expired") {
+    if (session.trialPendingPaymentMethod) {
+      // The trial starts once an admin saves a card; that page is the gate.
+      if (!isPath(location.pathname, "/start-trial")) {
+        return <Navigate to="/start-trial" replace />;
+      }
+    } else if (trialLifecycle === "expired") {
       if (!isPath(location.pathname, "/trial-ended")) {
         return <Navigate to="/trial-ended" replace />;
       }

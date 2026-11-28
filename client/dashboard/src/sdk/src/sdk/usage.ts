@@ -7,6 +7,7 @@ import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.
 import { usageCreateStripeCheckout } from "../funcs/usageCreateStripeCheckout.js";
 import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortalSession.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
+import { usageCreateTrialPaymentMethodCheckout } from "../funcs/usageCreateTrialPaymentMethodCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
 import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
@@ -54,6 +55,10 @@ import {
   CreateTopUpCheckoutRequest,
   CreateTopUpCheckoutSecurity,
 } from "../models/operations/createtopupcheckout.js";
+import {
+  CreateTrialPaymentMethodCheckoutRequest,
+  CreateTrialPaymentMethodCheckoutSecurity,
+} from "../models/operations/createtrialpaymentmethodcheckout.js";
 import {
   GetBillingEmailRequest,
   GetBillingEmailSecurity,
@@ -197,6 +202,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateTopUpCheckout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createTrialPaymentMethodCheckout usage
+   *
+   * @remarks
+   * Create an embedded Stripe Checkout session that saves a card to start the organization's free trial
+   */
+  async createTrialPaymentMethodCheckout(
+    request?: CreateTrialPaymentMethodCheckoutRequest | undefined,
+    security?: CreateTrialPaymentMethodCheckoutSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<StripeEmbeddedCheckout> {
+    return unwrapAsync(usageCreateTrialPaymentMethodCheckout(
       this,
       request,
       security,

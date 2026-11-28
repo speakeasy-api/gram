@@ -378,6 +378,7 @@ type PostgresReader struct {
 	// customDomainTargetSuffix is the normalized parent of designated CNAME destinations.
 	customDomainTargetSuffix  string
 	xaaReadiness              *xaaReadinessService
+	freeTrial                 *FreeTrialStatus
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
@@ -464,6 +465,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		eventFeed:                 nil,
 		networkIngress:            nil,
 		xaaReadiness:              nil,
+		freeTrial:                 nil,
 		issuerGate:                nil,
 		authz:                     nil,
 		identityGate:              nil,

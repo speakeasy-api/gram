@@ -296,6 +296,10 @@ func whoamiCard(output WhoamiOutput) resultCard {
 		}
 		tags = append(tags, role.Name)
 	}
+	var action *cardAction
+	if output.FreeTrial != nil {
+		action = &cardAction{Label: "Start free trial", URL: output.FreeTrial.StartURL}
+	}
 	return resultCard{
 		Eyebrow:     cardStatus{Label: "Connected as", Tone: cardToneNeutral},
 		Title:       name,
@@ -306,7 +310,7 @@ func whoamiCard(output WhoamiOutput) resultCard {
 		Description: email,
 		Tags:        tags,
 		Rows:        nil,
-		Action:      nil,
+		Action:      action,
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -25,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -114,23 +117,62 @@ func insertDashboardEventFixture(
 func setupKitSteerOrchestration(t *testing.T, serverURL string) (*ServiceCore, *pgxpool.Pool, kitRuntimeSessionKey, uuid.UUID, *KitRuntimeProtocol) {
 	t.Helper()
 	ctx := t.Context()
-	seedCore, db, key, chatID := kitSessionFixture(t)
-	require.NoError(t, assistantrepo.New(db).SetKitThreadSourceFixture(ctx, assistantrepo.SetKitThreadSourceFixtureParams{
-		ProjectID:  key.ProjectID,
-		ThreadID:   key.ThreadID,
-		SourceKind: sourceKindDashboard,
-	}))
-	// Cancel the default fixture event so each test controls exact events.
-	_, err := assistantrepo.New(db).CancelPendingAssistantThreadEvents(ctx, assistantrepo.CancelPendingAssistantThreadEventsParams{
-		ProjectID:       key.ProjectID,
-		ThreadID:        key.ThreadID,
-		PendingStatus:   eventStatusPending,
-		CancelledStatus: eventStatusCancelled,
+	db, err := assistantsInfra.CloneTestDatabase(t, "kit_steer")
+	require.NoError(t, err)
+	proj, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Project",
+		Slug:           "project",
+		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
+	queries := assistantrepo.New(db)
+	assistant, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
+		ProjectID:       proj.ID,
+		OrganizationID:  "org-test",
+		CreatedByUserID: pgtype.Text{String: "user-1", Valid: true},
+		Name:            "Assistant",
+		Model:           "openai/gpt-4o-mini",
+		Instructions:    "",
+		WarmTtlSeconds:  300,
+		MaxConcurrency:  1,
+		Status:          StatusActive,
+	})
+	require.NoError(t, err)
+	chatID := uuid.New()
+	require.NoError(t, queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      proj.ID,
+		OrganizationID: "org-test",
+		Title:          pgtype.Text{},
+	}))
+	threadID, err := queries.UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     proj.ID,
+		CorrelationID: "corr-1",
+		ChatID:        chatID,
+		SourceKind:    sourceKindDashboard,
+		SourceRefJson: []byte("{}"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(ctx, assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{
+		ProjectID: proj.ID, AssistantID: assistant.ID, RuntimeVersion: 3,
+	}))
+	require.NoError(t, queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+		ProjectID: proj.ID, AssistantID: assistant.ID, AssistantThreadID: threadID, Backend: runtimeBackendLocal, State: runtimeStateActive,
+	}))
+	runtime, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID: proj.ID, AssistantID: assistant.ID,
+	})
+	require.NoError(t, err)
+	cipher, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	key := kitRuntimeSessionKey{ProjectID: proj.ID, AssistantID: assistant.ID, RuntimeID: runtime.ID, ThreadID: threadID}
 
 	logger := testenv.NewLogger(t)
 	backend := &kitSteerBackendStub{}
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	authzEngine := newTestAuthzEngine(t, db)
 	core := NewServiceCore(
 		logger,
 		testenv.NewTracerProvider(t),
@@ -140,15 +182,25 @@ func setupKitSteerOrchestration(t *testing.T, serverURL string) (*ServiceCore, *
 		nil,
 		backend,
 		nil,
-		assistanttokens.New("test-jwt-secret", db, nil, nil, nil),
+		assistanttokens.New("test-jwt-secret", db, authzEngine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient)),
 		mustParseURLForServiceTest(t, "https://api.example"),
 		telemetry.NewStub(logger),
 		nil,
 		newTestAuditLogger(),
 		testIdentityService,
-		newTestAuthzEngine(t, db),
+		authzEngine,
 	)
-	core.encryptionClient = seedCore.encryptionClient
+	core.encryptionClient = cipher
+
+	seedIdentityMembers(t, db)
+	seedProjectRead(t, db, "user-1", key.ProjectID)
+	upgraded, err := core.UpgradeAssistantIdentity(ctx, assistantidentity.ProvisionParams{
+		OrganizationID: "org-test", ProjectID: key.ProjectID, AssistantID: key.AssistantID, ActorUserID: "user-1", Staff: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, upgraded.AgentID)
+	_, err = core.resolveDashboardTriggerInstance(ctx, "org-test", key.ProjectID, key.AssistantID, upgraded.Name)
+	require.NoError(t, err)
 
 	writer, shutdown := chat.NewChatMessageWriter(logger, db, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
@@ -1223,21 +1275,8 @@ func TestKitSteerRejectsIneligibleSenderOnNonSlackThread(t *testing.T) {
 	defer server.Close()
 
 	core, db, key, chatID, _ := setupKitSteerOrchestration(t, server.URL)
-	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	core.assistantTokens = assistanttokens.New("test-jwt-secret", db, core.authz, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-
-	seedIdentityMembers(t, db)
-	seedProjectRead(t, db, "user-1", key.ProjectID)
-	upgraded, err := core.UpgradeAssistantIdentity(ctx, assistantidentity.ProvisionParams{
-		OrganizationID: "org-test", ProjectID: key.ProjectID, AssistantID: key.AssistantID, ActorUserID: "user-1", Staff: nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, upgraded.AgentID)
-	_, err = core.resolveDashboardTriggerInstance(ctx, "org-test", key.ProjectID, key.AssistantID, upgraded.Name)
-	require.NoError(t, err)
 
 	insertDashboardAsUser := func(userID, text string) uuid.UUID {
 		msgID, err := testrepo.New(db).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
