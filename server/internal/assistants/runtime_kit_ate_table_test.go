@@ -363,6 +363,24 @@ func TestKitATEActorLookupByUIDUsesUniqueIndex(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Insert a second live actor in the same project and refresh planner
+	// statistics so PostgreSQL distinguishes the unique actor_uid index from
+	// the (project_id, assistant_thread_id) index on small test tables.
+	_, err = q.InsertAssistantATEActor(t.Context(), assistantrepo.InsertAssistantATEActorParams{
+		ActorName:   "spk-kit-actor-two",
+		ActorUid:    "uid-actor-two",
+		State:       ateActorStateRunning,
+		Configured:  true,
+		RuntimeID:   runtimeID,
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+		ThreadID:    thread2,
+	})
+	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: Refresh planner statistics before EXPLAIN so PostgreSQL picks the selective unique index.
+	_, err = db.Exec(t.Context(), "ANALYZE assistant_ate_actors")
+	require.NoError(t, err)
+
 	// Capture the actual SQLc-generated query and verify PostgreSQL uses the
 	// unique index assistant_ate_actors_actor_uid_key.
 	tx := testenv.BeginTx(t, t.Context(), db)

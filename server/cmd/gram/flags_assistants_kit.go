@@ -54,6 +54,20 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 			logger.WarnContext(c.Context, "ignoring ATE Kit settings: the assistant runtime provider is disabled")
 			return nil
 		}
+		// Validate required ATE configuration up front before registering any
+		// retiring GKE transition backend.
+		validateKitATEFlagsFromCLI(c, serverURL)
+		// During forward cutover (GKE -> ATE), when GKE Kit cluster flags are
+		// configured alongside ATE, register GKE first so
+		// installKitATERuntimeFromCLI promotes ATE as the active Kit v3
+		// backend and demotes GKE into retiring-only cleanup. Fail startup if
+		// explicit GKE transition flags are broken so persisted GKE rows cannot
+		// silently lose their cleanup route.
+		if base.Provider == assistants.RuntimeProviderGKE && core != nil && hasExplicitKitGKEFlags(c) {
+			if err := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); err != nil {
+				return fmt.Errorf("install retiring Kit GKE backend for ATE cutover: %w", err)
+			}
+		}
 		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts)
 	}
 	if c.String("assistant-kit-image") == "" {
@@ -69,6 +83,30 @@ func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *as
 		logger.WarnContext(c.Context, "ignoring Kit settings: the assistant runtime provider is disabled")
 		return nil
 	}
+	if err := installKitGKEOrLocalRuntimeFromCLI(c, core, redisClient, serverURL, orgHosts, base); err != nil {
+		return err
+	}
+	// During rollback (ATE -> GKE), when ATE flags remain configured while
+	// GRAM_ASSISTANT_ATE_ENABLED=false, attach ATE strictly for retiring
+	// cleanup so existing ATE thread actors and admissions drain cleanly.
+	if core != nil {
+		if err := installRetiringKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts); err != nil {
+			return fmt.Errorf("install retiring Kit ATE backend for rollback: %w", err)
+		}
+	}
+	return nil
+}
+
+func hasExplicitKitGKEFlags(c *cli.Context) bool {
+	return c.String("assistant-kit-image") != "" &&
+		(c.String("assistant-kit-gke-cluster-name") != "" ||
+			c.String("assistant-kit-gke-cluster-location") != "" ||
+			c.String("assistant-kit-gke-project-number") != "" ||
+			c.String("assistant-kit-gke-organization-id") != "")
+}
+
+func installKitGKEOrLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver, base assistants.RuntimeBackendConfig) error {
+	var err error
 	if base.Provider == assistants.RuntimeProviderLocal && c.String("environment") != "local" {
 		return fmt.Errorf("local Kit requires the local environment")
 	}

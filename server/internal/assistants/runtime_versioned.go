@@ -14,9 +14,12 @@ import (
 
 // versionedRuntimeBackend keeps infrastructure selection separate from guest
 // protocol evolution. Runtime rows, never UI flags, select the implementation.
+// kitRetiring holds superseded Kit v3 backends for teardown/reaping only (never
+// admission or turn execution) during forward cutover and rollback.
 type versionedRuntimeBackend struct {
-	legacy RuntimeBackend
-	kit    RuntimeBackend
+	legacy      RuntimeBackend
+	kit         RuntimeBackend
+	kitRetiring map[string]RuntimeBackend
 }
 
 func (v *versionedRuntimeBackend) forVersion(version int16) (RuntimeBackend, error) {
@@ -46,9 +49,33 @@ func (v *versionedRuntimeBackend) route(r assistantRuntimeRecord) (RuntimeBacken
 	return b, nil
 }
 
+func (v *versionedRuntimeBackend) routeCleanup(r assistantRuntimeRecord) (RuntimeBackend, error) {
+	if r.RuntimeVersion == 3 {
+		if v.kit != nil && v.kit.SupportsBackend(r.Backend) {
+			return v.kit, nil
+		}
+		if retiring, ok := v.kitRetiring[r.Backend]; ok && retiring != nil && retiring.SupportsBackend(r.Backend) {
+			return retiring, nil
+		}
+		if v.kit == nil && len(v.kitRetiring) == 0 {
+			return nil, fmt.Errorf("assistant runtime version %d is not configured", r.RuntimeVersion)
+		}
+		return nil, fmt.Errorf("assistant runtime version %d does not support backend %q", r.RuntimeVersion, r.Backend)
+	}
+	return v.route(r)
+}
+
 func (v *versionedRuntimeBackend) Backend() string { return v.legacy.Backend() }
 func (v *versionedRuntimeBackend) SupportsBackend(b string) bool {
-	return v.legacy.SupportsBackend(b) || (v.kit != nil && v.kit.SupportsBackend(b))
+	if v.legacy.SupportsBackend(b) || (v.kit != nil && v.kit.SupportsBackend(b)) {
+		return true
+	}
+	for _, retiring := range v.kitRetiring {
+		if retiring != nil && retiring.SupportsBackend(b) {
+			return true
+		}
+	}
+	return false
 }
 func (v *versionedRuntimeBackend) ServerURL() *url.URL { return v.legacy.ServerURL() }
 func (v *versionedRuntimeBackend) ImageRef() string    { return v.legacy.ImageRef() }
@@ -118,7 +145,7 @@ func (v *versionedRuntimeBackend) Status(ctx context.Context, r assistantRuntime
 	return result, nil
 }
 func (v *versionedRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecord) error {
-	b, err := v.route(r)
+	b, err := v.routeCleanup(r)
 	if err != nil {
 		return err
 	}
@@ -128,7 +155,7 @@ func (v *versionedRuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRe
 	return nil
 }
 func (v *versionedRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
-	b, err := v.route(r)
+	b, err := v.routeCleanup(r)
 	if err != nil {
 		return err
 	}
@@ -138,7 +165,7 @@ func (v *versionedRuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRe
 	return nil
 }
 func (v *versionedRuntimeBackend) ReapStoppedMachine(ctx context.Context, r assistantRuntimeRecord) error {
-	b, err := v.route(r)
+	b, err := v.routeCleanup(r)
 	if err != nil {
 		return err
 	}
@@ -148,7 +175,7 @@ func (v *versionedRuntimeBackend) ReapStoppedMachine(ctx context.Context, r assi
 	return nil
 }
 func (v *versionedRuntimeBackend) RuntimeExists(ctx context.Context, r assistantRuntimeRecord) (bool, error) {
-	b, err := v.route(r)
+	b, err := v.routeCleanup(r)
 	if err != nil {
 		return false, err
 	}
@@ -167,16 +194,60 @@ func (v *versionedRuntimeBackend) RuntimeExists(ctx context.Context, r assistant
 
 // installKitRuntime is called during service composition before serving work.
 // Keeping installation local to the service avoids changing the legacy default.
+// Installing a new active Kit backend demotes any previously installed distinct
+// Kit backend into kitRetiring so in-flight cutover and rollback retirements
+// can still tear down old-backend resources cleanly.
 func (s *ServiceCore) installKitRuntime(kit RuntimeBackend) error {
 	if kit == nil {
 		return fmt.Errorf("kit runtime backend is required")
 	}
+	attach := func(current RuntimeBackend) RuntimeBackend {
+		if existing, ok := current.(*versionedRuntimeBackend); ok {
+			retiring := existing.kitRetiring
+			if existing.kit != nil && existing.kit.Backend() != kit.Backend() {
+				if retiring == nil {
+					retiring = map[string]RuntimeBackend{}
+				}
+				retiring[existing.kit.Backend()] = existing.kit
+			}
+			delete(retiring, kit.Backend())
+			return &versionedRuntimeBackend{legacy: existing.legacy, kit: kit, kitRetiring: retiring}
+		}
+		return &versionedRuntimeBackend{legacy: current, kit: kit, kitRetiring: nil}
+	}
 	if t, ok := s.runtime.(*telemetryRuntimeBackend); ok {
-		t.inner = &versionedRuntimeBackend{legacy: t.inner, kit: kit}
+		t.inner = attach(t.inner)
 	} else {
-		s.runtime = &versionedRuntimeBackend{legacy: s.runtime, kit: kit}
+		s.runtime = attach(s.runtime)
 	}
 	return nil
+}
+
+// installRetiringKitRuntime registers a superseded Kit v3 backend strictly for
+// cleanup (Stop/Reap/ReapStoppedMachine/RuntimeExists) without changing the
+// active Kit target backend used for new admissions.
+func (s *ServiceCore) installRetiringKitRuntime(retiring RuntimeBackend) error {
+	if retiring == nil {
+		return fmt.Errorf("retiring kit runtime backend is required")
+	}
+	attach := func(current RuntimeBackend) error {
+		existing, ok := current.(*versionedRuntimeBackend)
+		if !ok || existing.kit == nil {
+			return fmt.Errorf("active kit runtime must be installed before a retiring backend")
+		}
+		if existing.kit.Backend() == retiring.Backend() {
+			return nil
+		}
+		if existing.kitRetiring == nil {
+			existing.kitRetiring = map[string]RuntimeBackend{}
+		}
+		existing.kitRetiring[retiring.Backend()] = retiring
+		return nil
+	}
+	if t, ok := s.runtime.(*telemetryRuntimeBackend); ok {
+		return attach(t.inner)
+	}
+	return attach(s.runtime)
 }
 
 func runtimeBackendForVersion(backend RuntimeBackend, version int16) (string, error) {
@@ -233,6 +304,59 @@ func (t *telemetryRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 	return result, nil
 }
 
+func (t *telemetryRuntimeBackend) PrepareKitBackendSwitch(ctx context.Context, assistant assistantRecord, row assistantRuntimeRecord) (runtimeSwitchReadiness, error) {
+	coordinator, ok := t.inner.(kitBackendSwitchCoordinator)
+	if !ok {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	result, err := coordinator.PrepareKitBackendSwitch(ctx, assistant, row)
+	if err != nil {
+		return result, fmt.Errorf("prepare Kit backend switch: %w", err)
+	}
+	return result, nil
+}
+
+type kitBackendSwitchCoordinator interface {
+	PrepareKitBackendSwitch(context.Context, assistantRecord, assistantRuntimeRecord) (runtimeSwitchReadiness, error)
+}
+
+func (v *versionedRuntimeBackend) PrepareKitBackendSwitch(ctx context.Context, assistant assistantRecord, row assistantRuntimeRecord) (runtimeSwitchReadiness, error) {
+	target, err := v.forVersion(3)
+	if err != nil {
+		return runtimeSwitchReadiness{}, err
+	}
+	if ready, ok := target.(interface{ RuntimeReadyForAdmission(context.Context) error }); ok {
+		if err := ready.RuntimeReadyForAdmission(ctx); err != nil {
+			return runtimeSwitchReadiness{}, fmt.Errorf("check destination Kit backend readiness: %w", err)
+		}
+	}
+	source, err := v.routeCleanup(row)
+	if err != nil {
+		return runtimeSwitchReadiness{}, err
+	}
+	coordinator, ok := source.(runtimeSwitchCoordinator)
+	if !ok {
+		return runtimeSwitchReadiness{}, errRuntimeSwitchUnavailable
+	}
+	// Pass destination=2 so the retiring source backend verifies source-row
+	// settlement and acquires its guest admission fence without requiring the
+	// retiring backend itself to be destination-ready for new v3 admissions.
+	result, err := coordinator.PrepareRuntimeSwitch(ctx, assistant, []assistantRuntimeRecord{row}, 2)
+	if err != nil {
+		if result.Release != nil {
+			result.Release()
+		}
+		return runtimeSwitchReadiness{}, fmt.Errorf("prepare retiring Kit backend switch: %w", err)
+	}
+	if !result.Settled || result.Release == nil {
+		if result.Release != nil {
+			result.Release()
+		}
+		return runtimeSwitchReadiness{}, errRuntimeSwitchBusy
+	}
+	return runtimeSwitchReadiness{DestinationReady: true, Settled: true, Release: result.Release}, nil
+}
+
 func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assistant assistantRecord, rows []assistantRuntimeRecord, destination int16) (runtimeSwitchReadiness, error) {
 	target, err := v.forVersion(destination)
 	if err != nil {
@@ -252,7 +376,7 @@ func (v *versionedRuntimeBackend) PrepareRuntimeSwitch(ctx context.Context, assi
 		}
 	}
 	for _, row := range rows {
-		source, err := v.route(row)
+		source, err := v.routeCleanup(row)
 		if err != nil {
 			release()
 			return runtimeSwitchReadiness{}, err

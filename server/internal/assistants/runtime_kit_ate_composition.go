@@ -85,20 +85,18 @@ func validateKitATEComposition(c KitATECompositionConfig) error {
 	return nil
 }
 
-// InstallKitATERuntime installs only the version-3 dispatch branch. The backend
-// creates actors lazily when the thread is known, not during Ensure.
-func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATECompositionConfig) error {
+func (s *ServiceCore) buildKitATERuntimeBackend(ctx context.Context, c KitATECompositionConfig) (*KitATERuntimeBackend, *ateclient.Client, error) {
 	if err := validateKitATEComposition(c); err != nil {
-		return err
+		return nil, nil, err
 	}
 	if s.guardianPolicy == nil || s.chatWriter == nil || s.assistantTokens == nil || s.encryptionClient == nil || s.serverURL == nil {
-		return errors.New("ATE requires guarded HTTP, transcript, inference, server URL, and encrypted gateway credential services")
+		return nil, nil, errors.New("ATE requires guarded HTTP, transcript, inference, server URL, and encrypted gateway credential services")
 	}
 
 	c.ClientConfig.Atespace = c.Atespace
 	client, err := ateclient.New(ctx, c.ClientConfig)
 	if err != nil {
-		return fmt.Errorf("create ATE control client: %w", err)
+		return nil, nil, fmt.Errorf("create ATE control client: %w", err)
 	}
 
 	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
@@ -120,9 +118,21 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 		ClearThreadSession: s.kitATEClearThreadSession,
 		Now:                nil,
 		HelperPollInterval: 0,
+		Logger:             s.logger,
+		Meter:              s.meter,
 	})
 	if err != nil {
 		_ = client.Close()
+		return nil, nil, err
+	}
+	return backend, client, nil
+}
+
+// InstallKitATERuntime installs only the version-3 dispatch branch. The backend
+// creates actors lazily when the thread is known, not during Ensure.
+func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATECompositionConfig) error {
+	backend, client, err := s.buildKitATERuntimeBackend(ctx, c)
+	if err != nil {
 		return err
 	}
 
@@ -134,6 +144,22 @@ func (s *ServiceCore) InstallKitATERuntime(ctx context.Context, c KitATEComposit
 	s.SetATEAtespace(c.Atespace)
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitAssistantEligible(ctx, tx, assistant, c.OrgHosts)
+	}
+	return nil
+}
+
+// InstallRetiringKitATERuntime registers the ATE backend strictly for cleanup
+// of previously created ATE runtimes during a rollback off ATE, without
+// changing the active Kit v3 target backend or assistant eligibility.
+func (s *ServiceCore) InstallRetiringKitATERuntime(ctx context.Context, c KitATECompositionConfig) error {
+	c.Enabled = true
+	backend, client, err := s.buildKitATERuntimeBackend(ctx, c)
+	if err != nil {
+		return err
+	}
+	if err := s.installRetiringKitRuntime(backend); err != nil {
+		_ = client.Close()
+		return err
 	}
 	return nil
 }

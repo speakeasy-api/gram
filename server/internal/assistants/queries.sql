@@ -2347,3 +2347,57 @@ SELECT EXISTS (
             AND (bpg.expires_at IS NULL OR bpg.expires_at > clock_timestamp())
       )
 )::boolean AS has_grant;
+
+-- name: AssistantHasActiveProcessingEvents :one
+-- True when any thread has an unsettled non-pending event (e.g. processing)
+-- or an unsettled wake trigger. Used by admission before retiring a superseded
+-- Kit backend runtime so in-flight turns are never interrupted while still
+-- allowing pending admissions to cut over an otherwise idle runtime.
+SELECT EXISTS (
+  SELECT 1 FROM assistant_thread_events e
+  WHERE e.project_id = @project_id AND e.assistant_id = @assistant_id
+    AND e.deleted IS FALSE AND e.status NOT IN ('pending', 'completed', 'failed', 'cancelled')
+) OR EXISTS (
+  SELECT 1 FROM trigger_instances t
+  WHERE t.project_id = @project_id AND t.target_kind = 'assistant'
+    AND t.target_ref = sqlc.arg('assistant_id')::uuid::text AND t.definition_slug = 'wake'
+    AND t.deleted IS FALSE AND t.status NOT IN ('fired', 'cancelled')
+) AS busy;
+
+-- name: ListProjectsWithSupersededKitRuntimes :many
+-- Internal background reaper query: keyset-paginates projects that hold live
+-- Kit v3 runtime rows parked on a backend different from the deployment's
+-- active Kit target backend so subsequent runtime reads stay project-scoped
+-- and busy tenants cannot starve later projects.
+SELECT DISTINCT r.project_id
+FROM assistant_runtimes r
+JOIN projects p ON p.id = r.project_id
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.runtime_version = 3
+  AND r.backend <> @target_backend
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ('active', 'stopped', 'failed')
+  AND p.deleted IS FALSE
+  AND a.deleted IS FALSE
+  AND r.project_id > @after_project_id
+ORDER BY r.project_id ASC
+LIMIT @limit_count;
+
+-- name: ListSupersededKitRuntimesByProject :many
+-- Project-scoped Kit v3 runtime rows parked on a backend different from the
+-- deployment's active Kit target backend, keyset-paginated by runtime ID so
+-- busy assistants can be skipped without starving idle siblings or projects.
+SELECT r.*
+FROM assistant_runtimes r
+JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
+WHERE r.project_id = @project_id
+  AND r.runtime_version = 3
+  AND r.backend <> @target_backend
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ('active', 'stopped', 'failed')
+  AND a.deleted IS FALSE
+  AND r.id > @after_id
+ORDER BY r.id ASC
+LIMIT @limit_count;

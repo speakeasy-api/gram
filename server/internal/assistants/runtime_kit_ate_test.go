@@ -477,6 +477,10 @@ func (p *fakeATEProtocol) Status(context.Context, assistantRuntimeRecord) (Runti
 	return RuntimeBackendStatus{Configured: true}, nil
 }
 
+func (p *fakeATEProtocol) VerifyNativeThreadSettled(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID) error {
+	return nil
+}
+
 func (p *fakeATEProtocol) CloseNativeThreadSession(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) error {
 	p.mu.Lock()
 	p.closedThread = append(p.closedThread, thread)
