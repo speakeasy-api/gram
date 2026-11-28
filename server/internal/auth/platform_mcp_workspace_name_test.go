@@ -18,6 +18,8 @@ func TestSuggestWorkspaceName(t *testing.T) {
 		{name: "work domain", email: "jane@acme.com", displayName: "Jane Doe", want: "Acme"},
 		{name: "work subdomain", email: "jane@eng.acme.co.uk", displayName: "Jane Doe", want: "Acme"},
 		{name: "free mail uses name", email: "jane@gmail.com", displayName: "Jane Doe", want: "Jane Doe's organization"},
+		{name: "regional free mail uses name", email: "jane@yahoo.co.uk", displayName: "Jane Doe", want: "Jane Doe's organization"},
+		{name: "internet provider mail uses name", email: "jane@orange.fr", displayName: "Jane Doe", want: "Jane Doe's organization"},
 		{name: "free mail without name uses mailbox", email: "jane.doe@outlook.com", displayName: "", want: "jane.doe's organization"},
 		{name: "nothing usable", email: "", displayName: "", want: ""},
 	} {
