@@ -44,3 +44,21 @@ export function scanTargetAccessOf(target: AiScanTarget): AIToolAccessSummary {
     }
   );
 }
+
+/** Why a decision still applies to a tool the Speakeasy catalog no longer
+ *  admits, in the admin's words, or nothing for every other tool. */
+export function catalogStatusNote(
+  access: AIToolAccessSummary,
+): string | undefined {
+  const still =
+    access.decision === "blocked"
+      ? "This block still applies."
+      : "This decision still applies.";
+  if (access.catalogStatus === "removed") {
+    return `Removed from the Speakeasy catalog. ${still}`;
+  }
+  if (access.catalogStatus === "documents_disabled") {
+    return `Sign-in documents are turned off for this client. ${still}`;
+  }
+  return undefined;
+}

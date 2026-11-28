@@ -141,6 +141,60 @@ func (q *Queries) ListDeletedProductIDs(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const listRemovedCatalogDocuments = `-- name: ListRemovedCatalogDocuments :many
+SELECT d.url, d.is_pattern, d.ai_product_id, p.vendor_key, p.category, p.display_name AS product_display_name
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+WHERE (d.deleted IS TRUE OR p.deleted IS TRUE)
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_product_cimd_documents l
+    JOIN ai_products lp ON lp.id = l.ai_product_id
+    WHERE l.url = d.url AND l.deleted IS FALSE AND lp.deleted IS FALSE
+  )
+ORDER BY LEAST(d.deleted_at, p.deleted_at) DESC, d.url COLLATE "C", d.ai_product_id COLLATE "C"
+LIMIT $1
+`
+
+type ListRemovedCatalogDocumentsRow struct {
+	Url                string
+	IsPattern          bool
+	AiProductID        string
+	VendorKey          string
+	Category           pgtype.Text
+	ProductDisplayName string
+}
+
+// Documents that no longer identify a live client: soft-deleted documents and
+// every document of a soft-deleted product, most recently removed first. Read
+// only to keep blocks applying. A URL a live document of a live product holds
+// now is left out, so it can never be credited to its old product.
+func (q *Queries) ListRemovedCatalogDocuments(ctx context.Context, maxRows int64) ([]ListRemovedCatalogDocumentsRow, error) {
+	rows, err := q.db.Query(ctx, listRemovedCatalogDocuments, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemovedCatalogDocumentsRow
+	for rows.Next() {
+		var i ListRemovedCatalogDocumentsRow
+		if err := rows.Scan(
+			&i.Url,
+			&i.IsPattern,
+			&i.AiProductID,
+			&i.VendorKey,
+			&i.Category,
+			&i.ProductDisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemovedDocumentURLs = `-- name: ListRemovedDocumentURLs :many
 SELECT d.url, COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE), FALSE)::boolean AS live
 FROM ai_product_cimd_documents d

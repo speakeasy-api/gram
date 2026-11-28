@@ -6,20 +6,24 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { accessLibrary, detection } from "./access-fixtures";
+import { accessLibrary, detection, scanTarget } from "./access-fixtures";
 import { type AccessDecision, buildAccessRows } from "./access-rows";
 import { ShadowAIAccessStep } from "./ShadowAIAccessStep";
 
 afterEach(cleanup);
 
-function renderStep(draft: ReadonlyMap<string, AccessDecision> = new Map()) {
+function renderStep(
+  draft: ReadonlyMap<string, AccessDecision> = new Map(),
+  library = accessLibrary(),
+) {
   const onDecide =
     vi.fn<(targetId: string, decision: AccessDecision) => void>();
   render(
     <TooltipProvider>
       <ShadowAIAccessStep
-        rows={buildAccessRows(accessLibrary(), [detection()])}
+        rows={buildAccessRows(library, [detection()])}
         isPending={false}
         libraryFailed={false}
         detectionsFailed={false}
@@ -75,5 +79,81 @@ describe("ShadowAIAccessStep", () => {
     ).toBe("true");
     fireEvent.click(within(control("Cursor")).getByText("Deny"));
     expect(second.onDecide).toHaveBeenCalledWith("cursor", "unreviewed");
+  });
+
+  it("shows a block on a removed tool and lets the admin clear it", () => {
+    const { onDecide } = renderStep(new Map(), [
+      scanTarget({
+        id: "zed",
+        displayName: "Zed",
+        gatewayClient: {
+          cimdVendorKeys: [],
+          oauthClientIds: [],
+          clientInfoNames: [],
+        },
+        access: {
+          state: "blocked",
+          decision: "blocked",
+          enforceable: true,
+          catalogStatus: "removed",
+        },
+      }),
+    ]);
+
+    expect(
+      screen.getByText(
+        "Removed from the Speakeasy catalog. This block still applies.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(control("Zed")).getByText("Deny").getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(within(control("Zed")).getByText("Deny"));
+    expect(onDecide).toHaveBeenCalledWith("zed", "unreviewed");
+  });
+
+  it("lists a tool of no known kind under Other, and hides Other when empty", () => {
+    renderStep();
+    expect(screen.queryByText("Other")).toBeNull();
+
+    cleanup();
+    renderStep(new Map(), [
+      scanTarget({
+        id: "gone-tool",
+        displayName: "Gone Tool",
+        category: unrecognized(""),
+        access: {
+          state: "blocked",
+          decision: "blocked",
+          enforceable: true,
+          catalogStatus: "removed",
+        },
+      }),
+    ]);
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(screen.getByText("Gone Tool")).toBeTruthy();
+    expect(control("Gone Tool")).toBeTruthy();
+
+    cleanup();
+    renderStep(new Map(), [
+      scanTarget({
+        id: "claude",
+        displayName: "Claude",
+        category: unrecognized(""),
+        access: {
+          state: "blocked",
+          decision: "blocked",
+          enforceable: true,
+          catalogStatus: "documents_disabled",
+        },
+      }),
+    ]);
+    expect(screen.getByText("Other")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sign-in documents are turned off for this client. This block still applies.",
+      ),
+    ).toBeTruthy();
+    expect(control("Claude")).toBeTruthy();
   });
 });

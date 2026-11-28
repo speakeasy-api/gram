@@ -228,13 +228,10 @@ func (s *Service) listAIDetectionModels(ctx context.Context, clientCatalog *aive
 		category := row.Category
 		// A detection can name a target the catalog no longer serves, because
 		// an agent binary can ship a newer list than the server's. The zero
-		// target is the honest input for the access summary there: nothing
+		// entry is the honest input for the access summary there: nothing
 		// matches a caller to it any more, so nothing is enforceable.
-		target := aitargets.ZeroTarget()
-		decision := aitargets.UnreviewedDecisionRecord(row.TargetID)
-		if entry, ok := catalog.Entry(row.TargetID); ok {
-			target = entry.Target
-			decision = entry.Decision
+		entry, ok := catalog.Entry(row.TargetID)
+		if ok {
 			displayName = entry.DisplayName
 			category = string(entry.Category)
 		}
@@ -248,7 +245,7 @@ func (s *Service) listAIDetectionModels(ctx context.Context, clientCatalog *aive
 			Versions:    row.Versions,
 			FirstSeen:   formatTimeValue(row.FirstSeen),
 			LastSeen:    formatTimeValue(row.LastSeen),
-			Access:      mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(target, decision)),
+			Access:      mv.BuildAIToolAccessSummaryView(aitargets.SummarizeAccess(entry)),
 		})
 	}
 

@@ -17,6 +17,12 @@ const (
 
 	// The overlap check compares every pair of enabled patterns; today there are 4.
 	maxPatterns = 64
+
+	// maxRemovedDocuments bounds the removed documents one load reads to keep
+	// blocks applying, newest first. It is the most documents a catalog within
+	// the caps can hold, so removing every product and document of one such
+	// catalog never reaches it.
+	maxRemovedDocuments = maxProducts * maxDocumentsPerProduct
 )
 
 var errInvalidCatalog = errors.New("invalid AI client catalog")

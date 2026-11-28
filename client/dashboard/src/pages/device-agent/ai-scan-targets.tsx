@@ -150,6 +150,20 @@ function OriginSection({
   );
 }
 
+function isDecisionOnly(target: AiScanTarget): boolean {
+  const status = target.access?.catalogStatus;
+  if (status === "removed") return true;
+  const { bundleIds, binaries, configDirs, processNames } = target.signatures;
+  return (
+    status === "documents_disabled" &&
+    bundleIds.length +
+      binaries.length +
+      configDirs.length +
+      processNames.length ===
+      0
+  );
+}
+
 function Library(): JSX.Element {
   const queryClient = useQueryClient();
   const list = useAiScanTargets(undefined, undefined, {
@@ -187,7 +201,12 @@ function Library(): JSX.Element {
   });
 
   const targets = useMemo(() => {
-    const all = list.data?.targets ?? [];
+    // A built-in listed only for its access decision (removed, or turned off
+    // with nothing to scan for) is not probed for, so the library leaves it
+    // out. One whose documents are off but that has signatures still is.
+    const all = (list.data?.targets ?? []).filter(
+      (target) => !isDecisionOnly(target),
+    );
     const needle = search.trim().toLowerCase();
     if (!needle) return all;
     return all.filter(

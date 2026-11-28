@@ -1,6 +1,10 @@
 package aitargets
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+)
 
 // GatewayCaller is what an MCP gateway request proved about the client behind
 // it. Every field is optional: an OAuth bearer carries a verified client_id, a
@@ -56,4 +60,31 @@ func MatchGatewayCaller(targets []Target, caller GatewayCaller) (Target, bool) {
 		}
 	}
 	return ZeroTarget(), false
+}
+
+// MatchLastKnownCaller resolves a caller no served target claims through the
+// product that last published its client ID. The organization's own targets
+// are matched first with that product's vendor key and document URL, so a
+// target written against the catalog keeps its claim. Built-ins are not
+// re-matched: once a product is gone another one can take its vendor key.
+// Otherwise the product itself is the target, unless the organization has
+// redefined that id as its own.
+func MatchLastKnownCaller(list *OrganizationList, clientID string, last aivendors.LastKnownProduct) (Target, bool) {
+	own := make([]Target, 0, len(list.Entries))
+	for _, entry := range list.Entries {
+		if entry.Source == SourceOrganization {
+			own = append(own, entry.Target)
+		}
+	}
+	caller := GatewayCaller{OAuthClientID: clientID, CIMDVendorKey: last.VendorKey, CIMDCatalogURL: last.URL}
+	if target, ok := MatchGatewayCaller(own, caller); ok {
+		return target, true
+	}
+	if entry, ok := list.Entry(last.ProductID); ok && entry.Source == SourceOrganization {
+		return ZeroTarget(), false
+	}
+	target := ZeroTarget()
+	target.ID = last.ProductID
+	target.DisplayName = last.DisplayName
+	return target, true
 }

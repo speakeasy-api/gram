@@ -4201,16 +4201,25 @@ type AiScanTargetResponseBody struct {
 	GatewayClient   *AiScanTargetGatewayClientResponseBody `form:"gateway_client,omitempty" json:"gateway_client,omitempty" xml:"gateway_client,omitempty"`
 	// Where the target comes from: default (a Speakeasy built-in, whose definition
 	// is read-only) or organization (added by the organization, fully editable).
-	// Every target listed here is probed for; a built-in leaves the list by being
-	// removed from Speakeasy's catalog, an organization target by being deleted.
+	// Every target listed here is probed for, including a built-in whose sign-in
+	// documents are turned off (access.catalog_status documents_disabled) and that
+	// has signatures, except a built-in removed from Speakeasy's catalog
+	// (access.catalog_status removed) or a documents_disabled one with no
+	// signatures, each listed only while the organization's decision on it still
+	// applies. Otherwise a built-in leaves the list by being removed from
+	// Speakeasy's catalog, an organization target by being deleted.
 	Origin *string `form:"origin,omitempty" json:"origin,omitempty" xml:"origin,omitempty"`
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized *bool `form:"customized,omitempty" json:"customized,omitempty" xml:"customized,omitempty"`
 	// The organization's access decision for the target, computed with the same
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
-	// never enforceable without a verifiable gateway matcher. Absent only from a
-	// server that predates it; read a missing summary as unreviewed.
+	// never enforceable without a verifiable gateway matcher, except a built-in
+	// the catalog no longer admits whose recorded decision still applies (see
+	// catalog_status). A removed one, or a documents_disabled one with no
+	// signatures, is listed for its decision only and is never served to device
+	// agents; a documents_disabled one with signatures is still probed for. Absent
+	// only from a server that predates it; read a missing summary as unreviewed.
 	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -4266,13 +4275,25 @@ type AIToolAccessSummaryResponseBody struct {
 	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
 	// tool that is not enforceable reads as unreviewed however it was decided —
 	// the stored decision is left untouched and takes effect again if the tool
-	// gains a verifiable gateway matcher.
+	// gains a verifiable gateway matcher. A tool with catalog_status set reads its
+	// stored decision, because that decision still applies.
 	Decision *string `form:"decision,omitempty" json:"decision,omitempty" xml:"decision,omitempty"`
-	// Whether a block on this tool would actually reach the gateway. False when
-	// the tool is linked only by a self-reported client name, or by nothing at
-	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
-	// admin is never told a tool is blocked when it is not.
+	// Whether a decision about this tool reaches the gateway, and so whether one
+	// can be recorded or changed. False when the tool has no verifiable gateway
+	// matcher (it is linked only by a self-reported client name, or by nothing at
+	// all) and no stored decision applies through a removed or turned-off sign-in
+	// document: no decision can be recorded, and any decision stored earlier
+	// enforces nothing and reads as unreviewed. True for a tool with
+	// catalog_status set: Speakeasy no longer admits it, but its stored decision
+	// still applies and can be changed or cleared. Surfaced so an admin is never
+	// told a tool is blocked when it is not.
 	Enforceable *bool `form:"enforceable,omitempty" json:"enforceable,omitempty" xml:"enforceable,omitempty"`
+	// Set only when the Speakeasy catalog no longer admits this tool but a
+	// decision the organization recorded still applies: removed when Speakeasy
+	// removed the tool from its catalog, documents_disabled when every sign-in
+	// document for it is turned off. The decision can be changed or cleared, but
+	// once cleared it cannot be set again. Absent for every other tool.
+	CatalogStatus *string `form:"catalog_status,omitempty" json:"catalog_status,omitempty" xml:"catalog_status,omitempty"`
 	// Why the decision was made, when an admin gave a reason. Who recorded it and
 	// when are in the audit log rather than here, so there is one record of that
 	// and not two.
@@ -13444,6 +13465,11 @@ func ValidateAIToolAccessSummaryResponseBody(body *AIToolAccessSummaryResponseBo
 	if body.Decision != nil {
 		if !(*body.Decision == "unreviewed" || *body.Decision == "approved" || *body.Decision == "blocked") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"unreviewed", "approved", "blocked"}))
+		}
+	}
+	if body.CatalogStatus != nil {
+		if !(*body.CatalogStatus == "removed" || *body.CatalogStatus == "documents_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.catalog_status", *body.CatalogStatus, []any{"removed", "documents_disabled"}))
 		}
 	}
 	return

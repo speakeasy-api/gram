@@ -1,6 +1,9 @@
 import { AIToolAccessSummaryDecision } from "@gram/client/models/components/aitoolaccesssummary.js";
 import { isKnownEnumValue } from "@/lib/enum";
-import { scanTargetAccessOf } from "@/components/shadow-ai/access";
+import {
+  catalogStatusNote,
+  scanTargetAccessOf,
+} from "@/components/shadow-ai/access";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 
@@ -20,6 +23,9 @@ export interface AccessRow {
   /** The decision on file. */
   stored: StoredDecision;
   rationale: string | undefined;
+  /** Set when the catalog no longer admits the tool but its decision still
+   *  applies. Such a decision can be changed or cleared, not added. */
+  catalogNote: string | undefined;
 }
 
 /** The whole library, each target joined with its detection. Library order
@@ -45,6 +51,7 @@ export function buildAccessRows(
       enforceable: access.enforceable && stored !== "unknown",
       stored,
       rationale: access.rationale,
+      catalogNote: catalogStatusNote(access),
     };
   });
 }

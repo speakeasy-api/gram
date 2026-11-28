@@ -20,6 +20,23 @@ JOIN ai_products p ON p.id = d.ai_product_id
 WHERE d.deleted IS FALSE AND p.deleted IS FALSE
 ORDER BY d.url COLLATE "C";
 
+-- Documents that no longer identify a live client: soft-deleted documents and
+-- every document of a soft-deleted product, most recently removed first. Read
+-- only to keep blocks applying. A URL a live document of a live product holds
+-- now is left out, so it can never be credited to its old product.
+-- name: ListRemovedCatalogDocuments :many
+SELECT d.url, d.is_pattern, d.ai_product_id, p.vendor_key, p.category, p.display_name AS product_display_name
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+WHERE (d.deleted IS TRUE OR p.deleted IS TRUE)
+  AND NOT EXISTS (
+    SELECT 1 FROM ai_product_cimd_documents l
+    JOIN ai_products lp ON lp.id = l.ai_product_id
+    WHERE l.url = d.url AND l.deleted IS FALSE AND lp.deleted IS FALSE
+  )
+ORDER BY LEAST(d.deleted_at, p.deleted_at) DESC, d.url COLLATE "C", d.ai_product_id COLLATE "C"
+LIMIT @max_rows;
+
 -- Removals the built-in fallback honours when the live catalog is rejected.
 -- name: ListDeletedProductIDs :many
 SELECT id FROM ai_products WHERE deleted IS TRUE ORDER BY id COLLATE "C";

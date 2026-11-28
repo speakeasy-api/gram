@@ -18,7 +18,7 @@ import { useSetAIToolDecisionMutation } from "@gram/client/react-query/setAITool
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { accessOf } from "./access";
+import { accessOf, catalogStatusNote } from "./access";
 
 // Mirrors MaxLength on the rationale attribute of setAIToolDecision in the
 // Goa design (server/design/access/design.go).
@@ -147,6 +147,17 @@ function DecisionForm({
               {detection.displayName} will fail to authenticate with an error
               its client cannot recover from. The error carries a link to
               request access.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {/* The catalog no longer admits this tool, but the decision on
+            file still applies until the admin clears it. */}
+        {catalogStatusNote(accessOf(detection)) ? (
+          <Alert variant="info" dismissible={false}>
+            <AlertTitle>{catalogStatusNote(accessOf(detection))}</AlertTitle>
+            <AlertDescription>
+              You can change or clear this decision. Once you clear it, you
+              cannot add a new one.
             </AlertDescription>
           </Alert>
         ) : null}

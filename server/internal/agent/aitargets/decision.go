@@ -55,34 +55,65 @@ const (
 	AccessUnreviewed AccessState = "unreviewed"
 )
 
+// CatalogStatus says why a built-in the catalog no longer admits still has a
+// decision that applies. Empty for every other target.
+type CatalogStatus string
+
+const (
+	// CatalogListed is a target the catalog lists and admits as usual.
+	CatalogListed CatalogStatus = ""
+
+	// CatalogRemoved is a product Speakeasy removed from the catalog.
+	CatalogRemoved CatalogStatus = "removed"
+
+	// CatalogDocumentsDisabled is a live product whose documents are all disabled.
+	CatalogDocumentsDisabled CatalogStatus = "documents_disabled"
+)
+
 // AccessSummary is the enforcement verdict for one AI tool, computed
 // server-side so a client renders wording without re-deriving it.
 type AccessSummary struct {
 	State    AccessState
 	Decision Decision
 
-	// Enforceable reports whether a block would actually reach the gateway.
+	// Enforceable reports whether a decision reaches the gateway, and so
+	// whether the organization may change it.
 	// Separate from State so a surface can explain why no decision is on offer.
 	Enforceable bool
 
 	// Record carries who decided and why, for surfaces allowed to see it.
 	Record DecisionRecord
+
+	// Catalog is set when the catalog no longer admits the tool but a decision on it applies.
+	Catalog CatalogStatus
 }
 
-// SummarizeAccess builds the verdict for one target.
+// SummarizeAccess builds the verdict for one entry.
 //
 // A tool Speakeasy cannot recognize at the gateway reads unreviewed whatever is
 // stored: blocking is CIMD-only, so claiming "blocked" would be untrue in the
 // one place an admin checks. The stored decision is left alone. A target the
 // catalog no longer serves arrives as the zero Target and lands here too.
-func SummarizeAccess(target Target, decision DecisionRecord) AccessSummary {
-	enforceable := Enforceable(target)
+//
+// One exception, and it is also the rule for changing a decision: a built-in
+// that was removed from the catalog, or whose documents are all disabled, is
+// still recognized through those documents. Its stored decision applies, and
+// may be changed or cleared, only while it is something other than unreviewed.
+func SummarizeAccess(entry Entry) AccessSummary {
+	decision := entry.Decision
+	enforceable := Enforceable(entry.Target)
+	catalog := CatalogListed
+	if !enforceable && entry.Catalog != CatalogListed && decision.Decision != DecisionUnreviewed {
+		enforceable = true
+		catalog = entry.Catalog
+	}
 	if !enforceable {
 		return AccessSummary{
 			State:       AccessUnreviewed,
 			Decision:    DecisionUnreviewed,
 			Enforceable: false,
 			Record:      UnreviewedDecisionRecord(decision.TargetID),
+			Catalog:     CatalogListed,
 		}
 	}
 
@@ -100,6 +131,7 @@ func SummarizeAccess(target Target, decision DecisionRecord) AccessSummary {
 		Decision:    decision.Decision,
 		Enforceable: true,
 		Record:      decision,
+		Catalog:     catalog,
 	}
 }
 

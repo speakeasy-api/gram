@@ -38,18 +38,72 @@ refresh.
 
 ## Removing a product or document
 
-A removed or disabled row no longer identifies its client. An organization's
-block on that client then no longer applies: the client is unknown, and an issuer that admits
-unknown clients lets it in. Before soft-deleting or disabling a row, check for
-blocks on it:
+A removed or disabled row stops admitting its client on presets issuers, stops
+attributing it, and leaves the scan list and the presets list. An
+organization's block on the product keeps applying.
+
+Each load also reads, in the same transaction, the soft-deleted documents and
+every document of a soft-deleted product, newest removal first, up to
+`maxRemovedDocuments`, which is `maxProducts * maxDocumentsPerProduct`: the
+most documents one catalog within the caps can hold, so removing all of one
+such catalog never reaches it. A removed URL that a live document of a live product
+holds now is left out, so it is never credited to its old product, not even by
+the built-in fallback. These documents are read only to keep blocks applying:
+they never admit, never appear in presets, scan lists or device payloads,
+never change attribution, and never count in validation. A malformed removed
+pattern can never match, so it is dropped and reported like a malformed live
+row: logged once, as a skipped row. The built-in fallback keeps them too, except when nothing
+is removed or the removals would leave no product, where the built-in catalog
+lists every product.
+
+When no live target matches a client at sign-in, `Snapshot.LastKnown` names
+the product that last published its client ID, by one rule. An enabled live
+match always decides instead. Otherwise the candidates are the disabled live
+documents and removed documents that match the client: exact before pattern;
+within one kind, a disabled live document before a removed one; among removed
+ones, the most recently removed. A URL added back under another product
+follows that product. One case this rule cannot see: if a product's exact URL
+was removed while another product's enabled pattern covered it, and that
+pattern was removed later, the exact URL's product still decides, because the
+index does not record which pattern covered a URL when.
+
+The organization's own targets are matched first, against the last product's
+document URL and its vendor key. The vendor key is left out while another live
+product carries it, so a block aimed at that product never reaches a removed
+sibling. Then the product id decides.
+
+The rule for decisions: for a removed product, or a live one no document
+admits (its documents are disabled or removed), a decision can be changed or
+cleared only while one other than unreviewed is on file. Such a product is
+listed in Shadow AI with `catalog_status` set and its block shown as in force,
+including a live one devices do not scan for. Devices still probe for a live
+one with signatures; the scan library leaves out the rest. A product with no
+category is sent with an empty category and listed under Other. Once cleared
+it drops out of the list (removed, or live with nothing to scan for) or reads
+as not enforceable (live and scanned for), and a new decision is refused. The
+stored decision of a product whose only URL moved to another product no
+longer applies and is not listed; it can still be cleared through the API.
+
+The built-in fallback is a degraded mode and keeps its own rules after a cold
+start with an invalid catalog: it does not know a URL moved between live
+products, a database-only disabled document, or that every built-in product
+was removed. A pod also takes up to a minute to see a document change, so a
+new block recorded in that minute after a product's last document is disabled
+can still be accepted.
+
+Before removing a row, check how many organizations block the product:
 
 ```sql
 SELECT count(*) FROM ai_scan_targets
 WHERE (ai_product_id = '<PRODUCT_ID>' OR id = '<PRODUCT_ID>') AND status = 'blocked';
 ```
 
-If any exist, fix the row in place instead of removing it, or tell the
-organizations first. Nothing refuses the removal for you.
+Those blocks keep applying, and the organizations can see and clear them.
+Blocks stop applying when the removed document passes the cap, when the row
+is hard-deleted, or when the URL is added back under another product. A load
+asks for one row past the cap, and only when more than the cap come back does
+it keep the newest ones and log an error, once per change; it never refuses the
+catalog for it.
 
 Every load rejects an empty catalog, a malformed enabled pattern, more
 products, documents per product, client info names or enabled patterns than the
@@ -78,8 +132,8 @@ Validation keeps overlapping patterns of different products strictly nested,
 so a tie can only be between one product's own patterns, and goes to the lower
 URL. The database's `is_pattern` discriminator is authoritative. A malformed
 disabled pattern is logged and omitted; that is a successful partial load,
-distinct from a database failure. Documents of soft-deleted products are never
-read.
+distinct from a database failure. Documents of soft-deleted products are read
+only to keep blocks applying.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.
@@ -88,5 +142,6 @@ Product families and reported-name aliases stay in the compiled registry by
 design: they change with plugin and telemetry code, so the database does not
 store them and snapshots leave them empty.
 
-Platform MCP parity: this package adds no reader, permission, or tool contract,
-so no Platform MCP tool changes.
+Platform MCP parity: Platform MCP only lists the inventory and library; it has
+no decision tool. Both list a removed product that still has a decision on
+file, flagged with `catalog_status`, and leave other removed products out.

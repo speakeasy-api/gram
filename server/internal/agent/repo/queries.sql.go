@@ -151,6 +151,8 @@ func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAg
 const getAIScanTargetCatalogState = `-- name: GetAIScanTargetCatalogState :one
 SELECT
   EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1 AND p.deleted IS FALSE) AS product_exists,
+  EXISTS (SELECT 1 FROM ai_products p WHERE p.id = $1 AND p.deleted IS TRUE) AS product_removed,
+  COALESCE((SELECT p.display_name FROM ai_products p WHERE p.id = $1), '')::text AS product_display_name,
   EXISTS (
     SELECT 1 FROM ai_scan_targets t
     WHERE t.organization_id = $2 AND t.id = $1
@@ -170,15 +172,22 @@ type GetAIScanTargetCatalogStateParams struct {
 }
 
 type GetAIScanTargetCatalogStateRow struct {
-	ProductExists bool
-	HasDefinition bool
+	ProductExists      bool
+	ProductRemoved     bool
+	ProductDisplayName string
+	HasDefinition      bool
 }
 
 // Only decision-only rows may take a catalog link; an ID match is not enough.
 func (q *Queries) GetAIScanTargetCatalogState(ctx context.Context, arg GetAIScanTargetCatalogStateParams) (GetAIScanTargetCatalogStateRow, error) {
 	row := q.db.QueryRow(ctx, getAIScanTargetCatalogState, arg.ID, arg.OrganizationID)
 	var i GetAIScanTargetCatalogStateRow
-	err := row.Scan(&i.ProductExists, &i.HasDefinition)
+	err := row.Scan(
+		&i.ProductExists,
+		&i.ProductRemoved,
+		&i.ProductDisplayName,
+		&i.HasDefinition,
+	)
 	return i, err
 }
 

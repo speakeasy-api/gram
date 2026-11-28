@@ -29,12 +29,25 @@ const (
 // errRejected marks a catalog that was read but is empty or invalid.
 var errRejected = errors.New("AI catalog rejected")
 
+// errRemovedTruncated marks a load that dropped removed documents past the cap;
+// blocks on them no longer apply, so it is logged as an error.
+var errRemovedTruncated = errors.New("removed AI catalog documents exceed the cap")
+
+// logSkipped reports one skipped row, at error level when blocks stop applying.
+func logSkipped(ctx context.Context, logger *slog.Logger, row error) {
+	if errors.Is(row, errRemovedTruncated) {
+		logger.ErrorContext(ctx, "skip AI catalog row", attr.SlogError(row))
+		return
+	}
+	logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+}
+
 // Load reads the catalog, falling back to the built-in one minus database removals when it is empty or invalid; only a failed read is an error.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
-	snapshot, skipped, err := load(ctx, db, validate)
+	snapshot, skipped, err := load(ctx, db, validate, maxRemovedDocuments)
 	keys := make([]string, 0, len(skipped))
 	for _, row := range skipped {
-		logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+		logSkipped(ctx, logger, row)
 		keys = append(keys, row.Error())
 	}
 	if errors.Is(err, errRejected) {
@@ -55,7 +68,7 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 
 // load returns the snapshot and the rows it skipped, so callers decide how often to report them.
 // A rejected catalog comes back with errRejected and the built-in fallback as the snapshot.
-func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error) (*Snapshot, []error, error) {
+func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error, removedCap int64) (*Snapshot, []error, error) {
 	if validate == nil {
 		return nil, nil, fmt.Errorf("AI catalog validator is required")
 	}
@@ -76,6 +89,30 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	docs, err := q.ListCatalogDocuments(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read AI catalog documents: %w", err)
+	}
+	// One row past the cap tells a full index from a truncated one.
+	removedRows, err := q.ListRemovedCatalogDocuments(ctx, removedCap+1)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read removed AI catalog documents: %w", err)
+	}
+	var skipped, malformed []error
+	if int64(len(removedRows)) > removedCap {
+		removedRows = removedRows[:removedCap]
+		skipped = append(skipped, fmt.Errorf("%w of %d; blocks on older removals no longer apply", errRemovedTruncated, removedCap))
+	}
+	removed := make([]removedDocument, 0, len(removedRows))
+	for _, r := range removedRows {
+		if r.IsPattern {
+			// It can never match, so it is dropped and reported like a malformed live row.
+			if err := validatePattern(r.Url); err != nil {
+				skipped = append(skipped, fmt.Errorf("removed document %s of %s: %w", r.Url, r.AiProductID, err))
+				continue
+			}
+		}
+		removed = append(removed, removedDocument{
+			LastKnownProduct: LastKnownProduct{ProductID: r.AiProductID, VendorKey: r.VendorKey, DisplayName: r.ProductDisplayName, Category: Category(r.Category.String), URL: r.Url},
+			Pattern:          r.IsPattern,
+		})
 	}
 	products := make([]Product, 0, len(rows))
 	byID := make(map[string]int, len(rows))
@@ -100,7 +137,6 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 			Documents:       nil,
 		})
 	}
-	var skipped, malformed []error
 	for _, d := range docs {
 		// ListCatalogDocuments joins live products in the same transaction, so the product is present.
 		i := byID[d.AiProductID]
@@ -119,6 +155,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
 	snapshot := NewSnapshot(products)
+	snapshot.keepRemoved(removed)
 	rejection := errors.Join(malformed...)
 	if rejection != nil {
 		rejection = fmt.Errorf("%w: %w", errInvalidCatalog, rejection)
@@ -128,7 +165,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		rejection = err
 	}
 	if rejection != nil {
-		fallback, err := readFallback(ctx, q)
+		fallback, err := readFallback(ctx, q, removed)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -140,8 +177,9 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	return snapshot, skipped, nil
 }
 
-// readFallback builds the built-in catalog minus what the database removed.
-func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
+// readFallback builds the built-in catalog minus what the database removed,
+// keeping the removed documents for block enforcement.
+func readFallback(ctx context.Context, q *repo.Queries, removed []removedDocument) (*Snapshot, error) {
 	products, err := q.ListDeletedProductIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read removed AI catalog products: %w", err)
@@ -165,6 +203,7 @@ func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
 	if len(fallback.products) == 0 {
 		return CompiledSnapshot(), nil
 	}
+	fallback.keepRemoved(removed)
 	return fallback, nil
 }
 
@@ -172,13 +211,13 @@ func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
 func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) error {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
-	next, skipped, err := load(ctx, db, validate)
+	next, skipped, err := load(ctx, db, validate, maxRemovedDocuments)
 	if err == nil || errors.Is(err, errRejected) {
 		reported := make(map[string]struct{}, len(skipped))
 		for _, row := range skipped {
 			reported[row.Error()] = struct{}{}
 			if _, seen := s.reported[row.Error()]; !seen {
-				logger.WarnContext(ctx, "skip AI catalog row", attr.SlogError(row))
+				logSkipped(ctx, logger, row)
 			}
 		}
 		s.reported = reported
