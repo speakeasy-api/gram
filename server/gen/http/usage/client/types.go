@@ -208,6 +208,15 @@ type CreateStripeCheckoutResponseBody struct {
 	PublishableKey *string `form:"publishable_key,omitempty" json:"publishable_key,omitempty" xml:"publishable_key,omitempty"`
 }
 
+// CreateTrialPaymentMethodCheckoutResponseBody is the type of the "usage"
+// service "createTrialPaymentMethodCheckout" endpoint HTTP response body.
+type CreateTrialPaymentMethodCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey *string `form:"publishable_key,omitempty" json:"publishable_key,omitempty" xml:"publishable_key,omitempty"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -2711,6 +2720,196 @@ type CreateStripeCheckoutUnexpectedResponseBody struct {
 // service "createStripeCheckout" endpoint HTTP response body for the
 // "gateway_error" error.
 type CreateStripeCheckoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutForbiddenResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateTrialPaymentMethodCheckoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutBadRequestResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateTrialPaymentMethodCheckoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutNotFoundResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "not_found" error.
+type CreateTrialPaymentMethodCheckoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutConflictResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "conflict" error.
+type CreateTrialPaymentMethodCheckoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody is the type of
+// the "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutInvalidResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "invalid" error.
+type CreateTrialPaymentMethodCheckoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody is the type
+// of the "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutUnexpectedResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateTrialPaymentMethodCheckoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -6179,6 +6378,168 @@ func NewCreateStripeCheckoutGatewayError(body *CreateStripeCheckoutGatewayErrorR
 	return v
 }
 
+// NewCreateTrialPaymentMethodCheckoutStripeEmbeddedCheckoutOK builds a "usage"
+// service "createTrialPaymentMethodCheckout" endpoint result from a HTTP "OK"
+// response.
+func NewCreateTrialPaymentMethodCheckoutStripeEmbeddedCheckoutOK(body *CreateTrialPaymentMethodCheckoutResponseBody) *usage.StripeEmbeddedCheckout {
+	v := &usage.StripeEmbeddedCheckout{
+		ClientSecret:   *body.ClientSecret,
+		PublishableKey: *body.PublishableKey,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutUnauthorized builds a usage service
+// createTrialPaymentMethodCheckout endpoint unauthorized error.
+func NewCreateTrialPaymentMethodCheckoutUnauthorized(body *CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutForbidden builds a usage service
+// createTrialPaymentMethodCheckout endpoint forbidden error.
+func NewCreateTrialPaymentMethodCheckoutForbidden(body *CreateTrialPaymentMethodCheckoutForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutBadRequest builds a usage service
+// createTrialPaymentMethodCheckout endpoint bad_request error.
+func NewCreateTrialPaymentMethodCheckoutBadRequest(body *CreateTrialPaymentMethodCheckoutBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutNotFound builds a usage service
+// createTrialPaymentMethodCheckout endpoint not_found error.
+func NewCreateTrialPaymentMethodCheckoutNotFound(body *CreateTrialPaymentMethodCheckoutNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutConflict builds a usage service
+// createTrialPaymentMethodCheckout endpoint conflict error.
+func NewCreateTrialPaymentMethodCheckoutConflict(body *CreateTrialPaymentMethodCheckoutConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutUnsupportedMedia builds a usage service
+// createTrialPaymentMethodCheckout endpoint unsupported_media error.
+func NewCreateTrialPaymentMethodCheckoutUnsupportedMedia(body *CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutInvalid builds a usage service
+// createTrialPaymentMethodCheckout endpoint invalid error.
+func NewCreateTrialPaymentMethodCheckoutInvalid(body *CreateTrialPaymentMethodCheckoutInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutInvariantViolation builds a usage service
+// createTrialPaymentMethodCheckout endpoint invariant_violation error.
+func NewCreateTrialPaymentMethodCheckoutInvariantViolation(body *CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutUnexpected builds a usage service
+// createTrialPaymentMethodCheckout endpoint unexpected error.
+func NewCreateTrialPaymentMethodCheckoutUnexpected(body *CreateTrialPaymentMethodCheckoutUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutGatewayError builds a usage service
+// createTrialPaymentMethodCheckout endpoint gateway_error error.
+func NewCreateTrialPaymentMethodCheckoutGatewayError(body *CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetStripeSubscriptionStripeSubscriptionOK builds a "usage" service
 // "getStripeSubscription" endpoint result from a HTTP "OK" response.
 func NewGetStripeSubscriptionStripeSubscriptionOK(body *GetStripeSubscriptionResponseBody) *usage.StripeSubscription {
@@ -7499,6 +7860,18 @@ func ValidateGetStripeCheckoutStatusResponseBody(body *GetStripeCheckoutStatusRe
 // ValidateCreateStripeCheckoutResponseBody runs the validations defined on
 // CreateStripeCheckoutResponseBody
 func ValidateCreateStripeCheckoutResponseBody(body *CreateStripeCheckoutResponseBody) (err error) {
+	if body.ClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.PublishableKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("publishable_key", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutResponseBody runs the validations
+// defined on CreateTrialPaymentMethodCheckoutResponseBody
+func ValidateCreateTrialPaymentMethodCheckoutResponseBody(body *CreateTrialPaymentMethodCheckoutResponseBody) (err error) {
 	if body.ClientSecret == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
 	}
@@ -10790,6 +11163,255 @@ func ValidateCreateStripeCheckoutUnexpectedResponseBody(body *CreateStripeChecko
 // ValidateCreateStripeCheckoutGatewayErrorResponseBody runs the validations
 // defined on createStripeCheckout_gateway_error_response_body
 func ValidateCreateStripeCheckoutGatewayErrorResponseBody(body *CreateStripeCheckoutGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutUnauthorizedResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_unauthorized_response_body
+func ValidateCreateTrialPaymentMethodCheckoutUnauthorizedResponseBody(body *CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutForbiddenResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_forbidden_response_body
+func ValidateCreateTrialPaymentMethodCheckoutForbiddenResponseBody(body *CreateTrialPaymentMethodCheckoutForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutBadRequestResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_bad_request_response_body
+func ValidateCreateTrialPaymentMethodCheckoutBadRequestResponseBody(body *CreateTrialPaymentMethodCheckoutBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutNotFoundResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_not_found_response_body
+func ValidateCreateTrialPaymentMethodCheckoutNotFoundResponseBody(body *CreateTrialPaymentMethodCheckoutNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutConflictResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_conflict_response_body
+func ValidateCreateTrialPaymentMethodCheckoutConflictResponseBody(body *CreateTrialPaymentMethodCheckoutConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody runs
+// the validations defined on
+// createTrialPaymentMethodCheckout_unsupported_media_response_body
+func ValidateCreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody(body *CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutInvalidResponseBody runs the
+// validations defined on createTrialPaymentMethodCheckout_invalid_response_body
+func ValidateCreateTrialPaymentMethodCheckoutInvalidResponseBody(body *CreateTrialPaymentMethodCheckoutInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutInvariantViolationResponseBody runs
+// the validations defined on
+// createTrialPaymentMethodCheckout_invariant_violation_response_body
+func ValidateCreateTrialPaymentMethodCheckoutInvariantViolationResponseBody(body *CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutUnexpectedResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_unexpected_response_body
+func ValidateCreateTrialPaymentMethodCheckoutUnexpectedResponseBody(body *CreateTrialPaymentMethodCheckoutUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTrialPaymentMethodCheckoutGatewayErrorResponseBody runs the
+// validations defined on
+// createTrialPaymentMethodCheckout_gateway_error_response_body
+func ValidateCreateTrialPaymentMethodCheckoutGatewayErrorResponseBody(body *CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

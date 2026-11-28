@@ -1681,7 +1681,11 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 		}
 	}
 
-	trialArmed := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle
+	// When trials wait for a validated card, the staff invitation only offers
+	// the trial: the invitee starts it by adding one. An organization staff
+	// already let into the product has no card gate to show, so it is armed.
+	trialArmed := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle &&
+		(org.Whitelisted || !s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, acceptedInvite.OrganizationID))
 	if trialArmed {
 		if s.trialBundleSeeder == nil {
 			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errors.New("enterprise trial bundle seeder is not configured")

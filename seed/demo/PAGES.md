@@ -417,6 +417,23 @@ demo intentionally shows no box; component and Stripe transport fixtures cover
 verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
 No Stripe subscription, promotion, or local billing settings are seeded for it.
 
+### Card-gated free trial
+
+`[~]` The demo org stays an enterprise, whitelisted organization, so the
+`start-trial` page and the trial-pending gate never show for it: seeding a
+pending trial there would lock demo visitors out of the product. Both states
+span several organizations, which the single-tenant seed cannot write, so they
+live in the local-only admin seed (`mise run seed:admin`, `RunAdminSeed`):
+"Fictional Trial Lab Awaiting Card" is a Base, non-whitelisted self-serve
+signup with no trial and no card, and "Fictional Trial Lab Shared Card A" and
+"B" are running enterprise trials whose `trial_payment_methods` rows share one
+fictional card fingerprint, so the staff admin organization page warns that
+the card started another organization's trial. Every Stripe identifier is an
+`*_admin_seed_example_*` placeholder. Each rerun resets the pending fixture,
+including a card a developer added to it locally. The admin seed adds no
+developer membership, so viewing `start-trial` as a member still needs a
+local signup with the rollout flag on. Browser verification pending.
+
 ### Hosted toolset sign-in
 
 The seeded hosted support toolset explicitly requires no upstream authentication (`requires_upstream_auth = FALSE`). Hosted upstream OAuth uses a registration assigned to the exact server; it does not borrow an upstream offer from another server with the same downstream sign-in issuer.

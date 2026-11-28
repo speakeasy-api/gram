@@ -84339,6 +84339,99 @@ paths:
       x-speakeasy-name-override: createTopUpCheckout
       x-speakeasy-react-hook:
         name: createTopUpCheckout
+  /rpc/usage.createTrialPaymentMethodCheckout:
+    post:
+      description: Create an embedded Stripe Checkout session that saves a card to start the organization's free trial
+      operationId: createTrialPaymentMethodCheckout
+      parameters:
+        - allowEmptyValue: true
+          description: Appearance for the embedded Checkout session.
+          in: query
+          name: theme
+          schema:
+            default: light
+            description: Appearance for the embedded Checkout session.
+            enum:
+              - light
+              - dark
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StripeEmbeddedCheckout'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createTrialPaymentMethodCheckout usage
+      tags:
+        - usage
+      x-speakeasy-name-override: createTrialPaymentMethodCheckout
+      x-speakeasy-react-hook:
+        name: createTrialPaymentMethodCheckout
   /rpc/usage.getBillingEmail:
     get:
       description: Get the billing notification email for a PAYG organization
@@ -106008,6 +106101,11 @@ components:
           allOf:
             - $ref: "#/components/schemas/Trial"
           nullable: true
+        trial_card_rejection:
+          $ref: '#/components/schemas/TrialCardRejection'
+        trial_pending_payment_method:
+          type: boolean
+          description: Whether the organization's free trial starts once an organization admin adds a card
         user_display_name:
           type: string
         user_email:
@@ -126731,6 +126829,22 @@ components:
       required:
         - started_at
         - ends_at
+    TrialCardRejection:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: 'prepaid_card: prepaid cards cannot start a trial. card_used: the card already started another organization''s trial.'
+          enum:
+            - prepaid_card
+            - card_used
+        rejected_at:
+          type: string
+          format: date-time
+      description: Why the last card an organization admin added could not start the free trial.
+      required:
+        - reason
+        - rejected_at
     TriggerAnalysisRequestBody:
       type: object
       properties:

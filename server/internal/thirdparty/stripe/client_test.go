@@ -94,6 +94,7 @@ type fakeStripeAPI struct {
 	checkoutSessionParams      *stripesdk.CheckoutSessionCreateParams
 	checkoutRetrieveParams     *stripesdk.CheckoutSessionRetrieveParams
 	checkoutExpireID           string
+	detachedPaymentMethodID    string
 	checkoutSession            *stripesdk.CheckoutSession
 	subscriptionRetrieveParams *stripesdk.SubscriptionRetrieveParams
 	subscriptionUpdateParams   *stripesdk.SubscriptionUpdateParams
@@ -309,6 +310,12 @@ func (f *fakeStripeAPI) retrieveCheckoutSession(_ context.Context, _ string, par
 	f.calls++
 	f.checkoutRetrieveParams = params
 	return f.checkoutSession, f.err
+}
+
+func (f *fakeStripeAPI) detachPaymentMethod(_ context.Context, id string, _ *stripesdk.PaymentMethodDetachParams) (*stripesdk.PaymentMethod, error) {
+	f.calls++
+	f.detachedPaymentMethodID = id
+	return &stripesdk.PaymentMethod{ID: id}, f.err
 }
 
 func (f *fakeStripeAPI) retrieveSubscription(_ context.Context, _ string, params *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error) {

@@ -95565,6 +95565,98 @@ paths:
             x-speakeasy-name-override: createTopUpCheckout
             x-speakeasy-react-hook:
                 name: createTopUpCheckout
+    /rpc/usage.createTrialPaymentMethodCheckout:
+        post:
+            description: Create an embedded Stripe Checkout session that saves a card to start the organization's free trial
+            operationId: createTrialPaymentMethodCheckout
+            parameters:
+                - allowEmptyValue: true
+                  description: Appearance for the embedded Checkout session.
+                  in: query
+                  name: theme
+                  schema:
+                    default: light
+                    description: Appearance for the embedded Checkout session.
+                    enum:
+                        - light
+                        - dark
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/StripeEmbeddedCheckout'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createTrialPaymentMethodCheckout usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createTrialPaymentMethodCheckout
+            x-speakeasy-react-hook:
+                name: createTrialPaymentMethodCheckout
     /rpc/usage.getBillingEmail:
         get:
             description: Get the billing notification email for a PAYG organization
@@ -105590,6 +105682,11 @@ components:
                 name:
                     type: string
                     description: The name of the organization
+                organizations_sharing_trial_card:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminTrialCardSharingOrganization'
+                    description: Other organizations that offered the same card as this organization's latest card, oldest first, with whether it started their trial. Absent when none did or no card was offered, and absent on list rows.
                 slug:
                     type: string
                     description: The slug of the organization
@@ -105607,6 +105704,16 @@ components:
                 stripe_subscription_id:
                     type: string
                     description: Current Stripe subscription ID, if subscribed.
+                trial_card_added_at:
+                    type: string
+                    description: The time at which the organization last offered a card to start its self-serve trial. Absent when it never offered one, and absent on list rows.
+                    format: date-time
+                trial_card_rejection_reason:
+                    type: string
+                    description: Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.
+                    enum:
+                        - prepaid_card
+                        - card_used
                 trial_converted_at:
                     type: string
                     description: The time at which the trial converted to a paid plan, if any.
@@ -107044,6 +107151,34 @@ components:
             required:
                 - organizations
                 - minimum_dual_write_seconds
+        AdminTrialCardSharingOrganization:
+            type: object
+            properties:
+                card_added_at:
+                    type: string
+                    description: The time at which the other organization last offered a card to start its trial.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the other organization.
+                name:
+                    type: string
+                    description: The name of the other organization.
+                rejection_reason:
+                    type: string
+                    description: Why the card could not start the other organization's trial. Absent when the card started that organization's trial.
+                    enum:
+                        - prepaid_card
+                        - card_used
+                slug:
+                    type: string
+                    description: The slug of the other organization.
+            description: Another organization that offered the same card to start its self-serve trial. Carries no card or Stripe identifiers.
+            required:
+                - id
+                - name
+                - slug
+                - card_added_at
         AdminUploadImageResult:
             type: object
             properties:
@@ -122471,6 +122606,11 @@ components:
                         $ref: '#/components/schemas/OrganizationEntry'
                 trial:
                     $ref: '#/components/schemas/Trial'
+                trial_card_rejection:
+                    $ref: '#/components/schemas/TrialCardRejection'
+                trial_pending_payment_method:
+                    type: boolean
+                    description: Whether the organization's free trial starts once an organization admin adds a card
                 user_display_name:
                     type: string
                 user_email:
@@ -122494,6 +122634,7 @@ components:
                 - gram_account_type
                 - has_active_subscription
                 - whitelisted
+                - trial_pending_payment_method
         IngestHookPayload:
             type: object
             properties:
@@ -144609,6 +144750,22 @@ components:
             required:
                 - started_at
                 - ends_at
+        TrialCardRejection:
+            type: object
+            properties:
+                reason:
+                    type: string
+                    description: 'prepaid_card: prepaid cards cannot start a trial. card_used: the card already started another organization''s trial.'
+                    enum:
+                        - prepaid_card
+                        - card_used
+                rejected_at:
+                    type: string
+                    format: date-time
+            description: Why the last card an organization admin added could not start the free trial.
+            required:
+                - reason
+                - rejected_at
         TriggerAnalysisRequestBody:
             type: object
             properties:
