@@ -1024,3 +1024,121 @@ func TestKitATETemplateMatchRejectsSecurityRelevantDrift(t *testing.T) {
 		})
 	}
 }
+
+func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
+	t.Parallel()
+	const (
+		recordedAtespace = "old-assistants"
+		liveAtespace     = "new-assistants"
+		recordedTemplate = "kit-v1"
+		liveTemplate     = "kit-v2"
+	)
+	cluster, client := startFakeATEStack(t, recordedAtespace)
+	cluster.mu.Lock()
+	cluster.atespaces[liveAtespace] = &ateapiv1.Atespace{Metadata: &ateapiv1.ResourceMetadata{Name: liveAtespace}}
+	cluster.mu.Unlock()
+
+	runtimeID := uuid.New()
+	assistantID := uuid.New()
+	projectID := uuid.New()
+	validThread := uuid.New()
+	validActorName := kitATEActorName(assistantRuntimeRecord{ID: runtimeID}, validThread)
+
+	// Seed a real actor in the RECORDED atespace with the RECORDED template.
+	created, err := client.CreateActor(t.Context(), &ateapiv1.CreateActorRequest{
+		Actor: &ateapiv1.Actor{
+			Metadata:      &ateapiv1.ResourceMetadata{Atespace: recordedAtespace, Name: validActorName},
+			ActorTemplate: &ateapiv1.ObjectRef{Atespace: recordedAtespace, Name: kitATETemplateVersionName(recordedTemplate, testKitATEImageDigestA)},
+		},
+	})
+	require.NoError(t, err)
+	validUID := created.GetMetadata().GetUid()
+	require.NotEmpty(t, validUID)
+
+	validBinding := &KitWorkloadBinding{
+		MCPProjectGateway: true,
+		IssuerID:          uuid.New(),
+		Subject:           "actor/" + recordedAtespace + "/" + validActorName,
+		Audience:          "https://api.speakeasy.test/oauth/usi/test",
+	}
+	meta := kitATEMetadata{
+		RuntimeID:   runtimeID,
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+		ImageDigest: testKitATEImageDigestA,
+		Atespace:    recordedAtespace,
+		Template:    recordedTemplate,
+		EgressHosts: []string{"legacy.speakeasy.test"},
+		Threads: map[string]kitATEThread{
+			"not-a-uuid": {
+				ActorName: "corrupted-actor-name",
+				ActorUID:  "",
+			},
+			validThread.String(): {
+				ActorName:  validActorName,
+				ActorUID:   validUID,
+				Configured: true,
+				Workload:   validBinding,
+			},
+		},
+	}
+	rawMeta, err := json.Marshal(meta)
+	require.NoError(t, err)
+
+	serverURL, err := url.Parse("https://api.speakeasy.test")
+	require.NoError(t, err)
+	var revoked []*KitWorkloadBinding
+	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+		Image:          testKitATEImage,
+		Atespace:       liveAtespace,
+		Template:       liveTemplate,
+		WorkerSelector: testKitATEWorkerSelector,
+		ServerURL:      serverURL,
+		Client:         client,
+		EgressHosts:    []string{"current.speakeasy.test"},
+		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		Token: func(context.Context, assistantRuntimeRecord, uuid.UUID) (string, error) { return "tok", nil },
+		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string) (KitLocalBootstrap, error) {
+			return KitLocalBootstrap{}, nil
+		},
+		Protocol: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
+			return nil, nil
+		},
+		Revoke: func(_ context.Context, _ assistantRuntimeRecord, b *KitWorkloadBinding) error {
+			revoked = append(revoked, b)
+			return nil
+		},
+		CheckSettled: func(context.Context, assistantRuntimeRecord) error { return nil },
+	})
+	require.NoError(t, err)
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		Retired:             true,
+		BackendMetadataJSON: rawMeta,
+	}
+
+	// Non-Reap callers (like Status) still enforce strict live config matching.
+	_, err = backend.Status(t.Context(), record)
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
+
+	// Reap must succeed across config drift and bad rows, revoking and deleting the valid actor in the recorded atespace.
+	require.NoError(t, backend.Reap(t.Context(), record))
+	require.Len(t, revoked, 1)
+	require.Equal(t, validBinding.Subject, revoked[0].Subject)
+	cluster.mu.Lock()
+	require.Equal(t, []string{validUID}, cluster.deletedActorUIDs)
+	require.Empty(t, cluster.actors)
+	cluster.mu.Unlock()
+
+	// Ownership mismatch must still be rejected by Reap.
+	foreign := record
+	foreign.ProjectID = uuid.New()
+	require.ErrorIs(t, backend.Reap(t.Context(), foreign), ErrKitRuntimeBinding)
+}
