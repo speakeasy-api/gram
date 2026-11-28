@@ -342,6 +342,7 @@ func newProjectAccessTest(t *testing.T, projectSlugs ...string) (context.Context
 	ctx, instance := newTestAuthService(t, userInfo)
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+	setWhitelisted(t, ctx, instance, userInfo.Organizations[0].ID, true)
 
 	projects := make([]projectsrepo.Project, 0, len(projectSlugs))
 	for _, slug := range projectSlugs {

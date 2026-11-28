@@ -82,6 +82,9 @@ func (s *Auth) authorize(
 		ctx, err = s.keys.KeyBasedAuth(ctx, key, scheme.RequiredScopes)
 	case constants.SessionSecurityScheme:
 		ctx, err = s.sessions.Authenticate(ctx, key)
+		if err == nil {
+			err = s.requireWhitelistedSession(ctx)
+		}
 	case constants.ProjectSlugSecuritySchema:
 		ctx, err = s.checkProjectAccess(ctx, s.logger, key)
 	default:
