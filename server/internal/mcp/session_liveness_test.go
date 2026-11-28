@@ -1,12 +1,14 @@
 package mcp_test
 
 import (
+	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -65,4 +67,59 @@ func TestServePublic_RevokedUserSessionWithoutDenylistEntryIsRefused(t *testing.
 		refused.Header().Get("WWW-Authenticate"),
 		"a user session is answered with the same challenge as any other rejected bearer",
 	)
+}
+
+func TestServePublic_ExpiredUserSessionIsRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	now := time.Now()
+
+	tests := []struct {
+		name              string
+		createdAt         time.Time
+		lastUsedAt        time.Time
+		inactivityTimeout time.Duration
+		absoluteExpiresAt time.Time
+	}{
+		{name: "inactive", createdAt: now.Add(-2 * time.Hour), lastUsedAt: now.Add(-31 * time.Minute), inactivityTimeout: 30 * time.Minute, absoluteExpiresAt: now.Add(time.Hour)},
+		{name: "maximum duration elapsed", createdAt: now.Add(-2 * time.Hour), lastUsedAt: now.Add(-time.Minute), inactivityTimeout: 30 * time.Minute, absoluteExpiresAt: now.Add(-time.Second)},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var capturedAuth atomic.Value
+			upstream := newAuthorizationRecorder(t, &capturedAuth)
+			fixture := createIssuerGatedHTTPToolFixture(t, ctx, ti, authCtx, fmt.Sprintf("expired-%d", i), upstream.URL)
+			slug := fixture.Toolset.McpSlug.String
+			issuerID := fixture.Toolset.UserSessionIssuerID.UUID
+			subject := urn.NewUserSubject("expired-row-user-" + uuid.NewString())
+
+			token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+				Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(),
+				Issuer: ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour,
+			})
+			require.NoError(t, err)
+			persistTestUserSession(t, ti, issuerID, subject, jti)
+			insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject, "valid-upstream-token", time.Now().Add(time.Hour))
+			control := serveMCPResponse(t, ti, slug, makeInitializeBody(), token)
+			require.Equal(t, http.StatusOK, control.Code, "unexpired control body=%s", control.Body.String())
+
+			err = usersessionsrepo.New(ti.conn).SetUserSessionLifetimeFixture(ctx, usersessionsrepo.SetUserSessionLifetimeFixtureParams{
+				CreatedAt:                pgtype.Timestamptz{Time: tt.createdAt, Valid: true},
+				LastUsedAt:               pgtype.Timestamptz{Time: tt.lastUsedAt, Valid: true},
+				SessionInactivityTimeout: pgtype.Interval{Microseconds: tt.inactivityTimeout.Microseconds(), Valid: true},
+				SessionAbsoluteExpiresAt: pgtype.Timestamptz{Time: tt.absoluteExpiresAt, Valid: true},
+				Jti:                      jti,
+				ProjectID:                uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+			})
+			require.NoError(t, err)
+
+			resp := serveMCPResponse(t, ti, slug, makeInitializeBody(), token)
+			require.Equal(t, http.StatusUnauthorized, resp.Code, "body=%s", resp.Body.String())
+		})
+	}
 }

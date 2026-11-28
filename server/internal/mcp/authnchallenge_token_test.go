@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -94,6 +95,12 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 
 	ctx, ti := newTestMCPService(t)
 	fx := newAgentConsentFixture(t, ctx, ti)
+	err := usersessionsrepo.New(ti.conn).SetUserSessionIssuerInactivityTimeoutFixture(ctx, usersessionsrepo.SetUserSessionIssuerInactivityTimeoutFixtureParams{
+		SessionInactivityTimeout: pgtype.Interval{Microseconds: (30 * time.Minute).Microseconds(), Valid: true},
+		ID:                       fx.target.UserSessionIssuerID,
+		ProjectID:                uuid.NullUUID{UUID: fx.target.ProjectID, Valid: true},
+	})
+	require.NoError(t, err)
 	agent := createConsentAgent(t, ctx, ti, fx, "Token subject agent")
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
@@ -143,6 +150,24 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 	require.Equal(t, urn.NewAgentSubject(agent.ID).String(), session.SubjectUrn.String())
 	require.True(t, session.AuthorizerUserID.Valid)
 	require.Equal(t, fx.userID, session.AuthorizerUserID.String)
+	require.True(t, session.SessionInactivityTimeout.Valid)
+	require.Equal(t, int64((30*time.Minute)/time.Microsecond), session.SessionInactivityTimeout.Microseconds)
+	require.Equal(t, session.RefreshExpiresAt, session.SessionAbsoluteExpiresAt)
+	lastUsedAt := time.Now().Add(-5 * time.Minute)
+	require.NoError(t, usersessionsrepo.New(ti.conn).SetUserSessionLifetimeFixture(ctx, usersessionsrepo.SetUserSessionLifetimeFixtureParams{
+		CreatedAt:                session.CreatedAt,
+		LastUsedAt:               pgtype.Timestamptz{Time: lastUsedAt, InfinityModifier: pgtype.Finite, Valid: true},
+		SessionInactivityTimeout: session.SessionInactivityTimeout,
+		SessionAbsoluteExpiresAt: session.SessionAbsoluteExpiresAt,
+		Jti:                      session.Jti,
+		ProjectID:                uuid.NullUUID{UUID: fx.target.ProjectID, Valid: true},
+	}))
+	session, err = usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+		Jti:                 claims.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, session.LastUsedAt.Valid)
 	require.True(t, session.DelegatedGrantsVersion.Valid)
 	require.Equal(t, int32(runtimepolicy.IssuedDelegatedPolicyVersion), session.DelegatedGrantsVersion.Int32)
 	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(session.DelegatedGrantsVersion.Int32), session.DelegatedGrants)
@@ -188,6 +213,9 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 	require.Equal(t, session.AuthorizerUserID, refreshedSession.AuthorizerUserID)
 	require.JSONEq(t, string(session.DelegatedGrants), string(refreshedSession.DelegatedGrants))
 	require.Equal(t, session.DelegatedGrantsVersion, refreshedSession.DelegatedGrantsVersion)
+	require.Equal(t, session.SessionInactivityTimeout, refreshedSession.SessionInactivityTimeout)
+	require.Equal(t, session.SessionAbsoluteExpiresAt, refreshedSession.SessionAbsoluteExpiresAt)
+	require.Equal(t, session.LastUsedAt, refreshedSession.LastUsedAt)
 }
 
 // TestHandleTokenCode_ResourceIndicator covers the RFC 8707 check on the

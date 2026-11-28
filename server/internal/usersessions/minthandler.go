@@ -199,10 +199,13 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		// again. Store a sentinel that satisfies the NOT NULL + unique constraint
 		// without colliding with any real sha256 hash; the column will be migrated
 		// to nullable separately.
-		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", sessiontokens.DashboardMintRefreshTokenHashPrefix, jti)),
-		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
-		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
-		ToolSelection:    toolPolicy,
+		RefreshTokenHash:         conv.ToPGText(fmt.Sprintf("%s:%s", sessiontokens.DashboardMintRefreshTokenHashPrefix, jti)),
+		ExpiresAt:                pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:         pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
+		SessionInactivityTimeout: issuer.SessionInactivityTimeout,
+		SessionAbsoluteExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: pgtype.Finite, Valid: true},
+		LastUsedAt:               pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		ToolSelection:            toolPolicy,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
 		Resource:     pgtype.Text{String: "", Valid: false},
 		SignInID:     signInID,

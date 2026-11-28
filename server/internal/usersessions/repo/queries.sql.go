@@ -681,7 +681,7 @@ WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id = $13
+    WHERE issuer.id = $16
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 ),
@@ -699,8 +699,8 @@ sign_in AS (
         ) AS fenced
     FROM sign_ins AS si
     JOIN issuer ON si.organization_id = issuer.organization_id
-    WHERE si.id = $14
-      AND si.user_id = $15
+    WHERE si.id = $17
+      AND si.user_id = $18
     FOR SHARE OF si
 )
 INSERT INTO user_sessions (
@@ -716,7 +716,10 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
+    session_inactivity_timeout,
+    session_absolute_expires_at,
     tool_selection,
+    last_used_at,
     resource,
     sign_in_id,
     credential_id
@@ -736,8 +739,11 @@ SELECT
     $9,
     $10,
     $11,
+    $12,
+    $13,
+    $14,
     (SELECT sign_in.id FROM sign_in),
-    $12
+    $15
 FROM issuer
 WHERE NOT EXISTS (
     SELECT 1
@@ -749,21 +755,24 @@ RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_
 `
 
 type CreateUserSessionParams struct {
-	UserSessionClientID    uuid.NullUUID
-	SubjectUrn             urn.SessionSubject
-	AuthorizerUserID       pgtype.Text
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion pgtype.Int4
-	Jti                    string
-	RefreshTokenHash       pgtype.Text
-	RefreshExpiresAt       pgtype.Timestamptz
-	ExpiresAt              pgtype.Timestamptz
-	ToolSelection          []byte
-	Resource               pgtype.Text
-	CredentialID           uuid.NullUUID
-	UserSessionIssuerID    uuid.UUID
-	SignInID               uuid.NullUUID
-	SignInUserID           pgtype.Text
+	UserSessionClientID      uuid.NullUUID
+	SubjectUrn               urn.SessionSubject
+	AuthorizerUserID         pgtype.Text
+	DelegatedGrants          []byte
+	DelegatedGrantsVersion   pgtype.Int4
+	Jti                      string
+	RefreshTokenHash         pgtype.Text
+	RefreshExpiresAt         pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
+	SessionInactivityTimeout pgtype.Interval
+	SessionAbsoluteExpiresAt pgtype.Timestamptz
+	ToolSelection            []byte
+	LastUsedAt               pgtype.Timestamptz
+	Resource                 pgtype.Text
+	CredentialID             uuid.NullUUID
+	UserSessionIssuerID      uuid.UUID
+	SignInID                 uuid.NullUUID
+	SignInUserID             pgtype.Text
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -794,7 +803,10 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.RefreshTokenHash,
 		arg.RefreshExpiresAt,
 		arg.ExpiresAt,
+		arg.SessionInactivityTimeout,
+		arg.SessionAbsoluteExpiresAt,
 		arg.ToolSelection,
+		arg.LastUsedAt,
 		arg.Resource,
 		arg.CredentialID,
 		arg.UserSessionIssuerID,
@@ -2535,6 +2547,8 @@ FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
   AND deleted IS FALSE
+  AND (session_absolute_expires_at IS NULL OR session_absolute_expires_at > clock_timestamp())
+  AND (session_inactivity_timeout IS NULL OR COALESCE(last_used_at, created_at) + session_inactivity_timeout > clock_timestamp())
 `
 
 type GetUserSessionPolicyByJTIParams struct {
@@ -2576,6 +2590,8 @@ WHERE user_session_issuer_id = $1
   AND jti = $2
   AND deleted IS FALSE
   AND expires_at > clock_timestamp()
+  AND (session_absolute_expires_at IS NULL OR session_absolute_expires_at > clock_timestamp())
+  AND (session_inactivity_timeout IS NULL OR COALESCE(last_used_at, created_at) + session_inactivity_timeout > clock_timestamp())
 `
 
 type GetUserSessionPrincipalCredentialByJTIParams struct {
@@ -7525,6 +7541,23 @@ func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg Set
 	return i, err
 }
 
+const setUserSessionIssuerInactivityTimeoutFixture = `-- name: SetUserSessionIssuerInactivityTimeoutFixture :exec
+UPDATE user_session_issuers
+SET session_inactivity_timeout = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetUserSessionIssuerInactivityTimeoutFixtureParams struct {
+	SessionInactivityTimeout pgtype.Interval
+	ID                       uuid.UUID
+	ProjectID                uuid.NullUUID
+}
+
+func (q *Queries) SetUserSessionIssuerInactivityTimeoutFixture(ctx context.Context, arg SetUserSessionIssuerInactivityTimeoutFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerInactivityTimeoutFixture, arg.SessionInactivityTimeout, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setUserSessionIssuerMigrationPreviewLockTimeout = `-- name: SetUserSessionIssuerMigrationPreviewLockTimeout :exec
 SET LOCAL lock_timeout = '5s'
 `
@@ -7535,6 +7568,36 @@ SET LOCAL lock_timeout = '5s'
 // organization's servers without holding a dashboard request open.
 func (q *Queries) SetUserSessionIssuerMigrationPreviewLockTimeout(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, setUserSessionIssuerMigrationPreviewLockTimeout)
+	return err
+}
+
+const setUserSessionLifetimeFixture = `-- name: SetUserSessionLifetimeFixture :exec
+UPDATE user_sessions
+SET created_at = $1,
+    last_used_at = $2,
+    session_inactivity_timeout = $3,
+    session_absolute_expires_at = $4
+WHERE jti = $5 AND project_id = $6
+`
+
+type SetUserSessionLifetimeFixtureParams struct {
+	CreatedAt                pgtype.Timestamptz
+	LastUsedAt               pgtype.Timestamptz
+	SessionInactivityTimeout pgtype.Interval
+	SessionAbsoluteExpiresAt pgtype.Timestamptz
+	Jti                      string
+	ProjectID                uuid.NullUUID
+}
+
+func (q *Queries) SetUserSessionLifetimeFixture(ctx context.Context, arg SetUserSessionLifetimeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionLifetimeFixture,
+		arg.CreatedAt,
+		arg.LastUsedAt,
+		arg.SessionInactivityTimeout,
+		arg.SessionAbsoluteExpiresAt,
+		arg.Jti,
+		arg.ProjectID,
+	)
 	return err
 }
 
