@@ -29,7 +29,7 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 	if (query != "" && queryLength < 3) || queryLength > 128 || len(input.Cursor) > 128 || input.Limit < 0 || input.Limit > maxOrganizationSearchLimit {
 		return nil, errors.New("provide a search query of 3 to 128 characters, a cursor up to 128 characters, and a limit of 1 to 20")
 	}
-	if query == "" && len(input.AccountTypes) == 0 && len(input.TrialStates) == 0 && input.DisabledStatus == nil && input.Whitelisted == nil && input.MinMembers == nil && input.MaxMembers == nil && input.CreatedFrom == "" && input.CreatedTo == "" {
+	if query == "" && len(input.AccountTypes) == 0 && len(input.TrialStates) == 0 && input.DisabledStatus == nil && input.Whitelisted == nil && input.InternalStatus == nil && input.MinMembers == nil && input.MaxMembers == nil && input.CreatedFrom == "" && input.CreatedTo == "" {
 		return nil, errors.New("provide a search query or an explicit organization filter")
 	}
 	if len(input.AccountTypes) > len(constants.AccountTypes) || len(input.TrialStates) > len(organizationTrialStates) {
@@ -47,6 +47,9 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 	}
 	if input.DisabledStatus != nil && !slices.Contains([]string{"all", "active", "disabled"}, *input.DisabledStatus) {
 		return nil, errors.New("disabled_status must be all, active or disabled")
+	}
+	if input.InternalStatus != nil && !slices.Contains([]string{"all", "internal", "external"}, *input.InternalStatus) {
+		return nil, errors.New("internal_status must be all, internal or external")
 	}
 	if input.Sort != "" && !slices.Contains(organizationSortColumns, input.Sort) {
 		return nil, errors.New("sort must be a supported dashboard column")
@@ -94,6 +97,7 @@ func organizationSearchPayload(input FindOrganizationsInput) (*gen.ListOrganizat
 	}
 	payload.DisabledStatus = input.DisabledStatus
 	payload.Whitelisted = input.Whitelisted
+	payload.InternalStatus = input.InternalStatus
 	if input.CreatedFrom != "" {
 		payload.CreatedFrom = &input.CreatedFrom
 	}
