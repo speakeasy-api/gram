@@ -317,6 +317,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	// supplies both client ID and client secret; otherwise fall back to
 	// configured layers or the tool's default tokenUrl.
 	if env.HasUserValue(tokenURLVar) && (!env.HasUserValue(clientIDVar) || !env.HasUserValue(secretVar)) {
+		logger.WarnContext(ctx, "request token url not used: the client credentials are configured", attr.SlogEnvVarName(tokenURLVar), attr.SlogSecurityScheme(security.Key))
 		tokenURLOverride = env.ConfiguredGet(tokenURLVar)
 	}
 

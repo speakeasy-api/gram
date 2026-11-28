@@ -81,3 +81,41 @@ func TestResolveUserConfiguration_SeparatesSavedAndUserLayers(t *testing.T) {
 	require.Equal(t, credentialSourceCaller, sources["acme_server_url"])
 	require.Equal(t, credentialSourceShared, sources["acme_oauth_access_token"])
 }
+
+// A token the request itself carried stays a per-request value; it is not saved configuration.
+func TestResolveUserConfiguration_PresentedTokenStaysInUserLayer(t *testing.T) {
+	t.Parallel()
+
+	plan := &gateway.ToolCallPlan{
+		Kind: gateway.ToolKindHTTP,
+		HTTP: &gateway.HTTPToolCallPlan{
+			Security: []*gateway.HTTPToolSecurity{{
+				Key:          "oauth",
+				Type:         gateway.NullString{Value: "oauth2", Valid: true},
+				OAuthTypes:   []string{"authorization_code"},
+				EnvVariables: []string{"ACME_OAUTH_ACCESS_TOKEN"},
+			}},
+		},
+	}
+
+	savedConfig, userConfig, sources, err := resolveUserConfiguration(
+		t.Context(),
+		testenv.NewLogger(t),
+		stubEnvLoader{vars: map[string]string{}},
+		&mcpInputs{
+			projectID:       uuid.New(),
+			mcpEnvVariables: map[string]string{"acme_server_url": "https://header.example"},
+			oauthTokenInputs: []oauthTokenInputs{{
+				Token:     "presented-token",
+				presented: true,
+			}},
+		},
+		plan,
+	)
+	require.NoError(t, err)
+
+	require.Equal(t, "presented-token", userConfig.Get("ACME_OAUTH_ACCESS_TOKEN"))
+	require.Equal(t, "https://header.example", userConfig.Get("ACME_SERVER_URL"))
+	require.Zero(t, savedConfig.Len())
+	require.Equal(t, credentialSourcePerson, sources["acme_oauth_access_token"])
+}

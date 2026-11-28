@@ -703,6 +703,13 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
+	// A tool call's arguments do not set variables: those come from system
+	// environment, saved configuration and request headers. The field is still
+	// accepted so that a call carrying it keeps working.
+	if len(toolCallBody.EnvironmentVariables) > 0 {
+		logger.WarnContext(ctx, "environment variables in tool call arguments not used", attr.SlogValueInt(len(toolCallBody.EnvironmentVariables)))
+	}
+
 	// Handle path parameters
 	requestPath := plan.Path
 	if toolCallBody.PathParameters != nil {
@@ -1208,16 +1215,24 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 		return ""
 	}
 
+	// Each layer's values stay bound to a server URL from that layer or above
+	// it, so a layer that holds any value settles the server URL, with the
+	// tool's own as the fallback: system environment first, then saved
+	// configuration, and a request-level server URL only when both are empty.
 	if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
+		logUnusedServerURL(ctx, logger, tool, env)
 		return envVar
+	}
+	if env.SystemEnv.Len() > 0 {
+		logUnusedServerURL(ctx, logger, tool, env)
+		return ""
 	}
 	if envVar := env.SavedConfig.Get(tool.ServerEnvVar); envVar != "" {
+		logUnusedServerURL(ctx, logger, tool, env)
 		return envVar
 	}
-	// When configured environment variables exist in SystemEnv or SavedConfig,
-	// disallow request-level server URL overrides so configured values remain
-	// bound to their configured destination.
-	if env.HasConfiguredEnv() {
+	if env.SavedConfig.Len() > 0 {
+		logUnusedServerURL(ctx, logger, tool, env)
 		return ""
 	}
 
@@ -1230,6 +1245,13 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 
 	logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
 	return ""
+}
+
+// logUnusedServerURL notes a request-level server URL that a configured layer took precedence over.
+func logUnusedServerURL(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) {
+	if env.HasUserValue(tool.ServerEnvVar) {
+		logger.WarnContext(ctx, "request server url not used: the server has configured values", attr.SlogEnvVarName(tool.ServerEnvVar))
+	}
 }
 
 var paramRegex = regexp.MustCompile(`{([^}]+)}`)

@@ -549,3 +549,54 @@ func TestServerEnvVarRespectsSavedConfig(t *testing.T) {
 		require.Equal(t, "user-api-key", userHits()[0].Get("X-API-Key"))
 	})
 }
+
+// With system environment set, the server URL comes from system environment or the tool itself, as it did before SavedConfig was split out.
+func TestServerEnvVarSystemEnvKeepsItsServer(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	hits := map[string][]string{}
+	recording := func(name string) string {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			hits[name] = append(hits[name], r.Header.Get("X-API-Key"))
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		t.Cleanup(s.Close)
+		return s.URL
+	}
+	defaultAPI, savedAPI, userAPI := recording("default"), recording("saved"), recording("user")
+
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:     "ACME_SERVER_URL",
+		DefaultServerUrl: NullString{Value: defaultAPI, Valid: true},
+		Security: []*HTTPToolSecurity{{
+			Type:         NullString{Value: "apiKey", Valid: true},
+			Scheme:       NullString{Value: "apiKey", Valid: true},
+			Name:         NullString{Value: "X-API-Key", Valid: true},
+			Placement:    NullString{Value: "header", Valid: true},
+			EnvVariables: []string{"ACME_API_KEY"},
+		}},
+		SecurityScopes:     map[string][]string{},
+		Method:             http.MethodGet,
+		Path:               "/items",
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+	}
+
+	proxy := NewToolProxy(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ToolCallSourceMCP, testenv.NewEncryptionClient(t), testenv.NewMemoryCache(), unsafePolicy(t), nil, nil, nil)
+	err := proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader([]byte(`{}`)), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"ACME_API_KEY": "system-api-key"}),
+		SavedConfig: toolconfig.CIEnvFrom(map[string]string{"ACME_SERVER_URL": savedAPI}),
+		UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_SERVER_URL": userAPI}),
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, map[string][]string{"default": {"system-api-key"}}, hits)
+}

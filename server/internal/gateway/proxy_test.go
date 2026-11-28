@@ -3245,7 +3245,6 @@ func TestToolProxy_Do_HTTPTool_ArgumentVariablesIgnoredAndServerVariableReported
 	require.NoError(t, err)
 
 	require.Equal(t, "header-key", sentKey)
-	require.Empty(t, report.CallerVariables)
 	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
 	require.Empty(t, report.ServerVariable)
 

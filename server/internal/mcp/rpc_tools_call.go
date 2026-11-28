@@ -362,11 +362,10 @@ func handleToolsCall(
 		GramChatID:  payload.chatID,
 		MCPClient:   clientIdentity,
 		Credentials: &toolconfig.CredentialReport{
-			Sent:            nil,
-			GrantFailure:    "",
-			CallerVariables: nil,
-			ServerVariable:  "",
-			Challenges:      nil,
+			Sent:           nil,
+			GrantFailure:   "",
+			ServerVariable: "",
+			Challenges:     nil,
 		},
 	}
 
@@ -782,11 +781,6 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return none
 	}
 	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
-		if !credential.System && slices.ContainsFunc(report.CallerVariables, func(variable string) bool {
-			return strings.EqualFold(variable, credential.Variable)
-		}) {
-			return credentialSourceCaller
-		}
 		if source, ok := sources[strings.ToLower(credential.Variable)]; ok && !credential.System {
 			return source
 		}
@@ -932,10 +926,16 @@ func resolveUserConfiguration(
 			for _, token := range payload.oauthTokenInputs {
 				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
-						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							setSaved(envVar, token.Token, token.source())
-							userConfig.Delete(envVar)
+						if !strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							continue
 						}
+						// A token the request itself carried is a per-request value, like a header.
+						if token.presented {
+							setUser(envVar, token.Token, token.source())
+							continue
+						}
+						setSaved(envVar, token.Token, token.source())
+						userConfig.Delete(envVar)
 					}
 				}
 			}

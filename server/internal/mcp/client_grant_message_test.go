@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -107,6 +108,12 @@ type clientGrantCall struct {
 // callClientCredentialsTool calls a tool whose token URL is tokenURL, as an admin set it up, with headers the caller sent, and returns what each surface kept.
 func callClientCredentialsTool(t *testing.T, tokenURL, serverURL string, headers map[string]string, guardianOpts ...func(*guardian.Policy)) clientGrantCall {
 	t.Helper()
+	return callClientCredentialsToolWithArguments(t, tokenURL, serverURL, headers, map[string]any{}, guardianOpts...)
+}
+
+// callClientCredentialsToolWithArguments is callClientCredentialsTool with the tool call's arguments set.
+func callClientCredentialsToolWithArguments(t *testing.T, tokenURL, serverURL string, headers map[string]string, arguments map[string]any, guardianOpts ...func(*guardian.Policy)) clientGrantCall {
+	t.Helper()
 
 	logs := &syncBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{AddSource: false, Level: slog.LevelDebug, ReplaceAttr: nil}))
@@ -123,7 +130,14 @@ func callClientCredentialsTool(t *testing.T, tokenURL, serverURL string, headers
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("machine_tool"), "", headers)
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": "machine_tool", "arguments": arguments},
+	})
+	require.NoError(t, err)
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, body, "", headers)
 	require.NoError(t, err)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
 
@@ -385,4 +399,58 @@ func TestClientGrantAddressFailuresLookAlike(t *testing.T) {
 	require.Equal(t, blocked.text, missing.text)
 	blocked.rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotAllowed)
 	missing.rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeAddressNotFound)
+}
+
+// A token URL set per request, in a header or in the tool call's arguments, is not used with the client an admin saved.
+func TestRequestTokenURLNotUsedWithSavedClient(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		headers   func(other string) map[string]string
+		arguments func(other string) map[string]any
+	}{
+		{
+			name:      "request header",
+			headers:   func(other string) map[string]string { return map[string]string{"Mcp-Machine-Token-Url": other} },
+			arguments: func(string) map[string]any { return map[string]any{} },
+		},
+		{
+			name: "request header with a request client secret",
+			headers: func(other string) map[string]string {
+				return map[string]string{"Mcp-Machine-Token-Url": other, "Mcp-Machine-Client-Secret": "request-secret"}
+			},
+			arguments: func(string) map[string]any { return map[string]any{} },
+		},
+		{
+			name:    "tool call arguments",
+			headers: func(string) map[string]string { return nil },
+			arguments: func(other string) map[string]any {
+				return map[string]any{"environmentVariables": map[string]any{"MACHINE_TOKEN_URL": other, "TEST_SERVER_URL": other}}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var otherRequests atomic.Int64
+			other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				otherRequests.Add(1)
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			t.Cleanup(other.Close)
+			token := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"machine-token","expires_in":60}`))
+			}))
+			t.Cleanup(token.Close)
+
+			call := callClientCredentialsToolWithArguments(t, token.URL+"/oauth/token", toolServer(t).URL, tc.headers(other.URL), tc.arguments(other.URL))
+
+			// The token URL the admin set is the one asked; this stand-in accepts any client.
+			require.Zero(t, otherRequests.Load())
+			require.False(t, call.isError)
+			require.JSONEq(t, `{"authorization":"Bearer machine-token"}`, call.text)
+		})
+	}
 }

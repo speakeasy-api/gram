@@ -374,6 +374,11 @@ type oauthTokenInputs struct {
 
 	// shared marks a credential the server holds for the organization, not the caller.
 	shared bool
+
+	// presented marks a token that arrived on the request itself, as its
+	// Authorization header, which makes it a per-request value. Every other
+	// token is resolved by the server and is saved configuration.
+	presented bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -407,6 +412,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
 			shared:                entry.CredentialOwner == remotesessions.CredentialOwnerSelf,
+			presented:             false,
 		})
 	}
 	return dst, nil
@@ -1473,6 +1479,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
 					shared:                false,
+					presented:             true,
 				})
 			}
 		case !cfg.isPublic:
