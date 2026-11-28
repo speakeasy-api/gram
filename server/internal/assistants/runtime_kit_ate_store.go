@@ -22,6 +22,9 @@ const (
 	// ateActorStateSuspended indicates the thread's ATE actor is durably suspended.
 	ateActorStateSuspended = "suspended"
 
+	// ateActorStateCrashed indicates the thread's ATE actor entered ACTOR_STATE_CRASHED.
+	ateActorStateCrashed = "crashed"
+
 	// ateActorStateRetired indicates the thread's ATE actor row was soft-deleted after reap or replacement.
 	ateActorStateRetired = "retired"
 )

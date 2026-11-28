@@ -1,11 +1,11 @@
 package main
 
 import (
-	"archive/tar"
-	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -15,38 +15,68 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
 
 const (
-	// home is the Kit actor's persistent home directory inside the sandbox rootfs.
-	home = "/home/kit"
+	// wireVersion is the version of the HTTP contract between the server and this init helper.
+	wireVersion = 1
 
-	// maxBootstrap bounds the tar archive uploaded to POST /bootstrap.
-	maxBootstrap = 2 << 20 // 2 MiB
+	// wireVersionHeader advertises wireVersion on every helper HTTP response so a
+	// mismatched runtime image fails fast and clearly.
+	wireVersionHeader = "X-ATE-Init-Version"
 
-	// minGatewayTokenBytes enforces minimum entropy on the per-actor ACP bearer token.
-	minGatewayTokenBytes = 32
+	// defaultListenAddr is the helper HTTP control address inside the actor sandbox.
+	defaultListenAddr = ":8082"
+
+	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
+	maxBootstrapBytes = 2 << 20 // 2 MiB
+
+	// maxBootstrapEntries bounds the number of directories or files in one bootstrap payload.
+	maxBootstrapEntries = 64
 )
 
-// bootstrapFiles lists the exact archive entries accepted by POST /bootstrap:
-// non-secret Kit config plus the per-actor ACP server credential file.
-// Speakeasy API credentials are never delivered into the sandbox; ATE's egress
-// gateway injects the actor JWT on outbound requests.
-var bootstrapFiles = []string{
-	".kit/AGENTS.md",
-	".kit/config.toml",
-	".kit/credentials/mcp.json",
-	".kit/credentials/gateway-token",
+type bootstrapDir struct {
+	Path string      `json:"path"`
+	Mode os.FileMode `json:"mode"`
+}
+
+type bootstrapFile struct {
+	Path    string      `json:"path"`
+	Mode    os.FileMode `json:"mode"`
+	Content []byte      `json:"content"`
+}
+
+type bootstrapPayload struct {
+	Version int             `json:"version"`
+	Dirs    []bootstrapDir  `json:"dirs"`
+	Files   []bootstrapFile `json:"files"`
+}
+
+type statusResponse struct {
+	Version  int  `json:"version"`
+	Draining bool `json:"draining"`
+	Started  bool `json:"started"`
+}
+
+type config struct {
+	rootDir   string
+	probeAddr string
+	listen    string
+	command   []string
 }
 
 type initializer struct {
-	home        string
+	rootDir   string
+	probeAddr string
+
 	mu          sync.Mutex
 	started     bool
 	launched    bool
+	draining    bool
 	hasBodyHash bool
 	bodyHash    [32]byte
 	launch      chan struct{}
@@ -59,14 +89,30 @@ func (s *initializer) signalLaunchLocked() {
 	}
 }
 
+func (s *initializer) markDraining() {
+	s.mu.Lock()
+	s.draining = true
+	s.mu.Unlock()
+}
+
 func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(wireVersionHeader, fmt.Sprintf("%d", wireVersion))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/readyz":
 		w.WriteHeader(http.StatusOK)
-	case r.Method == http.MethodGet && r.URL.Path == "/kit-readyz":
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:8081", time.Second)
+	case r.Method == http.MethodGet && r.URL.Path == "/status":
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(statusResponse{
+			Version:  wireVersion,
+			Draining: s.draining,
+			Started:  s.started,
+		})
+	case r.Method == http.MethodGet && r.URL.Path == "/app-readyz":
+		conn, err := net.DialTimeout("tcp", s.probeAddr, time.Second)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
@@ -74,8 +120,10 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		w.WriteHeader(http.StatusOK)
 	case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
-		// Initial write-once provisioning is reachable only through the authenticated ATE ingress.
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrap))
+		// Provisioning is reachable only through the authenticated ATE ingress.
+		// On cold start, resume, or revert, PID 1 starts fresh and waits for
+		// POST /bootstrap to rewrite provisioned files before launching the workload.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
 		if err != nil {
 			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
 			return
@@ -103,16 +151,101 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func atomicWrite(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create atomic file directory: %w", err)
+func validateRelativePath(raw string) (string, error) {
+	if raw == "" || strings.ContainsRune(raw, 0) || strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "\\") || filepath.IsAbs(raw) {
+		return "", errors.New("path must be relative")
 	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".ate-init-*")
+	clean := filepath.Clean(raw)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(clean, "\\") {
+		return "", errors.New("path escapes root")
+	}
+	for part := range strings.SplitSeq(clean, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", errors.New("invalid path segment")
+		}
+	}
+	return clean, nil
+}
+
+func validateMode(mode os.FileMode, defaultMode os.FileMode) (os.FileMode, error) {
+	if mode == 0 {
+		return defaultMode, nil
+	}
+	if mode&^os.ModePerm != 0 {
+		return 0, errors.New("special permission bits are forbidden")
+	}
+	return mode, nil
+}
+
+// ensureNoSymlinks checks every existing path component from rootDir down to rel
+// so neither directories nor files can follow a symlink out of rootDir.
+func ensureNoSymlinks(rootDir, rel string) error {
+	info, err := os.Lstat(rootDir)
+	if err != nil {
+		return fmt.Errorf("stat root directory: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("root directory must be a real directory")
+	}
+	cur := rootDir
+	for part := range strings.SplitSeq(rel, "/") {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stat bootstrap path: %w", err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return errors.New("symlink path component rejected")
+		}
+	}
+	return nil
+}
+
+func ensureDirUnderRoot(rootDir, rel string, mode os.FileMode) error {
+	if err := ensureNoSymlinks(rootDir, rel); err != nil {
+		return err
+	}
+	cur := rootDir
+	for part := range strings.SplitSeq(rel, "/") {
+		cur = filepath.Join(cur, part)
+		if err := os.Mkdir(cur, mode); err != nil && !errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("create bootstrap directory: %w", err)
+		}
+		info, err := os.Lstat(cur)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("invalid bootstrap directory")
+		}
+	}
+	return nil
+}
+
+func atomicWriteUnderRoot(rootDir, rel string, data []byte, mode os.FileMode) error {
+	if err := ensureNoSymlinks(rootDir, rel); err != nil {
+		return err
+	}
+	if parent := filepath.Dir(rel); parent != "." {
+		if err := ensureDirUnderRoot(rootDir, parent, 0o700); err != nil {
+			return err
+		}
+	}
+	target := filepath.Join(rootDir, rel)
+	if info, err := os.Lstat(target); err == nil {
+		if info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("bootstrap target must be a regular file")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat bootstrap target: %w", err)
+	}
+
+	f, err := os.CreateTemp(filepath.Dir(target), ".ate-init-*")
 	if err != nil {
 		return fmt.Errorf("create atomic temporary file: %w", err)
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
-	if err := f.Chmod(0o600); err != nil {
+	if err := f.Chmod(mode); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("set atomic file permissions: %w", err)
 	}
@@ -127,96 +260,155 @@ func atomicWrite(path string, data []byte) error {
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("close atomic file: %w", err)
 	}
-	if err := os.Rename(f.Name(), path); err != nil {
+	if err := os.Rename(f.Name(), target); err != nil {
 		return fmt.Errorf("install atomic file: %w", err)
 	}
 	return nil
 }
 
 func (s *initializer) install(body []byte) error {
-	reader := tar.NewReader(bytes.NewReader(body))
-	files := make(map[string][]byte)
-	for {
-		entry, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
+	var payload bootstrapPayload
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&payload); err != nil {
+		return fmt.Errorf("decode bootstrap payload: %w", err)
+	}
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("trailing data in bootstrap payload")
+	}
+	if payload.Version != wireVersion {
+		return fmt.Errorf("unsupported bootstrap version %d", payload.Version)
+	}
+	if len(payload.Dirs) > maxBootstrapEntries || len(payload.Files) == 0 || len(payload.Files) > maxBootstrapEntries {
+		return errors.New("invalid bootstrap entry count")
+	}
+
+	type cleanDir struct {
+		rel  string
+		mode os.FileMode
+	}
+	type cleanFile struct {
+		rel     string
+		mode    os.FileMode
+		content []byte
+	}
+
+	seenDirs := make(map[string]struct{}, len(payload.Dirs))
+	dirs := make([]cleanDir, 0, len(payload.Dirs))
+	for _, d := range payload.Dirs {
+		rel, err := validateRelativePath(d.Path)
 		if err != nil {
-			return fmt.Errorf("read bootstrap archive header: %w", err)
+			return errors.New("invalid bootstrap directory path")
 		}
-		if entry.Typeflag == tar.TypeDir && (entry.Name == ".kit/" || entry.Name == ".kit/credentials/" || entry.Name == "workspace/") {
-			continue
+		if _, dup := seenDirs[rel]; dup {
+			return errors.New("duplicate bootstrap directory")
 		}
-		allowed := false
-		for _, name := range bootstrapFiles {
-			if entry.Name == name {
-				allowed = true
-			}
+		mode, err := validateMode(d.Mode, 0o700)
+		if err != nil {
+			return err
 		}
-		if !allowed || entry.Typeflag != tar.TypeReg || entry.Size < 0 || entry.Size > maxBootstrap {
-			return errors.New("invalid archive entry")
+		if err := ensureNoSymlinks(s.rootDir, rel); err != nil {
+			return err
 		}
-		if _, exists := files[entry.Name]; exists {
-			return errors.New("duplicate archive entry")
-		}
-		data, err := io.ReadAll(io.LimitReader(reader, maxBootstrap+1))
-		if err != nil || int64(len(data)) != entry.Size {
-			return errors.New("invalid archive data")
-		}
-		files[entry.Name] = data
+		seenDirs[rel] = struct{}{}
+		dirs = append(dirs, cleanDir{rel: rel, mode: mode})
 	}
-	if len(files) != len(bootstrapFiles) {
-		return errors.New("incomplete bootstrap")
-	}
-	if len(files[".kit/credentials/gateway-token"]) < minGatewayTokenBytes || bytes.ContainsAny(files[".kit/credentials/gateway-token"], " \r\n\x00") {
-		return errors.New("invalid token")
-	}
-	for _, dir := range []string{".kit", ".kit/credentials", "workspace"} {
-		path := filepath.Join(s.home, dir)
-		if err := os.MkdirAll(path, 0o700); err != nil {
-			return fmt.Errorf("create bootstrap directory: %w", err)
+
+	seenFiles := make(map[string]struct{}, len(payload.Files))
+	files := make([]cleanFile, 0, len(payload.Files))
+	totalBytes := 0
+	for _, f := range payload.Files {
+		rel, err := validateRelativePath(f.Path)
+		if err != nil {
+			return errors.New("invalid bootstrap file path")
 		}
-		info, err := os.Lstat(path)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return errors.New("invalid bootstrap directory")
+		if _, dup := seenFiles[rel]; dup {
+			return errors.New("duplicate bootstrap file")
 		}
+		if _, isDir := seenDirs[rel]; isDir {
+			return errors.New("bootstrap path cannot be both directory and file")
+		}
+		mode, err := validateMode(f.Mode, 0o600)
+		if err != nil {
+			return err
+		}
+		totalBytes += len(f.Content)
+		if totalBytes > maxBootstrapBytes {
+			return errors.New("bootstrap content exceeds size limit")
+		}
+		if err := ensureNoSymlinks(s.rootDir, rel); err != nil {
+			return err
+		}
+		seenFiles[rel] = struct{}{}
+		files = append(files, cleanFile{rel: rel, mode: mode, content: f.Content})
 	}
-	for _, name := range bootstrapFiles {
-		if err := atomicWrite(filepath.Join(s.home, name), files[name]); err != nil {
+
+	for _, d := range dirs {
+		if err := ensureDirUnderRoot(s.rootDir, d.rel, d.mode); err != nil {
 			return err
 		}
 	}
-	return atomicWrite(filepath.Join(s.home, ".kit/ate-initialized"), []byte("1"))
+	for _, f := range files {
+		if err := atomicWriteUnderRoot(s.rootDir, f.rel, f.content, f.mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func newInitializer(homeDir string) (*initializer, error) {
-	state := &initializer{
-		home:        homeDir,
+func newInitializer(cfg config) (*initializer, error) {
+	if !filepath.IsAbs(cfg.rootDir) {
+		return nil, errors.New("root directory must be an absolute path")
+	}
+	if _, _, err := net.SplitHostPort(cfg.probeAddr); err != nil {
+		return nil, fmt.Errorf("invalid probe address: %w", err)
+	}
+
+	return &initializer{
+		rootDir:     filepath.Clean(cfg.rootDir),
+		probeAddr:   cfg.probeAddr,
 		mu:          sync.Mutex{},
 		started:     false,
 		launched:    false,
+		draining:    false,
 		hasBodyHash: false,
 		bodyHash:    [32]byte{},
 		launch:      make(chan struct{}),
-	}
-	if _, err := os.Stat(filepath.Join(homeDir, ".kit/ate-initialized")); err == nil {
-		// Resuming from a durable rootfs snapshot: config is already on disk,
-		// so launch Kit immediately without waiting for POST /bootstrap.
-		state.started = true
-		state.signalLaunchLocked()
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("check initialization marker: %w", err)
-	}
-	return state, nil
+	}, nil
 }
 
-func run(ctx context.Context) error {
-	state, err := newInitializer(home)
+// run manages bootstrap HTTP handling, worker-drain SIGTERM trapping, and the
+// launched workload process. On SIGTERM (ATE worker drain), PID 1 intentionally
+// stays alive and leaves the child running while advertising draining=true on
+// GET /status so the harness can synchronously suspend the actor with a durable
+// snapshot before the worker's shutdown budget elapses.
+func run(ctx context.Context, cfg config, listener net.Listener, termCh <-chan os.Signal, childFactory func(context.Context) *exec.Cmd) error {
+	state, err := newInitializer(cfg)
 	if err != nil {
 		return err
 	}
+
+	stopDrainWatch := make(chan struct{})
+	defer close(stopDrainWatch)
+	go func() {
+		for {
+			select {
+			case <-termCh:
+				state.markDraining()
+			case <-stopDrainWatch:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	listenAddr := cfg.listen
+	if listenAddr == "" {
+		listenAddr = defaultListenAddr
+	}
 	server := &http.Server{
-		Addr:              ":8082",
+		Addr:              listenAddr,
 		Handler:           state,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -224,8 +416,15 @@ func run(ctx context.Context) error {
 		MaxHeaderBytes:    8192,
 	}
 	errs := make(chan error, 2)
-	go func() { errs <- server.ListenAndServe() }()
+	go func() {
+		if listener != nil {
+			errs <- server.Serve(listener)
+			return
+		}
+		errs <- server.ListenAndServe()
+	}()
 	defer func() { _ = server.Close() }()
+
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("initialization canceled: %w", ctx.Err())
@@ -233,9 +432,8 @@ func run(ctx context.Context) error {
 		return err
 	case <-state.launch:
 	}
-	command := exec.CommandContext(ctx, "/usr/local/bin/kit", "serve", "--root", home+"/workspace", "--remote-acp", "--no-a2a", "--no-stdio", "--a2a", "0.0.0.0:8081", "--server-credential-file", home+"/.kit/credentials/gateway-token")
-	command.Env = append(os.Environ(), "HOME="+home)
-	command.Stdout, command.Stderr = os.Stdout, os.Stderr
+
+	command := childFactory(ctx)
 	go func() { errs <- command.Run() }()
 	select {
 	case err := <-errs:
@@ -245,12 +443,47 @@ func run(ctx context.Context) error {
 	}
 }
 
+func parseConfig(args []string) (config, error) {
+	fs := flag.NewFlagSet("ate-init", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var cfg config
+	fs.StringVar(&cfg.rootDir, "root", "", "Absolute root directory that bootstrap files may be written under")
+	fs.StringVar(&cfg.probeAddr, "probe-addr", "", "TCP host:port probed by GET /app-readyz")
+	fs.StringVar(&cfg.listen, "listen", defaultListenAddr, "HTTP listen address for init endpoints")
+	if err := fs.Parse(args); err != nil {
+		return config{}, fmt.Errorf("parse init flags: %w", err)
+	}
+	cfg.command = fs.Args()
+	if cfg.rootDir == "" || cfg.probeAddr == "" || len(cfg.command) == 0 {
+		return config{}, errors.New("--root, --probe-addr, and a workload launch command are required")
+	}
+	return cfg, nil
+}
+
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	err := run(ctx)
+	cfg, err := parseConfig(os.Args[1:])
+	if err != nil {
+		log.Printf("ATE init configuration invalid: %v", err)
+		os.Exit(1)
+	}
+
+	// Trap SIGTERM for ATE worker-drain eviction without exiting or killing the
+	// child process. Only SIGINT cancels the process context.
+	termCh := make(chan os.Signal, 1)
+	signal.Notify(termCh, syscall.SIGTERM)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	err = run(ctx, cfg, nil, termCh, func(cmdCtx context.Context) *exec.Cmd {
+		//nolint:gosec // Launch command is supplied explicitly by the container image ENTRYPOINT/CMD.
+		command := exec.CommandContext(cmdCtx, cfg.command[0], cfg.command[1:]...)
+		command.Env = append(os.Environ(), "HOME="+cfg.rootDir)
+		command.Stdout, command.Stderr = os.Stdout, os.Stderr
+		return command
+	})
 	cancel()
+	signal.Stop(termCh)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Print("ATE Kit initialization stopped")
+		log.Print("ATE init stopped")
 		os.Exit(1)
 	}
 }

@@ -171,7 +171,7 @@ func (k *KitATERuntimeBackend) desiredTemplate(templateName string) *ateapiv1.Ac
 		Containers: []*ateapiv1.Container{{
 			Name:    "kit",
 			Image:   k.config.Image,
-			Command: []string{"/usr/local/bin/kit-ate-init"},
+			Command: nil,
 			Args:    nil,
 			Env:     nil,
 			WakeupProbe: &ateapiv1.WakeupProbe{
