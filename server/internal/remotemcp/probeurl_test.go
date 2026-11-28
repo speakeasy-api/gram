@@ -134,6 +134,16 @@ func TestProbeURL_LimitsProbesPerOrganization(t *testing.T) {
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
 	})
 	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+
+	// Another organization has its own allowance.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	otherAuthCtx := *authCtx
+	otherAuthCtx.ActiveOrganizationID = "another-organization"
+	_, err = ti.service.ProbeURL(contextvalues.SetAuthContext(ctx, &otherAuthCtx), &gen.ProbeURLPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: blockedURL,
+	})
+	require.NoError(t, err)
 }
 
 func TestProbeURL_FailsClosedWhenTheLimiterIsUnavailable(t *testing.T) {
@@ -150,7 +160,7 @@ func TestProbeURL_FailsClosedWhenTheLimiterIsUnavailable(t *testing.T) {
 	_, err = ti.service.ProbeURL(ctx, &gen.ProbeURLPayload{
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, URL: "https://" + blockedTestHost + "/mcp",
 	})
-	requireOopsCode(t, err, oops.CodeUnexpected)
+	requireOopsCode(t, err, oops.CodeUnavailable)
 }
 
 func TestVerifyURL_CompatibilityInvalidMCPResponse(t *testing.T) {

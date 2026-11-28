@@ -95,12 +95,13 @@ func TestCanonicalEmail(t *testing.T) {
 		want  string
 	}{
 		{name: "lowercases and trims", email: "  Person@Example.COM ", want: "person@example.com"},
-		{name: "drops a plus tag", email: "person+trial2@example.com", want: "person@example.com"},
+		{name: "drops a plus tag on a provider that folds it", email: "person+trial2@outlook.com", want: "person@outlook.com"},
+		{name: "keeps a plus tag on other domains", email: "person+trial2@example.com", want: "person+trial2@example.com"},
 		{name: "keeps dots outside gmail", email: "first.last@example.com", want: "first.last@example.com"},
 		{name: "drops gmail dots", email: "f.i.r.s.t.last@gmail.com", want: "firstlast@gmail.com"},
 		{name: "drops gmail dots and plus tag", email: "First.Last+x@Gmail.com", want: "firstlast@gmail.com"},
 		{name: "folds googlemail into gmail", email: "first.last@googlemail.com", want: "firstlast@gmail.com"},
-		{name: "keeps a local part that is only a plus tag", email: "+tag@example.com", want: "+tag@example.com"},
+		{name: "keeps a local part that is only a plus tag", email: "+tag@gmail.com", want: "+tag@gmail.com"},
 		{name: "keeps a gmail local part that is only dots", email: "..@gmail.com", want: "..@gmail.com"},
 		{name: "leaves text without a domain", email: "not-an-email", want: "not-an-email"},
 		{name: "leaves a missing local part", email: "@example.com", want: "@example.com"},
@@ -124,13 +125,14 @@ func TestBlockedEmailMatchesAliasesOfABlockedMailbox(t *testing.T) {
 	users := usersrepo.New(conn)
 	for id, email := range map[string]string{
 		"blocked-gmail":   "first.last+one@gmail.com",
+		"blocked-outlook": "person+trial@outlook.com",
 		"blocked-company": "person+trial@example.com",
 		"active-user":     "someone@example.com",
 	} {
 		_, err := users.UpsertUser(ctx, usersrepo.UpsertUserParams{ID: id, Email: email, DisplayName: id, PhotoUrl: conv.ToPGTextEmpty(""), Admin: false})
 		require.NoError(t, err)
 	}
-	for _, id := range []string{"blocked-gmail", "blocked-company"} {
+	for _, id := range []string{"blocked-gmail", "blocked-outlook", "blocked-company"} {
 		require.NoError(t, users.SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{Blacklisted: true, ID: id}))
 	}
 	userblock.Forget(conn)
@@ -145,8 +147,11 @@ func TestBlockedEmailMatchesAliasesOfABlockedMailbox(t *testing.T) {
 		{name: "gmail without dots", email: "firstlast@gmail.com", blocked: true},
 		{name: "gmail with another plus tag", email: "firstlast+two@gmail.com", blocked: true},
 		{name: "googlemail spelling", email: "First.Last@googlemail.com", blocked: true},
-		{name: "company address without the tag", email: "person@example.com", blocked: true},
-		{name: "company address with another tag", email: "person+other@example.com", blocked: true},
+		{name: "outlook address without the tag", email: "person@outlook.com", blocked: true},
+		{name: "outlook address with another tag", email: "Person+other@outlook.com", blocked: true},
+		{name: "the blocked company address", email: "Person+Trial@example.com", blocked: true},
+		{name: "company address without the tag is another mailbox", email: "person@example.com", blocked: false},
+		{name: "company address with another tag is another mailbox", email: "person+other@example.com", blocked: false},
 		{name: "dots still matter outside gmail", email: "per.son@example.com", blocked: false},
 		{name: "another gmail mailbox", email: "firstlast2@gmail.com", blocked: false},
 		{name: "an active user", email: "someone@example.com", blocked: false},

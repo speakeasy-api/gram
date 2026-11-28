@@ -133,12 +133,30 @@ const (
 	googlemailDomain = "googlemail.com"
 )
 
+// plusTagDomains are the consumer mail providers that document plus
+// addressing: mail for "name+tag" is delivered to "name". The fold is limited
+// to them because on any other domain "name+tag" can be a mailbox of its own,
+// and folding it would refuse a different person.
+var plusTagDomains = map[string]struct{}{
+	gmailDomain:      {},
+	"outlook.com":    {},
+	"hotmail.com":    {},
+	"live.com":       {},
+	"icloud.com":     {},
+	"me.com":         {},
+	"proton.me":      {},
+	"protonmail.com": {},
+	"fastmail.com":   {},
+}
+
 // CanonicalEmail returns the form of email that block checks compare, so one
 // mailbox cannot pass as a new person under another spelling. It lowercases
-// the address and drops a plus-tag from the local part ("a+x@corp.com" is
-// "a@corp.com"). For Gmail it also drops dots in the local part and treats
-// googlemail.com as gmail.com, since Gmail delivers all of those to one inbox.
-// An address without a local part and a domain is only trimmed and lowercased.
+// the address. On the providers in plusTagDomains it drops a plus-tag from
+// the local part ("a+x@gmail.com" is "a@gmail.com"). For Gmail it also drops
+// dots in the local part and treats googlemail.com as gmail.com, since Gmail
+// delivers all of those to one inbox. Other domains keep their local part,
+// and an address without a local part and a domain is only trimmed and
+// lowercased.
 func CanonicalEmail(email string) string {
 	email = strings.ToLower(strings.TrimSpace(email))
 	at := strings.LastIndex(email, "@")
@@ -147,11 +165,13 @@ func CanonicalEmail(email string) string {
 	}
 
 	local, domain := email[:at], email[at+1:]
-	if tagged, _, ok := strings.Cut(local, "+"); ok && tagged != "" {
-		local = tagged
-	}
 	if domain == googlemailDomain {
 		domain = gmailDomain
+	}
+	if _, folds := plusTagDomains[domain]; folds {
+		if untagged, _, ok := strings.Cut(local, "+"); ok && untagged != "" {
+			local = untagged
+		}
 	}
 	if domain == gmailDomain {
 		if undotted := strings.ReplaceAll(local, ".", ""); undotted != "" {

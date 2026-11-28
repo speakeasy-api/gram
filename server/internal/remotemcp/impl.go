@@ -132,7 +132,7 @@ func (s *Service) allowProbe(ctx context.Context, logger *slog.Logger, organizat
 
 	result, err := s.probeLimiter.Allow(ctx, organizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "URL checks are unavailable right now; retry shortly").LogError(ctx, logger)
+		return oops.E(oops.CodeUnavailable, err, "URL checks are unavailable right now; retry shortly").LogError(ctx, logger)
 	}
 	if !result.Allowed {
 		return oops.E(oops.CodeRateLimitExceeded, nil, "too many URL checks were run just now; retry shortly").LogWarn(ctx, logger)
