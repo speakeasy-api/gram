@@ -18,7 +18,7 @@ import (
 )
 
 func uploadTestClient(transport roundTripFunc) *Client {
-	return &Client{httpClient: &http.Client{Transport: transport}, tokens: map[int64]cachedToken{1: {token: "test-token", expiresAt: time.Now().Add(time.Hour)}}}
+	return &Client{httpClient: &http.Client{Transport: transport}, tokens: map[installationTokenKey]cachedToken{{installationID: 1, repositoryID: 0}: {token: "test-token", expiresAt: time.Now().Add(time.Hour)}}}
 }
 
 func TestPushFiles_TimeoutFallbackUploadsAllContentAsBlobs(t *testing.T) {

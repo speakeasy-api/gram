@@ -40,7 +40,7 @@ Or with collaborators:
 
 3. **Generate files.** `GeneratePluginPackages()` builds a `map[string][]byte` with all platform configs, marketplace manifests, README, and hook scripts. See [Package Format](./package-format.md) for the exact file tree.
 
-4. **Push to GitHub.** The server calls `CreateRepo()` (no-op if repo exists) then `PushFiles()` with a single commit. The repo name is `<project-slug>-plugins` under the configured org.
+4. **Push to GitHub.** On first publish, Speakeasy requests a new private repository named `<org-slug>-<project-slug>-plugins`. If GitHub reports that the name is taken, Speakeasy tries a name with the project UUID appended. It records the repository ID from the successful creation and pushes a single commit with a token restricted to that ID. Later publishes use the saved binding; changing a project slug does not move the repository.
 
 5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated. The token is never stored in plaintext. `plugin_github_connections` stores its SHA-256 hash (`marketplace_token_hash`), which the marketplace proxy looks it up by, and a sealed copy, which the server opens to show the install URL again (see `server/internal/plugins/marketplacetokens`). This token becomes part of the marketplace proxy URL served by Speakeasy:
 
@@ -54,6 +54,17 @@ Or with collaborators:
 
 > **Keys are minted before the GitHub push.** If the push fails, the keys are discarded and not persisted to the database. On retry the flow starts over.
 
+## Migrating existing repositories in the staff admin app
+
+A legacy publishing connection identifies a repository by name only. To keep serving the same repository, use **Plugin repository migrations** in the staff admin app. Binding the original repository does not move it or change the customer's install URL.
+
+1. Match the project to the immutable GitHub repository ID using independent historical records. For example, correlate the project's original publish with the GitHub App's repository creation event. A current name match or a screenshot of today's repository is not evidence of that link.
+2. Enter or import the project ID, GitHub repository ID **as a string**, and a reference to the historical evidence. Preview the batch. The live check confirms that the supplied ID still points to the expected private repository; staff are responsible for verifying the historical link.
+3. Apply the verified rows and check the outcome for each project. An existing binding cannot be redirected to another repository through this workflow.
+4. When the original identity cannot be established, leave the connection unbound or provision a **new** private repository for that project. An unbound connection cannot publish or serve marketplace installations. This does not recover the old contents, transfer GitHub collaborators, or update direct GitHub install URLs. Publish packages to the replacement before directing users to it.
+
+If GitHub creates a repository but the request fails before the binding is saved, an unused private repository may remain. Before retrying recovery, refresh the migration inventory and check for a binding. If the project is still unbound, a retry provisions a new repository. Use the GitHub organization’s creation audit records to identify any unused repository for manual review; a repository name alone is not proof that it is safe to reuse or remove.
+
 ## GitHub App topology
 
 | Environment | GitHub App          | Org                 | Secrets location                                           |
@@ -62,7 +73,7 @@ Or with collaborators:
 | test        | Non-prod app (same) | Non-prod org (same) | Non-prod GCP Secret Manager (`test_gram_plugins_github_*`) |
 | prod        | Prod app            | Prod org            | Prod GCP Secret Manager (`prod_gram_plugins_github_*`)     |
 
-Dev and test share one GitHub App and one org. This means plugin repos published from dev and test land in the same org — no namespace collision risk because project slugs are globally unique across environments.
+Dev and test share one GitHub App and one org. Repository names can collide within that namespace; a matching name does not identify the owning project.
 
 ## Marketplace proxy
 

@@ -23,8 +23,8 @@ type Upstream struct {
 var ErrNotFound = errors.New("upstream not found for token")
 
 // Resolver maps an opaque URL token to the upstream repo it fronts. The
-// production impl is DBResolver (queries plugin_github_connections and mints
-// an installation token via the GitHub App broker).
+// production implementation is DBResolver, which checks a stored repository
+// binding and resolves a repository-scoped GitHub credential.
 type Resolver interface {
 	Resolve(ctx context.Context, token string) (Upstream, error)
 }

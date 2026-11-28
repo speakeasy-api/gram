@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,6 +51,12 @@ import (
 // simulate GitHub-side failures.
 type mockGitHubPublisher struct {
 	createRepoCalled        bool
+	createRepoNames         []string
+	createRepoErrors        []error
+	scopedRepoID            int64
+	scopedRepoName          string
+	pushedRepoName          string
+	collaboratorRepoName    string
 	pushFilesCalled         bool
 	addCollaboratorCalled   bool
 	getRepoFilesCalled      bool
@@ -105,13 +112,33 @@ func distributeTestSkill(t *testing.T, ctx context.Context, ti *testInstance, pl
 	require.NoError(t, err)
 }
 
-func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
+var mockGitHubRepositoryIDs atomic.Int64
+
+func (m *mockGitHubPublisher) CreatePrivateRepository(_ context.Context, _ int64, _, name string) (int64, error) {
 	m.createRepoCalled = true
-	return m.createRepoErr
+	m.createRepoNames = append(m.createRepoNames, name)
+	if len(m.createRepoErrors) > 0 {
+		err := m.createRepoErrors[0]
+		m.createRepoErrors = m.createRepoErrors[1:]
+		if err != nil {
+			return 0, err
+		}
+	}
+	if m.createRepoErr != nil {
+		return 0, m.createRepoErr
+	}
+	return mockGitHubRepositoryIDs.Add(1), nil
 }
 
-func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ string, files map[string][]byte) (string, error) {
+func (m *mockGitHubPublisher) ForRepository(_ context.Context, _, id int64, _, name string) (plugins.GitHubRepository, error) {
+	m.scopedRepoID = id
+	m.scopedRepoName = name
+	return m, nil
+}
+
+func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, repoName, _, _ string, files map[string][]byte) (string, error) {
 	m.pushFilesCalled = true
+	m.pushedRepoName = repoName
 	m.lastPushedFiles = files
 	if m.pushFilesErr != nil {
 		return "", m.pushFilesErr
@@ -119,8 +146,9 @@ func (m *mockGitHubPublisher) PushFiles(_ context.Context, _ int64, _, _, _, _ s
 	return "abc123", nil
 }
 
-func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, _, username, permission string) error {
+func (m *mockGitHubPublisher) AddCollaborator(_ context.Context, _ int64, _, repoName, username, permission string) error {
 	m.addCollaboratorCalled = true
+	m.collaboratorRepoName = repoName
 	m.collaborators = append(m.collaborators, username)
 	m.collaboratorPermissions = append(m.collaboratorPermissions, permission)
 	return nil
@@ -1533,7 +1561,11 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 
 	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.Contains(t, result.RepoURL, "test-org")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	name := strings.ToLower(authCtx.OrganizationSlug + "-" + *authCtx.ProjectSlug + "-plugins")
+	require.Equal(t, "https://github.com/test-org/"+name, result.RepoURL)
+	require.Equal(t, []string{name}, mock.createRepoNames)
 	require.True(t, mock.createRepoCalled)
 	require.True(t, mock.pushFilesCalled)
 	require.NotEmpty(t, mock.lastPushedFiles)
@@ -1626,14 +1658,9 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 			"MCPURL points straight at the vendor, so any header here leaks a Speakeasy credential to a third party")
 }
 
-// Reproduces the plugin_github_connections_installation_repo_key conflict:
-// project A publishes, gets soft-deleted (freeing its slug under the
-// partial projects_organization_id_slug_key index), and project B reuses
-// that slug — so both compute the identical repo_owner/repo_name. Since
-// soft-deletes never clean up plugin_github_connections, A's row is still
-// there when B tries to upsert its own. Publishing as B must succeed by
-// reclaiming A's stale row in band, not surface ErrGitHubRepoConflict.
-func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject(t *testing.T) {
+// A new project reusing a deleted project's slug must not take over its
+// GitHub repository, even though the database allows reuse of the slug.
+func TestPluginsService_PublishPlugins_SuffixesRepositoryFromDeletedProject(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1688,13 +1715,24 @@ func TestPluginsService_PublishPlugins_ReclaimsStaleConnectionFromDeletedProject
 	})
 	require.NoError(t, err)
 
-	result, err := ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	mock.createRepoErrors = []error{ghclient.ErrRepositoryNameTaken}
+	mock.pushFilesCalled = false
+	mock.createRepoNames = nil
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.Contains(t, result.RepoURL, sharedSlug)
+	require.True(t, mock.pushFilesCalled)
+	require.Len(t, mock.createRepoNames, 2)
+	require.True(t, strings.HasSuffix(mock.pushedRepoName, "-"+projectB.ID.String()))
 
-	conn, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
+	queries := pluginsrepo.New(ti.conn)
+	old, err := queries.GetPluginRepositoryBinding(ctx, projectAID)
 	require.NoError(t, err)
-	require.Equal(t, projectB.ID, conn.ProjectID)
+	require.Equal(t, uuid.NullUUID{UUID: projectAID, Valid: true}, old.ProjectID)
+	require.Equal(t, old.RepoName, mock.createRepoNames[0])
+	current, err := queries.GetPluginRepositoryBinding(ctx, projectB.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, old.RepositoryID, current.RepositoryID)
+	require.Equal(t, mock.pushedRepoName, current.RepoName)
 }
 
 // TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject pins the audience

@@ -726,3 +726,18 @@ func RunOrganizationEncryptionAdminPath() string {
 func FinalizeOrganizationEncryptionAdminPath() string {
 	return "/admin/organizationEncryption.finalize"
 }
+
+// ListPluginRepositoryMigrationsAdminPath returns the URL path to the admin service listPluginRepositoryMigrations HTTP endpoint.
+func ListPluginRepositoryMigrationsAdminPath() string {
+	return "/admin/plugin-repository-migrations"
+}
+
+// ApplyPluginRepositoryMigrationsAdminPath returns the URL path to the admin service applyPluginRepositoryMigrations HTTP endpoint.
+func ApplyPluginRepositoryMigrationsAdminPath() string {
+	return "/admin/plugin-repository-migrations/apply"
+}
+
+// ReprovisionPluginRepositoryAdminPath returns the URL path to the admin service reprovisionPluginRepository HTTP endpoint.
+func ReprovisionPluginRepositoryAdminPath() string {
+	return "/admin/plugin-repository-migrations/reprovision"
+}

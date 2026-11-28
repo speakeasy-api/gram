@@ -47,6 +47,9 @@ import {
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
 import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
+import { adminListPluginRepositoryMigrations } from "@gram/admin-client/funcs/adminListPluginRepositoryMigrations";
+import type { AdminPluginRepositoryMigrationList } from "@gram/admin-client/models/components/adminpluginrepositorymigrationlist";
+import { unwrapAsync } from "@gram/admin-client/types/fp";
 import { redirecting, redirectingClient } from "@/lib/adminSdkClient";
 
 // What queryOptions infers, named so the exports can carry the return type that
@@ -485,4 +488,23 @@ export function assistantMigrationOrganizationsQuery(): AdminQuery<
     queryKey: ["admin", "assistant-migration-organizations"] as const,
     queryFn: listAssistantMigrationOrganizations,
   });
+}
+
+export const pluginRepositoryMigrationInventoryKey = [
+  "plugin-repository-migrations",
+] as const;
+
+export function listPluginRepositoryMigrations(
+  after?: string,
+  signal?: AbortSignal,
+): Promise<AdminPluginRepositoryMigrationList> {
+  return redirecting(
+    unwrapAsync(
+      adminListPluginRepositoryMigrations(
+        redirectingClient(),
+        { after },
+        { signal },
+      ),
+    ),
+  );
 }

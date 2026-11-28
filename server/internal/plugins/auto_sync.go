@@ -210,7 +210,11 @@ func (s *Service) holdPendingPlugins(
 		return pausedPluginPlan{}, oops.E(oops.CodeUnavailable, nil, "github publishing is not configured").LogError(ctx, s.logger)
 	}
 	owners := ownersOfPlugins(live)
-	existing, err := s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", func(filePath string) bool {
+	client, err := s.projectRepository(ctx, projectID, repoOwner, repoName)
+	if err != nil {
+		return pausedPluginPlan{}, fmt.Errorf("verify repository for held plugins: %w", err)
+	}
+	existing, err := client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", func(filePath string) bool {
 		owner, ok := owners.ownerOf(filePath)
 		_, held := pending[owner]
 		return ok && held && (!entriesOnly || slices.Contains(heldEntryPaths(owner), filePath))

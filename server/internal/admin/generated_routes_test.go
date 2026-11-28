@@ -62,6 +62,9 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"ListOrganizationAssistants":                 "GET /admin/organization.assistants",
 		"MigrateOrganizationAssistantIdentities":     "POST /admin/organization.migrateAssistantIdentities",
 		"MigrateOrganizationAssistantsToKit":         "POST /admin/organization.migrateAssistantsToKit",
+		"ListPluginRepositoryMigrations":             "GET /admin/plugin-repository-migrations",
+		"ApplyPluginRepositoryMigrations":            "POST /admin/plugin-repository-migrations/apply",
+		"ReprovisionPluginRepository":                "POST /admin/plugin-repository-migrations/reprovision",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {

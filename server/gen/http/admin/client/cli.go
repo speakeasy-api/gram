@@ -4733,3 +4733,117 @@ func BuildFinalizeOrganizationEncryptionPayload(adminFinalizeOrganizationEncrypt
 
 	return v, nil
 }
+
+// BuildListPluginRepositoryMigrationsPayload builds the payload for the admin
+// listPluginRepositoryMigrations endpoint from CLI flags.
+func BuildListPluginRepositoryMigrationsPayload(adminListPluginRepositoryMigrationsAfter string, adminListPluginRepositoryMigrationsAdminSessionToken string) (*admin.ListPluginRepositoryMigrationsPayload, error) {
+	var err error
+	var after *string
+	{
+		if adminListPluginRepositoryMigrationsAfter != "" {
+			after = &adminListPluginRepositoryMigrationsAfter
+			err = goa.MergeErrors(err, goa.ValidateFormat("after", *after, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListPluginRepositoryMigrationsAdminSessionToken != "" {
+			adminSessionToken = &adminListPluginRepositoryMigrationsAdminSessionToken
+		}
+	}
+	v := &admin.ListPluginRepositoryMigrationsPayload{}
+	v.After = after
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildApplyPluginRepositoryMigrationsPayload builds the payload for the admin
+// applyPluginRepositoryMigrations endpoint from CLI flags.
+func BuildApplyPluginRepositoryMigrationsPayload(adminApplyPluginRepositoryMigrationsBody string, adminApplyPluginRepositoryMigrationsAdminSessionToken string) (*admin.ApplyPluginRepositoryMigrationsPayload, error) {
+	var err error
+	var body ApplyPluginRepositoryMigrationsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminApplyPluginRepositoryMigrationsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }'")
+		}
+		if body.Entries == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+		}
+		if len(body.Entries) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 1, true))
+		}
+		if len(body.Entries) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.entries", body.Entries, len(body.Entries), 50, false))
+		}
+		for _, e := range body.Entries {
+			if e != nil {
+				if err2 := ValidateAdminPluginRepositoryMigrationEntryRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminApplyPluginRepositoryMigrationsAdminSessionToken != "" {
+			adminSessionToken = &adminApplyPluginRepositoryMigrationsAdminSessionToken
+		}
+	}
+	v := &admin.ApplyPluginRepositoryMigrationsPayload{
+		DryRun: body.DryRun,
+	}
+	if body.Entries != nil {
+		v.Entries = make([]*admin.AdminPluginRepositoryMigrationEntry, len(body.Entries))
+		for i, val := range body.Entries {
+			if val == nil {
+				v.Entries[i] = nil
+				continue
+			}
+			v.Entries[i] = marshalAdminPluginRepositoryMigrationEntryRequestBodyToAdminAdminPluginRepositoryMigrationEntry(val)
+		}
+	} else {
+		v.Entries = []*admin.AdminPluginRepositoryMigrationEntry{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildReprovisionPluginRepositoryPayload builds the payload for the admin
+// reprovisionPluginRepository endpoint from CLI flags.
+func BuildReprovisionPluginRepositoryPayload(adminReprovisionPluginRepositoryBody string, adminReprovisionPluginRepositoryAdminSessionToken string) (*admin.ReprovisionPluginRepositoryPayload, error) {
+	var err error
+	var body ReprovisionPluginRepositoryRequestBody
+	{
+		err = json.Unmarshal([]byte(adminReprovisionPluginRepositoryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"\\u0001\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.reason", body.Reason, "\\S"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminReprovisionPluginRepositoryAdminSessionToken != "" {
+			adminSessionToken = &adminReprovisionPluginRepositoryAdminSessionToken
+		}
+	}
+	v := &admin.ReprovisionPluginRepositoryPayload{
+		ProjectID: body.ProjectID,
+		Reason:    body.Reason,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -50,12 +52,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -347,6 +351,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, customDomainTargetSuffixFlag())
 	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, staffFlags()...)
+	flags = append(flags, pluginsFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -548,6 +553,37 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
+			var pluginGitHubClient *ghclient.Client
+			if appID, key := c.Int64("plugins-github-app-id"), c.String("plugins-github-private-key"); appID != 0 || key != "" {
+				if appID <= 0 || key == "" {
+					return errors.New("plugin GitHub recovery requires both plugins-github-app-id and plugins-github-private-key")
+				}
+				pluginGitHubClient, err = ghclient.NewClient(appID, []byte(key), guardianPolicy.Client(), tracerProvider)
+				if err != nil {
+					return fmt.Errorf("create plugin GitHub app client: %w", err)
+				}
+			}
+			pluginGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
+				Client:         pluginGitHubClient,
+				Org:            c.String("plugins-github-org"),
+				InstallationID: c.Int64("plugins-github-installation-id"),
+			})
+			if err != nil {
+				return fmt.Errorf("configure plugin GitHub recovery: %w", err)
+			}
+			if serviceEnv == "local" && pluginGitHub == nil {
+				assetsURI := c.String("assets-uri")
+				if strings.TrimSpace(assetsURI) == "" {
+					return errors.New("local plugin repository recovery requires assets-uri")
+				}
+				publisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(assetsURI, "local-plugin-marketplaces"))
+				if err != nil {
+					return fmt.Errorf("create local plugin publisher: %w", err)
+				}
+				pluginGitHub = &plugins.GitHubConfig{Client: publisher, Org: "local-fixture", InstallationID: 1}
+			}
+			adminService.SetPluginRepositoryGitHub(pluginGitHub)
+
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {

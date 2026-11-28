@@ -1835,3 +1835,60 @@ SELECT (
     + (SELECT count(*) FROM mcp_server_auth_clients msac
        WHERE msac.mcp_server_id = @mcp_server_id AND msac.project_id = @project_id AND msac.deleted IS FALSE)
 )::bigint AS ref_count;
+
+-- name: AdminListPluginRepositoryMigrations :many
+WITH candidates AS (
+  SELECT c.project_id, c.repo_owner, c.repo_name, b.project_id IS NOT NULL AS bound
+  FROM plugin_github_connections c
+  LEFT JOIN plugin_repository_bindings b USING (project_id)
+  WHERE c.project_id > @after_project_id::uuid
+  UNION ALL
+  SELECT b.project_id, b.repo_owner, b.repo_name, true AS bound
+  FROM plugin_repository_bindings b
+  WHERE b.project_id > @after_project_id::uuid
+    AND NOT EXISTS (SELECT 1 FROM plugin_github_connections c WHERE c.project_id = b.project_id)
+)
+SELECT p.id AS project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
+FROM candidates c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+ORDER BY c.project_id
+LIMIT @page_size;
+
+-- name: AdminGetPluginRepositoryMigration :one
+SELECT p.organization_id, c.installation_id, c.repo_owner, c.repo_name
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = @project_id;
+
+-- name: AdminLockPluginRepositoryMigrationConnection :one
+-- Verify that the destination attested against GitHub is still current and lock it until commit.
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = @project_id
+  AND c.installation_id = @installation_id
+  AND c.repo_owner = @repo_owner
+  AND c.repo_name = @repo_name
+FOR UPDATE OF c, p;
+
+-- name: AdminFindPluginRepositoryID :one
+SELECT repository_id
+FROM plugin_repository_bindings
+WHERE repository_id = @repository_id;
+
+-- name: AdminReprovisionPluginRepository :execrows
+-- The install URL and encrypted credential columns stay untouched. Preserve
+-- only the frozen marketplace identity, not the prior publication state.
+UPDATE plugin_github_connections
+SET installation_id = @installation_id,
+    repo_owner = @repo_owner,
+    repo_name = @repo_name,
+    published_fingerprint = NULL,
+    published_mcp_fingerprints = NULL,
+    published_hooks_version = NULL,
+    published_hooks_config = CASE
+      WHEN published_hooks_config ->> 'published_marketplace_name' <> ''
+      THEN jsonb_build_object('published_marketplace_name', published_hooks_config ->> 'published_marketplace_name')
+      ELSE NULL
+    END
+WHERE project_id = @project_id;

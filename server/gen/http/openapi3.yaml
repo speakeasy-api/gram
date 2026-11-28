@@ -7339,6 +7339,264 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: listPlatformMcpFeedback
+    /admin/plugin-repository-migrations:
+        get:
+            description: Lists plugin repositories and reports whether each is bound to a trusted GitHub repository ID.
+            operationId: adminListPluginRepositoryMigrations
+            parameters:
+                - allowEmptyValue: true
+                  description: Continue after this project ID.
+                  in: query
+                  name: after
+                  schema:
+                    description: Continue after this project ID.
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminPluginRepositoryMigrationList'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listPluginRepositoryMigrations admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listPluginRepositoryMigrations
+            x-speakeasy-react-hook:
+                name: AdminListPluginRepositoryMigrations
+    /admin/plugin-repository-migrations/apply:
+        post:
+            description: Verifies historical repository bindings and, unless dry_run is true, records them for the specified projects.
+            operationId: adminApplyPluginRepositoryMigrations
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ApplyPluginRepositoryMigrationsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminPluginRepositoryMigrationApplyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: applyPluginRepositoryMigrations admin
+            tags:
+                - admin
+            x-speakeasy-name-override: applyPluginRepositoryMigrations
+            x-speakeasy-react-hook:
+                name: AdminApplyPluginRepositoryMigrations
+    /admin/plugin-repository-migrations/reprovision:
+        post:
+            description: Reprovisions the plugin repository for one project as a separate recovery operation.
+            operationId: adminReprovisionPluginRepository
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReprovisionPluginRepositoryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminPluginRepositoryReprovisionResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: reprovisionPluginRepository admin
+            tags:
+                - admin
+            x-speakeasy-name-override: reprovisionPluginRepository
+            x-speakeasy-react-hook:
+                name: AdminReprovisionPluginRepository
     /admin/project.get:
         get:
             tags:
@@ -106338,6 +106596,109 @@ components:
                 - delivery_state
                 - created_at
                 - expires_at
+        AdminPluginRepositoryMigration:
+            type: object
+            properties:
+                bound:
+                    type: boolean
+                    description: Whether the project has a trusted repository ID binding.
+                organization_id:
+                    type: string
+                    description: Organization that owns the project.
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                repo_name:
+                    type: string
+                    description: Stored GitHub repository name.
+                repo_owner:
+                    type: string
+                    description: Stored GitHub repository owner.
+            required:
+                - project_id
+                - organization_id
+                - repo_owner
+                - repo_name
+                - bound
+        AdminPluginRepositoryMigrationApplyResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminPluginRepositoryMigrationOutcome'
+                    description: Outcome for each entry, in request order.
+            required:
+                - items
+        AdminPluginRepositoryMigrationEntry:
+            type: object
+            properties:
+                evidence:
+                    type: string
+                    description: Reference to trusted historical evidence that identifies this repository for the project.
+                    pattern: \S
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                repository_id:
+                    type: string
+                    description: The historically verified GitHub repository ID as a decimal string.
+                    pattern: ^[0-9]+$
+            required:
+                - project_id
+                - repository_id
+                - evidence
+        AdminPluginRepositoryMigrationList:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminPluginRepositoryMigration'
+                    description: Projects with a plugin repository, ordered by project ID.
+                next_cursor:
+                    type: string
+                    description: Pass as after for the next page; absent on the last page.
+                    format: uuid
+            required:
+                - items
+        AdminPluginRepositoryMigrationOutcome:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Details of the outcome.
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                status:
+                    type: string
+                    description: Outcome of verifying or applying the binding.
+                    enum:
+                        - verified
+                        - bound
+                        - already_bound
+                        - conflict
+                        - unavailable
+            required:
+                - project_id
+                - status
+                - message
+        AdminPluginRepositoryReprovisionResult:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Details of the outcome.
+                status:
+                    type: string
+                    description: Reprovisioning outcome.
+            required:
+                - status
+                - message
         AdminProject:
             type: object
             properties:
@@ -109659,6 +110020,22 @@ components:
                     type: string
                     description: Principal URN of an existing role.
             description: 'One role in an item''s role set: an existing role by principal URN, or a new role by name. Set exactly one.'
+        ApplyPluginRepositoryMigrationsRequestBody:
+            type: object
+            properties:
+                dry_run:
+                    type: boolean
+                    description: Verify bindings without recording them.
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminPluginRepositoryMigrationEntry'
+                    description: Repository bindings to verify or apply.
+                    minItems: 1
+                    maxItems: 50
+            required:
+                - entries
+                - dry_run
         ApprovalDecision:
             type: object
             properties:
@@ -133968,6 +134345,20 @@ components:
             required:
                 - stored
                 - received_at
+        ReprovisionPluginRepositoryRequestBody:
+            type: object
+            properties:
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                reason:
+                    type: string
+                    description: Staff reason for reprovisioning.
+                    pattern: \S
+            required:
+                - project_id
+                - reason
         RequestAccessForm:
             type: object
             properties:

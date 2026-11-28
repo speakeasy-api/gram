@@ -2,9 +2,20 @@ package marketplace_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,6 +31,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
 var infra *testenv.Environment
@@ -142,4 +154,89 @@ func TestDBResolverRejectsAnUnknownToken(t *testing.T) {
 	// does not resolve.
 	_, err = marketplace.NewLocalDBResolver(testenv.NewLogger(t), conn).Resolve(t.Context(), marketplacetokens.Hash(token))
 	require.ErrorIs(t, err, marketplace.ErrNotFound)
+}
+
+type githubTransport func(*http.Request) (*http.Response, error)
+
+func (f githubTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestMarketplaceProxyRequiresVerifiedRepositoryBinding(t *testing.T) {
+	t.Parallel()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privateKey := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+
+	for _, tt := range []struct {
+		name               string
+		installBinding     int64
+		githubRepositoryID int64
+		wantStatus         int
+		wantRequests       []string
+	}{
+		{"missing binding", 0, 0, http.StatusNotFound, nil},
+		{"mismatched installation", 2, 0, http.StatusNotFound, nil},
+		{"replacement repository", 1, 99, http.StatusInternalServerError, []string{"mint", "verify"}},
+		{"verified binding", 1, 42, http.StatusOK, []string{"mint", "verify", "download"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db, _, projectID := newConnection(t)
+			queries := pluginsrepo.New(db)
+			conn, err := queries.GetGitHubConnection(t.Context(), projectID)
+			require.NoError(t, err)
+			token, err := marketplacetokens.Mint()
+			require.NoError(t, err)
+			marketplacetokenstest.Plant(t, db, projectID, token)
+			if tt.installBinding != 0 {
+				require.NoError(t, queries.InsertPluginRepositoryBinding(t.Context(), pluginsrepo.InsertPluginRepositoryBindingParams{
+					ProjectID: projectID, RepositoryID: 42, InstallationID: tt.installBinding,
+					RepoOwner: conn.RepoOwner, RepoName: conn.RepoName,
+				}))
+			}
+
+			var requests []string
+			httpClient := &http.Client{Transport: githubTransport(func(req *http.Request) (*http.Response, error) {
+				var status int
+				var body string
+				switch req.URL.Host + req.URL.Path {
+				case "api.github.com/app/installations/1/access_tokens":
+					requests = append(requests, "mint")
+					payload, err := io.ReadAll(req.Body)
+					require.NoError(t, err)
+					require.JSONEq(t, `{"repository_ids":[42]}`, string(payload))
+					status = http.StatusCreated
+					body = fmt.Sprintf(`{"token":"scoped-token","expires_at":%q}`, time.Now().Add(time.Hour).Format(time.RFC3339))
+				case "api.github.com/repos/" + conn.RepoOwner + "/" + conn.RepoName:
+					requests = append(requests, "verify")
+					require.Equal(t, "token scoped-token", req.Header.Get("Authorization"))
+					status = http.StatusOK
+					payload, err := json.Marshal(map[string]any{"id": tt.githubRepositoryID, "full_name": conn.RepoOwner + "/" + conn.RepoName, "private": true, "visibility": "private"})
+					require.NoError(t, err)
+					body = string(payload)
+				case "github.com/" + conn.RepoOwner + "/" + conn.RepoName + ".git/info/refs":
+					requests = append(requests, "download")
+					user, password, ok := req.BasicAuth()
+					require.True(t, ok)
+					require.Equal(t, "x-access-token", user)
+					require.Equal(t, "scoped-token", password)
+					status = http.StatusOK
+					body = "git refs"
+				default:
+					t.Fatalf("unexpected outbound request: %s %s", req.Method, req.URL)
+				}
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})}
+			github, err := ghclient.NewClient(1, privateKey, httpClient, testenv.NewTracerProvider(t))
+			require.NoError(t, err)
+			logger := testenv.NewLogger(t)
+			server := marketplace.NewServer(marketplace.NewDBResolver(logger, db, github), httpClient, logger)
+			rec := httptest.NewRecorder()
+			server.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet,
+				marketplace.RoutePrefix+token+".git/info/refs?service=git-upload-pack", nil))
+			require.Equal(t, tt.wantStatus, rec.Code)
+			require.Equal(t, tt.wantRequests, requests)
+		})
+	}
 }

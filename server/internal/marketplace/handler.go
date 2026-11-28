@@ -28,7 +28,7 @@ const RoutePrefix = "/marketplace/"
 const maxUploadPackRequestBytes = 1 << 20
 
 // Server hosts the git Smart HTTP proxy for plugin source clones. Streams
-// directly from GitHub against an installation token minted by the resolver —
+// directly from GitHub with a repository-scoped token from the resolver —
 // no local mirror state.
 type Server struct {
 	resolver   Resolver
@@ -41,9 +41,15 @@ func NewServer(
 	httpClient *guardian.HTTPClient,
 	logger *slog.Logger,
 ) *Server {
+	client := *httpClient
+	// GitHub can redirect renamed repositories. Only the verified owner/name
+	// may serve the request, even if a redirect stays on github.com.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	return &Server{
 		resolver:   resolver,
-		httpClient: httpClient,
+		httpClient: &client,
 		logger:     logger,
 	}
 }
@@ -200,6 +206,11 @@ func (s *Server) proxyToGitHub(
 		return
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		s.logger.WarnContext(ctx, "upstream redirect refused", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
+		http.Error(w, "unexpected upstream redirect", http.StatusBadGateway)
+		return
+	}
 
 	// Mirror the response shape the git client expects. We pass through
 	// Content-Type (carries the application/x-git-* media type), Cache-Control,

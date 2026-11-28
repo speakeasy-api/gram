@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -31,6 +32,15 @@ const apiBase = "https://api.github.com"
 // requested branch does not exist yet, so callers can treat a never-published
 // project as a first publish rather than an error.
 var ErrRepoNotFound = errors.New("github repo or branch not found")
+
+// ErrRepositoryConflict indicates that a repository name is already taken or
+// no longer identifies the expected private repository.
+var ErrRepositoryConflict = errors.New("github repository conflict")
+
+// ErrRepositoryNameTaken is the specific conflict GitHub reports when a
+// requested name is already in use. Other conflicts must not trigger a retry
+// under a different name.
+var ErrRepositoryNameTaken = fmt.Errorf("%w: name already exists", ErrRepositoryConflict)
 
 // ErrFileNotFound is returned by GetFileContent when the repository, branch,
 // or file path does not exist, so callers can treat an absent file as a
@@ -49,6 +59,10 @@ const maxErrBodyLen = 256
 
 func truncatedBody(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
+	return truncateErrorBody(body)
+}
+
+func truncateErrorBody(body []byte) string {
 	s := string(body)
 	if len(s) > maxErrBodyLen {
 		s = s[:maxErrBodyLen] + "..."
@@ -56,24 +70,21 @@ func truncatedBody(resp *http.Response) string {
 	return s
 }
 
-// CreateRepo creates a new repository under the given organization.
-// If the repo already exists, this is a no-op.
-func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
-	// Check if the repo already exists before attempting creation.
-	// This avoids relying on parsing GitHub's 422 error prose.
-	checkURL, _ := url.JoinPath(apiBase, "repos", org, name)
-	checkResp, err := c.doAPI(ctx, installationID, http.MethodGet, checkURL, nil)
-	if err != nil {
-		return fmt.Errorf("check repo existence: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return checkResp.Body.Close() })
-	if checkResp.StatusCode == http.StatusOK {
-		return nil // repo already exists
-	}
+var validRepositoryName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,100}$`)
 
+func validRepository(owner, name string) bool {
+	return validGitHubUsername.MatchString(owner) && validRepositoryName.MatchString(name) && name != "." && name != ".."
+}
+
+// CreatePrivateRepository creates a new private repository and returns its
+// immutable ID. An existing repository is never accepted as a successful create.
+func (c *Client) CreatePrivateRepository(ctx context.Context, installationID int64, org, name string) (int64, error) {
+	if installationID <= 0 || !validRepository(org, name) {
+		return 0, fmt.Errorf("create private repository: invalid installation or repository name")
+	}
 	payload := map[string]any{
 		"name":          name,
-		"private":       private,
+		"private":       true,
 		"auto_init":     true,
 		"description":   "Plugin packages managed by Speakeasy",
 		"has_issues":    false,
@@ -82,21 +93,113 @@ func (c *Client) CreateRepo(ctx context.Context, installationID int64, org, name
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal create repo: %w", err)
+		return 0, fmt.Errorf("marshal create repo: %w", err)
 	}
 
-	createURL, _ := url.JoinPath(apiBase, "orgs", org, "repos")
-	resp, err := c.doAPI(ctx, installationID, http.MethodPost, createURL, bytes.NewReader(body))
+	createURL := apiBase + "/orgs/" + org + "/repos"
+	resp, err := c.doAPIWithClient(ctx, withoutRedirects(c.httpClient), installationID, http.MethodPost, createURL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create repo: %w", err)
+		return 0, fmt.Errorf("create repo: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	switch {
+	case resp.StatusCode == http.StatusCreated:
+		return decodePrivateRepository(resp.Body, org, name)
+	case resp.StatusCode == http.StatusUnprocessableEntity:
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		if isRepositoryNameTaken(bytes.NewReader(body)) {
+			return 0, fmt.Errorf("create repo: %w", ErrRepositoryNameTaken)
+		}
+		return 0, fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncateErrorBody(body))
+	case isRedirect(resp.StatusCode):
+		return 0, fmt.Errorf("create repo: %w: unexpected redirect (status %d)", ErrRepositoryConflict, resp.StatusCode)
+	default:
+		return 0, fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+}
 
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncatedBody(resp))
+func isRepositoryNameTaken(body io.Reader) bool {
+	var validation struct {
+		Errors []struct {
+			Resource string `json:"resource"`
+			Field    string `json:"field"`
+			Code     string `json:"code"`
+			Message  string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.NewDecoder(body).Decode(&validation); err != nil {
+		return false
+	}
+	for _, issue := range validation.Errors {
+		if issue.Resource != "Repository" || issue.Field != "name" {
+			continue
+		}
+		if issue.Code == "already_exists" || (issue.Code == "custom" && issue.Message == "name already exists on this account") {
+			return true
+		}
+	}
+	return false
+}
+
+// ForRepository verifies the private repository's ID, name and visibility
+// on every call. The token may be cached, but the identity check must never be.
+// Use the returned client for immediate operations on that repository.
+func (c *Client) ForRepository(ctx context.Context, installationID, repositoryID int64, owner, name string) (*Client, error) {
+	if c.repository != nil {
+		return nil, fmt.Errorf("scope repository: client is already scoped")
+	}
+	if installationID <= 0 || repositoryID <= 0 || !validRepository(owner, name) {
+		return nil, fmt.Errorf("scope repository: invalid installation, repository ID, or repository name")
+	}
+	token, err := c.cachedInstallationToken(ctx, installationTokenKey{installationID: installationID, repositoryID: repositoryID})
+	if err != nil {
+		return nil, fmt.Errorf("scope repository: %w", err)
 	}
 
-	return nil
+	repoPath := "/repos/" + owner + "/" + name
+	scoped := &Client{appID: 0, privateKey: nil, mu: sync.Mutex{}, tokens: nil, tokenFlight: singleflight.Group{},
+		httpClient: withoutRedirects(c.httpClient),
+		tracer:     c.tracer,
+		repository: &repositoryScope{
+			installationID: installationID,
+			path:           strings.ToLower(repoPath),
+			token:          token,
+		},
+	}
+	resp, err := scoped.doAPI(ctx, installationID, http.MethodGet, apiBase+repoPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("verify private repository: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("verify private repository: status %d", resp.StatusCode)
+	}
+	id, err := decodePrivateRepository(resp.Body, owner, name)
+	if err != nil {
+		return nil, fmt.Errorf("verify private repository: %w", err)
+	}
+	if id != repositoryID {
+		return nil, fmt.Errorf("verify private repository: %w: unexpected repository ID", ErrRepositoryConflict)
+	}
+	return scoped, nil
+}
+
+func decodePrivateRepository(body io.Reader, owner, name string) (int64, error) {
+	var repo struct {
+		ID         int64  `json:"id"`
+		FullName   string `json:"full_name"`
+		Private    bool   `json:"private"`
+		Visibility string `json:"visibility"`
+	}
+	if err := json.NewDecoder(body).Decode(&repo); err != nil {
+		return 0, fmt.Errorf("decode private repository: %w", err)
+	}
+	// GitHub repository and owner names are case-insensitive.
+	if repo.ID <= 0 || !repo.Private || repo.Visibility != "private" ||
+		!strings.EqualFold(repo.FullName, owner+"/"+name) {
+		return 0, fmt.Errorf("%w: invalid identity or visibility for private repository", ErrRepositoryConflict)
+	}
+	return repo.ID, nil
 }
 
 // AddCollaborator invites a GitHub user as a collaborator on the repo with

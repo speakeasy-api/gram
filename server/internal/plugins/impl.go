@@ -78,9 +78,14 @@ var validGitHubUsername = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$`)
 // (e.g. Cursor's "Serve Marketplace From Cursor") requires repo admin.
 const marketplaceCollaboratorPermission = "admin"
 
-// GitHubPublisher is the interface for creating repos and pushing files to GitHub.
+// GitHubPublisher provisions repositories and opens identity-scoped clients.
 type GitHubPublisher interface {
-	CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error
+	CreatePrivateRepository(ctx context.Context, installationID int64, owner, name string) (int64, error)
+	ForRepository(ctx context.Context, installationID, repositoryID int64, owner, name string) (GitHubRepository, error)
+}
+
+// GitHubRepository operates with an installation token restricted to a single repository.
+type GitHubRepository interface {
 	PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error)
 	AddCollaborator(ctx context.Context, installationID int64, owner, repo, username, permission string) error
 	HasDirectCollaborator(ctx context.Context, installationID int64, owner, repo string) (bool, error)
@@ -150,7 +155,7 @@ func NewGitHubConfig(in GitHubConfigInput) (*GitHubConfig, error) {
 		return nil, nil
 	case 3:
 		return &GitHubConfig{
-			Client:         in.Client,
+			Client:         githubProvisioner{in.Client},
 			Org:            in.Org,
 			InstallationID: in.InstallationID,
 		}, nil
@@ -1902,7 +1907,7 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			result.LiveVersion = s.cachedLiveManifestVersion(ctx, ac, conn)
 
 			if decision.AllAllowed {
-				hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, conn.RepoOwner, conn.RepoName)
+				hasCollaborators, err := s.cachedHasDirectCollaborator(ctx, *ac.ProjectID, conn.RepoOwner, conn.RepoName)
 				if err != nil {
 					// Degrade rather than fail the whole status read — the
 					// dashboard treats a missing value as "unknown", not "false".
@@ -1929,38 +1934,35 @@ func collaboratorCacheKey(owner, repo string) string {
 	return fmt.Sprintf("plugins:has-collaborator:%s/%s", owner, repo)
 }
 
-// cachedHasDirectCollaborator wraps GitHubPublisher.HasDirectCollaborator
+// cachedHasDirectCollaborator wraps GitHubRepository.HasDirectCollaborator
 // with a short-lived cache. Falls back to an uncached live call when no
 // cache is configured (e.g. the publish-only worker instance from
 // NewPublisher, which never serves GetPublishStatus).
-func (s *Service) cachedHasDirectCollaborator(ctx context.Context, owner, repo string) (bool, error) {
-	if s.cache == nil {
-		hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
-		if err != nil {
-			return false, fmt.Errorf("check repo collaborators: %w", err)
-		}
-		return hasCollaborators, nil
-	}
-
+func (s *Service) cachedHasDirectCollaborator(ctx context.Context, projectID uuid.UUID, owner, repo string) (bool, error) {
 	key := collaboratorCacheKey(owner, repo)
 
-	var cached bool
-	switch err := s.cache.Get(ctx, key, &cached); {
-	case err == nil:
-		return cached, nil
-	case errors.Is(err, redisCache.ErrCacheMiss):
-		// Fall through to the live check below.
-	default:
-		s.logger.WarnContext(ctx, "read collaborator cache", attr.SlogError(err))
+	if s.cache != nil {
+		var cached bool
+		switch err := s.cache.Get(ctx, key, &cached); {
+		case err == nil:
+			return cached, nil
+		case errors.Is(err, redisCache.ErrCacheMiss):
+		default:
+			s.logger.WarnContext(ctx, "read collaborator cache", attr.SlogError(err))
+		}
 	}
-
-	hasCollaborators, err := s.github.Client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
+	client, err := s.projectRepository(ctx, projectID, owner, repo)
+	if err != nil {
+		return false, err
+	}
+	hasCollaborators, err := client.HasDirectCollaborator(ctx, s.github.InstallationID, owner, repo)
 	if err != nil {
 		return false, fmt.Errorf("check repo collaborators: %w", err)
 	}
-
-	if err := s.cache.Set(ctx, key, &hasCollaborators, hasCollaboratorsCacheTTL); err != nil {
-		s.logger.WarnContext(ctx, "write collaborator cache", attr.SlogError(err))
+	if s.cache != nil {
+		if err := s.cache.Set(ctx, key, &hasCollaborators, hasCollaboratorsCacheTTL); err != nil {
+			s.logger.WarnContext(ctx, "write collaborator cache", attr.SlogError(err))
+		}
 	}
 
 	return hasCollaborators, nil
@@ -2044,8 +2046,13 @@ func (s *Service) liveManifestVersion(ctx context.Context, ac *contextvalues.Aut
 		return !slices.Contains(pausedSlugs, pluginInfos[i].Slug) && slices.Contains(pausedSlugs, pluginInfos[j].Slug)
 	})
 
+	client, err := s.projectRepository(ctx, *ac.ProjectID, conn.RepoOwner, conn.RepoName)
+	if err != nil {
+		s.logger.WarnContext(ctx, "live version: verify repository", attr.SlogError(err))
+		return "", false
+	}
 	for _, p := range pluginInfos {
-		content, err := s.github.Client.GetFileContent(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName, "main", p.Slug+"/.claude-plugin/plugin.json")
+		content, err := client.GetFileContent(ctx, s.github.InstallationID, conn.RepoOwner, conn.RepoName, "main", p.Slug+"/.claude-plugin/plugin.json")
 		if errors.Is(err, ghclient.ErrFileNotFound) {
 			continue
 		}
@@ -2491,12 +2498,22 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		projectName = project.Name
 	}
 
-	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
+	destination, connErr := s.repo.GetPluginPublishDestination(ctx, input.ProjectID)
 	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
 	}
-	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	hasConnection := connErr == nil
+	if hasConnection && !destination.Bound {
+		return nil, oops.E(oops.CodeConflict, ErrGitHubRepoConflict, "no verified binding for the plugin repository").LogWarn(ctx, s.logger)
+	}
+	existing := destination.PluginGithubConnection
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
+	// A verified replacement can already have a connection row without any
+	// published files to carry. Treat it as an initial publication for generation,
+	// but still require its exact binding and never create another repository.
+	firstPublish := len(publishedMCPFingerprints) == 0 &&
+		conv.FromPGTextOrEmpty[string](existing.PublishedFingerprint) == "" &&
+		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) == ""
 
 	// The stored snapshot carries the marketplace name the repo was last
 	// published under, so cfg.MarketplaceName stays frozen across org renames,
@@ -2508,6 +2525,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
 	repoOwner := strings.ToLower(s.github.Org)
 	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
+	if hasConnection {
+		// A project slug change must not move an existing publication to a new repository.
+		// projectRepository verifies this stored name against the immutable binding before I/O.
+		repoName = existing.RepoName
+	}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 
 	// Package admission is available before the first Platform MCP connection,
@@ -2595,11 +2617,12 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// otherwise push an uncleared version onto the org. A held-back rotation
 	// leaves the published credential in place and is reported as deferred.
 	if input.RotateHooksKey {
-		if observabilityEnabled && !hooksCollision && targetHooksVersion == hooksGeneratorVersion {
+		if !firstPublish && observabilityEnabled && !hooksCollision && targetHooksVersion == hooksGeneratorVersion {
 			rotateHooks = true
 		} else {
 			// Publish nothing. This call exists only to carry a new credential
-			// into the marketplace, and the gate says it may not — so falling
+			// into an existing marketplace, and there is either no publication
+			// yet or the rollout gate says it may not proceed — so falling
 			// through to an ordinary publish would do work the caller never
 			// asked for: regenerating MCP (minting a consumer key customers did
 			// not ask to rotate), or regenerating the hooks subtree through the
@@ -2699,6 +2722,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// most of the publish downloading files that are about to be replaced. A
 	// first publish or a both-components change regenerates everything and
 	// needs no fetch.
+	client, repoName, err := s.resolveProjectRepository(ctx, input.ProjectID, repoOwner, repoName, !hasConnection)
+	if err != nil {
+		if errors.Is(err, ErrGitHubRepoConflict) {
+			return nil, oops.E(oops.CodeConflict, err, "verify plugin repository").LogWarn(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeGatewayError, err, "prepare plugin repository").LogError(ctx, s.logger)
+	}
+	repoURL = fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	var mcpPaths []string
 	if !mcpChanged {
 		mcpPaths, err = mcpFilePaths(plan.Active, cfg)
@@ -2720,7 +2751,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 				return strings.HasPrefix(path, prefix)
 			})
 		}
-		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", include)
+		existingFiles, err = client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main", include)
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
 				return nil, oops.E(oops.CodeGatewayError, err, "get existing repo files").LogError(ctx, s.logger)
@@ -2873,11 +2904,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	mcpFingerprints[mcpSharedFingerprintKey] = hashFiles(mcpGeneratorVersion, sharedFiles)
 	maps.Copy(files, sharedFiles)
 
-	if err := s.github.Client.CreateRepo(ctx, s.github.InstallationID, repoOwner, repoName, true); err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "create github repo").LogError(ctx, s.logger)
-	}
-
-	_, err = s.github.Client.PushFiles(
+	_, err = client.PushFiles(
 		ctx,
 		s.github.InstallationID,
 		repoOwner,
@@ -2891,7 +2918,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	for _, username := range input.GitHubUsernames {
-		if err := s.github.Client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
+		if err := client.AddCollaborator(ctx, s.github.InstallationID, repoOwner, repoName, username, marketplaceCollaboratorPermission); err != nil {
 			s.logger.WarnContext(ctx, "failed to add collaborator (non-fatal)",
 				attr.SlogOrganizationID(input.OrganizationID),
 				attr.SlogGitHubUsername(username),
@@ -3411,14 +3438,9 @@ func (s *Service) buildPluginAPIKeyCandidate(scope auth.APIKeyScope, purpose str
 	}, nil
 }
 
-// ErrGitHubRepoConflict indicates the computed repo_owner/repo_name for this
-// project's publish already belongs to a different, still-active project's
-// GitHub connection (plugin_github_connections_installation_repo_key) — see
-// upsertGitHubConnection, which self-heals the far more common case of a
-// stale row from a soft-deleted project and only returns this when the
-// blocking project is genuinely still active. Callers should treat this as a
-// non-retryable, human-actionable condition rather than a transient failure.
-var ErrGitHubRepoConflict = errors.New("github repo already connected to a different active project")
+// ErrGitHubRepoConflict indicates that this project cannot prove exclusive
+// ownership of the target repository. Retrying must not adopt it by name.
+var ErrGitHubRepoConflict = ghclient.ErrRepositoryConflict
 
 // upsertGitHubConnection wraps UpsertGitHubConnection with a SAVEPOINT so a
 // plugin_github_connections_installation_repo_key conflict can self-heal in

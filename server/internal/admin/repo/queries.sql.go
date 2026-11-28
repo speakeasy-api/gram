@@ -513,6 +513,19 @@ func (q *Queries) AdminFindAgentSlackAuthClient(ctx context.Context, arg AdminFi
 	return id, err
 }
 
+const adminFindPluginRepositoryID = `-- name: AdminFindPluginRepositoryID :one
+SELECT repository_id
+FROM plugin_repository_bindings
+WHERE repository_id = $1
+`
+
+func (q *Queries) AdminFindPluginRepositoryID(ctx context.Context, repositoryID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, adminFindPluginRepositoryID, repositoryID)
+	var repository_id int64
+	err := row.Scan(&repository_id)
+	return repository_id, err
+}
+
 const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
 SELECT expires_at
 FROM principal_grants
@@ -956,6 +969,32 @@ func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrgani
 		&i.TrialsEndingSoon,
 		&i.Disabled,
 		&i.DisabledLast7Days,
+	)
+	return i, err
+}
+
+const adminGetPluginRepositoryMigration = `-- name: AdminGetPluginRepositoryMigration :one
+SELECT p.organization_id, c.installation_id, c.repo_owner, c.repo_name
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = $1
+`
+
+type AdminGetPluginRepositoryMigrationRow struct {
+	OrganizationID string
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+func (q *Queries) AdminGetPluginRepositoryMigration(ctx context.Context, projectID uuid.UUID) (AdminGetPluginRepositoryMigrationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetPluginRepositoryMigration, projectID)
+	var i AdminGetPluginRepositoryMigrationRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.InstallationID,
+		&i.RepoOwner,
+		&i.RepoName,
 	)
 	return i, err
 }
@@ -2869,6 +2908,64 @@ func (q *Queries) AdminListPlatformMCPFeedback(ctx context.Context, rowLimit int
 	return items, nil
 }
 
+const adminListPluginRepositoryMigrations = `-- name: AdminListPluginRepositoryMigrations :many
+WITH candidates AS (
+  SELECT c.project_id, c.repo_owner, c.repo_name, b.project_id IS NOT NULL AS bound
+  FROM plugin_github_connections c
+  LEFT JOIN plugin_repository_bindings b USING (project_id)
+  WHERE c.project_id > $2::uuid
+  UNION ALL
+  SELECT b.project_id, b.repo_owner, b.repo_name, true AS bound
+  FROM plugin_repository_bindings b
+  WHERE b.project_id > $2::uuid
+    AND NOT EXISTS (SELECT 1 FROM plugin_github_connections c WHERE c.project_id = b.project_id)
+)
+SELECT p.id AS project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
+FROM candidates c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+ORDER BY c.project_id
+LIMIT $1
+`
+
+type AdminListPluginRepositoryMigrationsParams struct {
+	PageSize       int32
+	AfterProjectID uuid.UUID
+}
+
+type AdminListPluginRepositoryMigrationsRow struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RepoOwner      string
+	RepoName       string
+	Bound          bool
+}
+
+func (q *Queries) AdminListPluginRepositoryMigrations(ctx context.Context, arg AdminListPluginRepositoryMigrationsParams) ([]AdminListPluginRepositoryMigrationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListPluginRepositoryMigrations, arg.PageSize, arg.AfterProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListPluginRepositoryMigrationsRow
+	for rows.Next() {
+		var i AdminListPluginRepositoryMigrationsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RepoOwner,
+			&i.RepoName,
+			&i.Bound,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListProjectMcpServerRows = `-- name: AdminListProjectMcpServerRows :many
 SELECT
     m.id,
@@ -3393,6 +3490,37 @@ func (q *Queries) AdminLockAssistantAgentNames(ctx context.Context, organization
 	return err
 }
 
+const adminLockPluginRepositoryMigrationConnection = `-- name: AdminLockPluginRepositoryMigrationConnection :one
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+WHERE c.project_id = $1
+  AND c.installation_id = $2
+  AND c.repo_owner = $3
+  AND c.repo_name = $4
+FOR UPDATE OF c, p
+`
+
+type AdminLockPluginRepositoryMigrationConnectionParams struct {
+	ProjectID      uuid.UUID
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+}
+
+// Verify that the destination attested against GitHub is still current and lock it until commit.
+func (q *Queries) AdminLockPluginRepositoryMigrationConnection(ctx context.Context, arg AdminLockPluginRepositoryMigrationConnectionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminLockPluginRepositoryMigrationConnection,
+		arg.ProjectID,
+		arg.InstallationID,
+		arg.RepoOwner,
+		arg.RepoName,
+	)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
 SELECT EXISTS (
     SELECT 1 FROM projects
@@ -3615,6 +3743,44 @@ func (q *Queries) AdminRepointSlackTriggerToAuthClient(ctx context.Context, arg 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const adminReprovisionPluginRepository = `-- name: AdminReprovisionPluginRepository :execrows
+UPDATE plugin_github_connections
+SET installation_id = $1,
+    repo_owner = $2,
+    repo_name = $3,
+    published_fingerprint = NULL,
+    published_mcp_fingerprints = NULL,
+    published_hooks_version = NULL,
+    published_hooks_config = CASE
+      WHEN published_hooks_config ->> 'published_marketplace_name' <> ''
+      THEN jsonb_build_object('published_marketplace_name', published_hooks_config ->> 'published_marketplace_name')
+      ELSE NULL
+    END
+WHERE project_id = $4
+`
+
+type AdminReprovisionPluginRepositoryParams struct {
+	InstallationID int64
+	RepoOwner      string
+	RepoName       string
+	ProjectID      uuid.UUID
+}
+
+// The install URL and encrypted credential columns stay untouched. Preserve
+// only the frozen marketplace identity, not the prior publication state.
+func (q *Queries) AdminReprovisionPluginRepository(ctx context.Context, arg AdminReprovisionPluginRepositoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminReprovisionPluginRepository,
+		arg.InstallationID,
+		arg.RepoOwner,
+		arg.RepoName,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one

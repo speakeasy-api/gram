@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|create-trial-payment-method-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption|list-plugin-repository-migrations|apply-plugin-repository-migrations|reprovision-plugin-repository)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -5238,6 +5238,18 @@ func ParseEndpoint(
 		adminFinalizeOrganizationEncryptionBodyFlag              = adminFinalizeOrganizationEncryptionFlags.String("body", "REQUIRED", "")
 		adminFinalizeOrganizationEncryptionAdminSessionTokenFlag = adminFinalizeOrganizationEncryptionFlags.String("admin-session-token", "", "")
 
+		adminListPluginRepositoryMigrationsFlags                 = flag.NewFlagSet("list-plugin-repository-migrations", flag.ExitOnError)
+		adminListPluginRepositoryMigrationsAfterFlag             = adminListPluginRepositoryMigrationsFlags.String("after", "", "")
+		adminListPluginRepositoryMigrationsAdminSessionTokenFlag = adminListPluginRepositoryMigrationsFlags.String("admin-session-token", "", "")
+
+		adminApplyPluginRepositoryMigrationsFlags                 = flag.NewFlagSet("apply-plugin-repository-migrations", flag.ExitOnError)
+		adminApplyPluginRepositoryMigrationsBodyFlag              = adminApplyPluginRepositoryMigrationsFlags.String("body", "REQUIRED", "")
+		adminApplyPluginRepositoryMigrationsAdminSessionTokenFlag = adminApplyPluginRepositoryMigrationsFlags.String("admin-session-token", "", "")
+
+		adminReprovisionPluginRepositoryFlags                 = flag.NewFlagSet("reprovision-plugin-repository", flag.ExitOnError)
+		adminReprovisionPluginRepositoryBodyFlag              = adminReprovisionPluginRepositoryFlags.String("body", "REQUIRED", "")
+		adminReprovisionPluginRepositoryAdminSessionTokenFlag = adminReprovisionPluginRepositoryFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsCreateUserSessionClientFlags                = flag.NewFlagSet("create-user-session-client", flag.ExitOnError)
@@ -6991,6 +7003,9 @@ func ParseEndpoint(
 	adminRollbackOrganizationEncryptionFlags.Usage = adminRollbackOrganizationEncryptionUsage
 	adminRunOrganizationEncryptionFlags.Usage = adminRunOrganizationEncryptionUsage
 	adminFinalizeOrganizationEncryptionFlags.Usage = adminFinalizeOrganizationEncryptionUsage
+	adminListPluginRepositoryMigrationsFlags.Usage = adminListPluginRepositoryMigrationsUsage
+	adminApplyPluginRepositoryMigrationsFlags.Usage = adminApplyPluginRepositoryMigrationsUsage
+	adminReprovisionPluginRepositoryFlags.Usage = adminReprovisionPluginRepositoryUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsCreateUserSessionClientFlags.Usage = userSessionClientsCreateUserSessionClientUsage
@@ -10502,6 +10517,15 @@ func ParseEndpoint(
 
 			case "finalize-organization-encryption":
 				epf = adminFinalizeOrganizationEncryptionFlags
+
+			case "list-plugin-repository-migrations":
+				epf = adminListPluginRepositoryMigrationsFlags
+
+			case "apply-plugin-repository-migrations":
+				epf = adminApplyPluginRepositoryMigrationsFlags
+
+			case "reprovision-plugin-repository":
+				epf = adminReprovisionPluginRepositoryFlags
 
 			}
 
@@ -14090,6 +14114,15 @@ func ParseEndpoint(
 			case "finalize-organization-encryption":
 				endpoint = c.FinalizeOrganizationEncryption()
 				data, err = adminc.BuildFinalizeOrganizationEncryptionPayload(*adminFinalizeOrganizationEncryptionBodyFlag, *adminFinalizeOrganizationEncryptionAdminSessionTokenFlag)
+			case "list-plugin-repository-migrations":
+				endpoint = c.ListPluginRepositoryMigrations()
+				data, err = adminc.BuildListPluginRepositoryMigrationsPayload(*adminListPluginRepositoryMigrationsAfterFlag, *adminListPluginRepositoryMigrationsAdminSessionTokenFlag)
+			case "apply-plugin-repository-migrations":
+				endpoint = c.ApplyPluginRepositoryMigrations()
+				data, err = adminc.BuildApplyPluginRepositoryMigrationsPayload(*adminApplyPluginRepositoryMigrationsBodyFlag, *adminApplyPluginRepositoryMigrationsAdminSessionTokenFlag)
+			case "reprovision-plugin-repository":
+				endpoint = c.ReprovisionPluginRepository()
+				data, err = adminc.BuildReprovisionPluginRepositoryPayload(*adminReprovisionPluginRepositoryBodyFlag, *adminReprovisionPluginRepositoryAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -34154,6 +34187,9 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    rollback-organization-encryption: Moves one organization's use case from dual_write back to platform_key. Both copies still exist in dual_write, so nothing is lost. Not available once the use case is in org_kms.`)
 	fmt.Fprintln(os.Stderr, `    run-organization-encryption: Starts a background run for one organization's use case: in dual_write it converts waiting values and verifies both copies, and in org_kms it finishes destroying the platform-key copies after finalize. Joins a run already in progress. Returns at once with the current state.`)
 	fmt.Fprintln(os.Stderr, `    finalize-organization-encryption: Moves one organization's use case from dual_write to org_kms, then starts a run that destroys its platform-key copies, including every unreadable value. Irreversible: rollback is no longer possible afterwards. Refused unless no value waits for an organization-key copy, every value is attributed to the organization, a clean verification ran since the last backfill, the use case spent the minimum time in dual_write, the confirmation matches, and the acknowledged unreadable count matches the count when finalize runs.`)
+	fmt.Fprintln(os.Stderr, `    list-plugin-repository-migrations: Lists plugin repositories and reports whether each is bound to a trusted GitHub repository ID.`)
+	fmt.Fprintln(os.Stderr, `    apply-plugin-repository-migrations: Verifies historical repository bindings and, unless dry_run is true, records them for the specified projects.`)
+	fmt.Fprintln(os.Stderr, `    reprovision-plugin-repository: Reprovisions the plugin repository for one project as a separate recovery operation.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -37118,6 +37154,66 @@ func adminFinalizeOrganizationEncryptionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin finalize-organization-encryption --body '{\n      \"acknowledged_unreadable_values\": 1,\n      \"confirmation\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"use_case\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListPluginRepositoryMigrationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-plugin-repository-migrations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -after STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists plugin repositories and reports whether each is bound to a trusted GitHub repository ID.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -after STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-plugin-repository-migrations --after \"550e8400-e29b-41d4-a716-446655440000\" --admin-session-token \"abc123\"")
+}
+
+func adminApplyPluginRepositoryMigrationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin apply-plugin-repository-migrations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Verifies historical repository bindings and, unless dry_run is true, records them for the specified projects.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin apply-plugin-repository-migrations --body '{\n      \"dry_run\": false,\n      \"entries\": [\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         },\n         {\n            \"evidence\": \"\\u0001\",\n            \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"repository_id\": \"11\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminReprovisionPluginRepositoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin reprovision-plugin-repository", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Reprovisions the plugin repository for one project as a separate recovery operation.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin reprovision-plugin-repository --body '{\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"\\u0001\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

@@ -244,6 +244,10 @@ describe("AppSidebar", () => {
             label: "Encryption transitions",
             href: "/encryption-transitions",
           },
+          {
+            label: "Plugin repository migrations",
+            href: "/plugin-repository-migrations",
+          },
           { label: "Platform credentials", href: "/platform-credentials" },
           { label: "Custom domains", href: "/custom-domains" },
           { label: "Organizational Memory evals", href: "/memory-evals" },

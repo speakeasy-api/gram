@@ -7,17 +7,38 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
 func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
 	t.Parallel()
 
 	publisher := NewInMemoryGitHubPublisher()
-	require.NoError(t, publisher.CreateRepo(t.Context(), 1, "local", "fixture", true))
+	id, err := publisher.CreatePrivateRepository(t.Context(), 1, "local", "fixture")
+	require.NoError(t, err)
+	require.Positive(t, id)
+	otherID, err := publisher.CreatePrivateRepository(t.Context(), 1, "local", "other-fixture")
+	require.NoError(t, err)
+	require.NotEqual(t, id, otherID)
+	_, err = publisher.CreatePrivateRepository(t.Context(), 1, "LOCAL", "FIXTURE")
+	require.ErrorIs(t, err, ghclient.ErrRepositoryNameTaken)
+	_, err = publisher.ForRepository(t.Context(), 1, otherID, "local", "fixture")
+	require.ErrorIs(t, err, ghclient.ErrRepoNotFound)
+	repo, err := publisher.ForRepository(t.Context(), 1, id, "local", "fixture")
+	require.NoError(t, err)
 
-	files, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main", nil)
+	files, err := repo.GetRepoFiles(t.Context(), 1, "local", "fixture", "main", nil)
 	require.NoError(t, err)
 	require.Empty(t, files)
+	require.NoError(t, repo.AddCollaborator(t.Context(), 1, "local", "fixture", "test-user", "admin"))
+	has, err := repo.HasDirectCollaborator(t.Context(), 1, "LOCAL", "FIXTURE")
+	require.NoError(t, err)
+	require.True(t, has)
+	_, err = repo.PushFiles(t.Context(), 1, "local", "other-fixture", "main", "publish", nil)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryConflict)
+	_, err = repo.GetRepoFiles(t.Context(), 2, "local", "fixture", "main", nil)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryConflict)
 }
 
 func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {
@@ -49,6 +70,12 @@ func TestPersistentGitHubPublisherSharesRepositoriesAcrossInstances(t *testing.T
 	require.NoError(t, err)
 
 	files := map[string][]byte{"platform-mcp/.mcp.json": []byte(`{"mcpServers":{}}`)}
+	id, err := writer.CreatePrivateRepository(t.Context(), 1, "local", "fixture")
+	require.NoError(t, err)
+	_, err = reader.ForRepository(t.Context(), 1, id, "local", "fixture")
+	require.NoError(t, err)
+	_, err = reader.ForRepository(t.Context(), 2, id, "local", "fixture")
+	require.ErrorIs(t, err, ghclient.ErrRepoNotFound)
 	_, err = writer.PushFiles(t.Context(), 1, "local", "fixture", "main", "publish", files)
 	require.NoError(t, err)
 	require.NoError(t, writer.AddCollaborator(t.Context(), 1, "local", "fixture", "admin", "push"))
@@ -70,7 +97,7 @@ func TestPersistentGitHubPublisherSharesRepositoriesAcrossInstances(t *testing.T
 	}
 }
 
-func TestPersistentGitHubPublisherCreateRepoPreservesPublishedFiles(t *testing.T) {
+func TestPersistentGitHubPublisherRejectsCreateOverPublishedFiles(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -81,7 +108,8 @@ func TestPersistentGitHubPublisherCreateRepoPreservesPublishedFiles(t *testing.T
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, publisher.CreateRepo(t.Context(), 1, "local", "fixture", true))
+	_, err = publisher.CreatePrivateRepository(t.Context(), 1, "local", "fixture")
+	require.ErrorIs(t, err, ghclient.ErrRepositoryNameTaken)
 	stored, err := publisher.MainBranchFiles(t.Context(), "local", "fixture")
 	require.NoError(t, err)
 	require.Contains(t, stored, "platform-mcp/.mcp.json")

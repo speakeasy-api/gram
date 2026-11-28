@@ -540,6 +540,15 @@ type Service interface {
 	// spent the minimum time in dual_write, the confirmation matches, and the
 	// acknowledged unreadable count matches the count when finalize runs.
 	FinalizeOrganizationEncryption(context.Context, *FinalizeOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionFinalizeResult, err error)
+	// Lists plugin repositories and reports whether each is bound to a trusted
+	// GitHub repository ID.
+	ListPluginRepositoryMigrations(context.Context, *ListPluginRepositoryMigrationsPayload) (res *AdminPluginRepositoryMigrationList, err error)
+	// Verifies historical repository bindings and, unless dry_run is true, records
+	// them for the specified projects.
+	ApplyPluginRepositoryMigrations(context.Context, *ApplyPluginRepositoryMigrationsPayload) (res *AdminPluginRepositoryMigrationApplyResult, err error)
+	// Reprovisions the plugin repository for one project as a separate recovery
+	// operation.
+	ReprovisionPluginRepository(context.Context, *ReprovisionPluginRepositoryPayload) (res *AdminPluginRepositoryReprovisionResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -562,7 +571,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [144]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [147]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption", "listPluginRepositoryMigrations", "applyPluginRepositoryMigrations", "reprovisionPluginRepository"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -2272,6 +2281,63 @@ type AdminPlatformMCPFeedback struct {
 	ExpiresAt string
 }
 
+type AdminPluginRepositoryMigration struct {
+	// Project ID.
+	ProjectID string
+	// Organization that owns the project.
+	OrganizationID string
+	// Stored GitHub repository owner.
+	RepoOwner string
+	// Stored GitHub repository name.
+	RepoName string
+	// Whether the project has a trusted repository ID binding.
+	Bound bool
+}
+
+// AdminPluginRepositoryMigrationApplyResult is the result type of the admin
+// service applyPluginRepositoryMigrations method.
+type AdminPluginRepositoryMigrationApplyResult struct {
+	// Outcome for each entry, in request order.
+	Items []*AdminPluginRepositoryMigrationOutcome
+}
+
+type AdminPluginRepositoryMigrationEntry struct {
+	// Project ID.
+	ProjectID string
+	// The historically verified GitHub repository ID as a decimal string.
+	RepositoryID string
+	// Reference to trusted historical evidence that identifies this repository for
+	// the project.
+	Evidence string
+}
+
+// AdminPluginRepositoryMigrationList is the result type of the admin service
+// listPluginRepositoryMigrations method.
+type AdminPluginRepositoryMigrationList struct {
+	// Projects with a plugin repository, ordered by project ID.
+	Items []*AdminPluginRepositoryMigration
+	// Pass as after for the next page; absent on the last page.
+	NextCursor *string
+}
+
+type AdminPluginRepositoryMigrationOutcome struct {
+	// Project ID.
+	ProjectID string
+	// Outcome of verifying or applying the binding.
+	Status string
+	// Details of the outcome.
+	Message string
+}
+
+// AdminPluginRepositoryReprovisionResult is the result type of the admin
+// service reprovisionPluginRepository method.
+type AdminPluginRepositoryReprovisionResult struct {
+	// Reprovisioning outcome.
+	Status string
+	// Details of the outcome.
+	Message string
+}
+
 // Project summary surfaced to admin operators.
 type AdminProject struct {
 	// The ID of the project
@@ -3042,6 +3108,16 @@ type AdminUserOrganization struct {
 	Name       string
 	Slug       string
 	DisabledAt *string
+}
+
+// ApplyPluginRepositoryMigrationsPayload is the payload type of the admin
+// service applyPluginRepositoryMigrations method.
+type ApplyPluginRepositoryMigrationsPayload struct {
+	AdminSessionToken *string
+	// Repository bindings to verify or apply.
+	Entries []*AdminPluginRepositoryMigrationEntry
+	// Verify bindings without recording them.
+	DryRun bool
 }
 
 type Asset struct {
@@ -4185,6 +4261,14 @@ type ListPlatformMcpFeedbackResult struct {
 	Feedback []*AdminPlatformMCPFeedback
 }
 
+// ListPluginRepositoryMigrationsPayload is the payload type of the admin
+// service listPluginRepositoryMigrations method.
+type ListPluginRepositoryMigrationsPayload struct {
+	AdminSessionToken *string
+	// Continue after this project ID.
+	After *string
+}
+
 // ListProjectMcpServersPayload is the payload type of the admin service
 // listProjectMcpServers method.
 type ListProjectMcpServersPayload struct {
@@ -4521,6 +4605,16 @@ type RepairInferenceKeyPayload struct {
 type RepairOrganizationAssistantAgentNamesPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// ReprovisionPluginRepositoryPayload is the payload type of the admin service
+// reprovisionPluginRepository method.
+type ReprovisionPluginRepositoryPayload struct {
+	AdminSessionToken *string
+	// Project ID.
+	ProjectID string
+	// Staff reason for reprovisioning.
+	Reason string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service
