@@ -592,6 +592,7 @@ func newAdminCommand() *cli.Command {
 				return err
 			}
 			if applicationEncryption != nil {
+				adminService.SetApplicationEncryption(applicationEncryption)
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
 				// The temporary marketplace token backfill seals with the
 				// same cipher and platform key the servers build their
@@ -656,7 +657,7 @@ func newAdminCommand() *cli.Command {
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
-				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer, AssistantIdentities: assistantIdentities}
+				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer, AssistantIdentities: assistantIdentities, ApplicationEncryption: applicationEncryption}
 				if platformAssets != nil {
 					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
 					if err != nil {

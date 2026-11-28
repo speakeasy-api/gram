@@ -3181,7 +3181,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	require.NotContains(t, capturedEnvironment, "OAUTH_TOKEN")
 }
 
-func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
+func TestToolProxy_Do_HTTPTool_ArgumentVariablesIgnoredAndServerVariableReported(t *testing.T) {
 	t.Parallel()
 
 	var sentKey string
@@ -3233,18 +3233,18 @@ func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
 	proxy := NewToolProxy(logger, tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceDirect, testenv.NewEncryptionClient(t), nil, policy, funcs, nil, nil)
 
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
-	userConfig.Set("API_KEY", "saved-key")
+	userConfig.Set("API_KEY", "header-key")
 	report := &toolconfig.CredentialReport{}
 
 	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig:  userConfig,
 		Credentials: report,
 	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
 	require.NoError(t, err)
 
-	require.Equal(t, "argument-key", sentKey)
-	require.Equal(t, []string{"api_key"}, report.CallerVariables)
+	require.Equal(t, "header-key", sentKey)
 	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
 	require.Empty(t, report.ServerVariable)
 
@@ -3252,6 +3252,7 @@ func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
 	report = &toolconfig.CredentialReport{}
 	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig:  userConfig,
 		Credentials: report,
 	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})

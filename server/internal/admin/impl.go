@@ -90,6 +90,7 @@ type Service struct {
 	// leaves those methods unavailable.
 	gcpIdentity *gcpauth.Identity
 
+	tracerProvider       trace.TracerProvider
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -165,6 +166,11 @@ type Service struct {
 	// orgEncryption reports and changes organization encryption transitions.
 	// Nil leaves those methods unavailable.
 	orgEncryption *OrganizationEncryption
+
+	// applicationEncryption decrypts/encrypts customer application secrets
+	// (such as environment entries and slack_app auth client headers) for
+	// staff migrations. Nil leaves those migrations unavailable.
+	applicationEncryption *encryption.Client
 }
 
 type BillingOperations interface {
@@ -296,8 +302,9 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		tracerProvider:             tracerProvider,
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
 		db:                         db,
@@ -576,6 +583,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.DeleteGcpIamPlatformCredential = service.strictAdminJSON(server.DeleteGcpIamPlatformCredential, func() any { return new(adminserver.DeleteGcpIamPlatformCredentialRequestBody) })
 	server.ListAssistantOrganizations = service.preauthorizeAdmin(server.ListAssistantOrganizations)
 	server.RepairOrganizationAssistantAgentNames = service.strictAdminJSON(server.RepairOrganizationAssistantAgentNames, func() any { return new(adminserver.RepairOrganizationAssistantAgentNamesRequestBody) })
+	server.BackfillOrganizationAssistantBuiltinGrants = service.strictAdminJSON(server.BackfillOrganizationAssistantBuiltinGrants, func() any { return new(adminserver.BackfillOrganizationAssistantBuiltinGrantsRequestBody) })
+	server.MigrateOrganizationAssistantSlack = service.strictAdminJSON(server.MigrateOrganizationAssistantSlack, func() any { return new(adminserver.MigrateOrganizationAssistantSlackRequestBody) })
 	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
@@ -1031,6 +1040,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
+		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -1053,6 +1063,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		AccountTypes:   accountTypes,
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
+		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,

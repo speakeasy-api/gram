@@ -13,7 +13,7 @@ import (
 
 // gatewayDiscoveryOptionsOffered reports whether a connection to endpoint can
 // choose its own discovery mode: stored gateways and the organization gateway.
-// Agent gateways are ungated and never reach a consent page.
+// Ungated endpoints never reach a consent page.
 func gatewayDiscoveryOptionsOffered(endpoint *ResolvedMcpEndpoint) bool {
 	return endpoint.MetaMcpServerID.Valid
 }

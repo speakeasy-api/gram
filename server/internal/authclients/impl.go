@@ -44,6 +44,13 @@ const (
 	StatusNoAuthRequired  = "no_auth_required"
 )
 
+// ManageAuthClientPermission is the single authorization check governing
+// creation, modification, header rotation, server attachment, and audience
+// updates on typed auth clients (including slack_app clients).
+func ManageAuthClientPermission(org authz.OrgRef) authz.Check {
+	return org.Admin()
+}
+
 type Service struct {
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -161,7 +168,7 @@ func (s *Service) GetAuthClient(ctx context.Context, payload *gen.GetAuthClientP
 }
 
 func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthClientPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +253,7 @@ func (s *Service) UpdateAuthClient(ctx context.Context, payload *gen.UpdateAuthC
 }
 
 func (s *Service) DetachAuthClientFromMcpServer(ctx context.Context, payload *gen.DetachAuthClientFromMcpServerPayload) (*types.AuthClient, error) {
-	authCtx, logger, err := s.require(ctx, authz.OrgRef.Admin)
+	authCtx, logger, err := s.require(ctx, ManageAuthClientPermission)
 	if err != nil {
 		return nil, err
 	}

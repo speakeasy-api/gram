@@ -14,6 +14,16 @@ var Lifecycle = Type("AgentLifecycle", String, func() {
 	Enum("active", "suspended", "revoked")
 })
 
+var RuntimeGateway = Type("AgentRuntimeGateway", func() {
+	Description("The project gateway an agent runtime must call, resolved from the agent's bound project under agent credential-management authorization.")
+	Attribute("available", Boolean, "Whether the agent runtime may use its bound project's gateway.")
+	Attribute("url", String, "The bound project's gateway MCP URL. Set only when available.")
+	Attribute("unavailable_reason", String, "Why runtime setup is unavailable. Set only when not available.", func() {
+		Enum("project_assignment_required", "machine_access_disabled", "no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled", "turned_off")
+	})
+	Required("available")
+})
+
 var Permissions = Type("AgentPermissions", func() {
 	Required("read", "write", "authorize", "transfer")
 	Attribute("read", Boolean, "Whether the current human may read this agent")
@@ -53,7 +63,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
 	Attribute("client_type", String, "Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).", func() {
-		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "*")
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*")
 	})
 	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
 	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
@@ -280,6 +290,24 @@ var _ = Service("agents", func() {
 		HTTP(func() {
 			GET("/rpc/agents.get")
 			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+	})
+
+	Method("getRuntimeGateway", func() {
+		Description("Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.")
+		Meta("openapi:operationId", "getAgentRuntimeGateway")
+		Meta("openapi:extension:x-speakeasy-name-override", "getRuntimeGateway")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AgentRuntimeGateway"}`)
+		Payload(func() {
+			security.SessionPayload()
+			Extend(AgentIDForm)
+		})
+		Result(RuntimeGateway)
+		HTTP(func() {
+			GET("/rpc/agents.getRuntimeGateway")
+			Param("agent_id")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

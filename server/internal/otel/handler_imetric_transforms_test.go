@@ -25,7 +25,7 @@ func TestMetricTransformHandlerNoEnrichersPreservesProducerAttributes(t *testing
 		require.True(t, ok)
 		published = item
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t))
 
 	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
 
@@ -52,7 +52,7 @@ func TestMetricTransformHandlerAppliesOnlyResourceEnrichments(t *testing.T) {
 		require.True(t, ok)
 		published = item
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t))
 	handler.enrichers = []enrich.MetricEnricher{stubMetricEnricher{
 		name: "bounded-resource",
 		enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
@@ -83,7 +83,7 @@ func TestMetricTransformHandlerPassesSelectedDialectToEnrichers(t *testing.T) {
 
 	publisher := gcp.NewMockPublisher[*otelv1.Metric]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t))
 	var dialectKey, dialectValue string
 	var dialectErr error
 	handler.enrichers = []enrich.MetricEnricher{stubMetricEnricher{

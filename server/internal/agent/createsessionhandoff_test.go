@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -248,4 +249,34 @@ func TestServeSessionHandoff_ExpiredAndMalformed(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, strings.Repeat("z", 200)).Code)
 	// Right length, wrong alphabet: rejected on shape, never looked up.
 	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, strings.Repeat("z", 64)).Code)
+}
+
+func TestServeSessionHandoff_DisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAgentService(t)
+	userCtx := withPerUserKeyAuth(t, ctx, "dev@acme.corp")
+
+	const doc = "# Session handoff\n"
+	res, err := ti.service.CreateSessionHandoff(userCtx, &gen.CreateSessionHandoffPayload{
+		SessionID: uuid.NewString(),
+		Content:   doc,
+	})
+	require.NoError(t, err)
+	token := res.URL[strings.LastIndex(res.URL, "/")+1:]
+
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, serveHandoff(t, ti, token).Code)
+
+	link, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
+	require.NoError(t, err)
+	require.False(t, link.ConsumedAt.Valid, "a refused read must not burn the link")
+	require.NotEmpty(t, link.BlobUrl)
+
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, ti.orgID)
+	require.NoError(t, err)
+	served := serveHandoff(t, ti, token)
+	require.Equal(t, http.StatusOK, served.Code)
+	require.Equal(t, doc, served.Body.String())
 }

@@ -180,16 +180,29 @@ WHERE t.organization_id = $1::text AND t.project_id = $2::uuid
   AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
   AND t.subject = 'assistant-trigger:' || r.id::text
   AND (SELECT count(*) FROM principal_grants g
-    WHERE g.organization_id = $1::text AND g.principal_urn = 'agent:' || ag.id::text) = 4
+    WHERE g.organization_id = $1::text AND g.principal_urn = 'agent:' || ag.id::text) = 5
+  AND EXISTS (
+    SELECT 1 FROM principal_grants g
+    WHERE g.organization_id = $1::text
+      AND g.principal_urn = 'agent:' || ag.id::text
+      AND g.scope = 'mcp:connect'
+      AND g.expires_at IS NULL
+      AND g.selectors = jsonb_build_object(
+        'resource_kind', 'mcp',
+        'resource_id', $7::text,
+        'project_id', $2::text
+      )
+  )
 `
 
 type PostflightIDBoundAssistantRootParams struct {
-	OrgID       string
-	ProjectID   uuid.UUID
-	AssistantID uuid.UUID
-	OwnerUserID string
-	Issuer      string
-	JwksUri     string
+	OrgID               string
+	ProjectID           uuid.UUID
+	AssistantID         uuid.UUID
+	OwnerUserID         string
+	Issuer              string
+	JwksUri             string
+	AssistantsBuiltinID string
 }
 
 func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg PostflightIDBoundAssistantRootParams) (int64, error) {
@@ -200,6 +213,7 @@ func (q *Queries) PostflightIDBoundAssistantRoot(ctx context.Context, arg Postfl
 		arg.OwnerUserID,
 		arg.Issuer,
 		arg.JwksUri,
+		arg.AssistantsBuiltinID,
 	)
 	var count int64
 	err := row.Scan(&count)

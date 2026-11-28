@@ -847,3 +847,43 @@ func TestProcessWorkOSUserEvents_ExternalIDFailureDoesNotFail(t *testing.T) {
 	require.Equal(t, "event_external_id", res.LastEventID)
 	require.Equal(t, 1, workosClient.calls)
 }
+
+func userEventDataWithMetadata(workosUserID, updatedAt, metadata string) []byte {
+	return []byte(`{"id":"` + workosUserID + `","email":"blocked@example.com","first_name":"Ada","last_name":"Lovelace","created_at":"2026-05-11T10:00:00Z","updated_at":"` + updatedAt + `","metadata":` + metadata + `}`)
+}
+
+func TestProcessWorkOSUserEvents_AppliesDisabledMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_disabled_metadata")
+	logger := testenv.NewLogger(t)
+
+	const workosUserID = "user_disabled_metadata"
+	gramID := users.UserIDFromWorkOSID(workosUserID)
+
+	steps := []struct {
+		name      string
+		eventID   string
+		updatedAt string
+		metadata  string
+		blocked   bool
+	}{
+		{name: "disabled true blocks", eventID: "event_block", updatedAt: "2026-05-12T10:00:00Z", metadata: `{"blacklisted":"true"}`, blocked: true},
+		{name: "absent key keeps block", eventID: "event_unrelated", updatedAt: "2026-05-13T10:00:00Z", metadata: `{"team":"sdk"}`, blocked: true},
+		{name: "stale event cannot unblock", eventID: "event_stale", updatedAt: "2026-05-01T10:00:00Z", metadata: `{"blacklisted":"false"}`, blocked: true},
+		{name: "disabled false unblocks", eventID: "event_unblock", updatedAt: "2026-05-14T10:00:00Z", metadata: `{"blacklisted":"false"}`, blocked: false},
+	}
+	for _, step := range steps {
+		workosClient := workos.NewStubClient()
+		workosClient.SetEventPages([][]events.Event{{
+			{ID: step.eventID, Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithMetadata(workosUserID, step.updatedAt, step.metadata)},
+		}})
+		_, err := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient).Do(ctx, processWorkOSUserEventsParams(workosUserID))
+		require.NoError(t, err, step.name)
+
+		row, err := usersrepo.New(conn).GetUser(ctx, gramID)
+		require.NoError(t, err, step.name)
+		require.Equal(t, step.blocked, row.BlacklistedAt.Valid, step.name)
+	}
+}

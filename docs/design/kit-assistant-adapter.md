@@ -4,7 +4,7 @@ Use this reference when implementing or diagnosing the local Speakeasy Kit
 adapter. For configuration and validation steps, see
 [Run Kit assistants locally](../runbooks/kit-assistant-local.md).
 
-The workload configuration requires Kit v0.2.19 or a build containing its MCP
+The workload configuration requires Kit v0.3.1 or a build containing its MCP
 and inference workload support. Production has a separate
 [GKE lifecycle contract](../runbooks/kit-assistant-production.md). Existing
 hybrid-auth Kit runtimes are invalidated; no credential compatibility is provided.
@@ -56,7 +56,7 @@ headers do not establish authority. ACP session creation and resumption must omi
 
 The approved `_kit/session/update_mcp` contract is **additive upsert**, not
 replacement of the server set. Verify support in the runtime image before using
-this API; workload authentication requires Kit v0.2.19 or a build containing
+this API; workload authentication requires Kit v0.3.1 or a build containing
 its MCP and inference workload support.
 
 | Operation                                                             | Required behavior                                                                                     |
@@ -71,8 +71,9 @@ its MCP and inference workload support.
 | A submitted name colliding with a host- or plugin-owned server        | Reject the collision; host/plugin servers and built-ins remain protected.                             |
 
 The gateway's additive retention contract was verified in `src/gateway.rs`
-for Kit v0.2.17 (commit `90a1805`); that provenance is distinct from the v0.2.19
-workload-authentication requirement. The Speakeasy adapter is deliberately stricter:
+for Kit v0.2.17 (commit `90a1805`) and retained through Kit v0.3.1; that
+provenance is distinct from the workload-authentication and prompt-delivery
+requirements. The Speakeasy adapter is deliberately stricter:
 an explicit list represents a desired set, and `[]` must not silently retain
 servers the caller intended to remove. Omission is the adapter's only retain form.
 
@@ -122,6 +123,16 @@ snapshot RPC. A separate `session/resume` connection takes control and can repla
 the resident journal; it is not an independent canonical snapshot reader.
 
 ## Settlement and retirement
+
+`session/prompt` acknowledges prompt insertion (`messageId`), not turn
+completion. When the gateway advertises `capabilities.session.prompt.delivery.queue`,
+the adapter sends `"delivery": "queue"` so messages arriving while foreground
+work is active wait for the active turn to finish and start a new FIFO turn,
+matching Speakeasy's event-queue semantics while allowing the gateway to
+withdraw uninserted held prompts on detach. Every turn submission sends a stable
+`idempotencyKey` derived from the thread event ID so retries after transport or
+worker failure converge on a single insertion and return the original
+`messageId`.
 
 Use `kit/session/status` and its authoritative `settled` field while holding
 runtime admission for lifecycle decisions. Foreground `idle` does not establish

@@ -3283,6 +3283,21 @@ func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, 
 	return i, err
 }
 
+const hardDeleteAuthClientFixture = `-- name: HardDeleteAuthClientFixture :exec
+DELETE FROM mcp_auth_clients
+WHERE id = $1 AND organization_id = $2
+`
+
+type HardDeleteAuthClientFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HardDeleteAuthClientFixture(ctx context.Context, arg HardDeleteAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, hardDeleteAuthClientFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const insertAttachmentFixture = `-- name: InsertAttachmentFixture :execrows
 INSERT INTO principal_remote_session_bindings
  (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, attached_by_subject_id, grant_generation)
@@ -8553,6 +8568,22 @@ func (q *Queries) SoftDeleteAttachmentSourceFixture(ctx context.Context, id uuid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const softDeleteAuthClientFixture = `-- name: SoftDeleteAuthClientFixture :exec
+UPDATE mcp_auth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+`
+
+type SoftDeleteAuthClientFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteAuthClientFixture(ctx context.Context, arg SoftDeleteAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteAuthClientFixture, arg.ID, arg.OrganizationID)
+	return err
 }
 
 const softDeleteDirectoryGroupRoleMappingsFixture = `-- name: SoftDeleteDirectoryGroupRoleMappingsFixture :exec

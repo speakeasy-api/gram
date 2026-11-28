@@ -332,6 +332,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
 	}
 	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, config.ServerURL)
+	authenticator = authenticator.WithLogger(config.Logger)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP authenticator: %w", err)
 	}
@@ -1169,6 +1170,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
 	}
 	authenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(config.JWTSigningKey), config.DB, config.Encryption, config.ServerURL)
+	authenticator = authenticator.WithLogger(config.Logger)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp authenticator: %w", err)
 	}

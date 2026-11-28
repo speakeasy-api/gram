@@ -192,6 +192,12 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 			workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err.Error())
 			return &plugins.PublishProjectResult{RepoURL: "", Skipped: true}, nil
 		}
+		if errors.As(err, &appErr) && appErr.Type() == activities.ErrTypeOrganizationDisabled {
+			// Nothing is published for a disabled organization until it is
+			// re-enabled, so a retry or later sweep would be refused too.
+			workflow.GetLogger(ctx).Warn("plugin project publish skipped: organization is disabled", "error", err.Error())
+			return &plugins.PublishProjectResult{RepoURL: "", Skipped: true}, nil
+		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)
 	}
 	recordPluginProjectPublishOutcome(ctx, result, nil)

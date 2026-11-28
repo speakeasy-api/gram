@@ -26,16 +26,25 @@ export const FILTER_GROUP_KEYS = ["type", "trial", "disabled"] as const;
 export type FilterGroupKey = (typeof FILTER_GROUP_KEYS)[number];
 
 export type MemberRange = { minMembers?: string; maxMembers?: string };
+
+// Whether the organization is past the book-a-demo gate. Absent means both.
+export const WHITELIST_STATES = ["yes", "no"] as const;
+export type WhitelistState = (typeof WHITELIST_STATES)[number];
+export const WHITELIST_LABELS: Record<WhitelistState, string> = {
+  yes: "Whitelisted",
+  no: "Not whitelisted",
+};
 export type MemberRangeKey = keyof MemberRange;
 export type FilterControlKey =
   | FilterGroupKey
   | MemberRangeKey
   | CreatedRangeKey
-  | "created";
+  | "created"
+  | "whitelisted";
 /** Chosen values per group; status is empty (All) or a single state. */
 export type FilterSelection = Record<FilterGroupKey, string[]> &
   MemberRange &
-  CreatedSelection;
+  CreatedSelection & { whitelisted?: WhitelistState };
 
 export const NO_FILTERS: FilterSelection = {
   type: [],
@@ -197,6 +206,7 @@ export function disabledStates(chosen: string[]): DisabledState[] | undefined {
 /** Canonical status; old fields are read only for bookmark compatibility. */
 export type FilterSearch = MemberRange &
   CreatedSelection & {
+    whitelisted?: WhitelistState;
     type?: string[];
     trial?: TrialState[];
     disabledStatus?: "all" | DisabledState;
@@ -210,6 +220,7 @@ export function filtersToSearch(filters: FilterSelection): MemberRange &
     type?: string[];
     trial?: TrialState[];
     disabledStatus?: DisabledState;
+    whitelisted?: WhitelistState;
   } {
   const status = disabledStates(filters.disabled);
   return {
@@ -219,7 +230,31 @@ export function filtersToSearch(filters: FilterSelection): MemberRange &
     type: accountTypes(filters.type),
     trial: trialStates(filters.trial),
     disabledStatus: status?.length === 1 ? status[0] : undefined,
+    whitelisted: whitelistState(filters.whitelisted),
   };
+}
+
+/**
+ * Reads the URL's whitelist param. The router has already JSON-parsed a bare
+ * `?whitelisted=true`, so a hand-written boolean is read alongside yes/no.
+ * Anything else is dropped rather than guessed at.
+ */
+export function whitelistState(value: unknown): WhitelistState | undefined {
+  if (value === "yes" || value === true || value === "true") return "yes";
+  if (value === "no" || value === false || value === "false") return "no";
+  return undefined;
+}
+
+/**
+ * Sent as text: the request builder drops a boolean false as unset, and false
+ * here is a filter, not an absence.
+ */
+export function whitelistParams(search: FilterSearch): {
+  whitelisted?: "true" | "false";
+} {
+  const state = whitelistState(search.whitelisted);
+  if (state === undefined) return {};
+  return { whitelisted: state === "yes" ? "true" : "false" };
 }
 
 /** A valid canonical status wins, including explicit All. */

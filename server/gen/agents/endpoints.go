@@ -21,6 +21,7 @@ type Endpoints struct {
 	List                   goa.Endpoint
 	Create                 goa.Endpoint
 	Get                    goa.Endpoint
+	GetRuntimeGateway      goa.Endpoint
 	Rename                 goa.Endpoint
 	ListDelegableGrants    goa.Endpoint
 	ListPolicyGrants       goa.Endpoint
@@ -49,6 +50,7 @@ func NewEndpoints(s Service) *Endpoints {
 		List:                   NewListEndpoint(s, a.APIKeyAuth),
 		Create:                 NewCreateEndpoint(s, a.APIKeyAuth),
 		Get:                    NewGetEndpoint(s, a.APIKeyAuth),
+		GetRuntimeGateway:      NewGetRuntimeGatewayEndpoint(s, a.APIKeyAuth),
 		Rename:                 NewRenameEndpoint(s, a.APIKeyAuth),
 		ListDelegableGrants:    NewListDelegableGrantsEndpoint(s, a.APIKeyAuth),
 		ListPolicyGrants:       NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
@@ -75,6 +77,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
 	e.Create = m(e.Create)
 	e.Get = m(e.Get)
+	e.GetRuntimeGateway = m(e.GetRuntimeGateway)
 	e.Rename = m(e.Rename)
 	e.ListDelegableGrants = m(e.ListDelegableGrants)
 	e.ListPolicyGrants = m(e.ListPolicyGrants)
@@ -205,6 +208,29 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 			return nil, err
 		}
 		return s.Get(ctx, p)
+	}
+}
+
+// NewGetRuntimeGatewayEndpoint returns an endpoint function that calls the
+// method "getRuntimeGateway" of service "agents".
+func NewGetRuntimeGatewayEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRuntimeGatewayPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRuntimeGateway(ctx, p)
 	}
 }
 

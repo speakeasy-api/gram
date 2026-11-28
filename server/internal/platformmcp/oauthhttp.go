@@ -38,11 +38,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -568,6 +570,11 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			return
 		}
 		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
+		if errors.Is(err, identity.ErrUserBlocked) {
+			userblock.LogRefusal(r.Context(), s.logger, "platform_mcp_login", idpUser.Sub)
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed", oauthui.ReasonDefault)
+			return
+		}
 		if err != nil {
 			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "login could not be completed", oauthui.ReasonDefault)
 			return
@@ -912,7 +919,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		case errors.Is(err, auth.ErrUserHasPendingInvitation):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
 			return
-		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
+		case errors.Is(err, orgcap.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
 			s.logger.WarnContext(r.Context(), "Platform MCP workspace creation refused", attr.SlogError(err))
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account already has a Speakeasy organization, or one is being created. Connect again to choose it."})
 			return

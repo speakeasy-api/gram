@@ -267,8 +267,6 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/mcp/server/install/"},
 		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/server/"},
 		{http.MethodGet, "/.well-known/oauth-authorization-server/mcp/server/"},
-		{http.MethodPost, "/agent-mcp/agent/"},
-		{http.MethodPost, "/agent-mcp/"},
 		{http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"},
 		{http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"},
 		{http.MethodGet, "/mcp/idp_callback/"},

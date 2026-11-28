@@ -1,3 +1,5 @@
+import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
 import type { ReasoningEffort } from "./reasoning-effort";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import {
@@ -86,14 +88,23 @@ export function AssistantDraftProvider({
     [queryClient, onAssistantCreated, project.slug],
   );
 
-  const invalidateAll = useCallback(() => {
-    void invalidateAllAssistantsGet(queryClient);
-    void invalidateAllAssistantsList(queryClient);
-    void invalidateAllListEnvironments(queryClient);
-    void invalidateAllListToolsets(queryClient);
-    void invalidateAllTriggers(queryClient);
-    void invalidateAllTrigger(queryClient);
-  }, [queryClient]);
+  const invalidateAll = useCallback(
+    (options?: { kitAgentId?: string }) => {
+      void invalidateAllAssistantsGet(queryClient);
+      void invalidateAllAssistantsList(queryClient);
+      void invalidateAllListEnvironments(queryClient);
+      void invalidateAllListToolsets(queryClient);
+      if (options?.kitAgentId) {
+        void invalidateAllMcpServers(queryClient);
+        void invalidateAgentsListPolicyGrants(queryClient, [
+          { agentId: options.kitAgentId },
+        ]);
+      }
+      void invalidateAllTriggers(queryClient);
+      void invalidateAllTrigger(queryClient);
+    },
+    [queryClient],
+  );
 
   const invalidateSkillAttachments = useCallback(() => {
     void invalidateAllAssistantsList(queryClient);

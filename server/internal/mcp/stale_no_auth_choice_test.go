@@ -27,14 +27,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -42,8 +40,6 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
-	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -825,38 +821,6 @@ func TestConnectionStatusWritesNoChoiceUnderEnforcement(t *testing.T) {
 	require.Equal(t, 1, choices(), "a call still records the new member's choice")
 }
 
-func TestStaleNoAuthAgentRouteNamesTheAgentInItsLog(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestMCPService(t)
-	ti.service.manual = true
-	fx := seedAgentGateway(t, ctx, ti)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
-	upstream := newCatalogUpstream(t, 1)
-	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: *auth.ProjectID, TransportType: "streamable-http", Url: upstream.url})
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
-	serverID := mcpServerBySlug(t, ctx, ti, *auth.ProjectID, fx.granted)
-	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: *auth.ProjectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
-	require.NoError(t, err)
-	subject := urn.NewAgentSubject(fx.agent.ID)
-	keys, err := keysrepo.New(ti.conn).ListAgentAPIKeys(ctx, keysrepo.ListAgentAPIKeysParams{OrganizationID: auth.ActiveOrganizationID, SubjectUrn: pgtype.Text{String: subject.String(), Valid: true}})
-	require.NoError(t, err)
-	require.Len(t, keys, 1)
-	_, err = upstreamclientsrepo.New(ti.conn).RecordAuthClientChoice(ctx, upstreamclientsrepo.RecordAuthClientChoiceParams{CredentialKind: upstreamclients.CredentialKindAPIKey, CredentialID: keys[0].ID, Source: upstreamclients.SelectionSourceIssuance, OrganizationID: auth.ActiveOrganizationID, AuthClientID: uuid.NullUUID{}, McpServerID: serverID})
-	require.NoError(t, err)
-	registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "agent-"+uuid.NewString()[:8], "")
-	fixtures := authclientfixtures.New(ti.conn)
-	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: "service_account", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
-	require.NoError(t, err)
-	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
-
-	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--tool_000", "arguments": map[string]any{}}}))
-	require.NoError(t, err)
-	requireStaleError(t, w, staleOwnerCopy)
-	require.True(t, ti.service.StaleNoAuthWarned(subject.String(), serverID, "no_auth_forbidden"), "the warning names the agent")
-}
-
 // lateChoices counts the choices recorded for serverID on token's credential.
 func (g *staleChoiceGateway) lateChoices(t *testing.T, ctx context.Context, token string, serverID uuid.UUID) int {
 	t.Helper()
@@ -925,4 +889,19 @@ func TestCodeModeVerifyWritesNoChoice(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.True(t, ran, w.Body.String())
 	require.Zero(t, g.lateChoices(t, ctx, token, lateServer))
+}
+
+// serverAuthClientID is the one enabled auth client of clientType the server offers.
+func serverAuthClientID(t *testing.T, ctx context.Context, ti *testInstance, orgID string, serverID uuid.UUID, clientType string) uuid.UUID {
+	t.Helper()
+	rows, err := upstreamclientsrepo.New(ti.conn).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: orgID, McpServerIds: []uuid.UUID{serverID}})
+	require.NoError(t, err)
+	var ids []uuid.UUID
+	for _, row := range rows {
+		if row.AuthClientID.Valid && row.ClientType.String == clientType {
+			ids = append(ids, row.AuthClientID.UUID)
+		}
+	}
+	require.Len(t, ids, 1)
+	return ids[0]
 }

@@ -27,6 +27,7 @@ export const ClientType = {
   StaticCredential: "static_credential",
   PassThrough: "pass_through",
   Ema: "ema",
+  SlackApp: "slack_app",
 } as const;
 /**
  * Only clients of this type.
