@@ -19,6 +19,7 @@ const (
 	ActionAccessRoleDelete          Action = "access_role:delete"
 	ActionAccessMemberRoleUpdate    Action = "access_member:update_role"
 	ActionAccessMemberSignInsRevoke Action = "access_member:revoke_sign_ins"
+	ActionAccessMemberBlock         Action = "access_member:block"
 	ActionAccessChallengeResolve    Action = "access_challenge:resolve"
 )
 
@@ -339,6 +340,90 @@ func (l *Logger) LogAccessMemberSignInsRevoke(ctx context.Context, dbtx repo.DBT
 		Action: string(action),
 
 		SubjectID:          event.MemberID,
+		SubjectType:        string(subjectTypeAccessMember),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.MemberEmail),
+		SubjectSlug:        conv.ToPGTextEmpty(event.MemberEmail),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
+}
+
+type LogAccessMemberBlockEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	MemberURN   urn.Principal
+	MemberEmail string
+
+	Reason                         string
+	OrganizationDisabled           bool
+	RevokedAPIKeys                 int
+	RevokedSignIns                 int
+	RevokedUserSessions            int
+	RevokedUserSessionConsents     int
+	RevokedUserSessionClients      int
+	RevokedPlatformMCPConnections  int
+	RevokedPlatformMCPSessions     int
+	RevokedPlatformMCPOAuthClients int
+	RevokedChannelsOAuthGrants     int
+	RevokedChannelsOAuthClients    int
+}
+
+type accessMemberBlockMetadata struct {
+	Reason                         string `json:"reason,omitempty"`
+	OrganizationDisabled           bool   `json:"organization_disabled"`
+	RevokedAPIKeys                 int    `json:"revoked_api_keys"`
+	RevokedSignIns                 int    `json:"revoked_sign_ins"`
+	RevokedUserSessions            int    `json:"revoked_user_sessions"`
+	RevokedUserSessionConsents     int    `json:"revoked_user_session_consents"`
+	RevokedUserSessionClients      int    `json:"revoked_user_session_clients"`
+	RevokedPlatformMCPConnections  int    `json:"revoked_platform_mcp_connections"`
+	RevokedPlatformMCPSessions     int    `json:"revoked_platform_mcp_sessions"`
+	RevokedPlatformMCPOAuthClients int    `json:"revoked_platform_mcp_oauth_clients"`
+	RevokedChannelsOAuthGrants     int    `json:"revoked_channels_oauth_grants"`
+	RevokedChannelsOAuthClients    int    `json:"revoked_channels_oauth_clients"`
+}
+
+func (l *Logger) LogAccessMemberBlock(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberBlockEvent) error {
+	action := ActionAccessMemberBlock
+
+	metadata, err := marshalAuditPayload(accessMemberBlockMetadata{
+		Reason:                         event.Reason,
+		OrganizationDisabled:           event.OrganizationDisabled,
+		RevokedAPIKeys:                 event.RevokedAPIKeys,
+		RevokedSignIns:                 event.RevokedSignIns,
+		RevokedUserSessions:            event.RevokedUserSessions,
+		RevokedUserSessionConsents:     event.RevokedUserSessionConsents,
+		RevokedUserSessionClients:      event.RevokedUserSessionClients,
+		RevokedPlatformMCPConnections:  event.RevokedPlatformMCPConnections,
+		RevokedPlatformMCPSessions:     event.RevokedPlatformMCPSessions,
+		RevokedPlatformMCPOAuthClients: event.RevokedPlatformMCPOAuthClients,
+		RevokedChannelsOAuthGrants:     event.RevokedChannelsOAuthGrants,
+		RevokedChannelsOAuthClients:    event.RevokedChannelsOAuthClients,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(nil),
+
+		Action: string(action),
+
+		SubjectID:          event.MemberURN.ID,
 		SubjectType:        string(subjectTypeAccessMember),
 		SubjectDisplayName: conv.ToPGTextEmpty(event.MemberEmail),
 		SubjectSlug:        conv.ToPGTextEmpty(event.MemberEmail),
