@@ -140,10 +140,13 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
 
 ## Connect an agent to its project gateway
 
-From the agent's **Agent sign-in** page in the dashboard, issue an agent key and
-open the **Manual** setup instructions. The dashboard shows the existing project
-gateway URL, including its custom-domain URL when the organization uses one.
-It does not create or expose a separate per-agent gateway URL.
+See [Agent and workload access through gateways](agent-workload-gateway-access.md)
+for the supported endpoint, readiness requirements, and token modes. For an
+OpenClaw API-key setup, open the agent's **Agent sign-in** page in the dashboard,
+issue an agent key, and open the **Manual** setup instructions. The dashboard
+shows the existing shared project gateway URL, including its custom-domain URL
+when the organization uses one. The key binds requests on that URL to the agent;
+the dashboard does not create or expose a separate per-agent gateway URL.
 
 Store the displayed key in `SPEAKEASY_AGENT_KEY` where the OpenClaw runtime
 reads secrets, then add the project gateway without putting the key in the
