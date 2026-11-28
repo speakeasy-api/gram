@@ -34591,6 +34591,24 @@ func DecodeFinalizeOrganizationEncryptionResponse(decoder func(*http.Response) g
 	}
 }
 
+// unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization
+// builds a value of type *admin.AdminTrialCardSharingOrganization from a value
+// of type *AdminTrialCardSharingOrganizationResponseBody.
+func unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(v *AdminTrialCardSharingOrganizationResponseBody) *admin.AdminTrialCardSharingOrganization {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminTrialCardSharingOrganization{
+		ID:              *v.ID,
+		Name:            *v.Name,
+		Slug:            *v.Slug,
+		CardAddedAt:     *v.CardAddedAt,
+		RejectionReason: v.RejectionReason,
+	}
+
+	return res
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -34732,11 +34750,23 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		TrialEndsAt:                    v.TrialEndsAt,
 		TrialConvertedAt:               v.TrialConvertedAt,
 		TrialDemotedAt:                 v.TrialDemotedAt,
+		TrialCardAddedAt:               v.TrialCardAddedAt,
+		TrialCardRejectionReason:       v.TrialCardRejectionReason,
 		AdoptionDashboardURL:           v.AdoptionDashboardURL,
 		MemberCount:                    *v.MemberCount,
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      *v.CreatedAt,
 		UpdatedAt:                      *v.UpdatedAt,
+	}
+	if v.OrganizationsSharingTrialCard != nil {
+		res.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(v.OrganizationsSharingTrialCard))
+		for i, val := range v.OrganizationsSharingTrialCard {
+			if val == nil {
+				res.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			res.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return res

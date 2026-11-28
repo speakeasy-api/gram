@@ -18,7 +18,6 @@ import (
 
 // Bootstrap authenticates each invocation, including retries. Bound per-thread
 // credentials get independent buckets so busy siblings cannot starve each other.
-// Legacy assistant-wide credentials retain the assistant-wide abuse limit.
 const (
 	bootstrapRateBurst    = 60
 	bootstrapRatePerMin   = 60
@@ -69,10 +68,8 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeBadRequest, err, "invalid thread_id")
 	}
 
-	// Per-thread token (ThreadID claim populated) may only bootstrap its
-	// own thread; rejects replay/misuse against a sibling under the same
-	// assistant. Assistant-only tokens (ThreadID zero) still flow through.
-	if principal.ThreadID != uuid.Nil && principal.ThreadID != threadID {
+	// A thread-bound turn credential may only bootstrap its own thread.
+	if principal.ThreadID == uuid.Nil || principal.ThreadID != threadID {
 		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
 	}
 
@@ -109,9 +106,6 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 // fail open rather than wedge bootstrap.
 func (s *Service) allowBootstrap(ctx context.Context, assistantID, tokenThreadID uuid.UUID) error {
 	key := assistantID.String()
-	if tokenThreadID == uuid.Nil {
-		return s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key)
-	}
 	if err := s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key+":"+tokenThreadID.String()); err != nil {
 		return err
 	}

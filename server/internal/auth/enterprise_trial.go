@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,10 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -83,21 +80,6 @@ func (s *Service) SetOrganizationFeatureSeederForTest(seeder OrganizationFeature
 	s.organizationSeeder = seeder
 }
 
-// organizationEligibleForSelfServeTrial reports whether login may grant this
-// organization the same enterprise trial a zero-organization signup receives.
-// Prospects created in the admin app stay behind the book-a-demo gate, and so
-// does any organization that is already on a paid tier or already inside the
-// product.
-func organizationEligibleForSelfServeTrial(org orgRepo.OrganizationMetadatum) bool {
-	if org.ID == "" || org.Whitelisted || org.DisabledAt.Valid {
-		return false
-	}
-	if billing.Tier(strings.ToLower(strings.TrimSpace(org.GramAccountType))) != billing.TierBase {
-		return false
-	}
-	return conv.FromPGTextOrEmpty[string](org.CreationSource) != orgprovision.SourcePlatformAdmin
-}
-
 // armSelfServeTrialForExistingOrganization grants the standard signup trial to
 // an organization that already existed when an organization admin signed in.
 // Customers of another Speakeasy product already have an identity-provider
@@ -106,12 +88,13 @@ func organizationEligibleForSelfServeTrial(org orgRepo.OrganizationMetadatum) bo
 // admin role does not start the trial.
 //
 // armed is false when the organization is not eligible, the signer is not an
-// admin, or a trial lifecycle already exists, including one that has ended. A
+// admin, a trial lifecycle already exists, including one that has ended, or
+// the trial waits for a validated card. A
 // concurrent login that commits first is also not armed here; that request
 // sends the trial-started notification. The returned organization is the row
 // after a successful arm, and the caller's row otherwise.
 func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, org orgRepo.OrganizationMetadatum, userID, actorEmail string, membership identity.IDPMembershipRole) (orgRepo.OrganizationMetadatum, bool, error) {
-	if !organizationEligibleForSelfServeTrial(org) || !slices.Contains(membership.RoleSlugs, authz.SystemRoleAdmin) {
+	if !trials.SelfServeEligible(org) || !slices.Contains(membership.RoleSlugs, authz.SystemRoleAdmin) {
 		return org, false, nil
 	}
 
@@ -133,6 +116,7 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 	default:
 		return org, false, nil
 	}
+	requiresPaymentMethod := s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, org.ID)
 
 	if s.organizationSeeder == nil || s.trialBundleSeeder == nil {
 		return org, false, errors.New("enterprise trial seeders are not configured")
@@ -155,6 +139,14 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 	}
 	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
 		return org, false, fmt.Errorf("seed organization default entitlements: %w", err)
+	}
+	// The admin still needs the seeded roles to add the card that starts the
+	// trial, so access setup commits even when the trial waits.
+	if requiresPaymentMethod {
+		if err := tx.Commit(ctx); err != nil {
+			return org, false, fmt.Errorf("commit self-serve trial access setup: %w", err)
+		}
+		return org, false, nil
 	}
 	if err := s.armEnterpriseTrialTx(ctx, tx, org, userID, actorEmail); err != nil {
 		if errors.Is(err, trials.ErrNotStartable) {

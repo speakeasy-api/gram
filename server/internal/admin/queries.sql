@@ -616,6 +616,8 @@ SELECT
     t.ends_at AS trial_ends_at,
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
+    tpm.updated_at AS trial_card_added_at,
+    tpm.rejection_reason AS trial_card_rejection_reason,
     om.creation_source,
     om.adoption_dashboard_url,
     om.created_at,
@@ -628,6 +630,7 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
+LEFT JOIN trial_payment_methods tpm ON tpm.organization_id = om.id
 LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
