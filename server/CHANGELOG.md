@@ -1,5 +1,18 @@
 # server
 
+## 2.47.0
+
+### Minor Changes
+
+- cb64547: Add a bulk disable to the admin organizations page. Upload a CSV with an `id` or `slug` column, review the matched organizations (id, slug, name, account type, and whether each is already disabled) along with any the file named that could not be found, then confirm. Each confirmed organization is removed from the whitelist and disabled in a single transaction, with the same audit events as disabling one at a time.
+- 68d18fa: Add a staff switch in the admin dashboard that turns self-serve signup off across all organizations. While it is off, new self-serve organizations and self-serve trials are refused with a message pointing to sales.
+- 631693d: New self-serve free trials start after an organization admin adds a card. The card is saved with Stripe and is not charged during the 14-day trial. Prepaid cards are not accepted, and a card can start only one free trial. Until a card is added, the organization shows a **Start your free trial** page; members who are not admins are asked to contact an admin. When the trial ends, the saved card is offered when you start pay-as-you-go billing. Trials that are already running are not affected.
+
+### Patch Changes
+
+- 6dc2d1c: MCP clients configured with a URL that serves no MCP server now get JSON errors they can read instead of a parse error. The "mcp server not found" message says how to find the server's current URL in the dashboard. Requests from MCP clients to MCP URLs that match no route, such as a server URL with an extra path segment, answer with a JSON or JSON-RPC error instead of a plain text page. Root OAuth and OpenID discovery documents and `POST /register` on the dashboard answer with a JSON 404 instead of the dashboard page. Stream and session termination requests for an unknown MCP server answer not found instead of 405. A disabled MCP server now answers metadata, registration, stream, and session termination requests exactly as a missing one does.
+- 1f3d972: MCP clients that signed in before their server's MCP sign-in moved to the authentication host, including servers moved or consolidated onto a shared authorization server that uses it, can refresh again without clearing stored credentials. The MCP host keeps serving authorization server metadata under the issuer those clients recorded, and its token and revocation endpoints accept client assertions signed for that issuer. Clients whose registration did not move with the server get `invalid_client` and must sign in again.
+
 ## 2.46.0
 
 ### Minor Changes
