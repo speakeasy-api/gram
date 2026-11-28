@@ -5,6 +5,7 @@ mod errors;
 mod gram_client;
 mod http_layer;
 mod mcp_actor;
+mod peer_guard;
 mod runtime;
 mod server;
 mod telemetry;
@@ -97,6 +98,7 @@ enum OtlpProtocol {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    deny_same_user_inspection();
     let cli = Cli::parse();
     let result = match cli.mode {
         Mode::Serve {
@@ -137,6 +139,24 @@ async fn main() -> ExitCode {
         Err(e) => {
             tracing::error!(error = %e, "runner exited with error");
             ExitCode::FAILURE
+        }
+    }
+}
+
+/// Marks the runner non-dumpable so other processes running as the same user,
+/// such as `bun_run` children, cannot read its `/proc/<pid>/environ` or
+/// `/proc/<pid>/mem` or attach with ptrace. The runner holds deployment
+/// configuration in its environment and per-thread bearer tokens in memory.
+/// Children get the default dumpable state back when they exec.
+fn deny_same_user_inspection() {
+    #[cfg(target_os = "linux")]
+    if let Err(e) =
+        rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
+    {
+        // Tracing is not initialized yet; this is the only output channel.
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("gram-assistant-runner: failed to mark process non-dumpable: {e}");
         }
     }
 }
