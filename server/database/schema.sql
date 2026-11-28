@@ -18552,3 +18552,74 @@ COMMENT ON COLUMN mcp_server_feedback.updated_at IS '@access: confidential';
 -- and mcp_servers.
 CREATE INDEX IF NOT EXISTS mcp_server_feedback_project_id_mcp_server_id_created_at_id_idx
 ON mcp_server_feedback (project_id, mcp_server_id, created_at DESC, id DESC);
+
+-- Durable per-thread ATE actor identity and lifecycle record. Each row binds
+-- one assistant thread under an ATE Kit runtime to its Substrate actor and
+-- workload admission without locking the shared assistant_runtimes row.
+CREATE TABLE IF NOT EXISTS assistant_ate_actors (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  runtime_id uuid NOT NULL,
+  assistant_thread_id uuid NOT NULL,
+
+  actor_name TEXT NOT NULL CHECK (actor_name <> '' AND CHAR_LENGTH(actor_name) <= 63),
+  actor_uid TEXT NOT NULL CHECK (actor_uid <> ''),
+  state TEXT NOT NULL CHECK (state <> '' AND CHAR_LENGTH(state) <= 50),
+  configured boolean NOT NULL DEFAULT false,
+  workload_binding_json JSONB,
+  warm_until timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT assistant_ate_actors_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_ate_actors_project_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT assistant_ate_actors_assistant_fkey FOREIGN KEY (organization_id, project_id, assistant_id) REFERENCES assistants (organization_id, project_id, id) ON DELETE CASCADE,
+  CONSTRAINT assistant_ate_actors_runtime_fkey FOREIGN KEY (project_id, runtime_id) REFERENCES assistant_runtimes (project_id, id) ON DELETE CASCADE,
+  CONSTRAINT assistant_ate_actors_thread_fkey FOREIGN KEY (project_id, assistant_thread_id) REFERENCES assistant_threads (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_ate_actors_runtime_thread_active_key
+ON assistant_ate_actors (runtime_id, assistant_thread_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_ate_actors_actor_uid_key
+ON assistant_ate_actors (actor_uid)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_ate_actors_project_runtime_idx
+ON assistant_ate_actors (project_id, runtime_id);
+
+CREATE INDEX IF NOT EXISTS assistant_ate_actors_project_thread_idx
+ON assistant_ate_actors (project_id, assistant_thread_id);
+
+CREATE INDEX IF NOT EXISTS assistant_ate_actors_state_warm_until_active_idx
+ON assistant_ate_actors (state, warm_until)
+WHERE deleted IS FALSE;
+
+COMMENT ON COLUMN assistant_ate_actors.id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.organization_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.project_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.assistant_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.runtime_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.assistant_thread_id IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.actor_name IS 'DNS-1123 actor name within the configured ATE atespace.
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.actor_uid IS 'Immutable ATE-assigned actor UID used for durable identity lookup.
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.state IS 'Lifecycle state of the thread actor (Go constants are canonical).
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.configured IS 'True once initial bootstrap files have been delivered to the actor rootfs.
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.workload_binding_json IS 'Serialized workload admission binding for this thread actor.
+@access: restricted';
+COMMENT ON COLUMN assistant_ate_actors.warm_until IS 'Deadline after which an idle running actor is eligible for synchronous suspend.
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.created_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.updated_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.deleted IS '@access: confidential';
