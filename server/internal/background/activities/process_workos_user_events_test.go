@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -19,11 +21,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -886,4 +893,149 @@ func TestProcessWorkOSUserEvents_AppliesDisabledMetadata(t *testing.T) {
 		require.NoError(t, err, step.name)
 		require.Equal(t, step.blocked, row.BlacklistedAt.Valid, step.name)
 	}
+}
+
+func TestProcessWorkOSUserEvents_BlacklistMetadataCascadesAndInvalidatesGate(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newUserEventsTestConn(t, "workos_user_events_blacklist_cascade")
+	logger := testenv.NewLogger(t)
+
+	const (
+		workosUserID  = "user_blacklist_cascade_sync"
+		soleOrgID     = "org_blacklist_cascade_sole"
+		sharedOrgID   = "org_blacklist_cascade_shared"
+		staffOrgID    = "org_blacklist_cascade_staff"
+		peerUserID    = "user_blacklist_cascade_peer"
+		staffMemberID = "user_blacklist_cascade_staff_member"
+	)
+	localUserID := users.UserIDFromWorkOSID(workosUserID)
+	oRepo := orgrepo.New(conn)
+	uRepo := usersrepo.New(conn)
+	kRepo := keysrepo.New(conn)
+	pmRepo := platformrepo.New(conn)
+
+	_, err := uRepo.UpsertSyncedUser(ctx, syncedUserParams(localUserID, workosUserID, "blocked@example.com", "Blocked User"))
+	require.NoError(t, err)
+	_, err = uRepo.UpsertUser(ctx, localUserParams(peerUserID, "peer@example.com", "Peer User"))
+	require.NoError(t, err)
+	_, err = uRepo.UpsertUser(ctx, localUserParams(staffMemberID, "staff@example.com", "Staff User"))
+	require.NoError(t, err)
+
+	for _, org := range []orgrepo.CreateOrganizationMetadataParams{
+		{ID: soleOrgID, Name: "Sole Org", Slug: "sync-cascade-sole"},
+		{ID: sharedOrgID, Name: "Shared Org", Slug: "sync-cascade-shared"},
+		{ID: staffOrgID, Name: "Staff Org", Slug: "sync-cascade-staff"},
+	} {
+		require.NoError(t, oRepo.CreateOrganizationMetadata(ctx, org))
+	}
+	for _, membership := range []struct{ orgID, userID string }{
+		{soleOrgID, localUserID},
+		{soleOrgID, staffMemberID},
+		{staffOrgID, staffMemberID},
+		{sharedOrgID, localUserID},
+		{sharedOrgID, peerUserID},
+	} {
+		_, err := oRepo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+			OrganizationID: membership.orgID,
+			UserID:         conv.ToPGText(membership.userID),
+		})
+		require.NoError(t, err)
+	}
+
+	apiKey, err := kRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID:  sharedOrgID,
+		ProjectID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CreatedByUserID: localUserID,
+		Name:            "Synced Blocked Key",
+		KeyPrefix:       "sk_syn01",
+		KeyHash:         "hash-sync-blocked-key",
+		Scopes:          []string{"mcp:read"},
+	})
+	require.NoError(t, err)
+
+	pmClient, err := pmRepo.CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
+		ClientID:              "pmcp-sync-owned",
+		ClientSecretHash:      conv.ToPGTextEmpty(""),
+		ClientName:            "Owned Client",
+		RedirectUris:          []string{"http://127.0.0.1:7000/cb"},
+		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+	})
+	require.NoError(t, err)
+	gen := uuid.New()
+	future := conv.ToPGTimestamptz(time.Now().Add(time.Hour))
+	pmConn, err := pmRepo.CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{
+		ID:                     uuid.New(),
+		OrganizationID:         soleOrgID,
+		SubjectUrn:             urn.NewUserSubject(localUserID).String(),
+		OauthClientID:          pmClient.ID,
+		ActiveGeneration:       gen,
+		AuthorizationExpiresAt: future,
+	})
+	require.NoError(t, err)
+	_, err = pmRepo.CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID:                   uuid.New(),
+		OrganizationID:       soleOrgID,
+		ConnectionID:         pmConn.ID,
+		OauthClientID:        pmClient.ID,
+		ConnectionGeneration: gen,
+		Jti:                  "pmcp-sync-jti",
+		RefreshTokenHash:     "pmcp-sync-refresh",
+		ExpiresAt:            future,
+		RefreshExpiresAt:     future,
+	})
+	require.NoError(t, err)
+
+	gate := userblock.NewGate(conn)
+	blockedBefore, err := gate.Blocked(ctx, localUserID)
+	require.NoError(t, err)
+	require.False(t, blockedBefore)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_cascade_block", Event: "user.updated", CreatedAt: time.Now(), Data: userEventDataWithMetadata(workosUserID, "2026-05-12T10:00:00Z", `{"blacklisted":"true"}`)},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(
+		logger,
+		conn,
+		workosClient,
+		activities.WithProcessWorkOSUserEventsAuditLogger(audit.NewLogger()),
+		activities.WithProcessWorkOSUserEventsStaffOrganization(staff.NewOrganization(staffOrgID)),
+	)
+	_, err = activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+
+	blockedAfter, err := gate.Blocked(ctx, localUserID)
+	require.NoError(t, err)
+	require.True(t, blockedAfter, "WorkOS block sync must invalidate userblock snapshot after commit")
+
+	soleMeta, err := oRepo.GetOrganizationMetadata(ctx, soleOrgID)
+	require.NoError(t, err)
+	require.True(t, soleMeta.DisabledAt.Valid, "org with only blocked user + staff member must be disabled")
+
+	sharedMeta, err := oRepo.GetOrganizationMetadata(ctx, sharedOrgID)
+	require.NoError(t, err)
+	require.False(t, sharedMeta.DisabledAt.Valid, "shared org must stay enabled")
+
+	keyRow, err := kRepo.GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: apiKey.ID, OrganizationID: sharedOrgID})
+	require.NoError(t, err)
+	require.True(t, keyRow.DeletedAt.Valid)
+	require.True(t, keyRow.Deleted)
+
+	_, err = pmRepo.GetActivePlatformMCPOAuthClientByClientID(ctx, "pmcp-sync-owned")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = pmRepo.GetActivePlatformMCPSessionByJTI(ctx, platformrepo.GetActivePlatformMCPSessionByJTIParams{
+		OrganizationID: soleOrgID,
+		Jti:            "pmcp-sync-jti",
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	blockAuditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberBlock)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, blockAuditCount)
+	disabledAuditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationDisabled)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, disabledAuditCount)
 }

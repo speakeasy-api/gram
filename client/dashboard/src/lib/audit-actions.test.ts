@@ -204,6 +204,11 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("describes member blocking", () => {
+    expect(isAuditAction("access_member:block")).toBe(true);
+    expect(staticActionPhrase("access_member:block")).toBe("blocked member");
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);

@@ -15,14 +15,18 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 	"github.com/speakeasy-api/gram/server/internal/users"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -44,14 +48,46 @@ type ProcessWorkOSUserEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
 	workosClient WorkOSClient
+	auditLogger  *audit.Logger
+	staffOrg     staff.Organization
 }
 
-func NewProcessWorkOSUserEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient) *ProcessWorkOSUserEvents {
-	return &ProcessWorkOSUserEvents{
+// ProcessWorkOSUserEventsOption configures optional dependencies on
+// ProcessWorkOSUserEvents.
+type ProcessWorkOSUserEventsOption func(*ProcessWorkOSUserEvents)
+
+// WithProcessWorkOSUserEventsAuditLogger overrides the audit logger used when
+// WorkOS user metadata triggers a blacklist cascade.
+func WithProcessWorkOSUserEventsAuditLogger(auditLogger *audit.Logger) ProcessWorkOSUserEventsOption {
+	return func(p *ProcessWorkOSUserEvents) {
+		if auditLogger != nil {
+			p.auditLogger = auditLogger
+		}
+	}
+}
+
+// WithProcessWorkOSUserEventsStaffOrganization sets the deployment staff
+// organization so blacklist cascades treat its members as staff.
+func WithProcessWorkOSUserEventsStaffOrganization(staffOrg staff.Organization) ProcessWorkOSUserEventsOption {
+	return func(p *ProcessWorkOSUserEvents) {
+		p.staffOrg = staffOrg
+	}
+}
+
+func NewProcessWorkOSUserEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, opts ...ProcessWorkOSUserEventsOption) *ProcessWorkOSUserEvents {
+	p := &ProcessWorkOSUserEvents{
 		db:           db,
 		logger:       logger,
 		workosClient: workosClient,
+		auditLogger:  audit.NewLogger(),
+		staffOrg:     staff.Organization{},
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(p)
+		}
+	}
+	return p
 }
 
 func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUserEventsParams) (*ProcessWorkOSUserEventsResult, error) {
@@ -126,7 +162,7 @@ func (p *ProcessWorkOSUserEvents) handleEvent(ctx context.Context, logger *slog.
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	externalIDUpdate, err := p.handleUserEvent(ctx, logger, dbtx, workosUserID, event)
+	outcome, err := p.handleUserEvent(ctx, logger, dbtx, workosUserID, event)
 	if err != nil {
 		return "", err
 	}
@@ -142,13 +178,22 @@ func (p *ProcessWorkOSUserEvents) handleEvent(ctx context.Context, logger *slog.
 		return "", fmt.Errorf("commit transaction: %w", err)
 	}
 
-	if externalIDUpdate != nil {
-		if err := p.workosClient.UpdateUserExternalID(ctx, externalIDUpdate.workosUserID, externalIDUpdate.externalID); err != nil {
+	if outcome.blockStateChanged {
+		userblock.Forget(p.db)
+	}
+
+	if outcome.externalIDUpdate != nil {
+		if err := p.workosClient.UpdateUserExternalID(ctx, outcome.externalIDUpdate.workosUserID, outcome.externalIDUpdate.externalID); err != nil {
 			logger.WarnContext(ctx, "failed to set WorkOS user external ID", attr.SlogError(err))
 		}
 	}
 
 	return event.ID, nil
+}
+
+type workosUserEventOutcome struct {
+	externalIDUpdate  *workosUserExternalIDUpdate
+	blockStateChanged bool
 }
 
 type workosUserExternalIDUpdate struct {
@@ -194,39 +239,41 @@ func workosUserDisabledState(metadata map[string]string) (disabled bool, ok bool
 	}
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
+func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosUserID string, event events.Event) (workosUserEventOutcome, error) {
+	var zero workosUserEventOutcome
 	var payload workosUserEventPayload
 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
-		return nil, oops.Permanent(fmt.Errorf("unmarshal user event payload: %w", err))
+		return zero, oops.Permanent(fmt.Errorf("unmarshal user event payload: %w", err))
 	}
 	if payload.ID == "" {
-		return nil, oops.Permanent(fmt.Errorf("invalid user event payload missing ID"))
+		return zero, oops.Permanent(fmt.Errorf("invalid user event payload missing ID"))
 	}
 
 	if payload.ID != workosUserID {
-		return nil, nil
+		return zero, nil
 	}
 
 	switch workos.EventKind(event.Event) {
 	case workos.EventKindUserCreated, workos.EventKindUserUpdated:
 		return p.handleUserUpsert(ctx, logger, dbtx, payload)
 	case workos.EventKindUserDeleted:
-		return nil, p.handleUserDeleted(ctx, dbtx, payload)
+		return zero, p.handleUserDeleted(ctx, dbtx, payload)
 	default:
-		return nil, nil
+		return zero, nil
 	}
 }
 
-func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
+func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, payload workosUserEventPayload) (workosUserEventOutcome, error) {
+	var outcome workosUserEventOutcome
 	userQueries := usersrepo.New(dbtx)
 	resolved, err := resolveWorkOSUser(ctx, logger, userQueries, payload)
 	if err != nil {
-		return nil, err
+		return outcome, err
 	}
 	if resolved.needsLink {
 		if err := linkExistingUserToWorkOS(ctx, userQueries, resolved.userID, payload.ID); err != nil {
-			return nil, err
+			return outcome, err
 		}
 	}
 
@@ -240,25 +287,10 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("upsert synced user: %w", err)
-	}
-	// Only an event newer than the stored profile may change the block state,
-	// so a replayed older event cannot undo a newer block or unblock.
-	if disabled, ok := workosUserDisabledState(payload.Metadata); ok && applied > 0 {
-		if err := userQueries.SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
-			Blacklisted: disabled,
-			ID:          resolved.userID,
-		}); err != nil {
-			return nil, fmt.Errorf("set user block from workos metadata: %w", err)
-		}
-		message := "unblocked user from workos metadata"
-		if disabled {
-			message = "blocked user from workos metadata"
-		}
-		logger.InfoContext(ctx, message, attr.SlogUserID(resolved.userID), attr.SlogWorkOSUserID(payload.ID))
+		return outcome, fmt.Errorf("upsert synced user: %w", err)
 	}
 	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.ID, payload.Email); err != nil {
-		return nil, err
+		return outcome, err
 	}
 
 	organizationQueries := organizationsrepo.New(dbtx)
@@ -266,26 +298,57 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		UserID:       conv.ToPGText(resolved.userID),
 		WorkosUserID: payload.ID,
 	}); err != nil {
-		return nil, fmt.Errorf("link role assignments to user: %w", err)
+		return outcome, fmt.Errorf("link role assignments to user: %w", err)
 	}
 	if err := organizationQueries.LinkRelationshipsToUser(ctx, organizationsrepo.LinkRelationshipsToUserParams{
 		UserID:       conv.ToPGText(resolved.userID),
 		WorkosUserID: conv.ToPGText(payload.ID),
 	}); err != nil {
-		return nil, fmt.Errorf("link organization relationships to user: %w", err)
+		return outcome, fmt.Errorf("link organization relationships to user: %w", err)
 	}
 	if err := logRoleAssignmentLinkedToDifferentWorkOSUser(ctx, logger, organizationQueries, resolved.userID, payload.ID); err != nil {
-		return nil, err
+		return outcome, err
+	}
+
+	// Only an event newer than the stored profile may change the block state,
+	// so a replayed older event cannot undo a newer block or unblock. Run after
+	// relationship linking so the blacklist cascade sees newly linked orgs.
+	if disabled, ok := workosUserDisabledState(payload.Metadata); ok && applied > 0 {
+		outcome.blockStateChanged = true
+		if disabled {
+			if _, err := userblock.BlacklistTx(ctx, dbtx, userblock.BlacklistParams{
+				UserID: resolved.userID,
+				Actor: userblock.Actor{
+					Principal:   urn.NewSystemPrincipal("workos-user-sync"),
+					DisplayName: nil,
+				},
+				Reason:            "workos_metadata",
+				StaffOrganization: p.staffOrg,
+				AuditLogger:       p.auditLogger,
+				Logger:            logger,
+			}); err != nil {
+				return outcome, fmt.Errorf("cascade user block from workos metadata: %w", err)
+			}
+			logger.InfoContext(ctx, "blocked user from workos metadata", attr.SlogUserID(resolved.userID), attr.SlogWorkOSUserID(payload.ID))
+		} else {
+			if err := userQueries.SetUserBlacklisted(ctx, usersrepo.SetUserBlacklistedParams{
+				Blacklisted: false,
+				ID:          resolved.userID,
+			}); err != nil {
+				return outcome, fmt.Errorf("clear user block from workos metadata: %w", err)
+			}
+			logger.InfoContext(ctx, "unblocked user from workos metadata", attr.SlogUserID(resolved.userID), attr.SlogWorkOSUserID(payload.ID))
+		}
 	}
 
 	if resolved.needsExternalIDUpdate {
-		return &workosUserExternalIDUpdate{
+		outcome.externalIDUpdate = &workosUserExternalIDUpdate{
 			workosUserID: payload.ID,
 			externalID:   resolved.userID,
-		}, nil
+		}
 	}
 
-	return nil, nil
+	return outcome, nil
 }
 
 func logRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Context, logger *slog.Logger, organizationQueries *organizationsrepo.Queries, gramUserID, workosUserID string) error {
