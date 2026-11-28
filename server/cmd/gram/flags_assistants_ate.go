@@ -2,62 +2,32 @@ package gram
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
+	goahttp "goa.design/goa/v3/http"
+	"google.golang.org/api/idtoken"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
+	"github.com/speakeasy-api/gram/server/internal/atecred"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/inv"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 )
-
-type ateWorkloadAuthorizerAdapter struct {
-	resolver *assistants.ATEWorkloadAuthorizer
-}
-
-func newATEWorkloadAuthorizerAdapter(db *pgxpool.Pool) mcp.WorkloadAuthorizerResolver {
-	return &ateWorkloadAuthorizerAdapter{resolver: assistants.NewATEWorkloadAuthorizer(db)}
-}
-
-func (a *ateWorkloadAuthorizerAdapter) ResolveWorkloadAuthorizer(ctx context.Context, req mcp.WorkloadAuthorizerRequest) (mcp.WorkloadAuthorizerResolution, error) {
-	res, err := a.resolver.Resolve(ctx, assistants.ATEWorkloadAuthorizerRequest{
-		OrganizationID: req.OrganizationID,
-		ProjectID:      req.ProjectID,
-		IssuerID:       req.IssuerID,
-		Subject:        req.Subject,
-		Claims:         req.Claims,
-	})
-	if err != nil {
-		if errors.Is(err, assistants.ErrATEWorkloadAuthorizerRejected) {
-			return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("%w: %w", mcp.ErrWorkloadAuthorizerRejected, err)
-		}
-		return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("resolve ATE workload authorizer: %w", err)
-	}
-	return mcp.WorkloadAuthorizerResolution{
-		Bound:            res.Bound,
-		AuthorizerUserID: res.AuthorizerUserID,
-		AssistantID:      res.AssistantID,
-		ThreadID:         res.ThreadID,
-		ChatID:           res.ChatID,
-	}, nil
-}
 
 func assistantATERuntimeFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{Name: "assistant-ate-enabled", EnvVars: []string{"GRAM_ASSISTANT_ATE_ENABLED"}, Usage: "Enable the ATE Kit assistant runtime backend; never enabled by default."},
 		&cli.StringFlag{Name: "assistant-ate-image", EnvVars: []string{"GRAM_ASSISTANT_ATE_IMAGE"}, Usage: "Digest-pinned OCI image for ATE Kit actors."},
 		&cli.StringFlag{Name: "assistant-ate-worker-selector", EnvVars: []string{"GRAM_ASSISTANT_ATE_WORKER_SELECTOR"}, Usage: "Comma-separated key=value worker selector labels for ATE ActorTemplates (e.g. workload-type=ate-assistants)."},
-		&cli.StringFlag{Name: "assistant-ate-issuer-url", EnvVars: []string{"GRAM_ASSISTANT_ATE_ISSUER_URL"}, Usage: "Public HTTPS ATE actor JWT issuer URL (matches ate-api-server ACTOR_JWT_ISSUER)."},
-		&cli.StringFlag{Name: "assistant-ate-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_ATE_JWKS_URL"}, Usage: "Optional explicit HTTPS JWKS URL for ATE actor JWTs; defaults to <assistant-ate-issuer-url>/openid/v1/jwks."},
 		&cli.StringFlag{Name: "assistant-ate-api-address", EnvVars: []string{"GRAM_ASSISTANT_ATE_API_ADDRESS"}, Usage: "ATE control API host:port, authenticated with TLS and an audience-bound JWT."},
 		&cli.StringFlag{Name: "assistant-ate-router-address", EnvVars: []string{"GRAM_ASSISTANT_ATE_ROUTER_ADDRESS"}, Usage: "ATE authenticated actor router host:port."},
 		&cli.StringFlag{Name: "assistant-ate-api-server-name", EnvVars: []string{"GRAM_ASSISTANT_ATE_API_SERVER_NAME"}, Usage: "Optional TLS server name for the control API."},
@@ -68,22 +38,18 @@ func assistantATERuntimeFlags() []cli.Flag {
 		&cli.StringFlag{Name: "assistant-ate-audience-jwt-file", EnvVars: []string{"GRAM_ASSISTANT_ATE_AUDIENCE_JWT_FILE"}, Usage: "Rotating audience-bound ATE control-plane JWT file; never copied into actors."},
 		&cli.StringFlag{Name: "assistant-ate-atespace", EnvVars: []string{"GRAM_ASSISTANT_ATE_ATESPACE"}, Usage: "Explicit pre-created ATE atespace for Kit thread actors."},
 		&cli.StringFlag{Name: "assistant-ate-template", EnvVars: []string{"GRAM_ASSISTANT_ATE_TEMPLATE"}, Usage: "Explicit secret-free ActorTemplate base name (digest-versioned per image digest)."},
+		&cli.StringFlag{Name: "assistant-ate-cred-provider-service-account", EnvVars: []string{"GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT"}, Usage: "Expected GCP service account email on Google-signed ID tokens presented by the ATE credential provider."},
+		&cli.StringFlag{Name: "assistant-ate-cred-provider-local-token", EnvVars: []string{"GRAM_ASSISTANT_ATE_CRED_PROVIDER_LOCAL_TOKEN"}, Usage: "Static bearer token for the ATE credential provider mint endpoint; allowed only in local environment."},
 	}
 }
 
-func validateKitATEFlagsFromCLI(c *cli.Context, serverURL *url.URL) (map[string]string, string, string) {
+func validateKitATEFlagsFromCLI(c *cli.Context, serverURL *url.URL) map[string]string {
 	workerSelector, selectorErr := assistants.ParseKitATEWorkerSelector(c.String("assistant-ate-worker-selector"))
-	issuerURL := strings.TrimSpace(c.String("assistant-ate-issuer-url"))
-	jwksURL := strings.TrimSpace(c.String("assistant-ate-jwks-url"))
-	if jwksURL == "" && issuerURL != "" {
-		jwksURL = strings.TrimRight(issuerURL, "/") + "/openid/v1/jwks"
-	}
 
 	inv.Require("assistant ATE runtime configuration",
 		"deployment server URL is configured", serverURL != nil,
 		"assistant-ate-image is set", c.String("assistant-ate-image") != "",
 		"assistant-ate-worker-selector is valid", selectorErr == nil && len(workerSelector) > 0,
-		"assistant-ate-issuer-url is set", issuerURL != "",
 		"assistant-ate-api-address is set", c.String("assistant-ate-api-address") != "",
 		"assistant-ate-router-address is set", c.String("assistant-ate-router-address") != "",
 		"assistant-ate-service-ca-file is set", c.String("assistant-ate-service-ca-file") != "",
@@ -93,23 +59,23 @@ func validateKitATEFlagsFromCLI(c *cli.Context, serverURL *url.URL) (map[string]
 		"assistant-ate-atespace is set", c.String("assistant-ate-atespace") != "",
 		"assistant-ate-template is set", c.String("assistant-ate-template") != "",
 	)
-	return workerSelector, issuerURL, jwksURL
+	return workerSelector
 }
 
 func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
 	if !c.Bool("assistant-ate-enabled") {
 		return nil
 	}
-	workerSelector, issuerURL, jwksURL := validateKitATEFlagsFromCLI(c, serverURL)
+	workerSelector := validateKitATEFlagsFromCLI(c, serverURL)
 
-	err := core.InstallKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector, issuerURL, jwksURL))
+	err := core.InstallKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector))
 	if err != nil {
 		return fmt.Errorf("install assistant ATE runtime: %w", err)
 	}
 	return nil
 }
 
-func kitATECompositionConfigFromCLI(c *cli.Context, redisClient *redis.Client, orgHosts *orghost.Resolver, workerSelector map[string]string, issuerURL, jwksURL string) assistants.KitATECompositionConfig {
+func kitATECompositionConfigFromCLI(c *cli.Context, redisClient *redis.Client, orgHosts *orghost.Resolver, workerSelector map[string]string) assistants.KitATECompositionConfig {
 	return assistants.KitATECompositionConfig{
 		Enabled:        true,
 		Atespace:       c.String("assistant-ate-atespace"),
@@ -124,8 +90,8 @@ func kitATECompositionConfigFromCLI(c *cli.Context, redisClient *redis.Client, o
 			Image:                  c.String("assistant-ate-image"),
 			Origin:                 nil,
 			TurnStream:             chat.NewTurnStream(redisClient),
-			WorkloadIssuerURL:      issuerURL,
-			WorkloadJWKSURL:        jwksURL,
+			WorkloadIssuerURL:      "",
+			WorkloadJWKSURL:        "",
 			WorkloadIssuerBaseURL:  "",
 			WorkloadSubject:        c.String("assistant-kit-workload-subject"),
 			WorkloadAssertionFile:  c.String("assistant-kit-workload-assertion-file"),
@@ -162,13 +128,61 @@ func installRetiringKitATERuntimeFromCLI(c *cli.Context, core *assistants.Servic
 	if err != nil {
 		return fmt.Errorf("parse retiring ATE worker selector: %w", err)
 	}
-	issuerURL := strings.TrimSpace(c.String("assistant-ate-issuer-url"))
-	jwksURL := strings.TrimSpace(c.String("assistant-ate-jwks-url"))
-	if jwksURL == "" && issuerURL != "" {
-		jwksURL = strings.TrimRight(issuerURL, "/") + "/openid/v1/jwks"
-	}
-	if err := core.InstallRetiringKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector, issuerURL, jwksURL)); err != nil {
+	if err := core.InstallRetiringKitATERuntime(c.Context, kitATECompositionConfigFromCLI(c, redisClient, orgHosts, workerSelector)); err != nil {
 		return fmt.Errorf("install retiring ATE runtime: %w", err)
 	}
+	return nil
+}
+
+func mountATECredentialMintEndpointFromCLI(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, c *cli.Context, core *assistants.ServiceCore, serverURL *url.URL) error {
+	sa := strings.TrimSpace(c.String("assistant-ate-cred-provider-service-account"))
+	localToken := strings.TrimSpace(c.String("assistant-ate-cred-provider-local-token"))
+	if !c.Bool("assistant-ate-enabled") && sa == "" && localToken == "" {
+		return nil
+	}
+	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
+	if err != nil {
+		return err
+	}
+	if base.Provider == assistants.RuntimeProviderDisabled {
+		logger.WarnContext(ctx, "ignoring ATE credential provider mint endpoint settings: the assistant runtime provider is disabled")
+		return nil
+	}
+
+	atespace := strings.TrimSpace(c.String("assistant-ate-atespace"))
+	var (
+		mintURL string
+		urlErr  error
+	)
+	if serverURL != nil {
+		mintURL, urlErr = atecred.MintEndpointURL(serverURL)
+	}
+	authErr := atecred.ValidateServerAuthConfig(c.String("environment"), sa, localToken)
+
+	inv.Require("assistant ATE credential provider mint endpoint configuration",
+		"deployment server URL is configured", serverURL != nil && urlErr == nil,
+		"assistant-ate-atespace is set", atespace != "",
+		"ATE credential provider auth configuration is valid", authErr == nil,
+	)
+
+	var validator atecred.IDTokenValidator
+	if sa != "" {
+		var err error
+		validator, err = idtoken.NewValidator(ctx)
+		if err != nil {
+			return fmt.Errorf("create Google ID token validator for ATE credential provider: %w", err)
+		}
+	}
+
+	core.SetATEAtespace(atespace)
+	auth := atecred.NewAuthenticator(atecred.AuthenticatorConfig{
+		Environment:      c.String("environment"),
+		ExpectedAudience: mintURL,
+		ServiceAccount:   sa,
+		LocalToken:       localToken,
+		Validator:        validator,
+	})
+	handler := atecred.NewMintHandler(logger, auth, core)
+	o11y.AttachHandler(mux, http.MethodPost, atecred.MintEndpointPath, handler.ServeHTTP)
 	return nil
 }

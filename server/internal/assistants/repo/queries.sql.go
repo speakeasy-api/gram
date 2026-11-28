@@ -1403,92 +1403,6 @@ func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, arg GetAssistan
 	return i, err
 }
 
-const getAssistantATEActorByUIDWithChat = `-- name: GetAssistantATEActorByUIDWithChat :one
-SELECT
-  a.id,
-  a.organization_id,
-  a.project_id,
-  a.assistant_id,
-  a.runtime_id,
-  a.assistant_thread_id,
-  a.actor_name,
-  a.actor_uid,
-  a.state,
-  a.workload_binding_json,
-  a.initiating_user_id,
-  a.initiating_user_resolution,
-  t.chat_id
-FROM assistant_ate_actors a
-JOIN assistant_runtimes r
-  ON r.id = a.runtime_id AND r.project_id = a.project_id AND r.assistant_id = a.assistant_id
-JOIN assistants asst
-  ON asst.id = a.assistant_id AND asst.project_id = a.project_id AND asst.organization_id = a.organization_id
-JOIN assistant_threads t
-  ON t.id = a.assistant_thread_id AND t.project_id = a.project_id AND t.assistant_id = a.assistant_id
-JOIN chats c
-  ON c.id = t.chat_id AND c.project_id = a.project_id AND c.organization_id = a.organization_id
-WHERE a.actor_uid = $1
-  AND a.organization_id = $2
-  AND a.project_id = $3
-  AND a.deleted IS FALSE
-  AND a.state = 'running'
-  AND r.runtime_version = 3
-  AND r.backend = 'ate'
-  AND r.state = 'active'
-  AND r.deleted IS FALSE
-  AND r.ended IS FALSE
-  AND asst.deleted IS FALSE
-  AND asst.status = 'active'
-  AND t.deleted IS FALSE
-  AND c.deleted IS FALSE
-`
-
-type GetAssistantATEActorByUIDWithChatParams struct {
-	ActorUid       string
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-type GetAssistantATEActorByUIDWithChatRow struct {
-	ID                       uuid.UUID
-	OrganizationID           string
-	ProjectID                uuid.UUID
-	AssistantID              uuid.UUID
-	RuntimeID                uuid.UUID
-	AssistantThreadID        uuid.UUID
-	ActorName                string
-	ActorUid                 string
-	State                    string
-	WorkloadBindingJson      []byte
-	InitiatingUserID         pgtype.Text
-	InitiatingUserResolution string
-	ChatID                   uuid.UUID
-}
-
-// Uses assistant_ate_actors_actor_uid_key for tenant-scoped live actor identity
-// lookup, verifying the actor is running, the owning runtime is active for the
-// same assistant, and the assistant, thread, and chat are all live.
-func (q *Queries) GetAssistantATEActorByUIDWithChat(ctx context.Context, arg GetAssistantATEActorByUIDWithChatParams) (GetAssistantATEActorByUIDWithChatRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantATEActorByUIDWithChat, arg.ActorUid, arg.OrganizationID, arg.ProjectID)
-	var i GetAssistantATEActorByUIDWithChatRow
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.AssistantID,
-		&i.RuntimeID,
-		&i.AssistantThreadID,
-		&i.ActorName,
-		&i.ActorUid,
-		&i.State,
-		&i.WorkloadBindingJson,
-		&i.InitiatingUserID,
-		&i.InitiatingUserResolution,
-		&i.ChatID,
-	)
-	return i, err
-}
-
 const getAssistantATEActorForThread = `-- name: GetAssistantATEActorForThread :one
 SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
 WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
@@ -2190,6 +2104,120 @@ func (q *Queries) GetLatestAssistantThreadEventByThreadID(ctx context.Context, a
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getLiveAssistantATEActorByUID = `-- name: GetLiveAssistantATEActorByUID :one
+SELECT
+  a.id,
+  a.organization_id,
+  a.project_id,
+  a.assistant_id,
+  a.runtime_id,
+  a.assistant_thread_id,
+  a.actor_name,
+  a.actor_uid,
+  a.state,
+  a.configured,
+  a.workload_binding_json,
+  a.initiating_user_id,
+  a.initiating_user_resolution,
+  r.backend_metadata_json,
+  asst.name AS assistant_name,
+  asst.status AS assistant_status,
+  t.chat_id
+FROM assistant_ate_actors a
+JOIN assistant_runtimes r
+  ON r.id = a.runtime_id
+ AND r.project_id = a.project_id
+ AND r.assistant_id = a.assistant_id
+JOIN assistants asst
+  ON asst.id = a.assistant_id
+ AND asst.project_id = a.project_id
+ AND asst.organization_id = a.organization_id
+JOIN assistant_threads t
+  ON t.id = a.assistant_thread_id
+ AND t.project_id = a.project_id
+ AND t.assistant_id = a.assistant_id
+JOIN chats c
+  ON c.id = t.chat_id
+ AND c.project_id = a.project_id
+ AND c.organization_id = a.organization_id
+WHERE a.actor_uid = $1
+  AND a.deleted IS FALSE
+  AND a.configured IS TRUE
+  AND a.state = $2
+  AND r.runtime_version = 3
+  AND r.backend = 'ate'
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.state IN ($3, $4)
+  AND asst.deleted IS FALSE
+  AND asst.status = $5
+  AND t.deleted IS FALSE
+  AND c.deleted IS FALSE
+`
+
+type GetLiveAssistantATEActorByUIDParams struct {
+	ActorUid              string
+	RunningState          string
+	RuntimeStartingState  string
+	RuntimeActiveState    string
+	AssistantActiveStatus string
+}
+
+type GetLiveAssistantATEActorByUIDRow struct {
+	ID                       uuid.UUID
+	OrganizationID           string
+	ProjectID                uuid.UUID
+	AssistantID              uuid.UUID
+	RuntimeID                uuid.UUID
+	AssistantThreadID        uuid.UUID
+	ActorName                string
+	ActorUid                 string
+	State                    string
+	Configured               bool
+	WorkloadBindingJson      []byte
+	InitiatingUserID         pgtype.Text
+	InitiatingUserResolution string
+	BackendMetadataJson      []byte
+	AssistantName            string
+	AssistantStatus          string
+	ChatID                   uuid.UUID
+}
+
+// Looks up a live, configured, running ATE thread actor by its unique ATE
+// actor_uid for on-demand egress credential minting. Joins runtime, assistant,
+// thread, and chat so retired, unconfigured, paused, non-running, or deleted
+// actors fail closed.
+func (q *Queries) GetLiveAssistantATEActorByUID(ctx context.Context, arg GetLiveAssistantATEActorByUIDParams) (GetLiveAssistantATEActorByUIDRow, error) {
+	row := q.db.QueryRow(ctx, getLiveAssistantATEActorByUID,
+		arg.ActorUid,
+		arg.RunningState,
+		arg.RuntimeStartingState,
+		arg.RuntimeActiveState,
+		arg.AssistantActiveStatus,
+	)
+	var i GetLiveAssistantATEActorByUIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.RuntimeID,
+		&i.AssistantThreadID,
+		&i.ActorName,
+		&i.ActorUid,
+		&i.State,
+		&i.Configured,
+		&i.WorkloadBindingJson,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
+		&i.BackendMetadataJson,
+		&i.AssistantName,
+		&i.AssistantStatus,
+		&i.ChatID,
 	)
 	return i, err
 }

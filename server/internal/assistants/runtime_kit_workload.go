@@ -45,12 +45,6 @@ func kitWorkloadSubject(r assistantRuntimeRecord, c KitLocalCompositionConfig, g
 	if r.ID == uuid.Nil || gateway == "" {
 		return "", "", ErrKitRuntimeBinding
 	}
-	if c.ateIdentity != nil {
-		if c.nativeIdentity != nil || c.ateIdentity.Atespace == "" || c.ateIdentity.ActorName == "" || !kitATENamePattern.MatchString(c.ateIdentity.Atespace) || !kitATENamePattern.MatchString(c.ateIdentity.ActorName) {
-			return "", "", ErrKitRuntimeBinding
-		}
-		return "actor/" + c.ateIdentity.Atespace + "/" + c.ateIdentity.ActorName, "", nil
-	}
 	if c.Environment == "local" {
 		if strings.TrimSpace(c.WorkloadSubject) == "" {
 			return "", "", errors.New("kit workload subject is required")
@@ -158,19 +152,16 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if err := kitWorkloadInferenceAllowed(r.ProjectID, agentPolicy, ownerPolicy); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	audience := ""
-	if c.ateIdentity == nil {
-		shared, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
-		if err != nil {
-			return nil, fmt.Errorf("provision kit workload: %w", err)
-		}
-		if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
-			return nil, ErrKitRuntimeBinding
-		}
-		audience, err = (authserver.Hosts{ServerURL: s.serverURL.String(), AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL, PlatformHosts: nil}).SharedIssuerURL(shared.UserSessionIssuer)
-		if err != nil {
-			return nil, fmt.Errorf("provision kit workload: %w", err)
-		}
+	shared, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
+	if err != nil {
+		return nil, fmt.Errorf("provision kit workload: %w", err)
+	}
+	if shared.ResolvedOrganizationID != identity.OrganizationID || (shared.UserSessionIssuer.ProjectID.Valid && shared.UserSessionIssuer.ProjectID.UUID != r.ProjectID) {
+		return nil, ErrKitRuntimeBinding
+	}
+	audience, err := (authserver.Hosts{ServerURL: s.serverURL.String(), AuthenticationHostBaseURL: c.WorkloadIssuerBaseURL, PlatformHosts: nil}).SharedIssuerURL(shared.UserSessionIssuer)
+	if err != nil {
+		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 	generationHash := sha256.Sum256([]byte(gateway))
 	generation := fmt.Sprintf("%x", generationHash[:16])

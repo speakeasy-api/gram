@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,100 +15,88 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-jose/go-jose/v4"
-	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	credproviderv1 "go.ate.dev/substrate/api/credprovider/v1"
+	"golang.org/x/oauth2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/atecred"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/userblock"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-type testATEAuthorizerAdapter struct {
-	resolver *assistants.ATEWorkloadAuthorizer
-}
-
-func (a *testATEAuthorizerAdapter) ResolveWorkloadAuthorizer(ctx context.Context, req mcp.WorkloadAuthorizerRequest) (mcp.WorkloadAuthorizerResolution, error) {
-	res, err := a.resolver.Resolve(ctx, assistants.ATEWorkloadAuthorizerRequest{
-		OrganizationID: req.OrganizationID,
-		ProjectID:      req.ProjectID,
-		IssuerID:       req.IssuerID,
-		Subject:        req.Subject,
-		Claims:         req.Claims,
-	})
-	if err != nil {
-		if errors.Is(err, assistants.ErrATEWorkloadAuthorizerRejected) {
-			return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("%w: %w", mcp.ErrWorkloadAuthorizerRejected, err)
-		}
-		return mcp.WorkloadAuthorizerResolution{}, fmt.Errorf("resolve ATE workload authorizer: %w", err)
-	}
-	return mcp.WorkloadAuthorizerResolution{
-		Bound:            res.Bound,
-		AuthorizerUserID: res.AuthorizerUserID,
-		AssistantID:      res.AssistantID,
-		ThreadID:         res.ThreadID,
-		ChatID:           res.ChatID,
-	}, nil
-}
-
 type ateActorTestFixture struct {
-	f           workloadGrantFixture
-	projectID   uuid.UUID
-	orgID       string
-	ownerUserID string
-	assistantID uuid.UUID
-	runtimeID   uuid.UUID
-	identity    assistantidentity.RuntimeIdentity
-	gateway     organizationGatewayFixture
-	atespace    string
+	f            workloadGrantFixture
+	projectID    uuid.UUID
+	orgID        string
+	ownerUserID  string
+	assistantID  uuid.UUID
+	runtimeID    uuid.UUID
+	identity     assistantidentity.RuntimeIdentity
+	gateway      organizationGatewayFixture
+	atespace     string
+	credProvider *atecred.Server
+	clockOffset  *atomic.Int64
 }
 
 type seededATEThreadActor struct {
-	threadID     uuid.UUID
-	chatID       uuid.UUID
-	actorRowID   uuid.UUID
-	actorName    string
-	actorUID     string
-	subject      string
-	acpSessionID string
+	threadID      uuid.UUID
+	chatID        uuid.UUID
+	actorRowID    uuid.UUID
+	actorName     string
+	actorUID      string
+	subject       string
+	credentialURI string
+	spiffeID      string
+	acpSessionID  string
 }
 
 func newATEActorAuthzFixture(t *testing.T) *ateActorTestFixture {
 	t.Helper()
 	ctx := t.Context()
 	f := newWorkloadGrantFixture(t)
-	f.setAssertionReuse(t, true)
-	f.ti.service.SetWorkloadAuthorizerResolver(&testATEAuthorizerAdapter{
-		resolver: assistants.NewATEWorkloadAuthorizer(f.ti.conn),
-	})
+
+	const (
+		atespace          = "prod-assistants"
+		providerSAEmail   = "ate-cred-provider@speakeasy-test.iam.gserviceaccount.com"
+		providerGoogleJWT = "valid-google-oidc-id-token"
+	)
 
 	projectID := f.fx.target.ProjectID
 	orgID := f.fx.orgID
@@ -130,10 +117,10 @@ func newATEActorAuthzFixture(t *testing.T) *ateActorTestFixture {
 	_, err = triggerrepo.New(f.ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{
 		OrganizationID: orgID,
 		ProjectID:      projectID,
-		DefinitionSlug: "manual",
-		Name:           "ATE manual root",
+		DefinitionSlug: "dashboard",
+		Name:           "ATE dashboard root",
 		TargetKind:     "assistant",
-		TargetRef:      asst.ID.String(),
+		TargetRef:      fmt.Sprintf("project:%s:assistant:%s", projectID, asst.ID),
 		TargetDisplay:  asst.Name,
 		ConfigJson:     []byte(`{}`),
 		Status:         "active",
@@ -152,7 +139,6 @@ func newATEActorAuthzFixture(t *testing.T) *ateActorTestFixture {
 	identity, err := identities.ResolveRuntime(ctx, f.ti.conn, orgID, projectID, asst.ID)
 	require.NoError(t, err)
 
-	// Re-point the fixture's agent to the assistant's backing agent.
 	unassignWorkloadAgent(t, ctx, f.ti, f.assignmentID)
 	f.agentID = identity.AgentID
 
@@ -162,7 +148,6 @@ func newATEActorAuthzFixture(t *testing.T) *ateActorTestFixture {
 		RuntimeVersion: 3,
 	}))
 
-	// Seed an initial placeholder thread to reserve the live ATE runtime row.
 	seedChatID := uuid.New()
 	require.NoError(t, q.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
 		ChatID: seedChatID, ProjectID: projectID, OrganizationID: orgID, UserID: conv.ToPGText(ownerUserID),
@@ -180,23 +165,113 @@ func newATEActorAuthzFixture(t *testing.T) *ateActorTestFixture {
 	})
 	require.NoError(t, err)
 
+	runtimeMeta, err := json.Marshal(map[string]any{
+		"runtime_id":   rt.ID,
+		"assistant_id": asst.ID,
+		"project_id":   projectID,
+		"image_digest": "sha256:" + strings.Repeat("a", 64),
+		"atespace":     atespace,
+		"template":     "kit-v1",
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
+		ProjectID: projectID, RuntimeID: rt.ID, BackendMetadataJson: runtimeMeta,
+	}))
+
 	gateway := seedOrganizationGateway(t, f.ctx, f.ti)
 	f.ti.features.SetFlag(feature.FlagProjectGatewayMachineAccess, orgID, true)
 	authCtx, ok := contextvalues.GetAuthContext(f.ctx)
 	require.True(t, ok)
 	grantProjectRead(t, f.ti, authCtx)
 
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t)
+	core := assistants.NewServiceCore(
+		logger, tracer, testenv.NewMeterProvider(t), f.ti.conn, guardian.NewDefaultPolicy(tracer), f.ti.enc,
+		nil, nil, f.ti.assistantTokens, f.ti.serverURL, nil, nil, f.ti.audit, identities, f.ti.authzEngine,
+	)
+	core.SetATEAtespace(atespace)
+
+	mintMux := http.NewServeMux()
+	mintServer := httptest.NewServer(mintMux)
+	t.Cleanup(mintServer.Close)
+	mintServerURL, err := url.Parse(mintServer.URL)
+	require.NoError(t, err)
+	mintURL, err := atecred.MintEndpointURL(mintServerURL)
+	require.NoError(t, err)
+
+	auth := atecred.NewAuthenticator(atecred.AuthenticatorConfig{
+		Environment:      "production",
+		ExpectedAudience: mintURL,
+		ServiceAccount:   providerSAEmail,
+		LocalToken:       "",
+		Validator: fakeATEEgressIDTokenValidator{
+			expectedToken:    providerGoogleJWT,
+			expectedAudience: mintURL,
+			email:            providerSAEmail,
+		},
+	})
+	mintMux.Handle(atecred.MintEndpointPath, atecred.NewMintHandler(logger, auth, core))
+
+	clockOffset := &atomic.Int64{}
+	mintClient := atecred.NewHTTPMintClient(atecred.HTTPMintClientConfig{
+		EndpointURL:    mintURL,
+		TokenSource:    oauth2.StaticTokenSource(&oauth2.Token{AccessToken: providerGoogleJWT}),
+		HTTPClient:     mintServer.Client(),
+		RequestTimeout: 3 * time.Second,
+	})
+	credProvider := atecred.NewServer(atecred.ServerConfig{
+		Logger:   logger,
+		Atespace: atespace,
+		CacheTTL: time.Minute,
+		Client:   mintClient,
+		Now: func() time.Time {
+			return time.Now().Add(time.Duration(clockOffset.Load()))
+		},
+	})
+
 	return &ateActorTestFixture{
-		f:           f,
-		projectID:   projectID,
-		orgID:       orgID,
-		ownerUserID: ownerUserID,
-		assistantID: asst.ID,
-		runtimeID:   rt.ID,
-		identity:    identity,
-		gateway:     gateway,
-		atespace:    "prod-assistants",
+		f:            f,
+		projectID:    projectID,
+		orgID:        orgID,
+		ownerUserID:  ownerUserID,
+		assistantID:  asst.ID,
+		runtimeID:    rt.ID,
+		identity:     identity,
+		gateway:      gateway,
+		atespace:     atespace,
+		credProvider: credProvider,
+		clockOffset:  clockOffset,
 	}
+}
+
+func (fx *ateActorTestFixture) newChatService(t *testing.T, client *managedInferenceCompletion) *chat.Service {
+	t.Helper()
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	return chat.NewService(
+		logger, tracer, fx.f.ti.conn, fx.f.ti.sessionManager, fx.f.ti.chatSessionsManager,
+		nil, client, nil, posthog.New(t.Context(), logger, "", "", ""),
+		nil, nil, fx.f.ti.authzEngine, fx.f.ti.assistantTokens, billing.NewStubClient(logger, tracer),
+		fx.f.ti.audit, staff.Organization{},
+	).WithWorkloadInference(fx.f.ti.service).WithTurnStream(chat.NewTurnStream(redisClient))
+}
+
+func (fx *ateActorTestFixture) postCompletion(t *testing.T, svc *chat.Service, token string, headers map[string]string, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/chat/completions", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rec := httptest.NewRecorder()
+	oops.ErrHandle(fx.f.ti.logger, svc.HandleCompletion).ServeHTTP(rec, req)
+	return rec
 }
 
 func (fx *ateActorTestFixture) seedOrgMember(t *testing.T, label string, grantProjectAccess, grantInference bool) string {
@@ -252,6 +327,9 @@ func (fx *ateActorTestFixture) seedRemoteMemberServer(t *testing.T, slug string,
 		Visibility:          mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
+	require.NoError(t, executionprofiles.New(fx.f.ti.conn).SeedAssistantServerFixture(ctx, executionprofiles.SeedAssistantServerFixtureParams{
+		AssistantID: fx.assistantID, ProjectID: fx.projectID, McpServerID: serverID,
+	}))
 	return serverID, upstream
 }
 
@@ -279,17 +357,11 @@ func (fx *ateActorTestFixture) seedThreadActor(t *testing.T, label, initiatingUs
 	actorUID := "uid-" + label + "-" + uuid.NewString()
 	subject := "actor/" + fx.atespace + "/" + actorName
 
-	require.NoError(t, testrepo.New(fx.f.ti.conn).CreateWorkloadIdentityAdmissionFixture(ctx, testrepo.CreateWorkloadIdentityAdmissionFixtureParams{
-		OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true},
-		WorkloadIssuerID: fx.f.issuerID, Subject: subject,
-	}))
-	assignAgentToWorkload(t, ctx, fx.f.ti, fx.orgID, fx.f.issuerID, subject, fx.f.agentID)
-
-	bindingJSON, err := json.Marshal(map[string]any{
-		"issuer_id":           fx.f.issuerID,
-		"subject":             subject,
-		"identity":            fx.identity,
-		"mcp_project_gateway": true,
+	bindingJSON, err := json.Marshal(assistants.KitWorkloadBinding{
+		MCPProjectGateway: true,
+		IssuerID:          uuid.Nil,
+		Subject:           subject,
+		Identity:          fx.identity,
 	})
 	require.NoError(t, err)
 
@@ -316,52 +388,39 @@ func (fx *ateActorTestFixture) seedThreadActor(t *testing.T, label, initiatingUs
 	})
 	require.NoError(t, err)
 
+	uri, err := atecred.BuildCredentialURI(fx.atespace, actorName, actorUID)
+	require.NoError(t, err)
+
 	return seededATEThreadActor{
-		threadID:     threadID,
-		chatID:       chatID,
-		actorRowID:   row.ID,
-		actorName:    actorName,
-		actorUID:     actorUID,
-		subject:      subject,
-		acpSessionID: acpSessionID,
+		threadID:      threadID,
+		chatID:        chatID,
+		actorRowID:    row.ID,
+		actorName:     actorName,
+		actorUID:      actorUID,
+		subject:       subject,
+		credentialURI: uri,
+		spiffeID:      fmt.Sprintf("spiffe://substrate-actor.local/actor/%s/%s", fx.atespace, actorName),
+		acpSessionID:  acpSessionID,
 	}
 }
 
-func (fx *ateActorTestFixture) mintATEJWT(t *testing.T, subject string, audiences []string, extraClaims map[string]any) string {
-	t.Helper()
-	now := time.Now()
-	std := jwt.Claims{
-		Issuer:    fx.f.issuer.OAuth21URL,
-		Subject:   subject,
-		Audience:  jwt.Audience(audiences),
-		ID:        uuid.NewString(),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		Expiry:    jwt.NewNumericDate(now.Add(10 * time.Minute)),
-	}
-	signer, err := jose.NewSigner(
-		jose.SigningKey{Algorithm: jose.RS256, Key: fx.f.issuer.SigningKey()},
-		(&jose.SignerOptions{}).WithType(jose.ContentType("JWT")).WithHeader(jose.HeaderKey("kid"), fx.f.issuer.KeyID()),
-	)
-	require.NoError(t, err)
-	builder := jwt.Signed(signer).Claims(std)
-	if len(extraClaims) > 0 {
-		builder = builder.Claims(extraClaims)
-	}
-	raw, err := builder.Serialize()
-	require.NoError(t, err)
-	return raw
-}
-
-func (fx *ateActorTestFixture) mintActorToken(t *testing.T, actor seededATEThreadActor, audiences ...string) string {
-	t.Helper()
-	return fx.mintATEJWT(t, actor.subject, audiences, map[string]any{
-		"actor.ate.dev": map[string]string{
-			"atespace":  fx.atespace,
-			"actorName": actor.actorName,
-			"actorUID":  actor.actorUID,
-		},
+func (fx *ateActorTestFixture) fetchActorCredential(ctx context.Context, actor seededATEThreadActor) (string, error) {
+	resp, err := fx.credProvider.FetchSecret(ctx, &credproviderv1.FetchSecretRequest{
+		Uri:           actor.credentialURI,
+		ActorSpiffeId: actor.spiffeID,
 	})
+	if err != nil {
+		return "", fmt.Errorf("fetch actor credential: %w", err)
+	}
+	return string(resp.GetOpaqueBytes()), nil
+}
+
+func (fx *ateActorTestFixture) requireActorCredential(t *testing.T, actor seededATEThreadActor) string {
+	t.Helper()
+	tok, err := fx.fetchActorCredential(t.Context(), actor)
+	require.NoError(t, err)
+	require.NotEmpty(t, tok)
+	return tok
 }
 
 func serveProjectGatewayHTTPWithOptions(
@@ -402,11 +461,6 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 	fx := newATEActorAuthzFixture(t)
 	fx.f.ti.service.SetAuthClientPermitted(true)
 
-	// Freeze the Stage-1 cache clock so every revocation test proves Stage-2
-	// re-evaluates fresh inside the 5-second Stage-1 cache window.
-	frozenNow := time.Now()
-	fx.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
-
 	// Create two distinct users under the same organization and project.
 	userA := fx.seedOrgMember(t, "alice", true, true)
 	userB := fx.seedOrgMember(t, "bob", true, true)
@@ -443,10 +497,13 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 	actorNoUser := fx.seedThreadActor(t, "cron", "", assistants.ATEInitiatorNoUser)
 	actorUnrecorded := fx.seedThreadActor(t, "unrecorded", "", assistants.ATEInitiatorNotRecorded)
 
-	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
-	tokenB := fx.mintActorToken(t, actorB, mcp.DirectWorkloadProjectGatewayAudience)
-	tokenNoUser := fx.mintActorToken(t, actorNoUser, mcp.DirectWorkloadProjectGatewayAudience)
-	tokenUnrecorded := fx.mintActorToken(t, actorUnrecorded, mcp.DirectWorkloadProjectGatewayAudience)
+	tokenA := fx.requireActorCredential(t, actorA)
+	tokenB := fx.requireActorCredential(t, actorB)
+	tokenNoUser := fx.requireActorCredential(t, actorNoUser)
+
+	// Unrecorded "not_recorded" row fails closed at FetchSecret (PermissionDenied).
+	_, err := fx.fetchActorCredential(ctx, actorUnrecorded)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	// 1. Thread A sees serverA ONLY (denied serverB and serverOwnerOnly even though agent+owner have them).
 	listedA := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil)
@@ -491,16 +548,15 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 	require.Contains(t, listedNoUser.Body.String(), slugB)
 	require.Contains(t, listedNoUser.Body.String(), slugOwnerOnly)
 
-	// 4. Unrecorded "not_recorded" row fails closed (401 Unauthorized) on BOTH gateway and inference.
-	listedUnrecorded := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenUnrecorded, listServersBody(t), "", nil)
-	require.Equal(t, http.StatusUnauthorized, listedUnrecorded.Code, listedUnrecorded.Body.String())
-
-	// 5. Managed Kit inference succeeds for User A and records canonical Thread A / Chat A.
+	// 4. Managed Kit inference succeeds for User A and records canonical Thread A / Chat A
+	//    with TranscriptOwned=true and agent actor + initiating user authorizer telemetry.
 	var inferenceCalls atomic.Int32
 	completionClient := &managedInferenceCompletion{complete: func(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 		inferenceCalls.Add(1)
 		require.Equal(t, billing.ModelUsageSourceAssistants, req.UsageSource)
+		require.Equal(t, billing.ModelUsageSourceAssistants, req.KeySlot)
 		require.Equal(t, actorA.chatID, req.ChatID)
+		require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
 		p, ok := contextvalues.GetAssistantPrincipal(ctx)
 		require.True(t, ok)
 		require.Equal(t, fx.assistantID, p.AssistantID)
@@ -508,7 +564,6 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 		cred, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
 		require.True(t, ok)
 		require.Equal(t, userA, cred.AuthorizerUserID)
-		// Verify telemetry actor attribution records agent as actor and initiating user as authorizer.
 		attrs := tm.HTTPLogAttributes{}
 		attrs.RecordAuthenticatedActor(ctx)
 		require.Equal(t, "agent", attrs["gram.authorization.actor.type"])
@@ -517,39 +572,37 @@ func TestATEInitiatingUserAuthz_FourWayIntersectionPerThreadIsolationAndLiveRech
 		msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{})
 		return &openrouter.CompletionResponse{Message: &msg, Model: "test/model"}, nil
 	}}
-	chatRouter := newDirectWorkloadChatMux(t, fx.f, completionClient)
-	infPath := "/projects/" + fx.projectID.String() + "/chat/completions"
-	infTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadInferenceAudience)
-	infTokenUnrecorded := fx.mintActorToken(t, actorUnrecorded, mcp.DirectWorkloadInferenceAudience)
-
-	infBodyA := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorA.acpSessionID)
-	infResp := postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA)
+	chatSvc := fx.newChatService(t, completionClient)
+	infBodyA := `{"model":"test-model","messages":[{"role":"user","content":"hi"}],"stream":false}`
+	infResp := fx.postCompletion(t, chatSvc, tokenA, nil, infBodyA)
 	require.Equal(t, http.StatusOK, infResp.Code, infResp.Body.String())
 	require.EqualValues(t, 1, inferenceCalls.Load())
 
-	infRespUnrecorded := postCompletionRequest(chatRouter, infPath, infTokenUnrecorded, nil, infBodyA)
-	require.Equal(t, http.StatusUnauthorized, infRespUnrecorded.Code, infRespUnrecorded.Body.String())
-
-	// 6. Live per-request recheck INSIDE the 5s Stage-1 cache window (clock still frozen):
+	// 5. Live per-request recheck INSIDE the 1m provider cache window (re-using cached tokenA):
 	//    (a) Revoking User A's mcp:connect grant on serverA takes effect immediately.
-	_, err := accessrepo.New(fx.f.ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{
+	_, err = accessrepo.New(fx.f.ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{
 		OrganizationID: fx.orgID, ID: grantA,
 	})
 	require.NoError(t, err)
 	listedAfterRevoke := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil)
 	require.Equal(t, http.StatusOK, listedAfterRevoke.Code, listedAfterRevoke.Body.String())
-	require.NotContains(t, listedAfterRevoke.Body.String(), slugA, "revoked user grant must take effect immediately even inside the 5s Stage-1 cache window")
+	require.NotContains(t, listedAfterRevoke.Body.String(), slugA, "revoked user grant must take effect immediately even while credential is cached")
 
 	//    (b) Removing User A from the organization takes effect immediately on BOTH
-	//        Project Gateway AND inference (401 refusal, never falling back to userless!).
+	//        Project Gateway AND inference (401 refusal, never falling back to userless!),
+	//        and rejects new mints once cache expires.
 	require.NoError(t, testrepo.New(fx.f.ti.conn).DeleteOrganizationUserRelationshipFixture(ctx, testrepo.DeleteOrganizationUserRelationshipFixtureParams{
 		OrganizationID: fx.orgID, UserID: conv.ToPGText(userA),
 	}))
 	listedAfterRemove := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil)
 	require.Equal(t, http.StatusUnauthorized, listedAfterRemove.Code, "removed initiating user must be refused immediately without falling back to userless")
 
-	infAfterRemove := postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA)
+	infAfterRemove := fx.postCompletion(t, chatSvc, tokenA, nil, infBodyA)
 	require.Equal(t, http.StatusUnauthorized, infAfterRemove.Code, "removed initiating user must be refused on inference immediately")
+
+	fx.clockOffset.Store(int64(2 * time.Minute))
+	_, err = fx.fetchActorCredential(ctx, actorA)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "removed initiating user must be refused at mint endpoint")
 }
 
 func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundToInitiator(t *testing.T) {
@@ -561,9 +614,6 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 	userA := fx.seedOrgMember(t, "alice-personal", true, false)
 	userB := fx.seedOrgMember(t, "bob-personal", true, false)
 
-	// Upstream MCP server records the Authorization header it receives and answers
-	// 401 when no valid personal token is presented, proxying authorized calls to a
-	// real streamable-HTTP MCP server.
 	mockMCP := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{Tools: []testmcp.Tool{{
 		Name:        "list_issues",
 		Description: "lists issues",
@@ -612,6 +662,9 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 		ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin",
 	}))
 	associateServerRegistration(t, ctx, fx.f.ti.conn, fx.orgID, fx.projectID, serverID, registration)
+	require.NoError(t, executionprofiles.New(fx.f.ti.conn).SeedAssistantServerFixture(ctx, executionprofiles.SeedAssistantServerFixtureParams{
+		AssistantID: fx.assistantID, ProjectID: fx.projectID, McpServerID: serverID,
+	}))
 
 	agentURN := urn.NewPrincipal(urn.PrincipalTypeAgent, fx.f.agentID.String())
 	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, fx.ownerUserID, serverID.String())
@@ -634,7 +687,7 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 	}
 
 	actorA := fx.seedThreadActor(t, "alice-pers", userA, assistants.ATEInitiatorDashboardSender)
-	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
+	tokenA := fx.requireActorCredential(t, actorA)
 
 	// Configure browser session auth for verifying the OAuth recovery link binding.
 	fx.f.ti.service.SetBrowserSession(func(ctx context.Context, cookie string) (context.Context, error) {
@@ -697,7 +750,6 @@ func TestATEInitiatingUserAuthz_PersonalUpstreamConnectionsAndRecoveryLinkBoundT
 		urn.NewUserSubject(userA), "alice-personal-secret-token", upstream.URL,
 	)
 
-	// Re-run call as Thread A: upstream receives Alice's personal token and succeeds.
 	respOK := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, callBody, "", nil)
 	require.Equal(t, http.StatusOK, respOK.Code, respOK.Body.String())
 	okText, okErr := metaToolResultText(t, decodeRPCResponse(t, respOK))
@@ -725,10 +777,8 @@ func TestATEInitiatingUserAuthz_AuditLogRecordsAgentActorAndInitiatingUserAuthor
 	seedUserMCPConnectGrant(t, ctx, fx.f.ti.conn, fx.orgID, userA, member.toolsetID.String())
 
 	actorA := fx.seedThreadActor(t, "alice-audit", userA, assistants.ATEInitiatorDashboardSender)
-	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
+	tokenA := fx.requireActorCredential(t, actorA)
 
-	// Drive a real execute_tool request through Project Gateway so the
-	// production audit logger and telemetry pipeline emit the persisted records.
 	callBody := makeMetaRPCBody(t, mcpversions.MethodToolsCall, map[string]any{
 		"name":      metamcp.ToolExecuteTool,
 		"arguments": map[string]any{"name": member.slug + "--audit_ping", "arguments": map[string]any{}},
@@ -774,9 +824,6 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 	fx := newATEActorAuthzFixture(t)
 	fx.f.ti.service.SetAuthClientPermitted(true)
 
-	frozenNow := time.Now()
-	fx.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
-
 	userA := fx.seedOrgMember(t, "alice-vec", true, true)
 	userB := fx.seedOrgMember(t, "bob-vec", true, true)
 
@@ -790,8 +837,7 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 
 	actorA := fx.seedThreadActor(t, "alice-vec", userA, assistants.ATEInitiatorDashboardSender)
 	actorB := fx.seedThreadActor(t, "bob-vec", userB, assistants.ATEInitiatorDashboardSender)
-	tokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
-	infTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadInferenceAudience)
+	tokenA := fx.requireActorCredential(t, actorA)
 
 	// Vector 1: Spoofed user identity headers claiming User B on Thread A's token.
 	t.Run("spoofed user headers cannot escalate to User B", func(t *testing.T) {
@@ -814,11 +860,10 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 		})
 		require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
 
-		chatRouter := newDirectWorkloadChatMux(t, fx.f, &managedInferenceCompletion{})
-		infPath := "/projects/" + fx.projectID.String() + "/chat/completions"
-		infBody := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorA.acpSessionID)
+		chatSvc := fx.newChatService(t, &managedInferenceCompletion{})
+		infBody := `{"model":"test-model","messages":[{"role":"user","content":"hi"}],"stream":false}`
 		for _, hdr := range []string{"Gram-Chat-ID", "Gram-Assistant-ID"} {
-			r := postCompletionRequest(chatRouter, infPath, infTokenA, map[string]string{hdr: actorB.chatID.String()}, infBody)
+			r := fx.postCompletion(t, chatSvc, tokenA, map[string]string{hdr: actorB.chatID.String()}, infBody)
 			require.Equal(t, http.StatusForbidden, r.Code, "header %s must be refused on inference", hdr)
 		}
 	})
@@ -855,41 +900,43 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 		require.NotContains(t, resp.Body.String(), slugB)
 	})
 
-	// Vector 5: Cross-thread session claim on inference (Token A claiming Thread B's ACP session ID).
-	t.Run("cross-thread ACP session claim on inference is rejected 403", func(t *testing.T) {
+	// Vector 5: Client-supplied user field on inference cannot hijack Thread B's chat.
+	t.Run("cross-thread user field on inference stays pinned to Thread A chat", func(t *testing.T) {
 		t.Parallel()
-		chatRouter := newDirectWorkloadChatMux(t, fx.f, &managedInferenceCompletion{})
-		infPath := "/projects/" + fx.projectID.String() + "/chat/completions"
+		var observedChat uuid.UUID
+		chatSvc := fx.newChatService(t, &managedInferenceCompletion{complete: func(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+			observedChat = req.ChatID
+			msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{})
+			return &openrouter.CompletionResponse{Message: &msg, Model: "test-model"}, nil
+		}})
 		crossBody := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"steal"}],"stream":false}`, actorB.acpSessionID)
-		r := postCompletionRequest(chatRouter, infPath, infTokenA, nil, crossBody)
-		require.Equal(t, http.StatusForbidden, r.Code, r.Body.String())
+		r := fx.postCompletion(t, chatSvc, tokenA, nil, crossBody)
+		require.Equal(t, http.StatusOK, r.Code, r.Body.String())
+		require.Equal(t, actorA.chatID, observedChat, "runtime-bound credential must stay pinned to Thread A chat")
 	})
 
 	// Vector 6: Replayed token from a retired/replaced actor (old actor_uid soft-deleted),
-	// even inside the 5s Stage-1 cache window AND even if a same-name replacement exists.
-	t.Run("replayed retired actor token is rejected immediately inside Stage-1 cache window", func(t *testing.T) {
+	// even inside the provider cache window AND even if a same-name replacement exists.
+	t.Run("replayed retired actor token is rejected immediately inside cache window", func(t *testing.T) {
 		t.Parallel()
 		actorRet := fx.seedThreadActor(t, "retire-me", userA, assistants.ATEInitiatorDashboardSender)
-		tokRet := fx.mintActorToken(t, actorRet, mcp.DirectWorkloadProjectGatewayAudience)
+		tokRet := fx.requireActorCredential(t, actorRet)
 
-		// Warm Stage-1 cache while live.
 		okResp := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokRet, listServersBody(t), "", nil)
 		require.Equal(t, http.StatusOK, okResp.Code, okResp.Body.String())
 
-		// Soft-delete the old actor row (leaving its workload admission intact to prove
-		// actor_uid liveness is enforced independently of Stage-1 admission caching).
 		_, err := assistantrepo.New(fx.f.ti.conn).SoftDeleteAssistantATEActor(ctx, assistantrepo.SoftDeleteAssistantATEActorParams{
 			RetiredState: "retired", ProjectID: fx.projectID, ID: actorRet.actorRowID,
 		})
 		require.NoError(t, err)
 
-		// Even inserting a new live row with the SAME actor_name + SAME subject but a
-		// NEW actor_uid must NOT validate the replayed old-UID token!
-		bindingJSON, err := json.Marshal(map[string]any{
-			"issuer_id":           fx.f.issuerID,
-			"subject":             actorRet.subject,
-			"identity":            fx.identity,
-			"mcp_project_gateway": true,
+		// Even inserting a new live row with the SAME actor_name but a NEW actor_uid
+		// must NOT validate the replayed old-UID credential!
+		bindingJSON, err := json.Marshal(assistants.KitWorkloadBinding{
+			MCPProjectGateway: true,
+			IssuerID:          uuid.Nil,
+			Subject:           actorRet.subject,
+			Identity:          fx.identity,
 		})
 		require.NoError(t, err)
 		_, err = assistantrepo.New(fx.f.ti.conn).InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
@@ -909,76 +956,72 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 		require.NoError(t, err)
 
 		replayed := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokRet, listServersBody(t), "", nil)
-		require.Equal(t, http.StatusUnauthorized, replayed.Code, "replayed retired-actor token must be refused 401 even inside 5s cache window")
+		require.Equal(t, http.StatusUnauthorized, replayed.Code, "replayed retired-actor credential must be refused 401 immediately")
 	})
 
-	// Vector 7: Tampered / malformed / mismatched actor.ate.dev claims and worker-for-actor tokens.
-	t.Run("tampered or mismatched actor.ate.dev claims and worker tokens fail closed 401", func(t *testing.T) {
+	// Vector 7: Tampered / mismatched SPIFFE ID or credential URI fails closed at FetchSecret.
+	t.Run("tampered or mismatched SPIFFE identity and credential URI fail closed", func(t *testing.T) {
 		t.Parallel()
-		badTokens := []struct {
-			name  string
-			token string
+		crossUIDURI, err := atecred.BuildCredentialURI(fx.atespace, actorA.actorName, actorB.actorUID)
+		require.NoError(t, err)
+		unknownUIDURI, err := atecred.BuildCredentialURI(fx.atespace, actorA.actorName, "uid-does-not-exist")
+		require.NoError(t, err)
+		otherSpaceURI, err := atecred.BuildCredentialURI("other-space", actorA.actorName, actorA.actorUID)
+		require.NoError(t, err)
+
+		badRequests := []struct {
+			name     string
+			uri      string
+			spiffeID string
+			wantCode codes.Code
 		}{
 			{
-				name:  "missing actor.ate.dev claim on actor/ subject",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, nil),
+				name:     "mismatched actorName in SPIFFE vs URI",
+				uri:      actorB.credentialURI,
+				spiffeID: actorA.spiffeID,
+				wantCode: codes.PermissionDenied,
 			},
 			{
-				name: "mismatched actorName vs sub",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorB.actorName, "actorUID": actorB.actorUID},
-				}),
+				name:     "mismatched atespace in URI",
+				uri:      otherSpaceURI,
+				spiffeID: actorA.spiffeID,
+				wantCode: codes.PermissionDenied,
 			},
 			{
-				name: "mismatched atespace vs sub",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": "other-space", "actorName": actorA.actorName, "actorUID": actorA.actorUID},
-				}),
+				name:     "unknown actorUID",
+				uri:      unknownUIDURI,
+				spiffeID: actorA.spiffeID,
+				wantCode: codes.PermissionDenied,
 			},
 			{
-				name: "missing actorUID",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorA.actorName},
-				}),
+				name:     "actorA name carrying actorB UID fails row identity cross-check",
+				uri:      crossUIDURI,
+				spiffeID: actorA.spiffeID,
+				wantCode: codes.PermissionDenied,
 			},
 			{
-				name: "unknown actorUID",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorA.actorName, "actorUID": "uid-does-not-exist"},
-				}),
-			},
-			{
-				name: "non-empty node on actor.ate.dev claim",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorA.actorName, "actorUID": actorA.actorUID, "node": "worker-1"},
-				}),
-			},
-			{
-				name: "worker-for-actor.ate.dev claim rejected",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"worker-for-actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorA.actorName, "actorUID": actorA.actorUID, "node": "worker-1"},
-				}),
-			},
-			{
-				name: "actorA subject carrying actorB UID fails row identity cross-check",
-				token: fx.mintATEJWT(t, actorA.subject, []string{mcp.DirectWorkloadProjectGatewayAudience}, map[string]any{
-					"actor.ate.dev": map[string]string{"atespace": fx.atespace, "actorName": actorA.actorName, "actorUID": actorB.actorUID},
-				}),
+				name:     "malformed SPIFFE identity",
+				uri:      actorA.credentialURI,
+				spiffeID: "spiffe://cluster.local/ns/ate-system/sa/atenet-egress",
+				wantCode: codes.PermissionDenied,
 			},
 		}
-		for _, tc := range badTokens {
-			resp := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tc.token, listServersBody(t), "", nil)
-			require.Equal(t, http.StatusUnauthorized, resp.Code, "case %q must fail closed 401, got body: %s", tc.name, resp.Body.String())
+		for _, tc := range badRequests {
+			_, fetchErr := fx.credProvider.FetchSecret(ctx, &credproviderv1.FetchSecretRequest{
+				Uri:           tc.uri,
+				ActorSpiffeId: tc.spiffeID,
+			})
+			require.Equal(t, tc.wantCode, status.Code(fetchErr), "case %q must fail closed", tc.name)
 		}
 	})
 
 	// Vector 8: Non-running actor states (suspended/crashed), stopped runtimes,
-	// and soft-deleted chats fail closed 401 even inside the 5s Stage-1 cache window.
+	// and soft-deleted chats fail closed 401 immediately even on already-minted credentials.
 	t.Run("suspended or crashed actor, stopped runtime, and deleted chat fail closed 401", func(t *testing.T) {
 		t.Parallel()
 		for _, nonRunningState := range []string{"suspended", "crashed"} {
 			actorNonRun := fx.seedThreadActor(t, "state-"+nonRunningState, userA, assistants.ATEInitiatorDashboardSender)
-			tok := fx.mintActorToken(t, actorNonRun, mcp.DirectWorkloadProjectGatewayAudience)
+			tok := fx.requireActorCredential(t, actorNonRun)
 			require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tok, listServersBody(t), "", nil).Code)
 
 			_, err := assistantrepo.New(fx.f.ti.conn).UpdateAssistantATEActorState(ctx, assistantrepo.UpdateAssistantATEActorStateParams{
@@ -991,17 +1034,16 @@ func TestATEInitiatingUserAuthz_InjectionAndSpoofingVectorsRejected(t *testing.T
 
 		// Soft-deleted chat must reject the actor immediately.
 		actorDelChat := fx.seedThreadActor(t, "del-chat", userA, assistants.ATEInitiatorDashboardSender)
-		tokDelChat := fx.mintActorToken(t, actorDelChat, mcp.DirectWorkloadProjectGatewayAudience)
+		tokDelChat := fx.requireActorCredential(t, actorDelChat)
 		require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokDelChat, listServersBody(t), "", nil).Code)
 		require.NoError(t, testrepo.New(fx.f.ti.conn).ForceSoftDeleteChat(ctx, actorDelChat.chatID))
 		require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokDelChat, listServersBody(t), "", nil).Code)
 
 		// Stopped runtime (isolated fixture so sibling subtests are unaffected) must reject immediately.
 		fxStopped := newATEActorAuthzFixture(t)
-		fxStopped.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
 		uStopped := fxStopped.seedOrgMember(t, "alice-stopped", true, false)
 		actorStopped := fxStopped.seedThreadActor(t, "stopped-rt", uStopped, assistants.ATEInitiatorDashboardSender)
-		tokStopped := fxStopped.mintActorToken(t, actorStopped, mcp.DirectWorkloadProjectGatewayAudience)
+		tokStopped := fxStopped.requireActorCredential(t, actorStopped)
 		require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fxStopped.f.ti, fxStopped.gateway, tokStopped, listServersBody(t), "", nil).Code)
 		require.NoError(t, assistantrepo.New(fxStopped.f.ti.conn).SetAssistantRuntimeStateForTest(ctx, assistantrepo.SetAssistantRuntimeStateForTestParams{
 			ProjectID: fxStopped.projectID, RuntimeID: fxStopped.runtimeID, State: "stopped", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -1016,11 +1058,6 @@ func TestATEInitiatingUserAuthz_BlockedUserRefusedOnGatewayAndInference(t *testi
 	fx := newATEActorAuthzFixture(t)
 	fx.f.ti.service.SetAuthClientPermitted(true)
 
-	// Freeze the Stage-1 cache clock to prove blocked-user refusal runs fresh on
-	// every request inside the 5-second Stage-1 cache window.
-	frozenNow := time.Now()
-	fx.f.ti.service.SetDirectWorkloadClock(func() time.Time { return frozenNow })
-
 	userA := fx.seedOrgMember(t, "alice-blocked", true, true)
 
 	slugA := "svc-blocked-" + uuid.NewString()[:6]
@@ -1034,10 +1071,8 @@ func TestATEInitiatingUserAuthz_BlockedUserRefusedOnGatewayAndInference(t *testi
 	actorA := fx.seedThreadActor(t, "alice-blocked", userA, assistants.ATEInitiatorDashboardSender)
 	actorNoUser := fx.seedThreadActor(t, "cron-blocked", "", assistants.ATEInitiatorNoUser)
 
-	gwTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadProjectGatewayAudience)
-	infTokenA := fx.mintActorToken(t, actorA, mcp.DirectWorkloadInferenceAudience)
-	gwTokenNoUser := fx.mintActorToken(t, actorNoUser, mcp.DirectWorkloadProjectGatewayAudience)
-	infTokenNoUser := fx.mintActorToken(t, actorNoUser, mcp.DirectWorkloadInferenceAudience)
+	tokenA := fx.requireActorCredential(t, actorA)
+	tokenNoUser := fx.requireActorCredential(t, actorNoUser)
 
 	var inferenceCalls atomic.Int32
 	completionClient := &managedInferenceCompletion{complete: func(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
@@ -1045,16 +1080,14 @@ func TestATEInitiatingUserAuthz_BlockedUserRefusedOnGatewayAndInference(t *testi
 		msg := or.CreateChatMessagesAssistant(or.ChatAssistantMessage{})
 		return &openrouter.CompletionResponse{Message: &msg, Model: "test/model"}, nil
 	}}
-	chatRouter := newDirectWorkloadChatMux(t, fx.f, completionClient)
-	infPath := "/projects/" + fx.projectID.String() + "/chat/completions"
-	infBodyA := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorA.acpSessionID)
-	infBodyNoUser := fmt.Sprintf(`{"model":"test-model","user":%q,"messages":[{"role":"user","content":"hi"}],"stream":false}`, actorNoUser.acpSessionID)
+	chatSvc := fx.newChatService(t, completionClient)
+	infBody := `{"model":"test-model","messages":[{"role":"user","content":"hi"}],"stream":false}`
 
-	// Warm Stage-1 cache for both threads while neither user is blocked.
-	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
-	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
-	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
-	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenNoUser, nil, infBodyNoUser).Code)
+	// Both threads succeed while neither user is blocked.
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, fx.postCompletion(t, chatSvc, tokenA, nil, infBody).Code)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, fx.postCompletion(t, chatSvc, tokenNoUser, nil, infBody).Code)
 	require.EqualValues(t, 2, inferenceCalls.Load())
 
 	setBlocked := func(userID string, blocked bool) {
@@ -1066,32 +1099,40 @@ func TestATEInitiatingUserAuthz_BlockedUserRefusedOnGatewayAndInference(t *testi
 	}
 
 	// 1. Blocking the initiating user immediately refuses Thread A on BOTH Project
-	//    Gateway and inference with 401 (never falling back to userless authority),
-	//    while leaving the unaffected userless thread working.
+	//    Gateway and inference (never falling back to userless authority), and
+	//    refuses new mints, while leaving the unaffected userless thread working.
 	setBlocked(userA, true)
-	gwBlocked := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil)
+	gwBlocked := serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil)
 	require.Equal(t, http.StatusUnauthorized, gwBlocked.Code, gwBlocked.Body.String())
-	infBlocked := postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA)
+	infBlocked := fx.postCompletion(t, chatSvc, tokenA, nil, infBody)
 	require.Equal(t, http.StatusUnauthorized, infBlocked.Code, infBlocked.Body.String())
 	require.EqualValues(t, 2, inferenceCalls.Load(), "blocked initiating user must not reach inference")
-	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenNoUser, listServersBody(t), "", nil).Code)
 
-	// Unblocking the initiating user restores both endpoints.
+	fx.clockOffset.Store(int64(2 * time.Minute))
+	_, err := fx.fetchActorCredential(ctx, actorA)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "blocked initiating user must be refused at mint endpoint")
+
+	// Unblocking the initiating user restores both endpoints and minting.
 	setBlocked(userA, false)
-	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
-	require.Equal(t, http.StatusOK, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, fx.postCompletion(t, chatSvc, tokenA, nil, infBody).Code)
 	require.EqualValues(t, 3, inferenceCalls.Load())
 
 	// 2. Blocking the assistant's owner refuses BOTH human-initiated and userless
-	//    direct-bearer workload requests on Project Gateway and inference.
+	//    requests on Project Gateway and inference, plus new mints.
 	setBlocked(fx.ownerUserID, true)
-	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenA, listServersBody(t), "", nil).Code)
-	require.Equal(t, http.StatusUnauthorized, postCompletionRequest(chatRouter, infPath, infTokenA, nil, infBodyA).Code)
-	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
-	require.Equal(t, http.StatusUnauthorized, postCompletionRequest(chatRouter, infPath, infTokenNoUser, nil, infBodyNoUser).Code)
+	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenA, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusUnauthorized, fx.postCompletion(t, chatSvc, tokenA, nil, infBody).Code)
+	require.Equal(t, http.StatusUnauthorized, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusUnauthorized, fx.postCompletion(t, chatSvc, tokenNoUser, nil, infBody).Code)
 	require.EqualValues(t, 3, inferenceCalls.Load(), "blocked owner must not reach inference")
+
+	fx.clockOffset.Store(int64(4 * time.Minute))
+	_, err = fx.fetchActorCredential(ctx, actorNoUser)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "blocked owner must be refused at mint endpoint")
 
 	// Unblocking the owner restores access.
 	setBlocked(fx.ownerUserID, false)
-	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, gwTokenNoUser, listServersBody(t), "", nil).Code)
+	require.Equal(t, http.StatusOK, serveProjectGatewayHTTPWithOptions(t, fx.f.ti, fx.gateway, tokenNoUser, listServersBody(t), "", nil).Code)
 }

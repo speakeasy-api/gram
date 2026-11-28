@@ -2137,10 +2137,11 @@ SELECT * FROM assistant_ate_actors
 WHERE organization_id = @organization_id AND project_id = @project_id
   AND actor_uid = @actor_uid AND deleted IS FALSE;
 
--- name: GetAssistantATEActorByUIDWithChat :one
--- Uses assistant_ate_actors_actor_uid_key for tenant-scoped live actor identity
--- lookup, verifying the actor is running, the owning runtime is active for the
--- same assistant, and the assistant, thread, and chat are all live.
+-- name: GetLiveAssistantATEActorByUID :one
+-- Looks up a live, configured, running ATE thread actor by its unique ATE
+-- actor_uid for on-demand egress credential minting. Joins runtime, assistant,
+-- thread, and chat so retired, unconfigured, paused, non-running, or deleted
+-- actors fail closed.
 SELECT
   a.id,
   a.organization_id,
@@ -2151,31 +2152,42 @@ SELECT
   a.actor_name,
   a.actor_uid,
   a.state,
+  a.configured,
   a.workload_binding_json,
   a.initiating_user_id,
   a.initiating_user_resolution,
+  r.backend_metadata_json,
+  asst.name AS assistant_name,
+  asst.status AS assistant_status,
   t.chat_id
 FROM assistant_ate_actors a
 JOIN assistant_runtimes r
-  ON r.id = a.runtime_id AND r.project_id = a.project_id AND r.assistant_id = a.assistant_id
+  ON r.id = a.runtime_id
+ AND r.project_id = a.project_id
+ AND r.assistant_id = a.assistant_id
 JOIN assistants asst
-  ON asst.id = a.assistant_id AND asst.project_id = a.project_id AND asst.organization_id = a.organization_id
+  ON asst.id = a.assistant_id
+ AND asst.project_id = a.project_id
+ AND asst.organization_id = a.organization_id
 JOIN assistant_threads t
-  ON t.id = a.assistant_thread_id AND t.project_id = a.project_id AND t.assistant_id = a.assistant_id
+  ON t.id = a.assistant_thread_id
+ AND t.project_id = a.project_id
+ AND t.assistant_id = a.assistant_id
 JOIN chats c
-  ON c.id = t.chat_id AND c.project_id = a.project_id AND c.organization_id = a.organization_id
+  ON c.id = t.chat_id
+ AND c.project_id = a.project_id
+ AND c.organization_id = a.organization_id
 WHERE a.actor_uid = @actor_uid
-  AND a.organization_id = @organization_id
-  AND a.project_id = @project_id
   AND a.deleted IS FALSE
-  AND a.state = 'running'
+  AND a.configured IS TRUE
+  AND a.state = @running_state
   AND r.runtime_version = 3
   AND r.backend = 'ate'
-  AND r.state = 'active'
   AND r.deleted IS FALSE
   AND r.ended IS FALSE
+  AND r.state IN (@runtime_starting_state, @runtime_active_state)
   AND asst.deleted IS FALSE
-  AND asst.status = 'active'
+  AND asst.status = @assistant_active_status
   AND t.deleted IS FALSE
   AND c.deleted IS FALSE;
 

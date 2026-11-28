@@ -124,12 +124,20 @@ func checkShape(c Credential) error {
 	return nil
 }
 
-// Mint signs c and returns the token and its ID.
+// Mint signs c with the default Lifetime and returns the token and its ID.
 func (i *Issuer) Mint(c Credential) (string, string, error) {
-	if err := checkShape(c); err != nil {
-		return "", "", err
+	raw, id, _, err := i.MintWithLifetime(c, Lifetime)
+	return raw, id, err
+}
+
+// MintWithLifetime signs c for lifetime (bounded by [time.Second, Lifetime])
+// and returns the token, its ID, and its expiration timestamp.
+func (i *Issuer) MintWithLifetime(c Credential, lifetime time.Duration) (string, string, time.Time, error) {
+	if err := checkShape(c); err != nil || lifetime < time.Second || lifetime > Lifetime {
+		return "", "", time.Time{}, ErrInvalid
 	}
 	now := time.Now()
+	expiresAt := now.Add(lifetime)
 	id := uuid.NewString()
 	var profileVersion *uuid.UUID
 	if c.SelectionProfileVersionID.Valid {
@@ -140,13 +148,13 @@ func (i *Issuer) Mint(c Credential) (string, string, error) {
 		SelectionProfileVersionID: profileVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer: i.signer.URL(), Subject: c.Principal.String(), Audience: jwt.ClaimStrings{Audience},
-			ExpiresAt: jwt.NewNumericDate(now.Add(Lifetime)), NotBefore: nil, IssuedAt: jwt.NewNumericDate(now), ID: id,
+			ExpiresAt: jwt.NewNumericDate(expiresAt), NotBefore: nil, IssuedAt: jwt.NewNumericDate(now), ID: id,
 		},
 	}, TokenType)
 	if err != nil {
-		return "", "", fmt.Errorf("sign principal credential: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("sign principal credential: %w", err)
 	}
-	return raw, id, nil
+	return raw, id, expiresAt, nil
 }
 
 // IsToken reports whether raw is shaped as a principal credential, without
@@ -196,13 +204,6 @@ type authenticatedKey struct{}
 func FromContext(ctx context.Context) (Authenticated, bool) {
 	a, ok := ctx.Value(authenticatedKey{}).(Authenticated)
 	return a, ok
-}
-
-// WithAuthenticated attaches a server-constructed principal credential
-// authentication (for example a direct-bearer workload admitted to act as its
-// assigned agent on behalf of a server-resolved authorizing user) to ctx.
-func WithAuthenticated(ctx context.Context, authenticated Authenticated) context.Context {
-	return context.WithValue(ctx, authenticatedKey{}, authenticated)
 }
 
 // Authenticate verifies raw and returns a context authenticated as its

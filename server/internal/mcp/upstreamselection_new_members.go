@@ -13,9 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -196,16 +194,7 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 				}
 			}
 			if reconnect {
-				// A human-backed direct-bearer workload carries no minted
-				// execution-selection profile; keep an unconnected personal
-				// client as a candidate so an unambiguous server still resolves
-				// and can mint a user-bound connection recovery link instead of
-				// degrading to an opaque choice gap.
-				authenticated, hasPrincipal := principalcredential.FromContext(ctx)
-				_, directWorkload := contextvalues.VerifiedWorkloadPrincipal(ctx)
-				if !hasPrincipal || !directWorkload || authenticated.Credential.AuthorizerUserID == "" {
-					return none, unresolved, false, nil
-				}
+				return none, unresolved, false, nil
 			}
 			readyPersonalRegistration = row.RemoteSessionClientID
 		}

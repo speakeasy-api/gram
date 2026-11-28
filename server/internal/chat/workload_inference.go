@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -15,25 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const (
-	// ProjectScopedCompletionsRouteParam is the chi path parameter holding the
-	// project UUID on the project-scoped OpenAI-compatible completions route.
-	ProjectScopedCompletionsRouteParam = "projectID"
-
-	// ProjectScopedCompletionsRoute is the project-scoped inference endpoint
-	// where direct-bearer workload JWTs are accepted. Harnesses configure
-	// `<base>/projects/<project_id>` as their OpenAI base URL.
-	ProjectScopedCompletionsRoute = "/projects/{" + ProjectScopedCompletionsRouteParam + "}/chat/completions"
-)
-
-// WorkloadInferenceAuthorizer accepts explicitly inference-audienced workload
-// sessions and, when projectID is non-nil (from the project-scoped completions
-// route), direct-bearer workload JWTs. It rechecks workload admission and
-// effective policy on every call, and reports handled even when a recognized
-// workload credential is refused so authentication never falls back to another
-// identity on that request.
+// WorkloadInferenceAuthorizer accepts only explicitly inference-audienced
+// sessions and rechecks workload admission and effective policy on every call.
+// It reports handled even when a recognized inference credential is refused,
+// preventing authentication fallback to a different identity on that request.
 type WorkloadInferenceAuthorizer interface {
-	AuthorizeWorkloadInference(ctx context.Context, token string, projectID uuid.UUID) (context.Context, bool, error)
+	AuthorizeWorkloadInference(context.Context, string) (context.Context, bool, error)
 }
 
 func (s *Service) WithWorkloadInference(authorizer WorkloadInferenceAuthorizer) *Service {
@@ -48,29 +34,13 @@ func isWorkloadInference(ctx context.Context) bool {
 	return value
 }
 
-func completionPathProjectID(r *http.Request) (uuid.UUID, bool, error) {
-	raw := chi.URLParam(r, ProjectScopedCompletionsRouteParam)
-	if raw == "" {
-		return uuid.Nil, false, nil
-	}
-	projectID, err := uuid.Parse(raw)
-	if err != nil || projectID == uuid.Nil {
-		return uuid.Nil, true, oops.C(oops.CodeUnauthorized)
-	}
-	return projectID, true, nil
-}
-
 func (s *Service) authorizeWorkloadCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, bool, error) {
 	ctx := r.Context()
-	pathProjectID, hasPathProject, err := completionPathProjectID(r)
-	if err != nil {
-		return ctx, nil, true, err
-	}
 	fields := strings.Fields(r.Header.Get("Authorization"))
 	if s.workloadInference == nil || len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
 		return ctx, nil, false, nil
 	}
-	ctx, handled, err := s.workloadInference.AuthorizeWorkloadInference(ctx, fields[1], pathProjectID)
+	ctx, handled, err := s.workloadInference.AuthorizeWorkloadInference(ctx, fields[1])
 	if err != nil {
 		return ctx, nil, handled, fmt.Errorf("authorize workload completion: %w", err)
 	}
@@ -80,9 +50,6 @@ func (s *Service) authorizeWorkloadCompletion(r *http.Request) (context.Context,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return ctx, nil, true, oops.C(oops.CodeUnauthorized)
-	}
-	if hasPathProject && *authCtx.ProjectID != pathProjectID {
-		return ctx, nil, true, oops.C(oops.CodeForbidden)
 	}
 	// Workloads have no authority over assistant or transcript ownership. Never
 	// forward a caller's claimed identity into capture, linking, or billing.

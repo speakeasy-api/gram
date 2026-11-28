@@ -52,7 +52,7 @@ func TestWorkloadInference_OrganizationIssuerBindsTargetProject(t *testing.T) {
 			})
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			token := decodeSharedTokenResponse(t, w).AccessToken
-			authorized, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
+			authorized, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
 			require.NoError(t, err)
 			require.True(t, handled)
 			authCtx, ok := contextvalues.GetAuthContext(authorized)
@@ -71,7 +71,7 @@ func TestWorkloadInference_OrganizationIssuerBindsTargetProject(t *testing.T) {
 				affected, err := testrepo.New(f.ti.conn).SoftDeleteWorkloadAdmissionFixture(ctx, testrepo.SoftDeleteWorkloadAdmissionFixtureParams{OrganizationID: f.fx.orgID, WorkloadIssuerID: f.issuerID, Subject: f.subject})
 				require.NoError(t, err)
 				require.Equal(t, int64(1), affected)
-				_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token, uuid.Nil)
+				_, handled, err := f.ti.service.AuthorizeWorkloadInference(t.Context(), token)
 				require.True(t, handled)
 				require.Error(t, err, "project-tier admission revocation must revoke an existing inference credential")
 				retry := sharedToken(t, t.Context(), f.ti, issuer.ID.String(), url.Values{

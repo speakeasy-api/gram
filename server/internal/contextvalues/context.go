@@ -186,23 +186,6 @@ func WithWorkloadAgent(ctx context.Context, agent urn.Principal) context.Context
 	return context.WithValue(ctx, workloadAgentKey{}, agent)
 }
 
-type verifiedWorkloadKey struct{}
-
-// WithVerifiedWorkloadPrincipal preserves the cryptographically verified
-// workload principal when Stage-2 admission elevates a direct-bearer workload
-// request to act as its assigned agent on behalf of a resolved authorizing
-// user, allowing downstream runtime attribution to verify the workload binding.
-func WithVerifiedWorkloadPrincipal(ctx context.Context, workload urn.Principal) context.Context {
-	return context.WithValue(ctx, verifiedWorkloadKey{}, workload)
-}
-
-// VerifiedWorkloadPrincipal returns the verified workload principal recorded
-// by WithVerifiedWorkloadPrincipal.
-func VerifiedWorkloadPrincipal(ctx context.Context) (urn.Principal, bool) {
-	p, ok := ctx.Value(verifiedWorkloadKey{}).(urn.Principal)
-	return p, ok && !p.IsZero()
-}
-
 // EffectiveAgent returns the agent a request acts for: the actor itself when an
 // agent authenticated it, or the recorded agent when an admitted workload did.
 // Policy audiences, bypass, plugin selection and spend use this agent.

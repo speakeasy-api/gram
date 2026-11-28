@@ -326,8 +326,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		return choice, len(authentication.agentKeyClients) <= 1, nil
 	}
 	authenticated, ok := principalcredential.FromContext(ctx)
-	_, directWorkload := contextvalues.VerifiedWorkloadPrincipal(ctx)
-	if !ok || (directWorkload && !authenticated.Credential.SelectionProfileVersionID.Valid) {
+	if !ok {
 		endpoint := authentication.endpoint
 		res, err := s.resolveUnchosenAuthClient(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID, connectionSubject(ctx, authentication.subject), consentAuthServer{id: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID})
 		if err != nil {
@@ -605,8 +604,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 	profile := false
 	if selector == nil {
 		authenticated, ok := principalcredential.FromContext(ctx)
-		_, directWorkload := contextvalues.VerifiedWorkloadPrincipal(ctx)
-		if !ok || (directWorkload && !authenticated.Credential.SelectionProfileVersionID.Valid) {
+		if !ok {
 			choices := s.unchosenMemberChoices(endpoint, connectionSubject(ctx, authentication.subject))
 			// An agent key's own choices decide the members they name.
 			if keyMode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && keyMode == contextvalues.APIKeyAuthorizationModePrincipal {
@@ -623,8 +621,8 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 			}
 			return choices, nil
 		}
-		// A minted principal credential is served only through its profile;
-		// one that binds none reaches no proxied member.
+		// A principal credential is served only through its profile; one that
+		// binds none reaches no proxied member.
 		selector, profile = s.profileSelector(authenticated.Credential, endpoint), true
 	}
 	return &memberChoices{
