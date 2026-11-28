@@ -15,6 +15,19 @@ describe("organizationsSearchSchema", () => {
   const cases: [string, Record<string, unknown>, OrganizationsSearch][] = [
     ["defaults to unrestricted", {}, {}],
     [
+      "reads internal only",
+      { internalStatus: "internal" },
+      { internalStatus: "internal" },
+    ],
+    [
+      "reads internal excluded",
+      { internalStatus: "external" },
+      { internalStatus: "external" },
+    ],
+    ["internal all is the default and absent", { internalStatus: "all" }, {}],
+    ["invalid internal status is dropped", { internalStatus: "yes" }, {}],
+    ["array internal status is dropped", { internalStatus: ["internal"] }, {}],
+    [
       "reads canonical active",
       { disabledStatus: "active" },
       { disabledStatus: "active" },

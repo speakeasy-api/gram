@@ -26,7 +26,11 @@ import {
   type AdminOrganization,
   type ListOrganizationsParams,
 } from "@/lib/gramAdminApi";
-import { statusParams, whitelistParams } from "@/lib/organizationFilters";
+import {
+  internalParams,
+  statusParams,
+  whitelistParams,
+} from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
 
 import { BulkAccountType } from "./BulkAccountType";
@@ -130,6 +134,7 @@ export function OrganizationsList(): JSX.Element {
     trial_states: search.trial,
     ...statusParams(search),
     ...whitelistParams(search),
+    ...internalParams(search),
     created_from: search.createdFrom,
     created_to: search.createdTo,
     min_members: search.minMembers,
@@ -563,6 +568,11 @@ export function OrganizationsList(): JSX.Element {
                                 className={cn(
                                   "bg-background hover:bg-muted has-aria-expanded:bg-muted",
                                   isPeeked && "bg-muted",
+                                  // Colour, not opacity: the whole table
+                                  // already dims with opacity while a page
+                                  // loads.
+                                  row.original.internal &&
+                                    "text-muted-foreground",
                                 )}
                                 onClick={openOrganization}
                                 onAltClick={togglePeek}

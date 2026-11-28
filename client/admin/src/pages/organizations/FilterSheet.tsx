@@ -84,8 +84,8 @@ export function FilterSheet({
   // every browser, so that is not reliably the trigger.
   onReturnFocus: () => void;
 }): JSX.Element {
-  const disabledId = useId();
   const whitelistedId = useId();
+  const singleSelectId = useId();
   const membersId = useId();
   const createdId = useId();
   const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
@@ -159,38 +159,47 @@ export function FilterSheet({
 
         <div className="grid min-h-0 flex-1 content-start gap-4 overflow-y-auto p-4">
           {FILTER_GROUPS.map((group) =>
-            group.key === "disabled" ? (
+            group.key === "disabled" || group.key === "internal" ? (
+              // One branch for every group that takes a single choice, so the
+              // groups cannot drift apart. "all" stands for nothing chosen.
               <div key={group.key} className="space-y-2">
-                <label htmlFor={disabledId} className="text-sm font-medium">
-                  Organization Status
+                <label
+                  htmlFor={`${singleSelectId}-${group.key}`}
+                  className="text-sm font-medium"
+                >
+                  {group.label}
                 </label>
                 <Select
                   value={
-                    draft.disabled.length === 1 ? draft.disabled[0] : "all"
+                    draft[group.key].length === 1 ? draft[group.key][0] : "all"
                   }
-                  onValueChange={(status) =>
+                  onValueChange={(chosen) =>
                     setDraft((previous) => ({
                       ...previous,
-                      disabled:
-                        status === "active" || status === "disabled"
-                          ? [status]
-                          : [],
+                      [group.key]: group.options.some(
+                        (option) => option.value === chosen,
+                      )
+                        ? [chosen]
+                        : [],
                     }))
                   }
                 >
                   <SelectTrigger
-                    id={disabledId}
+                    id={`${singleSelectId}-${group.key}`}
                     className="w-full"
                     ref={(node) => {
-                      if (node) pickers.current.disabled = node;
+                      if (node) pickers.current[group.key] = node;
                     }}
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="disabled">Disabled</SelectItem>
+                    <SelectItem value="all">{group.emptyLabel}</SelectItem>
+                    {group.options.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

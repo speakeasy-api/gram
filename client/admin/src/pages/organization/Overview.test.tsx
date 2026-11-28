@@ -595,7 +595,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     const dialog = await screen.findByRole("dialog");
 
     // The record under test is whitelisted, so the change reads yes → no. Both
@@ -613,7 +613,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
     await waitFor(() => {
       expect(document.querySelector(".text-destructive")?.textContent).toMatch(
@@ -641,7 +641,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
     await waitFor(() => {
       expect(document.querySelector(".text-destructive")?.textContent).toMatch(
@@ -700,7 +700,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
 
     // The field by name, not merely that a write happened: the two editors
@@ -717,6 +717,66 @@ describe("Overview", () => {
       "id",
       "whitelisted",
     ]);
+  });
+
+  it("marks an organization internal on its own, after confirmation", async () => {
+    mocks.updateOrganization.mockResolvedValue({ ...ORG, internal: true });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("switch", { name: "Internal" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // Both halves, as for whitelisted: a description that renders the boolean
+    // backwards asks the operator to approve the opposite of the write.
+    expect(ORG.internal).toBe(false);
+    expect(dialog.textContent).toContain("Internal: no → yes");
+    expect(dialog.textContent).not.toContain("Internal: yes → no");
+    expect(mocks.updateOrganization).not.toHaveBeenCalled();
+
+    await confirmDialog();
+
+    await waitFor(() => {
+      expect(mocks.updateOrganization).toHaveBeenCalledTimes(1);
+    });
+    // The endpoint rejects internal combined with any other field.
+    expect(payloadOf(mocks.updateOrganization)).toStrictEqual({
+      id: ORG.id,
+      internal: true,
+    });
+    expect(Object.keys(payloadOf(mocks.updateOrganization)).sort()).toEqual([
+      "id",
+      "internal",
+    ]);
+  });
+
+  it("says what the internal label means in each state", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    expect(await screen.findByText("Counts as a customer")).toBeTruthy();
+    expect(screen.queryByText("Hidden from customer analytics")).toBeNull();
+    expect(
+      screen
+        .getByRole("switch", { name: "Internal" })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+
+  it("shows a marked organization as internal", async () => {
+    mocks.getOrganization.mockResolvedValue({ ...ORG, internal: true });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    expect(
+      await screen.findByText("Hidden from customer analytics"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("switch", { name: "Internal" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("writes nothing when the operator cancels, and the control snaps back", async () => {
@@ -736,16 +796,18 @@ describe("Overview", () => {
     // nobody confirmed was never anywhere but the dialog's words.
     expect(select.textContent).toBe(ORG.account_type);
 
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("switch", { name: "Whitelisted" }));
     const second = await screen.findByRole("dialog");
     fireEvent.click(within(second).getByRole("button", { name: "Cancel" }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
     expect(mocks.updateOrganization).not.toHaveBeenCalled();
-    expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
-      String(ORG.whitelisted),
-    );
+    expect(
+      screen
+        .getByRole("switch", { name: "Whitelisted" })
+        .getAttribute("aria-checked"),
+    ).toBe(String(ORG.whitelisted));
   });
 
   it("shows a saved change on a record the operator reached by id", async () => {
@@ -946,7 +1008,7 @@ describe("Overview", () => {
       queryClient: qc,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     expect((await screen.findByRole("dialog")).textContent).toContain(ORG.name);
 
     await router.navigate({
@@ -1708,7 +1770,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
     await waitFor(() => {
       expect(mocks.updateOrganization).toHaveBeenCalled();
@@ -1747,7 +1809,7 @@ describe("Overview", () => {
       expect(document.activeElement).toBe(select);
     });
 
-    const toggle = screen.getByRole("switch");
+    const toggle = screen.getByRole("switch", { name: "Whitelisted" });
     fireEvent.click(toggle);
     await confirmDialog();
     await waitFor(() => {
@@ -1766,11 +1828,13 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    const toggle = await screen.findByRole("switch");
+    const toggle = await screen.findByRole("switch", { name: "Whitelisted" });
     fireEvent.click(toggle);
     await confirmDialog();
     await waitFor(() => {
-      expect(isDisabled(screen.getByRole("switch"))).toBe(true);
+      expect(
+        isDisabled(screen.getByRole("switch", { name: "Whitelisted" })),
+      ).toBe(true);
     });
 
     // What the browser does when a focused control becomes disabled.
@@ -1779,10 +1843,14 @@ describe("Overview", () => {
 
     settle();
     await waitFor(() => {
-      expect(isDisabled(screen.getByRole("switch"))).toBe(false);
+      expect(
+        isDisabled(screen.getByRole("switch", { name: "Whitelisted" })),
+      ).toBe(false);
     });
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("switch"));
+      expect(document.activeElement).toBe(
+        screen.getByRole("switch", { name: "Whitelisted" }),
+      );
     });
   }
 
@@ -1820,23 +1888,27 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    const toggle = await screen.findByRole("switch");
+    const toggle = await screen.findByRole("switch", { name: "Whitelisted" });
     fireEvent.click(toggle);
     await confirmDialog();
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("switch"));
+      expect(document.activeElement).toBe(
+        screen.getByRole("switch", { name: "Whitelisted" }),
+      );
     });
 
     // The second write is the one at issue: the first moves the write off
     // `idle`, and after that a repeat has nothing new to say about itself.
     (document.activeElement as HTMLElement | null)?.blur();
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
     await waitFor(() => {
       expect(mocks.updateOrganization).toHaveBeenCalledTimes(2);
     });
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByRole("switch"));
+      expect(document.activeElement).toBe(
+        screen.getByRole("switch", { name: "Whitelisted" }),
+      );
     });
   });
 
@@ -1852,19 +1924,23 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.click(await screen.findByRole("switch", { name: "Whitelisted" }));
     await confirmDialog();
 
     // Two writes in flight against one record race each other into the cache,
     // and the loser's answer is the one that stays.
     await waitFor(() => {
-      expect(isDisabled(screen.getByRole("switch"))).toBe(true);
+      expect(
+        isDisabled(screen.getByRole("switch", { name: "Whitelisted" })),
+      ).toBe(true);
     });
     expect(isDisabled(screen.getByRole("combobox"))).toBe(true);
 
     landTheWrite();
     await waitFor(() => {
-      expect(isDisabled(screen.getByRole("switch"))).toBe(false);
+      expect(
+        isDisabled(screen.getByRole("switch", { name: "Whitelisted" })),
+      ).toBe(false);
     });
     expect(isDisabled(screen.getByRole("combobox"))).toBe(false);
   });
