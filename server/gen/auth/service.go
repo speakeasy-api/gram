@@ -148,9 +148,15 @@ type InfoResult struct {
 	// eligibility
 	AcceptedSignupOfferFlow *string
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted   bool
-	Trial         *Trial `json:"trial"`
-	Organizations []*OrganizationEntry
+	Whitelisted bool
+	Trial       *Trial `json:"trial"`
+	// Whether the organization's free trial starts once an organization admin adds
+	// a card
+	TrialPendingPaymentMethod bool
+	// Set while the trial waits for a card and the last card added could not start
+	// it
+	TrialCardRejection *TrialCardRejection
+	Organizations      []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session
@@ -323,6 +329,14 @@ type TransferOutResult struct {
 type Trial struct {
 	StartedAt string
 	EndsAt    string
+}
+
+// Why the last card an organization admin added could not start the free trial.
+type TrialCardRejection struct {
+	// prepaid_card: prepaid cards cannot start a trial. card_used: the card
+	// already started another organization's trial.
+	Reason     string
+	RejectedAt string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

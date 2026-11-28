@@ -329,6 +329,11 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
+	// Report whether self-serve signup is disabled across the platform.
+	GetSelfServeStatus(context.Context, *GetSelfServeStatusPayload) (res *AdminSelfServeStatus, err error)
+	// Turn self-serve signup off or on across the platform. Existing organizations
+	// are unaffected.
+	SetSelfServeDisabled(context.Context, *SetSelfServeDisabledPayload) (res *AdminSelfServeStatus, err error)
 	// List the newest Platform MCP feedback reports across every organization.
 	ListPlatformMcpFeedback(context.Context, *ListPlatformMcpFeedbackPayload) (res *ListPlatformMcpFeedbackResult, err error)
 	// Returns eligible live Stripe subscription details before linking it to a
@@ -557,7 +562,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [142]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [144]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -1925,6 +1930,17 @@ type AdminOrganization struct {
 	TrialConvertedAt *string
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganization
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string
@@ -2545,6 +2561,19 @@ type AdminSecretBackfills struct {
 	PlatformKeyFingerprint *string
 }
 
+// AdminSelfServeStatus is the result type of the admin service
+// getSelfServeStatus method.
+type AdminSelfServeStatus struct {
+	// When true, no self-serve path can create an organization or arm a self-serve
+	// trial.
+	Disabled bool
+	// Email of the staff member who last changed the switch. Absent if it was
+	// never changed.
+	UpdatedBy *string
+	// When the switch last changed. Absent if it was never changed.
+	UpdatedAt *string
+}
+
 // AdminSession is the result type of the admin service getSession method.
 type AdminSession struct {
 	Email string
@@ -2663,6 +2692,23 @@ type AdminTailscaleOAuthMigrationOrganizations struct {
 	Organizations []*AdminTailscaleOAuthMigrationOrganization
 	// How long an organization must stay in dual_write before it can be finalized.
 	MinimumDualWriteSeconds int64
+}
+
+// Another organization that offered the same card to start its self-serve
+// trial. Carries no card or Stripe identifiers.
+type AdminTrialCardSharingOrganization struct {
+	// The ID of the other organization.
+	ID string
+	// The name of the other organization.
+	Name string
+	// The slug of the other organization.
+	Slug string
+	// The time at which the other organization last offered a card to start its
+	// trial.
+	CardAddedAt string
+	// Why the card could not start the other organization's trial. Absent when the
+	// card started that organization's trial.
+	RejectionReason *string
 }
 
 // AdminUploadImageResult is the result type of the admin service
@@ -3727,6 +3773,12 @@ type GetSecretBackfillsPayload struct {
 	AdminSessionToken *string
 }
 
+// GetSelfServeStatusPayload is the payload type of the admin service
+// getSelfServeStatus method.
+type GetSelfServeStatusPayload struct {
+	AdminSessionToken *string
+}
+
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
@@ -4067,6 +4119,10 @@ type ListOrganizationsPayload struct {
 	// Organization status: all (default), active (disabled_at IS NULL), or
 	// disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.
 	DisabledStatus *string
+	// Whitelist filter: true matches only whitelisted organizations, false only
+	// organizations that are not whitelisted. Omitted matches both. Applies even
+	// to exact ID matches.
+	Whitelisted *bool
 	// Inclusive minimum active member count, from 0 through 9223372036854775807.
 	// The generated TypeScript SDK accepts bigint. The handwritten admin client
 	// accepts safe integers or decimal strings; use decimal strings above
@@ -4663,6 +4719,13 @@ type SetRegistryEntryPublishedPayload struct {
 	ID                string
 	UpdatedAt         string
 	Published         bool
+}
+
+// SetSelfServeDisabledPayload is the payload type of the admin service
+// setSelfServeDisabled method.
+type SetSelfServeDisabledPayload struct {
+	AdminSessionToken *string
+	Disabled          bool
 }
 
 // SetStripeCustomerPayload is the payload type of the admin service

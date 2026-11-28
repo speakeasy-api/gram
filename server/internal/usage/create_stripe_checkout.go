@@ -47,6 +47,9 @@ const (
 	// Persist the appearance version so older intents keep their original parameters.
 	stripeCheckoutBrandingV1Marker     = "branding-v1"
 	stripeCheckoutBrandingDarkV1Marker = "branding-dark-v1"
+	// stripeCheckoutSavedCardsV1Marker marks intents that offer the customer's
+	// saved cards, so older intents replay without that parameter.
+	stripeCheckoutSavedCardsV1Marker = "saved-cards-v1"
 	// stripeCheckoutSessionIDTemplate is the literal Stripe replaces before redirect.
 	stripeCheckoutSessionIDTemplate = "{CHECKOUT_SESSION_ID}"
 	// maxStripeIdempotencyKeyLength is the longest idempotency key Stripe accepts.
@@ -124,6 +127,40 @@ func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID
 		accountType: accountType,
 		email:       email,
 	}, nil
+}
+
+// resolveStripeCustomer returns the organization's Stripe customer, creating
+// one when billing metadata names none. An existing customer's identity is
+// refreshed on a best-effort basis. The caller persists a new customer ID.
+func (s *Service) resolveStripeCustomer(ctx context.Context, organizationID, organizationSlug string, billingMetadata repo.BillingMetadatum, identity stripeOrganizationIdentity) (string, error) {
+	if billingMetadata.StripeCustomerID.Valid && billingMetadata.StripeCustomerID.String != "" {
+		customerID := billingMetadata.StripeCustomerID.String
+		// Best effort: keep identity and contract metadata current on customers created
+		// before the contract existed, or whose name/email/account type changed.
+		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
+			CustomerID:       customerID,
+			OrganizationID:   organizationID,
+			OrganizationSlug: organizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      identity.accountType,
+		}); updateErr != nil {
+			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity", attr.SlogError(updateErr))
+		}
+		return customerID, nil
+	}
+	customer, err := s.stripeClient.CreateCustomer(ctx, stripeclient.CreateCustomerInput{
+		OrganizationID:   organizationID,
+		OrganizationSlug: organizationSlug,
+		OrganizationName: identity.name,
+		Email:            identity.email,
+		AccountType:      identity.accountType,
+		IdempotencyKey:   fmt.Sprintf("customer:%s", organizationID),
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create Stripe customer").LogError(ctx, s.logger)
+	}
+	return customer.ID, nil
 }
 
 type stripeCheckoutSessionExpirer interface {
@@ -212,34 +249,9 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, payload *gen.CreateS
 		return nil, identityErr
 	}
 
-	customerID := ""
-	if err == nil && billingMetadata.StripeCustomerID.Valid {
-		customerID = billingMetadata.StripeCustomerID.String
-		// Best effort: keep identity and contract metadata current on customers created
-		// before the contract existed, or whose name/email/account type changed.
-		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
-			CustomerID:       customerID,
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			OrganizationSlug: authCtx.OrganizationSlug,
-			OrganizationName: identity.name,
-			Email:            identity.email,
-			AccountType:      identity.accountType,
-		}); updateErr != nil {
-			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity", attr.SlogError(updateErr))
-		}
-	} else {
-		customer, err := s.stripeClient.CreateCustomer(ctx, stripeclient.CreateCustomerInput{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			OrganizationSlug: authCtx.OrganizationSlug,
-			OrganizationName: identity.name,
-			Email:            identity.email,
-			AccountType:      identity.accountType,
-			IdempotencyKey:   fmt.Sprintf("customer:%s", authCtx.ActiveOrganizationID),
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to create Stripe customer").LogError(ctx, s.logger)
-		}
-		customerID = customer.ID
+	customerID, err := s.resolveStripeCustomer(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingMetadata, identity)
+	if err != nil {
+		return nil, err
 	}
 	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, proposedIntent, now)
 	if err != nil {
@@ -363,20 +375,21 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, payload *gen.CreateS
 
 func checkoutSessionInput(customerID, organizationID, organizationSlug string, intent stripeCheckoutIntent, billingURL string) stripeclient.CreateCheckoutSessionInput {
 	input := stripeclient.CreateCheckoutSessionInput{
-		PromotionCodeID:        "",
-		EmbeddedBrandingV1:     false,
-		EmbeddedBrandingDarkV1: false,
-		EmbeddedForm:           false,
-		CustomerID:             customerID,
-		OrganizationID:         organizationID,
-		OrganizationSlug:       organizationSlug,
-		SuccessURL:             "",
-		CancelURL:              "",
-		ReturnURL:              "",
-		TrialEnd:               intent.trialEnd,
-		BillingCycleAnchor:     intent.billingCycleAnchor,
-		ExpiresAt:              intent.expiresAt,
-		IdempotencyKey:         intent.idempotencyKey,
+		PromotionCodeID:              "",
+		EmbeddedBrandingV1:           false,
+		EmbeddedBrandingDarkV1:       false,
+		EmbeddedForm:                 false,
+		RedisplaySavedPaymentMethods: strings.Contains(intent.idempotencyKey, ":"+stripeCheckoutSavedCardsV1Marker+":"),
+		CustomerID:                   customerID,
+		OrganizationID:               organizationID,
+		OrganizationSlug:             organizationSlug,
+		SuccessURL:                   "",
+		CancelURL:                    "",
+		ReturnURL:                    "",
+		TrialEnd:                     intent.trialEnd,
+		BillingCycleAnchor:           intent.billingCycleAnchor,
+		ExpiresAt:                    intent.expiresAt,
+		IdempotencyKey:               intent.idempotencyKey,
 	}
 	if checkoutIntentEmbedded(intent.idempotencyKey) {
 		input.ReturnURL = stripeCheckoutEmbeddedReturnURL(billingURL)
@@ -703,7 +716,7 @@ func newStripeCheckoutIntentForTrial(organizationID string, now time.Time, produ
 	}
 
 	return stripeCheckoutIntent{
-		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d:%s:%s:%s", organizationID, anchor.Unix(), expiresAt.Unix(), stripeCheckoutFormMarker, stripeCheckoutBrandingV1Marker, stripeCheckoutTrialFingerprintDigest(trial)),
+		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d:%s:%s:%s:%s", organizationID, anchor.Unix(), expiresAt.Unix(), stripeCheckoutFormMarker, stripeCheckoutBrandingV1Marker, stripeCheckoutSavedCardsV1Marker, stripeCheckoutTrialFingerprintDigest(trial)),
 		billingCycleAnchor: anchor,
 		trialEnd:           stripeTrialEnd,
 		expiresAt:          expiresAt,

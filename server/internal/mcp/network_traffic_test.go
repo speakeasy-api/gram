@@ -14,7 +14,7 @@ import (
 func TestMetaMCPNetworkRequestAttribution(t *testing.T) {
 	t.Parallel()
 	storedGatewayID := uuid.New()
-	require.False(t, metaMembership{agentID: uuid.Nil, organization: false}.derived())
+	require.False(t, metaMembership{organization: false}.derived())
 	attributes := mcpNetworkRequestAttributes(context.Background(), uuid.Nil, storedGatewayID)
 	require.Equal(t, tm.MCPNetworkRequestEventURN, attributes[attr.EventURNKey])
 	require.Equal(t, "public", attributes[attr.NetworkSurfaceKey])
@@ -22,8 +22,7 @@ func TestMetaMCPNetworkRequestAttribution(t *testing.T) {
 	_, hasServerID := attributes[attr.McpServerIDKey]
 	require.False(t, hasServerID)
 
-	require.True(t, metaMembership{agentID: uuid.New(), organization: false}.derived())
-	require.True(t, metaMembership{agentID: uuid.Nil, organization: true}.derived())
+	require.True(t, metaMembership{organization: true}.derived())
 
 	serverID := uuid.New()
 	serverAttributes := mcpNetworkRequestAttributes(context.Background(), serverID, uuid.Nil)

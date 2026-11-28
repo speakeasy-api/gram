@@ -190,6 +190,42 @@ CREATE INDEX IF NOT EXISTS trials_ends_at_idx
 ON trials (ends_at)
 WHERE converted_at IS NULL AND demoted_at IS NULL;
 
+-- The latest card an organization offered to start its self-serve trial. One
+-- row per organization. A rejected card is replaced by the next attempt; an
+-- accepted card started the trial and is never rewritten. The fingerprint
+-- index finds a card that already started another organization's trial.
+CREATE TABLE IF NOT EXISTS trial_payment_methods (
+  organization_id TEXT NOT NULL,
+  stripe_customer_id TEXT NOT NULL,
+  stripe_payment_method_id TEXT NOT NULL,
+  card_fingerprint TEXT NOT NULL,
+  -- Stripe's card funding type: credit, debit, prepaid, or unknown.
+  card_funding TEXT NOT NULL,
+  stripe_checkout_session_id TEXT NOT NULL,
+  -- Why the card could not start a trial. NULL means it started the trial.
+  -- Allowed values live in application code.
+  rejection_reason TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT trial_payment_methods_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT trial_payment_methods_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN trial_payment_methods.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.stripe_customer_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.stripe_payment_method_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.card_fingerprint IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.card_funding IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.stripe_checkout_session_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.rejection_reason IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.created_at IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS trial_payment_methods_card_fingerprint_idx
+ON trial_payment_methods (card_fingerprint);
+
 -- Billing contract metadata for an organization. Currently holds the
 -- "tokens under management" (TUM) contract terms for enterprise accounts.
 CREATE TABLE IF NOT EXISTS billing_metadata (
@@ -12100,9 +12136,9 @@ COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 -- organizations that follow the default pin for a newer hooks generator
 -- version before the default pin itself moves to it. The share is picked by a
 -- stable hash of the organization id, so an organization stays cleared as the
--- share grows. A scheduled workflow advances the share after each soak period
--- and pauses the rollout when hook health degrades; staff can pause, resume or
--- cancel it from the admin dashboard.
+-- share grows. A scheduled workflow advances the share after each soak period.
+-- It does not watch hook health: staff pause, resume or cancel the rollout from
+-- the admin dashboard.
 --
 -- The table is append-only like hooks_rollout_pins: the row with the highest
 -- seq is the current state and older rows are its history.
@@ -16991,6 +17027,24 @@ COMMENT ON COLUMN signup_offers.enabled IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
   ON signup_offers (stripe_promotion_code_id);
+
+-- Staff-controlled platform-wide switches, one row per key. A missing row
+-- means the switch is off.
+CREATE TABLE IF NOT EXISTS platform_switches (
+  key TEXT PRIMARY KEY,
+  engaged BOOLEAN NOT NULL DEFAULT false,
+  updated_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_switches_key_check CHECK (key <> '')
+);
+
+COMMENT ON COLUMN platform_switches.key IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.engaged IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_by IS 'Email of the staff member who last changed the switch.
+@access: confidential-pii';
+COMMENT ON COLUMN platform_switches.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_at IS '@access: confidential';
 
 -- The top-level steps of a playbook in walking order. Cards under a group
 -- come with the group and are never listed on their own.

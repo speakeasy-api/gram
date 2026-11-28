@@ -10,11 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/trials"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -86,6 +89,14 @@ func TestAdminSeedSafetyAndIdempotency(t *testing.T) {
 		require.NoError(t, fixtures.ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
 			OrganizationID: "org_local_admin_fixture_02", UserID: pgtype.Text{String: "user_local_admin_fixture_02_001", Valid: true},
 		}))
+		if iteration > 0 {
+			// A trial started locally on a fixture without an accepted card is
+			// undone by the rerun.
+			for _, id := range []string{"org_local_admin_trial_pending", "org_local_admin_trial_card_b", "org_local_admin_trial_prepaid"} {
+				_, err := trialsrepo.New(db).StartTrial(ctx, trialsrepo.StartTrialParams{Tier: "enterprise", StartForDays: 14, OrganizationID: id})
+				require.NoError(t, err)
+			}
+		}
 		require.NoError(t, runAdminSeed(ctx, db, at))
 		snapshot, err := demoseedtest.SnapshotPostgres(ctx, db)
 		require.NoError(t, err)
@@ -97,7 +108,43 @@ func TestAdminSeedSafetyAndIdempotency(t *testing.T) {
 		orgs := adminSeedSnapshotRows(t, snapshot, "organization_metadata")
 		users := adminSeedSnapshotRows(t, snapshot, "users")
 		members := adminSeedSnapshotRows(t, snapshot, "organization_user_relationships")
-		require.Len(t, orgs, AdminSeedOrganizationCount+1)
+		trialFixtures := adminSeedTrialFixtures(at)
+		require.Len(t, orgs, AdminSeedOrganizationCount+len(trialFixtures)+1)
+		for _, fixture := range trialFixtures {
+			org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, fixture.ID)
+			require.NoError(t, err)
+			awaiting, err := trials.AwaitingPaymentMethod(ctx, db, org)
+			require.NoError(t, err)
+			require.Equal(t, !fixture.Card.StartedTrial(), awaiting, "%s awaiting a card", fixture.ID)
+			sharing, err := trialsrepo.New(db).ListOrganizationsSharingTrialCard(ctx, fixture.ID)
+			require.NoError(t, err)
+			_, trialErr := trialsrepo.New(db).GetTrial(ctx, fixture.ID)
+			if fixture.Card == nil {
+				require.Empty(t, sharing)
+				require.ErrorIs(t, trialErr, pgx.ErrNoRows)
+				continue
+			}
+			card, err := trialsrepo.New(db).GetTrialPaymentMethod(ctx, fixture.ID)
+			require.NoError(t, err)
+			require.Equal(t, fixture.Card.Funding, card.CardFunding)
+			require.Equal(t, fixture.Card.RejectionReason, card.RejectionReason.String)
+			require.Equal(t, !fixture.Card.StartedTrial(), card.RejectionReason.Valid)
+			switch fixture.Card.Fingerprint {
+			case AdminSeedSharedCardFingerprint:
+				require.Len(t, sharing, 1, "%s shares its card with exactly one other fixture", fixture.ID)
+				require.NotEqual(t, fixture.ID, sharing[0].OrganizationID)
+				require.Equal(t, fixture.Card.StartedTrial(), sharing[0].RejectionReason.Valid, "one fixture started its trial with the shared card and the other was rejected")
+			default:
+				require.Empty(t, sharing)
+			}
+			if !fixture.Card.StartedTrial() {
+				require.ErrorIs(t, trialErr, pgx.ErrNoRows, "%s has no trial", fixture.ID)
+				continue
+			}
+			trial, err := trialsrepo.New(db).GetTrial(ctx, fixture.ID)
+			require.NoError(t, err)
+			require.True(t, trial.EndsAt.Time.Equal(fixture.Card.TrialEndsAt))
+		}
 		expectedMembers := 1
 		counts := map[string]int{}
 		ids := make([]string, 0, len(members))
@@ -281,7 +328,7 @@ func TestAdminSeedConcurrentReruns(t *testing.T) {
 	require.NoError(t, group.Wait())
 	snapshot, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
-	require.Len(t, snapshot["organization_metadata"], AdminSeedOrganizationCount)
+	require.Len(t, snapshot["organization_metadata"], AdminSeedOrganizationCount+len(adminSeedTrialFixtures(now)))
 	expectedMembers := 0
 	for _, fixture := range adminSeedFixtures(now) {
 		expectedMembers += fixture.Members

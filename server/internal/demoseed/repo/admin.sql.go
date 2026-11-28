@@ -11,6 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminSeedClearTrial = `-- name: AdminSeedClearTrial :exec
+DELETE FROM trials WHERE organization_id= $1::text
+`
+
+// A fixture without a card that started its trial must have no trial
+// lifecycle, even after a local run started one. Scoped to the one fictional
+// organization.
+func (q *Queries) AdminSeedClearTrial(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, adminSeedClearTrial, organizationID)
+	return err
+}
+
+const adminSeedClearTrialPaymentMethod = `-- name: AdminSeedClearTrialPaymentMethod :exec
+DELETE FROM trial_payment_methods WHERE organization_id= $1::text
+`
+
+func (q *Queries) AdminSeedClearTrialPaymentMethod(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, adminSeedClearTrialPaymentMethod, organizationID)
+	return err
+}
+
 const adminSeedEdgeUserCollision = `-- name: AdminSeedEdgeUserCollision :one
 SELECT EXISTS (
    SELECT 1 FROM users WHERE id= $1::text AND (email<>id||'@admin-seed.invalid' OR workos_id IS NOT NULL)
@@ -210,9 +231,111 @@ func (q *Queries) AdminSeedUpsertOrganization(ctx context.Context, arg AdminSeed
 	return err
 }
 
+const adminSeedUpsertTrial = `-- name: AdminSeedUpsertTrial :exec
+INSERT INTO trials (organization_id,tier,ends_at,created_at)
+   VALUES ($1::text,$2::text,$3::timestamptz,$4::timestamptz)
+   ON CONFLICT (organization_id) DO UPDATE SET tier=EXCLUDED.tier,ends_at=EXCLUDED.ends_at,created_at=EXCLUDED.created_at,
+   converted_at=NULL,demoted_at=NULL,updated_at= $5::timestamptz
+`
+
+type AdminSeedUpsertTrialParams struct {
+	OrganizationID string
+	Tier           string
+	EndsAt         pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) AdminSeedUpsertTrial(ctx context.Context, arg AdminSeedUpsertTrialParams) error {
+	_, err := q.db.Exec(ctx, adminSeedUpsertTrial,
+		arg.OrganizationID,
+		arg.Tier,
+		arg.EndsAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const adminSeedUpsertTrialOrganization = `-- name: AdminSeedUpsertTrialOrganization :exec
+INSERT INTO organization_metadata
+   (id,name,slug,gram_account_type,whitelisted,creation_source,created_at)
+   VALUES ($1::text,$2::text,$3::text,$4::text,$5::boolean,$6::text,$7::timestamptz)
+   ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
+   gram_account_type=EXCLUDED.gram_account_type,whitelisted=EXCLUDED.whitelisted,
+   creation_source=EXCLUDED.creation_source,created_at=EXCLUDED.created_at,
+   disabled_at=NULL,updated_at= $8::timestamptz
+`
+
+type AdminSeedUpsertTrialOrganizationParams struct {
+	ID              string
+	Name            string
+	Slug            string
+	GramAccountType string
+	Whitelisted     bool
+	CreationSource  string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Free trial fixtures carry the billing state the staff trial views read, so
+// the upsert refreshes it on every run.
+func (q *Queries) AdminSeedUpsertTrialOrganization(ctx context.Context, arg AdminSeedUpsertTrialOrganizationParams) error {
+	_, err := q.db.Exec(ctx, adminSeedUpsertTrialOrganization,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.GramAccountType,
+		arg.Whitelisted,
+		arg.CreationSource,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const adminSeedUpsertTrialPaymentMethod = `-- name: AdminSeedUpsertTrialPaymentMethod :exec
+INSERT INTO trial_payment_methods
+   (organization_id,stripe_customer_id,stripe_payment_method_id,card_fingerprint,card_funding,stripe_checkout_session_id,rejection_reason,created_at,updated_at)
+   VALUES ($1::text,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::timestamptz,$8::timestamptz)
+   ON CONFLICT (organization_id) DO UPDATE SET stripe_customer_id=EXCLUDED.stripe_customer_id,
+   stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,card_fingerprint=EXCLUDED.card_fingerprint,
+   card_funding=EXCLUDED.card_funding,stripe_checkout_session_id=EXCLUDED.stripe_checkout_session_id,
+   rejection_reason=EXCLUDED.rejection_reason,created_at=EXCLUDED.created_at,updated_at=EXCLUDED.updated_at
+`
+
+type AdminSeedUpsertTrialPaymentMethodParams struct {
+	OrganizationID          string
+	StripeCustomerID        string
+	StripePaymentMethodID   string
+	CardFingerprint         string
+	CardFunding             string
+	StripeCheckoutSessionID string
+	RejectionReason         pgtype.Text
+	OfferedAt               pgtype.Timestamptz
+}
+
+// Fictional Stripe identifiers only. Two fixtures share a fingerprint on
+// purpose so the staff view shows a card offered by more than one
+// organization. A NULL rejection_reason means the card started the trial.
+func (q *Queries) AdminSeedUpsertTrialPaymentMethod(ctx context.Context, arg AdminSeedUpsertTrialPaymentMethodParams) error {
+	_, err := q.db.Exec(ctx, adminSeedUpsertTrialPaymentMethod,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripePaymentMethodID,
+		arg.CardFingerprint,
+		arg.CardFunding,
+		arg.StripeCheckoutSessionID,
+		arg.RejectionReason,
+		arg.OfferedAt,
+	)
+	return err
+}
+
 const lockAdminSeedIdentities = `-- name: LockAdminSeedIdentities :exec
 LOCK TABLE organization_metadata, users,
-  organization_user_relationships IN SHARE ROW EXCLUSIVE MODE
+  organization_user_relationships, trials,
+  trial_payment_methods IN SHARE ROW EXCLUSIVE MODE
 `
 
 // Blocks other writers to the local-only fixture tables, including inserts

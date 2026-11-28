@@ -431,6 +431,17 @@ UPDATE organization_invitations
 SET expires_at = clock_timestamp() - interval '1 hour'
 WHERE id = @id;
 
+-- name: BackdateOrganizationCreatedAtForTest :exec
+UPDATE organization_metadata
+SET created_at = @created_at
+WHERE id = @id;
+
+-- name: BackdateOrganizationUserRelationshipForTest :exec
+UPDATE organization_user_relationships
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
+
 -- name: SetOrganizationDefaultHostForTest :exec
 UPDATE organization_metadata
 SET default_host = @default_host
@@ -826,6 +837,7 @@ INSERT INTO organization_metadata (
     workos_updated_at,
     workos_last_event_id,
     verified_domains,
+    whitelisted,
     default_host
 ) VALUES (
     @id,
@@ -835,6 +847,7 @@ INSERT INTO organization_metadata (
     @workos_updated_at,
     @workos_last_event_id,
     @verified_domains::text[],
+    TRUE,
     sqlc.narg('default_host')::text
 )
 RETURNING *, (xmax = 0) AS inserted
@@ -942,6 +955,59 @@ JOIN organization_metadata om ON om.id = our.organization_id
 WHERE our.user_id = @user_id
   AND our.deleted_at IS NULL
   AND om.disabled_at IS NULL;
+
+-- name: LockUserOrganizationCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || @workos_user_id::text, 0));
+
+-- name: DisableOrganizationOverUserCap :one
+UPDATE organization_metadata AS target
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE target.id = @organization_id
+  AND target.disabled_at IS NULL
+  AND target.creation_source IS NULL
+  AND target.sso_enabled IS NOT TRUE
+  AND target.scim_enabled IS NOT TRUE
+  AND COALESCE(cardinality(target.verified_domains), 0) = 0
+  AND NOT EXISTS (
+      SELECT 1
+      FROM users
+      WHERE users.admin IS TRUE
+        AND users.deleted_at IS NULL
+        AND (
+            users.id = sqlc.narg('user_id')::text
+            OR users.workos_id = sqlc.narg('workos_user_id')::text
+        )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships AS other_member
+      WHERE other_member.organization_id = target.id
+        AND other_member.deleted_at IS NULL
+        AND NOT EXISTS (
+            SELECT 1
+            FROM users AS departed
+            WHERE departed.id = other_member.user_id
+              AND departed.deleted_at IS NOT NULL
+        )
+        AND NOT (
+            COALESCE(other_member.user_id = sqlc.narg('user_id')::text, FALSE)
+            OR COALESCE(other_member.workos_user_id = sqlc.narg('workos_user_id')::text, FALSE)
+        )
+  )
+  AND (
+      SELECT count(DISTINCT other_org.id)
+      FROM organization_user_relationships AS mine
+      JOIN organization_metadata AS other_org ON other_org.id = mine.organization_id
+      WHERE mine.deleted IS FALSE
+        AND other_org.id <> target.id
+        AND other_org.disabled_at IS NULL
+        AND (
+            mine.user_id = sqlc.narg('user_id')::text
+            OR mine.workos_user_id = sqlc.narg('workos_user_id')::text
+        )
+  ) >= @max_organizations::int
+RETURNING target.id, target.name, target.slug, target.disabled_at;
 
 -- name: DisableOrganizationByWorkosID :execrows
 -- Mark a WorkOS-linked organization as disabled. Append-only: keeps

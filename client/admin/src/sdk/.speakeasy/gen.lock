@@ -92,6 +92,7 @@ trackedFiles:
   src/funcs/adminGetRegistryOktaCandidates.ts: {}
   src/funcs/adminGetRegistryPromotionCandidate.ts: {}
   src/funcs/adminGetSecretBackfills.ts: {}
+  src/funcs/adminGetSelfServeStatus.ts: {}
   src/funcs/adminGetSession.ts: {}
   src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
@@ -157,6 +158,7 @@ trackedFiles:
   src/funcs/adminSetOrganizationHooksRollout.ts: {}
   src/funcs/adminSetOrganizationOnboardingStack.ts: {}
   src/funcs/adminSetRegistryEntryPublished.ts: {}
+  src/funcs/adminSetSelfServeDisabled.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminSetStripeSubscription.ts: {}
   src/funcs/adminStartMemoryEvalRun.ts: {}
@@ -318,6 +320,7 @@ trackedFiles:
   src/models/components/adminrunnerkeyorganizationbackfill.ts: {}
   src/models/components/adminsecretbackfillorganization.ts: {}
   src/models/components/adminsecretbackfills.ts: {}
+  src/models/components/adminselfservestatus.ts: {}
   src/models/components/adminsession.ts: {}
   src/models/components/adminsignupoffer.ts: {}
   src/models/components/adminspendbreakdownresponse.ts: {}
@@ -326,6 +329,7 @@ trackedFiles:
   src/models/components/adminstripesubscriptioncandidate.ts: {}
   src/models/components/admintailscaleoauthmigrationorganization.ts: {}
   src/models/components/admintailscaleoauthmigrationorganizations.ts: {}
+  src/models/components/admintrialcardsharingorganization.ts: {}
   src/models/components/adminuploadimageresult.ts: {}
   src/models/components/adminupstreamauthenforcement.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}
@@ -422,6 +426,7 @@ trackedFiles:
   src/models/components/setorganizationhooksrolloutrequestbody.ts: {}
   src/models/components/setorganizationonboardingstackrequestbody.ts: {}
   src/models/components/setregistryentrypublishedrequestbody.ts: {}
+  src/models/components/setselfservedisabledrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/setstripesubscriptionrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
@@ -582,6 +587,8 @@ trackedFiles:
   src/react-query/adminGetRegistryPromotionCandidate.ts: {}
   src/react-query/adminGetSecretBackfills.core.ts: {}
   src/react-query/adminGetSecretBackfills.ts: {}
+  src/react-query/adminGetSelfServeStatus.core.ts: {}
+  src/react-query/adminGetSelfServeStatus.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
   src/react-query/adminGetSpendBreakdown.core.ts: {}
@@ -688,6 +695,7 @@ trackedFiles:
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetOrganizationHooksRollout.ts: {}
   src/react-query/adminSetRegistryEntryPublished.ts: {}
+  src/react-query/adminSetSelfServeDisabled.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminSetStripeSubscription.ts: {}
   src/react-query/adminStartMemoryEvalRun.ts: {}
@@ -1496,6 +1504,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetSelfServeStatus:
+    speakeasy-default-admin-get-self-serve-status:
+      responses:
+        "200":
+          application/json: {"disabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetSession:
     speakeasy-default-admin-get-session:
       responses:
@@ -2283,6 +2300,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "1708711107630", "data_json": "<value>", "id": "<id>", "issues": [{"message": "<value>", "path": "/var/mail"}], "published": false, "updated_at": "1735612556541"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetSelfServeDisabled:
+    speakeasy-default-admin-set-self-serve-disabled:
+      requestBody:
+        application/json: {"disabled": true}
+      responses:
+        "200":
+          application/json: {"disabled": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

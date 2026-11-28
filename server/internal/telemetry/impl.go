@@ -4199,9 +4199,9 @@ func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uu
 	return ids, nil
 }
 
-// agentGatewayPathPrefix is the path an agent gateway is served under,
-// followed by the agent id.
-const agentGatewayPathPrefix = "/agent-mcp/"
+// historicalAgentGatewayPathPrefix matches telemetry recorded while the retired
+// agent gateway serving route existed. It must not be used to serve requests.
+const historicalAgentGatewayPathPrefix = "/agent-mcp/"
 
 // agentGatewayName names the gateway that serves an agent.
 func agentGatewayName(agentName string) string {
@@ -4327,14 +4327,11 @@ func loadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, engine *authz.En
 	return append(anchoredMatchers, platformMatchers...), nil
 }
 
-// organizationGatewayMatchers matches the URLs of the gateways that have no
-// endpoint row: /agent-mcp/<agent id> for each agent, deleted ones included
-// because an agent id is never reused and its past calls keep their gateway,
-// and /mcp/gateway/<organization slug>, plus /projects/<project slug> for each
-// live project, for the organization and project gateways. Each is labelled
-// the way LoadGatewayLabels labels the gateway id it carries, so a gateway in
-// a project, or serving an agent, the caller may not read gets the neutral
-// name.
+// organizationGatewayMatchers matches the URLs of gateways that have no
+// endpoint row: /mcp/gateway/<organization slug>, plus /projects/<project slug>
+// for each live project. Each is labelled the way LoadGatewayLabels labels the
+// gateway id it carries, so a gateway in a project the caller may not read gets
+// the neutral name.
 func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owners *gatewayOwners) ([]repo.MetaMCPMatcher, error) {
 	organization, err := owners.Organization(ctx)
 	if err != nil {
@@ -4353,9 +4350,11 @@ func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owne
 	organizationPath := "/" + mcproute.OrganizationGateway.String() + "/" + organization.Slug
 	candidates := make([]gatewayCandidate, 0, len(agents)+len(projects)+1)
 	suffixes := make([]string, 0, len(agents)+len(projects)+1)
+	// These matchers preserve historical telemetry readability only. The agent
+	// gateway HTTP route is retired and is not registered from this package.
 	for _, agent := range agents {
 		candidates = append(candidates, agentGatewayCandidate(authCtx, agent))
-		suffixes = append(suffixes, agentGatewayPathPrefix+agent.ID.String())
+		suffixes = append(suffixes, historicalAgentGatewayPathPrefix+agent.ID.String())
 	}
 	candidates = append(candidates, organizationGatewayCandidate(owners.organizationID, organization))
 	suffixes = append(suffixes, organizationPath)

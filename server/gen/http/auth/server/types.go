@@ -60,9 +60,15 @@ type InfoResponseBody struct {
 	// eligibility
 	AcceptedSignupOfferFlow *string `form:"accepted_signup_offer_flow,omitempty" json:"accepted_signup_offer_flow,omitempty" xml:"accepted_signup_offer_flow,omitempty"`
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
-	Trial         *TrialResponseBody               `json:"trial"`
-	Organizations []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	Whitelisted bool               `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	Trial       *TrialResponseBody `json:"trial"`
+	// Whether the organization's free trial starts once an organization admin adds
+	// a card
+	TrialPendingPaymentMethod bool `form:"trial_pending_payment_method" json:"trial_pending_payment_method" xml:"trial_pending_payment_method"`
+	// Set while the trial waits for a card and the last card added could not start
+	// it
+	TrialCardRejection *TrialCardRejectionResponseBody  `form:"trial_card_rejection,omitempty" json:"trial_card_rejection,omitempty" xml:"trial_card_rejection,omitempty"`
+	Organizations      []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1875,6 +1881,15 @@ type TrialResponseBody struct {
 	EndsAt    string `form:"ends_at" json:"ends_at" xml:"ends_at"`
 }
 
+// TrialCardRejectionResponseBody is used to define fields on response body
+// types.
+type TrialCardRejectionResponseBody struct {
+	// prepaid_card: prepaid cards cannot start a trial. card_used: the card
+	// already started another organization's trial.
+	Reason     string `form:"reason" json:"reason" xml:"reason"`
+	RejectedAt string `form:"rejected_at" json:"rejected_at" xml:"rejected_at"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -1929,9 +1944,13 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		HasActiveSubscription:          res.HasActiveSubscription,
 		AcceptedSignupOfferFlow:        res.AcceptedSignupOfferFlow,
 		Whitelisted:                    res.Whitelisted,
+		TrialPendingPaymentMethod:      res.TrialPendingPaymentMethod,
 	}
 	if res.Trial != nil {
 		body.Trial = marshalAuthTrialToTrialResponseBody(res.Trial)
+	}
+	if res.TrialCardRejection != nil {
+		body.TrialCardRejection = marshalAuthTrialCardRejectionToTrialCardRejectionResponseBody(res.TrialCardRejection)
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))

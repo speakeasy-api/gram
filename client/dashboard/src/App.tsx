@@ -55,6 +55,7 @@ import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
+import StartTrial from "./pages/demo/StartTrial";
 import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
 import { useRoutes, useOrgRoutes } from "./routes";
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
@@ -396,6 +397,12 @@ const RouteProvider = () => {
             visitor has no trial to talk about. */}
         <Route path="/trial-ended" element={<LoginCheck />}>
           <Route index element={<TrialEnded />} />
+        </Route>
+        {/* Full-page gate for a trial that starts once an admin saves a card.
+            Stripe returns here (with session_id) when a card needs an extra
+            verification step. */}
+        <Route path="/start-trial" element={<LoginCheck />}>
+          <Route index element={<StartTrial />} />
         </Route>
         <Route
           path="/shadow-mcp/request"

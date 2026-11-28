@@ -126,7 +126,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff|list-pending-access-requests|list-requestable-access|request-access)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|get-runtime-gateway|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-org-units|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -209,8 +209,8 @@ func UsageCommands() []string {
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
-		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|create-trial-payment-method-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -424,6 +424,10 @@ func ParseEndpoint(
 		agentsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
 		agentsGetIDFlag           = agentsGetFlags.String("id", "REQUIRED", "")
 		agentsGetSessionTokenFlag = agentsGetFlags.String("session-token", "", "")
+
+		agentsGetRuntimeGatewayFlags            = flag.NewFlagSet("get-runtime-gateway", flag.ExitOnError)
+		agentsGetRuntimeGatewayAgentIDFlag      = agentsGetRuntimeGatewayFlags.String("agent-id", "REQUIRED", "")
+		agentsGetRuntimeGatewaySessionTokenFlag = agentsGetRuntimeGatewayFlags.String("session-token", "", "")
 
 		agentsRenameFlags            = flag.NewFlagSet("rename", flag.ExitOnError)
 		agentsRenameBodyFlag         = agentsRenameFlags.String("body", "REQUIRED", "")
@@ -4595,6 +4599,10 @@ func ParseEndpoint(
 		usageCreateStripeCheckoutThemeFlag        = usageCreateStripeCheckoutFlags.String("theme", "light", "")
 		usageCreateStripeCheckoutSessionTokenFlag = usageCreateStripeCheckoutFlags.String("session-token", "", "")
 
+		usageCreateTrialPaymentMethodCheckoutFlags            = flag.NewFlagSet("create-trial-payment-method-checkout", flag.ExitOnError)
+		usageCreateTrialPaymentMethodCheckoutThemeFlag        = usageCreateTrialPaymentMethodCheckoutFlags.String("theme", "light", "")
+		usageCreateTrialPaymentMethodCheckoutSessionTokenFlag = usageCreateTrialPaymentMethodCheckoutFlags.String("session-token", "", "")
+
 		usageGetStripeSubscriptionFlags            = flag.NewFlagSet("get-stripe-subscription", flag.ExitOnError)
 		usageGetStripeSubscriptionSessionTokenFlag = usageGetStripeSubscriptionFlags.String("session-token", "", "")
 
@@ -4717,6 +4725,7 @@ func ParseEndpoint(
 		adminListOrganizationsAccountTypesFlag      = adminListOrganizationsFlags.String("account-types", "", "")
 		adminListOrganizationsTrialStatesFlag       = adminListOrganizationsFlags.String("trial-states", "", "")
 		adminListOrganizationsDisabledStatusFlag    = adminListOrganizationsFlags.String("disabled-status", "", "")
+		adminListOrganizationsWhitelistedFlag       = adminListOrganizationsFlags.String("whitelisted", "", "")
 		adminListOrganizationsMinMembersFlag        = adminListOrganizationsFlags.String("min-members", "", "")
 		adminListOrganizationsMaxMembersFlag        = adminListOrganizationsFlags.String("max-members", "", "")
 		adminListOrganizationsCreatedFromFlag       = adminListOrganizationsFlags.String("created-from", "", "")
@@ -5028,6 +5037,13 @@ func ParseEndpoint(
 		adminUpdateSignupOfferFlags                 = flag.NewFlagSet("update-signup-offer", flag.ExitOnError)
 		adminUpdateSignupOfferBodyFlag              = adminUpdateSignupOfferFlags.String("body", "REQUIRED", "")
 		adminUpdateSignupOfferAdminSessionTokenFlag = adminUpdateSignupOfferFlags.String("admin-session-token", "", "")
+
+		adminGetSelfServeStatusFlags                 = flag.NewFlagSet("get-self-serve-status", flag.ExitOnError)
+		adminGetSelfServeStatusAdminSessionTokenFlag = adminGetSelfServeStatusFlags.String("admin-session-token", "", "")
+
+		adminSetSelfServeDisabledFlags                 = flag.NewFlagSet("set-self-serve-disabled", flag.ExitOnError)
+		adminSetSelfServeDisabledBodyFlag              = adminSetSelfServeDisabledFlags.String("body", "REQUIRED", "")
+		adminSetSelfServeDisabledAdminSessionTokenFlag = adminSetSelfServeDisabledFlags.String("admin-session-token", "", "")
 
 		adminListPlatformMcpFeedbackFlags                 = flag.NewFlagSet("list-platform-mcp-feedback", flag.ExitOnError)
 		adminListPlatformMcpFeedbackLimitFlag             = adminListPlatformMcpFeedbackFlags.String("limit", "200", "")
@@ -5913,6 +5929,7 @@ func ParseEndpoint(
 	agentsListFlags.Usage = agentsListUsage
 	agentsCreateFlags.Usage = agentsCreateUsage
 	agentsGetFlags.Usage = agentsGetUsage
+	agentsGetRuntimeGatewayFlags.Usage = agentsGetRuntimeGatewayUsage
 	agentsRenameFlags.Usage = agentsRenameUsage
 	agentsListDelegableGrantsFlags.Usage = agentsListDelegableGrantsUsage
 	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
@@ -6821,6 +6838,7 @@ func ParseEndpoint(
 	usageCreateCustomerSessionFlags.Usage = usageCreateCustomerSessionUsage
 	usageGetStripeCheckoutStatusFlags.Usage = usageGetStripeCheckoutStatusUsage
 	usageCreateStripeCheckoutFlags.Usage = usageCreateStripeCheckoutUsage
+	usageCreateTrialPaymentMethodCheckoutFlags.Usage = usageCreateTrialPaymentMethodCheckoutUsage
 	usageGetStripeSubscriptionFlags.Usage = usageGetStripeSubscriptionUsage
 	usageGetPaygBillingSummaryFlags.Usage = usageGetPaygBillingSummaryUsage
 	usageCreateStripePortalSessionFlags.Usage = usageCreateStripePortalSessionUsage
@@ -6923,6 +6941,8 @@ func ParseEndpoint(
 	adminListSignupOffersFlags.Usage = adminListSignupOffersUsage
 	adminCreateSignupOfferFlags.Usage = adminCreateSignupOfferUsage
 	adminUpdateSignupOfferFlags.Usage = adminUpdateSignupOfferUsage
+	adminGetSelfServeStatusFlags.Usage = adminGetSelfServeStatusUsage
+	adminSetSelfServeDisabledFlags.Usage = adminSetSelfServeDisabledUsage
 	adminListPlatformMcpFeedbackFlags.Usage = adminListPlatformMcpFeedbackUsage
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
@@ -7464,6 +7484,9 @@ func ParseEndpoint(
 
 			case "get":
 				epf = agentsGetFlags
+
+			case "get-runtime-gateway":
+				epf = agentsGetRuntimeGatewayFlags
 
 			case "rename":
 				epf = agentsRenameFlags
@@ -10023,6 +10046,9 @@ func ParseEndpoint(
 			case "create-stripe-checkout":
 				epf = usageCreateStripeCheckoutFlags
 
+			case "create-trial-payment-method-checkout":
+				epf = usageCreateTrialPaymentMethodCheckoutFlags
+
 			case "get-stripe-subscription":
 				epf = usageGetStripeSubscriptionFlags
 
@@ -10326,6 +10352,12 @@ func ParseEndpoint(
 
 			case "update-signup-offer":
 				epf = adminUpdateSignupOfferFlags
+
+			case "get-self-serve-status":
+				epf = adminGetSelfServeStatusFlags
+
+			case "set-self-serve-disabled":
+				epf = adminSetSelfServeDisabledFlags
 
 			case "list-platform-mcp-feedback":
 				epf = adminListPlatformMcpFeedbackFlags
@@ -11011,6 +11043,9 @@ func ParseEndpoint(
 			case "get":
 				endpoint = c.Get()
 				data, err = agentsc.BuildGetPayload(*agentsGetIDFlag, *agentsGetSessionTokenFlag)
+			case "get-runtime-gateway":
+				endpoint = c.GetRuntimeGateway()
+				data, err = agentsc.BuildGetRuntimeGatewayPayload(*agentsGetRuntimeGatewayAgentIDFlag, *agentsGetRuntimeGatewaySessionTokenFlag)
 			case "rename":
 				endpoint = c.Rename()
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
@@ -13595,6 +13630,9 @@ func ParseEndpoint(
 			case "create-stripe-checkout":
 				endpoint = c.CreateStripeCheckout()
 				data, err = usagec.BuildCreateStripeCheckoutPayload(*usageCreateStripeCheckoutThemeFlag, *usageCreateStripeCheckoutSessionTokenFlag)
+			case "create-trial-payment-method-checkout":
+				endpoint = c.CreateTrialPaymentMethodCheckout()
+				data, err = usagec.BuildCreateTrialPaymentMethodCheckoutPayload(*usageCreateTrialPaymentMethodCheckoutThemeFlag, *usageCreateTrialPaymentMethodCheckoutSessionTokenFlag)
 			case "get-stripe-subscription":
 				endpoint = c.GetStripeSubscription()
 				data, err = usagec.BuildGetStripeSubscriptionPayload(*usageGetStripeSubscriptionSessionTokenFlag)
@@ -13685,7 +13723,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildListUserOrganizationsPayload(*adminListUserOrganizationsUserIDFlag, *adminListUserOrganizationsPageFlag, *adminListUserOrganizationsLimitFlag, *adminListUserOrganizationsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
-				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsWhitelistedFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
 			case "extend-trial":
 				endpoint = c.ExtendTrial()
 				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
@@ -13902,6 +13940,12 @@ func ParseEndpoint(
 			case "update-signup-offer":
 				endpoint = c.UpdateSignupOffer()
 				data, err = adminc.BuildUpdateSignupOfferPayload(*adminUpdateSignupOfferBodyFlag, *adminUpdateSignupOfferAdminSessionTokenFlag)
+			case "get-self-serve-status":
+				endpoint = c.GetSelfServeStatus()
+				data, err = adminc.BuildGetSelfServeStatusPayload(*adminGetSelfServeStatusAdminSessionTokenFlag)
+			case "set-self-serve-disabled":
+				endpoint = c.SetSelfServeDisabled()
+				data, err = adminc.BuildSetSelfServeDisabledPayload(*adminSetSelfServeDisabledBodyFlag, *adminSetSelfServeDisabledAdminSessionTokenFlag)
 			case "list-platform-mcp-feedback":
 				endpoint = c.ListPlatformMcpFeedback()
 				data, err = adminc.BuildListPlatformMcpFeedbackPayload(*adminListPlatformMcpFeedbackLimitFlag, *adminListPlatformMcpFeedbackAdminSessionTokenFlag)
@@ -15175,6 +15219,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
+	fmt.Fprintln(os.Stderr, `    get-runtime-gateway: Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
 	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
@@ -15313,6 +15358,26 @@ func agentsGetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsGetRuntimeGatewayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents get-runtime-gateway", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get-runtime-gateway --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func agentsRenameUsage() {
@@ -33543,6 +33608,7 @@ func usageUsage() {
 	fmt.Fprintln(os.Stderr, `    create-customer-session: Create a customer session for the user`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-checkout-status: Read the current status of a Stripe Checkout session owned by the active organization`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-checkout: Create an embedded Stripe Checkout session for starting PAYG billing`)
+	fmt.Fprintln(os.Stderr, `    create-trial-payment-method-checkout: Create an embedded Stripe Checkout session that saves a card to start the organization's free trial`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Get the live lifecycle state of the organization's Stripe PAYG subscription`)
 	fmt.Fprintln(os.Stderr, `    get-payg-billing-summary: Get exact billable usage and estimated cost for the organization's live paid Stripe service period`)
 	fmt.Fprintln(os.Stderr, `    create-stripe-portal-session: Create a Stripe customer portal session for the organization's PAYG subscription`)
@@ -33807,6 +33873,26 @@ func usageCreateStripeCheckoutUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-stripe-checkout --theme \"dark\" --session-token \"abc123\"")
 }
 
+func usageCreateTrialPaymentMethodCheckoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] usage create-trial-payment-method-checkout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -theme STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an embedded Stripe Checkout session that saves a card to start the organization's free trial`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -theme STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "usage create-trial-payment-method-checkout --theme \"dark\" --session-token \"abc123\"")
+}
+
 func usageGetStripeSubscriptionUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] usage get-stripe-subscription", os.Args[0])
@@ -34018,6 +34104,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-signup-offers: List staff-managed signup offers. Stripe owns all promotion terms.`)
 	fmt.Fprintln(os.Stderr, `    create-signup-offer: Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
 	fmt.Fprintln(os.Stderr, `    update-signup-offer: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
+	fmt.Fprintln(os.Stderr, `    get-self-serve-status: Report whether self-serve signup is disabled across the platform.`)
+	fmt.Fprintln(os.Stderr, `    set-self-serve-disabled: Turn self-serve signup off or on across the platform. Existing organizations are unaffected.`)
 	fmt.Fprintln(os.Stderr, `    list-platform-mcp-feedback: List the newest Platform MCP feedback reports across every organization.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
@@ -34534,6 +34622,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprint(os.Stderr, " -account-types JSON")
 	fmt.Fprint(os.Stderr, " -trial-states JSON")
 	fmt.Fprint(os.Stderr, " -disabled-status STRING")
+	fmt.Fprint(os.Stderr, " -whitelisted BOOL")
 	fmt.Fprint(os.Stderr, " -min-members INT64")
 	fmt.Fprint(os.Stderr, " -max-members INT64")
 	fmt.Fprint(os.Stderr, " -created-from STRING")
@@ -34556,6 +34645,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    -account-types JSON: `)
 	fmt.Fprintln(os.Stderr, `    -trial-states JSON: `)
 	fmt.Fprintln(os.Stderr, `    -disabled-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -whitelisted BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -min-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -max-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -created-from STRING: `)
@@ -34569,7 +34659,7 @@ func adminListOrganizationsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --whitelisted false --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
 }
 
 func adminExtendTrialUsage() {
@@ -36028,6 +36118,44 @@ func adminUpdateSignupOfferUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-signup-offer --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetSelfServeStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-self-serve-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report whether self-serve signup is disabled across the platform.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-self-serve-status --admin-session-token \"abc123\"")
+}
+
+func adminSetSelfServeDisabledUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-self-serve-disabled", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Turn self-serve signup off or on across the platform. Existing organizations are unaffected.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-self-serve-disabled --body '{\n      \"disabled\": false\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListPlatformMcpFeedbackUsage() {

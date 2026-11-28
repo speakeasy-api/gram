@@ -608,6 +608,12 @@ type UpdateSignupOfferRequestBody struct {
 	Enabled               bool   `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
+// SetSelfServeDisabledRequestBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP request body.
+type SetSelfServeDisabledRequestBody struct {
+	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+}
+
 // SetStripeSubscriptionRequestBody is the type of the "admin" service
 // "setStripeSubscription" endpoint HTTP request body.
 type SetStripeSubscriptionRequestBody struct {
@@ -1114,6 +1120,17 @@ type UpdateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1183,6 +1200,17 @@ type DisableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1241,6 +1269,17 @@ type EnableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1299,6 +1338,17 @@ type GetOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1416,6 +1466,17 @@ type ExtendTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1474,6 +1535,17 @@ type CreateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1532,6 +1604,17 @@ type RearmTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1647,6 +1730,17 @@ type SetStripeCustomerResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1705,6 +1799,17 @@ type SetAdoptionDashboardURLResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -2222,6 +2327,17 @@ type StartTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -2280,6 +2396,17 @@ type ChangeTrialEndDateResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -2932,6 +3059,32 @@ type UpdateSignupOfferResponseBody struct {
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// GetSelfServeStatusResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body.
+type GetSelfServeStatusResponseBody struct {
+	// When true, no self-serve path can create an organization or arm a self-serve
+	// trial.
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Email of the staff member who last changed the switch. Absent if it was
+	// never changed.
+	UpdatedBy *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	// When the switch last changed. Absent if it was never changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetSelfServeDisabledResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body.
+type SetSelfServeDisabledResponseBody struct {
+	// When true, no self-serve path can create an organization or arm a self-serve
+	// trial.
+	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Email of the staff member who last changed the switch. Absent if it was
+	// never changed.
+	UpdatedBy *string `form:"updated_by,omitempty" json:"updated_by,omitempty" xml:"updated_by,omitempty"`
+	// When the switch last changed. Absent if it was never changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ListPlatformMcpFeedbackResponseBody is the type of the "admin" service
 // "listPlatformMcpFeedback" endpoint HTTP response body.
 type ListPlatformMcpFeedbackResponseBody struct {
@@ -2994,6 +3147,17 @@ type SetStripeSubscriptionResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -21837,6 +22001,376 @@ type UpdateSignupOfferGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetSelfServeStatusUnauthorizedResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetSelfServeStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusForbiddenResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "forbidden" error.
+type GetSelfServeStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusBadRequestResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "bad_request" error.
+type GetSelfServeStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusNotFoundResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "not_found" error.
+type GetSelfServeStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusConflictResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "conflict" error.
+type GetSelfServeStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSelfServeStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusInvalidResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "invalid" error.
+type GetSelfServeStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusInvariantViolationResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSelfServeStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusUnexpectedResponseBody is the type of the "admin" service
+// "getSelfServeStatus" endpoint HTTP response body for the "unexpected" error.
+type GetSelfServeStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetSelfServeStatusGatewayErrorResponseBody is the type of the "admin"
+// service "getSelfServeStatus" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetSelfServeStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledUnauthorizedResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetSelfServeDisabledUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledForbiddenResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "forbidden" error.
+type SetSelfServeDisabledForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledBadRequestResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "bad_request" error.
+type SetSelfServeDisabledBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledNotFoundResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "not_found" error.
+type SetSelfServeDisabledNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledConflictResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "conflict" error.
+type SetSelfServeDisabledConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledUnsupportedMediaResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetSelfServeDisabledUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledInvalidResponseBody is the type of the "admin" service
+// "setSelfServeDisabled" endpoint HTTP response body for the "invalid" error.
+type SetSelfServeDisabledInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledInvariantViolationResponseBody is the type of the
+// "admin" service "setSelfServeDisabled" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetSelfServeDisabledInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledUnexpectedResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "unexpected" error.
+type SetSelfServeDisabledUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSelfServeDisabledGatewayErrorResponseBody is the type of the "admin"
+// service "setSelfServeDisabled" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetSelfServeDisabledGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListPlatformMcpFeedbackUnauthorizedResponseBody is the type of the "admin"
 // service "listPlatformMcpFeedback" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -31290,6 +31824,23 @@ type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AdminTrialCardSharingOrganizationResponseBody is used to define fields on
+// response body types.
+type AdminTrialCardSharingOrganizationResponseBody struct {
+	// The ID of the other organization.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the other organization.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the other organization.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The time at which the other organization last offered a card to start its
+	// trial.
+	CardAddedAt *string `form:"card_added_at,omitempty" json:"card_added_at,omitempty" xml:"card_added_at,omitempty"`
+	// Why the card could not start the other organization's trial. Absent when the
+	// card started that organization's trial.
+	RejectionReason *string `form:"rejection_reason,omitempty" json:"rejection_reason,omitempty" xml:"rejection_reason,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -31440,6 +31991,17 @@ type AdminOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -34132,6 +34694,15 @@ func NewUpdateSignupOfferRequestBody(p *admin.UpdateSignupOfferPayload) *UpdateS
 	return body
 }
 
+// NewSetSelfServeDisabledRequestBody builds the HTTP request body from the
+// payload of the "setSelfServeDisabled" endpoint of the "admin" service.
+func NewSetSelfServeDisabledRequestBody(p *admin.SetSelfServeDisabledPayload) *SetSelfServeDisabledRequestBody {
+	body := &SetSelfServeDisabledRequestBody{
+		Disabled: p.Disabled,
+	}
+	return body
+}
+
 // NewSetStripeSubscriptionRequestBody builds the HTTP request body from the
 // payload of the "setStripeSubscription" endpoint of the "admin" service.
 func NewSetStripeSubscriptionRequestBody(p *admin.SetStripeSubscriptionPayload) *SetStripeSubscriptionRequestBody {
@@ -36252,11 +36823,23 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -36599,11 +37182,23 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -36780,11 +37375,23 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -36961,11 +37568,23 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -38319,11 +38938,23 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -38500,11 +39131,23 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -38681,11 +39324,23 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -40042,11 +40697,23 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -40238,11 +40905,23 @@ func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURL
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -43730,11 +44409,23 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -43911,11 +44602,23 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -51169,6 +51872,330 @@ func NewUpdateSignupOfferGatewayError(body *UpdateSignupOfferGatewayErrorRespons
 	return v
 }
 
+// NewGetSelfServeStatusAdminSelfServeStatusOK builds a "admin" service
+// "getSelfServeStatus" endpoint result from a HTTP "OK" response.
+func NewGetSelfServeStatusAdminSelfServeStatusOK(body *GetSelfServeStatusResponseBody) *admin.AdminSelfServeStatus {
+	v := &admin.AdminSelfServeStatus{
+		Disabled:  *body.Disabled,
+		UpdatedBy: body.UpdatedBy,
+		UpdatedAt: body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusUnauthorized builds a admin service getSelfServeStatus
+// endpoint unauthorized error.
+func NewGetSelfServeStatusUnauthorized(body *GetSelfServeStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusForbidden builds a admin service getSelfServeStatus
+// endpoint forbidden error.
+func NewGetSelfServeStatusForbidden(body *GetSelfServeStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusBadRequest builds a admin service getSelfServeStatus
+// endpoint bad_request error.
+func NewGetSelfServeStatusBadRequest(body *GetSelfServeStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusNotFound builds a admin service getSelfServeStatus
+// endpoint not_found error.
+func NewGetSelfServeStatusNotFound(body *GetSelfServeStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusConflict builds a admin service getSelfServeStatus
+// endpoint conflict error.
+func NewGetSelfServeStatusConflict(body *GetSelfServeStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusUnsupportedMedia builds a admin service
+// getSelfServeStatus endpoint unsupported_media error.
+func NewGetSelfServeStatusUnsupportedMedia(body *GetSelfServeStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusInvalid builds a admin service getSelfServeStatus
+// endpoint invalid error.
+func NewGetSelfServeStatusInvalid(body *GetSelfServeStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusInvariantViolation builds a admin service
+// getSelfServeStatus endpoint invariant_violation error.
+func NewGetSelfServeStatusInvariantViolation(body *GetSelfServeStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusUnexpected builds a admin service getSelfServeStatus
+// endpoint unexpected error.
+func NewGetSelfServeStatusUnexpected(body *GetSelfServeStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetSelfServeStatusGatewayError builds a admin service getSelfServeStatus
+// endpoint gateway_error error.
+func NewGetSelfServeStatusGatewayError(body *GetSelfServeStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledAdminSelfServeStatusOK builds a "admin" service
+// "setSelfServeDisabled" endpoint result from a HTTP "OK" response.
+func NewSetSelfServeDisabledAdminSelfServeStatusOK(body *SetSelfServeDisabledResponseBody) *admin.AdminSelfServeStatus {
+	v := &admin.AdminSelfServeStatus{
+		Disabled:  *body.Disabled,
+		UpdatedBy: body.UpdatedBy,
+		UpdatedAt: body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledUnauthorized builds a admin service
+// setSelfServeDisabled endpoint unauthorized error.
+func NewSetSelfServeDisabledUnauthorized(body *SetSelfServeDisabledUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledForbidden builds a admin service setSelfServeDisabled
+// endpoint forbidden error.
+func NewSetSelfServeDisabledForbidden(body *SetSelfServeDisabledForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledBadRequest builds a admin service
+// setSelfServeDisabled endpoint bad_request error.
+func NewSetSelfServeDisabledBadRequest(body *SetSelfServeDisabledBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledNotFound builds a admin service setSelfServeDisabled
+// endpoint not_found error.
+func NewSetSelfServeDisabledNotFound(body *SetSelfServeDisabledNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledConflict builds a admin service setSelfServeDisabled
+// endpoint conflict error.
+func NewSetSelfServeDisabledConflict(body *SetSelfServeDisabledConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledUnsupportedMedia builds a admin service
+// setSelfServeDisabled endpoint unsupported_media error.
+func NewSetSelfServeDisabledUnsupportedMedia(body *SetSelfServeDisabledUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledInvalid builds a admin service setSelfServeDisabled
+// endpoint invalid error.
+func NewSetSelfServeDisabledInvalid(body *SetSelfServeDisabledInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledInvariantViolation builds a admin service
+// setSelfServeDisabled endpoint invariant_violation error.
+func NewSetSelfServeDisabledInvariantViolation(body *SetSelfServeDisabledInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledUnexpected builds a admin service
+// setSelfServeDisabled endpoint unexpected error.
+func NewSetSelfServeDisabledUnexpected(body *SetSelfServeDisabledUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSelfServeDisabledGatewayError builds a admin service
+// setSelfServeDisabled endpoint gateway_error error.
+func NewSetSelfServeDisabledGatewayError(body *SetSelfServeDisabledGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListPlatformMcpFeedbackResultOK builds a "admin" service
 // "listPlatformMcpFeedback" endpoint result from a HTTP "OK" response.
 func NewListPlatformMcpFeedbackResultOK(body *ListPlatformMcpFeedbackResponseBody) *admin.ListPlatformMcpFeedbackResult {
@@ -51534,11 +52561,23 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		TrialEndsAt:                    body.TrialEndsAt,
 		TrialConvertedAt:               body.TrialConvertedAt,
 		TrialDemotedAt:                 body.TrialDemotedAt,
+		TrialCardAddedAt:               body.TrialCardAddedAt,
+		TrialCardRejectionReason:       body.TrialCardRejectionReason,
 		AdoptionDashboardURL:           body.AdoptionDashboardURL,
 		MemberCount:                    *body.MemberCount,
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.OrganizationsSharingTrialCard != nil {
+		v.OrganizationsSharingTrialCard = make([]*admin.AdminTrialCardSharingOrganization, len(body.OrganizationsSharingTrialCard))
+		for i, val := range body.OrganizationsSharingTrialCard {
+			if val == nil {
+				v.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			v.OrganizationsSharingTrialCard[i] = unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCardSharingOrganization(val)
+		}
 	}
 
 	return v
@@ -59880,6 +60919,21 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -59957,6 +61011,21 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -60022,6 +61091,21 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -60086,6 +61170,21 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
@@ -60285,6 +61384,21 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -60350,6 +61464,21 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -60414,6 +61543,21 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
@@ -60584,6 +61728,21 @@ func ValidateSetStripeCustomerResponseBody(body *SetStripeCustomerResponseBody) 
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -60648,6 +61807,21 @@ func ValidateSetAdoptionDashboardURLResponseBody(body *SetAdoptionDashboardURLRe
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
@@ -61184,6 +62358,21 @@ func ValidateStartTrialResponseBody(body *StartTrialResponseBody) (err error) {
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
 	}
@@ -61248,6 +62437,21 @@ func ValidateChangeTrialEndDateResponseBody(body *ChangeTrialEndDateResponseBody
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
@@ -62741,6 +63945,30 @@ func ValidateUpdateSignupOfferResponseBody(body *UpdateSignupOfferResponseBody) 
 	return
 }
 
+// ValidateGetSelfServeStatusResponseBody runs the validations defined on
+// GetSelfServeStatusResponseBody
+func ValidateGetSelfServeStatusResponseBody(body *GetSelfServeStatusResponseBody) (err error) {
+	if body.Disabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledResponseBody runs the validations defined on
+// SetSelfServeDisabledResponseBody
+func ValidateSetSelfServeDisabledResponseBody(body *SetSelfServeDisabledResponseBody) (err error) {
+	if body.Disabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateListPlatformMcpFeedbackResponseBody runs the validations defined on
 // ListPlatformMcpFeedbackResponseBody
 func ValidateListPlatformMcpFeedbackResponseBody(body *ListPlatformMcpFeedbackResponseBody) (err error) {
@@ -62824,6 +64052,21 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
@@ -87458,6 +88701,486 @@ func ValidateUpdateSignupOfferGatewayErrorResponseBody(body *UpdateSignupOfferGa
 	return
 }
 
+// ValidateGetSelfServeStatusUnauthorizedResponseBody runs the validations
+// defined on getSelfServeStatus_unauthorized_response_body
+func ValidateGetSelfServeStatusUnauthorizedResponseBody(body *GetSelfServeStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusForbiddenResponseBody runs the validations defined
+// on getSelfServeStatus_forbidden_response_body
+func ValidateGetSelfServeStatusForbiddenResponseBody(body *GetSelfServeStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusBadRequestResponseBody runs the validations
+// defined on getSelfServeStatus_bad_request_response_body
+func ValidateGetSelfServeStatusBadRequestResponseBody(body *GetSelfServeStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusNotFoundResponseBody runs the validations defined
+// on getSelfServeStatus_not_found_response_body
+func ValidateGetSelfServeStatusNotFoundResponseBody(body *GetSelfServeStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusConflictResponseBody runs the validations defined
+// on getSelfServeStatus_conflict_response_body
+func ValidateGetSelfServeStatusConflictResponseBody(body *GetSelfServeStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusUnsupportedMediaResponseBody runs the validations
+// defined on getSelfServeStatus_unsupported_media_response_body
+func ValidateGetSelfServeStatusUnsupportedMediaResponseBody(body *GetSelfServeStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusInvalidResponseBody runs the validations defined
+// on getSelfServeStatus_invalid_response_body
+func ValidateGetSelfServeStatusInvalidResponseBody(body *GetSelfServeStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusInvariantViolationResponseBody runs the
+// validations defined on getSelfServeStatus_invariant_violation_response_body
+func ValidateGetSelfServeStatusInvariantViolationResponseBody(body *GetSelfServeStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusUnexpectedResponseBody runs the validations
+// defined on getSelfServeStatus_unexpected_response_body
+func ValidateGetSelfServeStatusUnexpectedResponseBody(body *GetSelfServeStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetSelfServeStatusGatewayErrorResponseBody runs the validations
+// defined on getSelfServeStatus_gateway_error_response_body
+func ValidateGetSelfServeStatusGatewayErrorResponseBody(body *GetSelfServeStatusGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledUnauthorizedResponseBody runs the validations
+// defined on setSelfServeDisabled_unauthorized_response_body
+func ValidateSetSelfServeDisabledUnauthorizedResponseBody(body *SetSelfServeDisabledUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledForbiddenResponseBody runs the validations
+// defined on setSelfServeDisabled_forbidden_response_body
+func ValidateSetSelfServeDisabledForbiddenResponseBody(body *SetSelfServeDisabledForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledBadRequestResponseBody runs the validations
+// defined on setSelfServeDisabled_bad_request_response_body
+func ValidateSetSelfServeDisabledBadRequestResponseBody(body *SetSelfServeDisabledBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledNotFoundResponseBody runs the validations
+// defined on setSelfServeDisabled_not_found_response_body
+func ValidateSetSelfServeDisabledNotFoundResponseBody(body *SetSelfServeDisabledNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledConflictResponseBody runs the validations
+// defined on setSelfServeDisabled_conflict_response_body
+func ValidateSetSelfServeDisabledConflictResponseBody(body *SetSelfServeDisabledConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledUnsupportedMediaResponseBody runs the
+// validations defined on setSelfServeDisabled_unsupported_media_response_body
+func ValidateSetSelfServeDisabledUnsupportedMediaResponseBody(body *SetSelfServeDisabledUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledInvalidResponseBody runs the validations defined
+// on setSelfServeDisabled_invalid_response_body
+func ValidateSetSelfServeDisabledInvalidResponseBody(body *SetSelfServeDisabledInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledInvariantViolationResponseBody runs the
+// validations defined on setSelfServeDisabled_invariant_violation_response_body
+func ValidateSetSelfServeDisabledInvariantViolationResponseBody(body *SetSelfServeDisabledInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledUnexpectedResponseBody runs the validations
+// defined on setSelfServeDisabled_unexpected_response_body
+func ValidateSetSelfServeDisabledUnexpectedResponseBody(body *SetSelfServeDisabledUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSelfServeDisabledGatewayErrorResponseBody runs the validations
+// defined on setSelfServeDisabled_gateway_error_response_body
+func ValidateSetSelfServeDisabledGatewayErrorResponseBody(body *SetSelfServeDisabledGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListPlatformMcpFeedbackUnauthorizedResponseBody runs the validations
 // defined on listPlatformMcpFeedback_unauthorized_response_body
 func ValidateListPlatformMcpFeedbackUnauthorizedResponseBody(body *ListPlatformMcpFeedbackUnauthorizedResponseBody) (err error) {
@@ -99693,6 +101416,32 @@ func ValidateFinalizeOrganizationEncryptionGatewayErrorResponseBody(body *Finali
 	return
 }
 
+// ValidateAdminTrialCardSharingOrganizationResponseBody runs the validations
+// defined on AdminTrialCardSharingOrganizationResponseBody
+func ValidateAdminTrialCardSharingOrganizationResponseBody(body *AdminTrialCardSharingOrganizationResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.CardAddedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("card_added_at", "body"))
+	}
+	if body.CardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.card_added_at", *body.CardAddedAt, goa.FormatDateTime))
+	}
+	if body.RejectionReason != nil {
+		if !(*body.RejectionReason == "prepaid_card" || *body.RejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rejection_reason", *body.RejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -99926,6 +101675,21 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	}
 	if body.TrialDemotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardAddedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_card_added_at", *body.TrialCardAddedAt, goa.FormatDateTime))
+	}
+	if body.TrialCardRejectionReason != nil {
+		if !(*body.TrialCardRejectionReason == "prepaid_card" || *body.TrialCardRejectionReason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_card_rejection_reason", *body.TrialCardRejectionReason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	for _, e := range body.OrganizationsSharingTrialCard {
+		if e != nil {
+			if err2 := ValidateAdminTrialCardSharingOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.AdoptionDashboardURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.adoption_dashboard_url", *body.AdoptionDashboardURL, goa.FormatURI))
