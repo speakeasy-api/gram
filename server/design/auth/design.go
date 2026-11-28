@@ -17,6 +17,17 @@ var Trial = Type("Trial", func() {
 	Required("started_at", "ends_at")
 })
 
+var TrialCardRejection = Type("TrialCardRejection", func() {
+	Description("Why the last card an organization admin added could not start the free trial.")
+	Attribute("reason", String, "prepaid_card: prepaid cards cannot start a trial. card_used: the card already started another organization's trial.", func() {
+		Enum("prepaid_card", "card_used")
+	})
+	Attribute("rejected_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Required("reason", "rejected_at")
+})
+
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(security.Session)
@@ -281,12 +292,14 @@ var _ = Service("auth", func() {
 			Attribute("trial", Trial, func() {
 				Meta("struct:tag:json", "trial")
 			})
+			Attribute("trial_pending_payment_method", Boolean, "Whether the organization's free trial starts once an organization admin adds a card")
+			Attribute("trial_card_rejection", TrialCardRejection, "Set while the trial waits for a card and the last card added could not start it")
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
 
-			Required("user_id", "user_email", "is_admin", "organization_override", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription", "whitelisted")
+			Required("user_id", "user_email", "is_admin", "organization_override", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription", "whitelisted", "trial_pending_payment_method")
 		})
 
 		HTTP(func() {

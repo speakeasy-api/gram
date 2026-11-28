@@ -190,6 +190,42 @@ CREATE INDEX IF NOT EXISTS trials_ends_at_idx
 ON trials (ends_at)
 WHERE converted_at IS NULL AND demoted_at IS NULL;
 
+-- The latest card an organization offered to start its self-serve trial. One
+-- row per organization. A rejected card is replaced by the next attempt; an
+-- accepted card started the trial and is never rewritten. The fingerprint
+-- index finds a card that already started another organization's trial.
+CREATE TABLE IF NOT EXISTS trial_payment_methods (
+  organization_id TEXT NOT NULL,
+  stripe_customer_id TEXT NOT NULL,
+  stripe_payment_method_id TEXT NOT NULL,
+  card_fingerprint TEXT NOT NULL,
+  -- Stripe's card funding type: credit, debit, prepaid, or unknown.
+  card_funding TEXT NOT NULL,
+  stripe_checkout_session_id TEXT NOT NULL,
+  -- Why the card could not start a trial. NULL means it started the trial.
+  -- Allowed values live in application code.
+  rejection_reason TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT trial_payment_methods_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT trial_payment_methods_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN trial_payment_methods.organization_id IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.stripe_customer_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.stripe_payment_method_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.card_fingerprint IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.card_funding IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.stripe_checkout_session_id IS '@access: restricted';
+COMMENT ON COLUMN trial_payment_methods.rejection_reason IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.created_at IS '@access: confidential';
+COMMENT ON COLUMN trial_payment_methods.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS trial_payment_methods_card_fingerprint_idx
+ON trial_payment_methods (card_fingerprint);
+
 -- Billing contract metadata for an organization. Currently holds the
 -- "tokens under management" (TUM) contract terms for enterprise accounts.
 CREATE TABLE IF NOT EXISTS billing_metadata (

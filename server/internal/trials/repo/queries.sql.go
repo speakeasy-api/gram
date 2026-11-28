@@ -309,6 +309,54 @@ func (q *Queries) GetTrial(ctx context.Context, organizationID string) (Trial, e
 	return i, err
 }
 
+const getTrialPaymentMethod = `-- name: GetTrialPaymentMethod :one
+SELECT rejection_reason, card_funding, created_at, updated_at
+FROM trial_payment_methods
+WHERE organization_id = $1
+`
+
+type GetTrialPaymentMethodRow struct {
+	RejectionReason pgtype.Text
+	CardFunding     string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// The latest card the organization offered to start its trial.
+func (q *Queries) GetTrialPaymentMethod(ctx context.Context, organizationID string) (GetTrialPaymentMethodRow, error) {
+	row := q.db.QueryRow(ctx, getTrialPaymentMethod, organizationID)
+	var i GetTrialPaymentMethodRow
+	err := row.Scan(
+		&i.RejectionReason,
+		&i.CardFunding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const hasAcceptedPlatformAdminInvitation = `-- name: HasAcceptedPlatformAdminInvitation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations invitation
+  JOIN users inviter ON inviter.id = invitation.inviter_user_id
+  WHERE invitation.organization_id = $1
+    AND invitation.state = 'accepted'
+    AND inviter.admin
+    AND inviter.deleted_at IS NULL
+)
+`
+
+// Reports whether a Speakeasy staff member invited someone into the
+// organization and the invitation was accepted. Staff invitations are how a
+// prospect created in the admin app is offered a trial.
+func (q *Queries) HasAcceptedPlatformAdminInvitation(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAcceptedPlatformAdminInvitation, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertTrialFixture = `-- name: InsertTrialFixture :exec
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (
@@ -370,6 +418,70 @@ func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listOrganizationsSharingTrialCard = `-- name: ListOrganizationsSharingTrialCard :many
+SELECT
+    other.organization_id
+  , organization.name AS organization_name
+  , organization.slug AS organization_slug
+  , other.rejection_reason
+  , other.updated_at AS offered_at
+FROM trial_payment_methods self
+JOIN trial_payment_methods other
+  ON other.card_fingerprint = self.card_fingerprint
+ AND other.organization_id <> self.organization_id
+JOIN organization_metadata organization ON organization.id = other.organization_id
+WHERE self.organization_id = $1
+ORDER BY other.updated_at, other.organization_id
+`
+
+type ListOrganizationsSharingTrialCardRow struct {
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	RejectionReason  pgtype.Text
+	OfferedAt        pgtype.Timestamptz
+}
+
+// Lists the other organizations that offered the same card as this
+// organization, oldest first. A NULL rejection_reason means the card started
+// that organization's trial.
+func (q *Queries) ListOrganizationsSharingTrialCard(ctx context.Context, organizationID string) ([]ListOrganizationsSharingTrialCardRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsSharingTrialCard, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationsSharingTrialCardRow
+	for rows.Next() {
+		var i ListOrganizationsSharingTrialCardRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.RejectionReason,
+			&i.OfferedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockTrialCardFingerprint = `-- name: LockTrialCardFingerprint :exec
+SELECT pg_advisory_xact_lock(hashtextextended('trial_card:' || $1::text, 0))
+`
+
+// Serializes trial starts that offer the same card, so two organizations
+// cannot both start a trial with it.
+func (q *Queries) LockTrialCardFingerprint(ctx context.Context, cardFingerprint string) error {
+	_, err := q.db.Exec(ctx, lockTrialCardFingerprint, cardFingerprint)
+	return err
 }
 
 const lockTrialLifecycle = `-- name: LockTrialLifecycle :one
@@ -478,6 +590,66 @@ func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTr
 	return i, err
 }
 
+const recordTrialPaymentMethod = `-- name: RecordTrialPaymentMethod :execrows
+INSERT INTO trial_payment_methods (
+    organization_id
+  , stripe_customer_id
+  , stripe_payment_method_id
+  , card_fingerprint
+  , card_funding
+  , stripe_checkout_session_id
+  , rejection_reason
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+ON CONFLICT (organization_id) DO UPDATE SET
+    stripe_customer_id = EXCLUDED.stripe_customer_id
+  , stripe_payment_method_id = EXCLUDED.stripe_payment_method_id
+  , card_fingerprint = EXCLUDED.card_fingerprint
+  , card_funding = EXCLUDED.card_funding
+  , stripe_checkout_session_id = EXCLUDED.stripe_checkout_session_id
+  , rejection_reason = EXCLUDED.rejection_reason
+  , updated_at = clock_timestamp()
+WHERE trial_payment_methods.rejection_reason IS NOT NULL
+`
+
+type RecordTrialPaymentMethodParams struct {
+	OrganizationID          string
+	StripeCustomerID        string
+	StripePaymentMethodID   string
+	CardFingerprint         string
+	CardFunding             string
+	StripeCheckoutSessionID string
+	RejectionReason         pgtype.Text
+}
+
+// Records the card an organization offered to start its trial. A later attempt
+// replaces a rejected card; zero rows means an accepted card is already
+// recorded, so a replayed or second Checkout keeps the card that started the
+// trial.
+func (q *Queries) RecordTrialPaymentMethod(ctx context.Context, arg RecordTrialPaymentMethodParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordTrialPaymentMethod,
+		arg.OrganizationID,
+		arg.StripeCustomerID,
+		arg.StripePaymentMethodID,
+		arg.CardFingerprint,
+		arg.CardFunding,
+		arg.StripeCheckoutSessionID,
+		arg.RejectionReason,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const restoreOrganizationFromTrial = `-- name: RestoreOrganizationFromTrial :one
 UPDATE organization_metadata
 SET gram_account_type = $1,
@@ -572,4 +744,27 @@ func (q *Queries) StartTrial(ctx context.Context, arg StartTrialParams) (StartTr
 	var i StartTrialRow
 	err := row.Scan(&i.Tier, &i.EndsAt)
 	return i, err
+}
+
+const trialCardStartedAnotherTrial = `-- name: TrialCardStartedAnotherTrial :one
+SELECT EXISTS (
+  SELECT 1
+  FROM trial_payment_methods
+  WHERE card_fingerprint = $1
+    AND organization_id <> $2
+    AND rejection_reason IS NULL
+)
+`
+
+type TrialCardStartedAnotherTrialParams struct {
+	CardFingerprint string
+	OrganizationID  string
+}
+
+// Reports whether the card already started another organization's trial.
+func (q *Queries) TrialCardStartedAnotherTrial(ctx context.Context, arg TrialCardStartedAnotherTrialParams) (bool, error) {
+	row := q.db.QueryRow(ctx, trialCardStartedAnotherTrial, arg.CardFingerprint, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

@@ -77,6 +77,11 @@ func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (claims
 	if !ok || !token.Valid {
 		return nil, true, fmt.Errorf("invalid token")
 	}
+	// Chat session tokens carry a JTI, organization ID, and no issuer; reject
+	// JWTs minted for other purposes with the same signing key.
+	if claims.Issuer != "" || claims.ID == "" || claims.OrgID == "" {
+		return nil, true, fmt.Errorf("invalid chat session token")
+	}
 
 	isRevoked, err := m.IsTokenRevoked(ctx, claims.ID)
 	if err != nil {

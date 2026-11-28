@@ -2,21 +2,38 @@ package assistanttokens
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/assert"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var tokensInfra *testenv.Environment
@@ -38,10 +55,13 @@ func TestMain(m *testing.M) {
 
 type fixture struct {
 	conn        *pgxpool.Pool
+	manager     *Manager
 	projectID   uuid.UUID
 	assistantID uuid.UUID
+	agentID     uuid.UUID
 	threadID    uuid.UUID
 	chatID      uuid.UUID
+	userID      string
 }
 
 func newFixture(t *testing.T, dbName string) fixture {
@@ -51,6 +71,25 @@ func newFixture(t *testing.T, dbName string) fixture {
 	require.NoError(t, err)
 
 	ctx := t.Context()
+	userID := "user-test"
+
+	_, err = usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       "user@example.test",
+		DisplayName: "Test User",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:   "org-test",
+		Name: "Test Org",
+		Slug: "org-test",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: "org-test",
+		UserID:         pgtype.Text{String: userID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "Project",
@@ -58,11 +97,28 @@ func newFixture(t *testing.T, dbName string) fixture {
 		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeProjectRead, proj.ID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: "org-test",
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: "org-test",
+		OwnerUserID:    userID,
+		ProjectID:      uuid.NullUUID{UUID: proj.ID, Valid: true},
+		Name:           "Assistant Agent",
+	})
+	require.NoError(t, err)
 
 	assistant, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
 		ProjectID:       proj.ID,
 		OrganizationID:  "org-test",
-		CreatedByUserID: pgtype.Text{},
+		CreatedByUserID: pgtype.Text{String: userID, Valid: true},
 		Name:            "Assistant",
 		Model:           "openai/gpt-4o-mini",
 		Instructions:    "",
@@ -91,92 +147,135 @@ func newFixture(t *testing.T, dbName string) fixture {
 	})
 	require.NoError(t, err)
 
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	signer, err := mcpauthz.New(
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})),
+		"https://platform.example.invalid",
+		false,
+	)
+	require.NoError(t, err)
+
+	mr := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+
+	engine := authz.NewEngine(
+		testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, nil,
+		authz.EngineOpts{
+			AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential,
+			AdmitWorkloadSession:     runtimepolicy.AdmitWorkloadSession,
+		},
+	)
+	manager := New("test-secret", conn, engine, principalcredential.New(signer, conn), cache.NewRedisCacheAdapter(redisClient))
+
 	return fixture{
 		conn:        conn,
+		manager:     manager,
 		projectID:   proj.ID,
 		assistantID: assistant.ID,
+		agentID:     agent.ID,
 		threadID:    threadID,
 		chatID:      chatID,
+		userID:      userID,
 	}
 }
 
-func TestCheckRevocation_active(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_active")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
-}
-
-func TestCheckRevocation_threadDeleted(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_thread_deleted")
-	err := assistantsrepo.New(f.conn).SoftDeleteAssistantThread(t.Context(), assistantsrepo.SoftDeleteAssistantThreadParams{
-		ID:        f.threadID,
-		ProjectID: f.projectID,
+func (f fixture) mintCredential(t *testing.T) string {
+	t.Helper()
+	token, err := f.manager.MintTurnCredential(t.Context(), principalcredential.Credential{
+		OrganizationID:   "org-test",
+		ProjectID:        f.projectID,
+		Principal:        urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()),
+		AuthorizerUserID: f.userID,
+	}, RuntimeBinding{
+		OrganizationID: "org-test",
+		ProjectID:      f.projectID,
+		AssistantID:    f.assistantID,
+		ThreadID:       f.threadID,
+		ChatID:         f.chatID,
 	})
 	require.NoError(t, err)
-
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
-	requireUnauthorized(t, err)
+	return token
 }
 
-func TestCheckRevocation_assistantDeleted(t *testing.T) {
+func TestAuthorizeRuntime_ActiveAndLifecycleRevocation(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, "tokens_assistant_deleted")
-	err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
-		AssistantID: f.assistantID,
-		ProjectID:   f.projectID,
+	t.Run("active", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, "tokens_runtime_active")
+		token := f.mintCredential(t)
+		authed, claims, err := f.manager.AuthorizeRuntime(t.Context(), "Bearer "+token)
+		require.NoError(t, err)
+		require.Equal(t, f.assistantID.String(), claims.AssistantID)
+		require.Equal(t, f.threadID.String(), claims.ThreadID)
+		require.Equal(t, f.userID, claims.UserID)
+		chatID, bound := RuntimeChatID(authed)
+		require.True(t, bound)
+		require.Equal(t, f.chatID, chatID)
 	})
+
+	t.Run("thread deleted", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, "tokens_runtime_thread_deleted")
+		token := f.mintCredential(t)
+		err := assistantsrepo.New(f.conn).SoftDeleteAssistantThread(t.Context(), assistantsrepo.SoftDeleteAssistantThreadParams{
+			ID:        f.threadID,
+			ProjectID: f.projectID,
+		})
+		require.NoError(t, err)
+		_, _, err = f.manager.AuthorizeRuntime(t.Context(), token)
+		requireUnauthorized(t, err)
+	})
+
+	t.Run("assistant deleted", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, "tokens_runtime_assistant_deleted")
+		token := f.mintCredential(t)
+		err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
+			AssistantID: f.assistantID,
+			ProjectID:   f.projectID,
+		})
+		require.NoError(t, err)
+		_, _, err = f.manager.AuthorizeRuntime(t.Context(), token)
+		requireUnauthorized(t, err)
+	})
+
+	t.Run("assistant paused", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, "tokens_runtime_assistant_paused")
+		token := f.mintCredential(t)
+		err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
+			Status:    "paused",
+			ID:        f.assistantID,
+			ProjectID: f.projectID,
+		})
+		require.NoError(t, err)
+		_, _, err = f.manager.AuthorizeRuntime(t.Context(), token)
+		requireUnauthorized(t, err)
+	})
+}
+
+func TestAuthorizeRuntime_RejectsNonPrincipalCredentialTokens(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, "tokens_runtime_reject_non_principal")
+	signedJWT, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "user-1",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}).SignedString([]byte("test-secret"))
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
-	requireUnauthorized(t, err)
-}
-
-func TestCheckRevocation_assistantPaused(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_assistant_paused")
-	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
-		Status:    "paused",
-		ID:        f.assistantID,
-		ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
-
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
-	requireUnauthorized(t, err)
-}
-
-func TestCheckRevocation_threadMissing(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_thread_missing")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.New())
-	requireUnauthorized(t, err)
-}
-
-func TestCheckRevocation_assistantScoped(t *testing.T) {
-	t.Parallel()
-
-	// v2 tokens omit ThreadID — revocation must fall back to an
-	// assistant-only lookup and pass when the assistant is active.
-	f := newFixture(t, "tokens_assistant_scoped")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil))
+	for _, header := range []string{"Bearer " + signedJWT, "Bearer not-a-credential"} {
+		_, _, err = f.manager.AuthorizeRuntime(t.Context(), header)
+		requireUnauthorized(t, err)
+	}
 }
 
 func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
@@ -212,7 +311,7 @@ func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 	require.Equal(t, "https://auth.example.com", claims.OAuthServerIssuer)
 }
 
-func TestMCPAuthFlowDefaultsAttemptToLegacyFlowID(t *testing.T) {
+func TestMCPAuthFlowDefaultsAttemptToFlowID(t *testing.T) {
 	t.Parallel()
 
 	manager := New("test-secret", nil, nil, nil, nil)
@@ -241,97 +340,6 @@ func TestMCPAuthFlowDefaultsAttemptToLegacyFlowID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, flowID, claims.FlowID)
 	require.Equal(t, flowID, claims.ID)
-}
-
-func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_assistant_scoped_paused")
-	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
-		Status:    "paused",
-		ID:        f.assistantID,
-		ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
-
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil)
-	requireUnauthorized(t, err)
-}
-
-func TestGenerate_assistantScopedOmitsThreadClaim(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_generate_v2")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	token, err := m.Generate(GenerateInput{
-		OrgID:       "org",
-		ProjectID:   f.projectID,
-		UserID:      "user",
-		AssistantID: f.assistantID,
-		ThreadID:    uuid.Nil,
-		TTL:         time.Minute,
-	})
-	require.NoError(t, err)
-	claims, err := m.Validate(token)
-	require.NoError(t, err)
-	require.Empty(t, claims.ThreadID, "v2 tokens must omit the ThreadID claim")
-}
-
-func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_cache_hit")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	// Prime cache with the active path.
-	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
-
-	// Pause the assistant out from under us; the cached "allowed" answer must
-	// continue to be honoured until revocationCacheTTL expires.
-	err := assistantsrepo.New(f.conn).SetAssistantStatus(t.Context(), assistantsrepo.SetAssistantStatusParams{
-		Status:    "paused",
-		ID:        f.assistantID,
-		ProjectID: f.projectID,
-	})
-	require.NoError(t, err)
-
-	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
-}
-
-func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "tokens_cache_ttl")
-	m := New("test-secret", f.conn, nil, nil, nil)
-
-	// Force a tiny TTL so we can observe expiry in the test.
-	m.revocation = newRevocationCache(50 * time.Millisecond)
-
-	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
-
-	err := assistantsrepo.New(f.conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
-		AssistantID: f.assistantID,
-		ProjectID:   f.projectID,
-	})
-	require.NoError(t, err)
-
-	// The cached "allowed" answer is honoured until the 50ms TTL drains; once it
-	// expires the next check re-queries the DB and observes the deletion. Poll
-	// rather than sleeping a fixed duration that races the TTL.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
-		if !assert.Error(c, err) {
-			return
-		}
-		se := &oops.ShareableError{}
-		if !assert.ErrorAs(c, err, &se) {
-			return
-		}
-		assert.Equal(c, oops.CodeUnauthorized, se.Code)
-	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func requireUnauthorized(t *testing.T, err error) {

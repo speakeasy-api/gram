@@ -8723,6 +8723,27 @@ type Trial struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type TrialPaymentMethod struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	StripeCustomerID string
+	// @access: restricted
+	StripePaymentMethodID string
+	// @access: restricted
+	CardFingerprint string
+	// @access: confidential
+	CardFunding string
+	// @access: restricted
+	StripeCheckoutSessionID string
+	// @access: confidential
+	RejectionReason pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type TriggerInstance struct {
 	// @access: confidential
 	ID uuid.UUID

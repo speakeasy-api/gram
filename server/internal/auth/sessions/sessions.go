@@ -406,6 +406,12 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 // SetFlags wires the flag provider gating sign-in enforcement.
 func (s *Manager) SetFlags(flags feature.Provider) { s.flags = flags }
 
+// SelfServeTrialRequiresPaymentMethod reports whether an organization's
+// self-serve trial waits for a validated card.
+func (s *Manager) SelfServeTrialRequiresPaymentMethod(ctx context.Context, organizationID string) bool {
+	return feature.SelfServeTrialRequiresPaymentMethod(ctx, s.flags, organizationID)
+}
+
 // SignInEnforced reports whether sign-in enforcement is on for the
 // organization.
 func (s *Manager) SignInEnforced(ctx context.Context, organizationID string) bool {

@@ -121,10 +121,6 @@ func TestServeProjectGateway_AgentMachineAccess(t *testing.T) {
 	_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, anonymousToken, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 
-	assistantToken := mintAssistantBearerForOwner(t, ti, authCtx)
-	_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, assistantToken, makeInitializeBody())
-	requireOopsCode(t, err, oops.CodeUnauthorized)
-
 	listed, err := serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, token, listServersBody(t))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())

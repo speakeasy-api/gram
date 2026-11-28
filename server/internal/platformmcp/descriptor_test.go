@@ -278,7 +278,7 @@ func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testi
 	t.Parallel()
 
 	registrar := newRegistrar(newTestMCPServer())
-	registerGetPlatformContextTool(registrar)
+	registerGetPlatformContextTool(registrar, nil)
 	principal := testPrincipal()
 	principal.ConnectionID = ""
 	principal.Generation = ""
