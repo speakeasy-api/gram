@@ -107,6 +107,10 @@ describe("plugin membership authorization", () => {
         </MemoryRouter>
       </TooltipProvider>,
     );
+    // The skill's name opens it in the Skills section; its link covers the card.
+    expect(
+      screen.getByRole("link", { name: "Example skill" }).getAttribute("href"),
+    ).toBe("/org/projects/project-a/skills/skill-a");
     const remove = screen.getByRole("button", { name: "Remove skill" });
     // The card must not own button semantics that intercept nested keyboard actions.
     expect(remove.parentElement?.closest('[role="button"]')).toBeNull();

@@ -1,9 +1,8 @@
-import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
+import { DETAIL_HEADER_CONTROL_BUTTON } from "@/components/detail/detail-frame";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Text } from "@/components/ui/Text";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
@@ -14,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { useQueryClient } from "@tanstack/react-query";
@@ -77,13 +77,13 @@ const CONFIRM_COPY: Record<
 };
 
 /**
- * Sidebar-card sharing controls for the skill detail page, mirroring the MCP
- * details card: a Visibility dropdown (Private / Public) and, when public, the
- * share URL with copy and reset actions. Sharing is idempotent server-side:
+ * The skill's visibility, as a header control on the skill detail page: a
+ * Private / Public picker in the header button look. When public, the same
+ * menu copies or resets the share link. Sharing is idempotent server-side:
  * repeated shares return the same token, so "reset" is an unshare followed by
  * a fresh share.
  */
-export function SkillSharingCardBlocks({
+export function SkillVisibilityControl({
   skill,
 }: {
   skill: Skill;
@@ -186,104 +186,79 @@ export function SkillSharingCardBlocks({
 
   return (
     <>
-      <div className="flex flex-col gap-1.5">
-        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
-        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-          <DropdownMenuTrigger asChild disabled={!canWrite || pending}>
-            <button
-              type="button"
-              disabled={!canWrite || pending}
-              className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <span
-                className={cn(
-                  "h-2 w-2 shrink-0 rounded-full",
-                  currentOption?.dotClass,
-                )}
-              />
-              {currentOption?.label}
-              <ChevronDown className="text-muted-foreground h-3 w-3" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[320px] p-1">
-            {STATUS_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onSelect={() => handleSelect(option.value)}
-                className="group flex cursor-pointer items-start gap-2.5 p-2"
-              >
-                {option.value === currentStatus ? (
-                  <span
-                    className={cn(
-                      "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
-                      option.dotClass,
-                    )}
-                  >
-                    <Check
-                      className="text-background h-2.5 w-2.5"
-                      strokeWidth={4}
-                    />
-                  </span>
-                ) : (
-                  <span
-                    className={cn(
-                      "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
-                      "bg-muted",
-                      option.hoverDotClass,
-                    )}
-                  />
-                )}
-                <div className="flex-1">
-                  <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
-                    {option.label}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    {option.description}
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {shareUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Public link</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {shareUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={shareUrl}
-              size="xs"
-              tooltip="Copy public link"
-              className="mt-[-2px] shrink-0"
-              onCopy={() => {
-                toast.success("Public link copied");
-              }}
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+        <DropdownMenuTrigger asChild disabled={!canWrite || pending}>
+          <button
+            type="button"
+            disabled={!canWrite || pending}
+            aria-label={`Visibility: ${currentOption?.label ?? ""}`}
+            className={DETAIL_HEADER_CONTROL_BUTTON}
+          >
+            <StatusDot
+              tone={currentStatus === "public" ? "success" : "information"}
             />
-            {canWrite && (
-              <SimpleTooltip tooltip="Reset link">
-                <Button
-                  size="sm"
-                  variant="tertiary"
-                  disabled={pending}
-                  aria-label="Reset public link"
-                  className="mt-[-4px] shrink-0"
-                  onClick={() => setConfirmAction("reset")}
+            <span className="min-w-0 flex-1 truncate text-left">
+              {currentOption?.label}
+            </span>
+            <ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[320px] p-1">
+          {STATUS_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onSelect={() => handleSelect(option.value)}
+              className="group flex cursor-pointer items-start gap-2.5 p-2"
+            >
+              {option.value === currentStatus ? (
+                <span
+                  className={cn(
+                    "mt-1 flex size-3.5 shrink-0 items-center justify-center rounded-full",
+                    option.dotClass,
+                  )}
                 >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </Button>
-              </SimpleTooltip>
-            )}
-          </div>
-        </div>
-      )}
+                  <Check
+                    className="text-background h-2.5 w-2.5"
+                    strokeWidth={4}
+                  />
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "mt-1 size-3.5 shrink-0 rounded-full transition-colors",
+                    "bg-muted",
+                    option.hoverDotClass,
+                  )}
+                />
+              )}
+              <div className="flex-1">
+                <span className="block font-mono text-xs font-semibold tracking-wide uppercase">
+                  {option.label}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {option.description}
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+          {shareUrl && canWrite && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  // Defer until the menu has closed, as with the private
+                  // confirmation above.
+                  setTimeout(() => setConfirmAction("reset"), 0);
+                }}
+                className="cursor-pointer gap-2 p-2"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset public link
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog
         open={confirmAction !== null}
@@ -313,5 +288,40 @@ export function SkillSharingCardBlocks({
         </Dialog.Content>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * The public link under the skill's name, with a copy button. Renders nothing
+ * while the skill is private.
+ */
+export function SkillPublicLink({
+  skill,
+}: {
+  skill: Skill;
+}): JSX.Element | null {
+  const { domain: customDomain } = useCustomDomain(!!skill.shareToken);
+  if (!skill.shareToken) return null;
+  const shareUrl = skillShareUrl(
+    skill.shareToken,
+    skillShareDomain(customDomain),
+  );
+  return (
+    <span className="text-muted-foreground flex h-6 min-w-0 items-center gap-1">
+      <span
+        className="max-w-[320px] truncate font-mono text-xs leading-6"
+        title={shareUrl}
+      >
+        {shareUrl.replace(/^https?:\/\//, "")}
+      </span>
+      <CopyButton
+        text={shareUrl}
+        size="xs"
+        tooltip="Copy public link"
+        onCopy={() => {
+          toast.success("Public link copied");
+        }}
+      />
+    </span>
   );
 }
