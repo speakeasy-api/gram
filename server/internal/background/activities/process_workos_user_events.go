@@ -221,6 +221,11 @@ func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *s
 
 func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
 	userQueries := usersrepo.New(dbtx)
+	if emailnorm.IsGmailDomain(payload.Email) {
+		if err := userQueries.LockCanonicalGmailEmail(ctx, emailnorm.Canonicalize(payload.Email)); err != nil {
+			return nil, fmt.Errorf("lock canonical email: %w", err)
+		}
+	}
 	resolved, err := resolveWorkOSUser(ctx, logger, userQueries, payload)
 	if err != nil {
 		return nil, err

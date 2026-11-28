@@ -100,6 +100,8 @@ func TestBlockedEmail_NormalizesGmailAliases(t *testing.T) {
 		{id: "blocked-plain-gmail", email: "alice@gmail.com"},
 		{id: "blocked-googlemail-alias", email: "B.o.b+orig@googlemail.com"},
 		{id: "blocked-non-gmail", email: "carol.smith+work@example.com"},
+		{id: "blocked-leading-v-gmail", email: "victor@gmail.com"},
+		{id: "blocked-trailing-v-domain", email: "dev@company.dev"},
 	}
 	for _, u := range seeded {
 		_, err := users.UpsertUser(ctx, usersrepo.UpsertUserParams{
@@ -133,6 +135,11 @@ func TestBlockedEmail_NormalizesGmailAliases(t *testing.T) {
 		{name: "non-gmail exact match case-insensitive", email: "CAROL.SMITH+WORK@Example.com", blocked: true},
 		{name: "non-gmail dots stripped does not match", email: "carolsmith+work@example.com", blocked: false},
 		{name: "non-gmail plus stripped does not match", email: "carol.smith@example.com", blocked: false},
+		{name: "leading v gmail alias matches", email: "v.i.c.t.o.r+tag@googlemail.com", blocked: true},
+		{name: "leading v gmail is not stripped to ictor", email: "ictor@gmail.com", blocked: false},
+		{name: "vertical tab whitespace still trims cleanly", email: "\v  victor@gmail.com  \v", blocked: true},
+		{name: "trailing v domain exact matches", email: "DEV@company.dev", blocked: true},
+		{name: "trailing v domain is not stripped to de", email: "dev@company.de", blocked: false},
 	}
 
 	type directDBTX struct {

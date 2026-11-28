@@ -179,6 +179,15 @@ func (p testInviteIdentityProvider) UpsertUserFromIDP(_ context.Context, idpUser
 	return p.identities[idpUser.Email].gramUserID, nil
 }
 
+type failingUpsertInviteIdentityProvider struct {
+	stubUserProvisioner
+	upsertErr error
+}
+
+func (p failingUpsertInviteIdentityProvider) UpsertUserFromIDP(_ context.Context, _ *identity.IDPUserInfo) (string, error) {
+	return "", p.upsertErr
+}
+
 // MockLoopsClient implements loops.Client for testing email send paths.
 type MockLoopsClient struct {
 	mock.Mock

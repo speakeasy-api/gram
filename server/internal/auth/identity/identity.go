@@ -324,7 +324,21 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		span.End()
 	}()
 
-	blockedEmail, err := r.userRepo.IsEmailBlacklisted(ctx, emailnorm.Canonicalize(idpUser.Email))
+	tx, err := r.userRepo.Begin(ctx)
+	if err != nil {
+		return UpsertUserResult{}, fmt.Errorf("begin user upsert transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	qtx := userRepo.New(tx)
+
+	canonicalEmail := emailnorm.Canonicalize(idpUser.Email)
+	if emailnorm.IsGmailDomain(idpUser.Email) {
+		if err := qtx.LockCanonicalGmailEmail(ctx, canonicalEmail); err != nil {
+			return UpsertUserResult{}, fmt.Errorf("lock canonical email: %w", err)
+		}
+	}
+
+	blockedEmail, err := qtx.IsEmailBlacklisted(ctx, canonicalEmail)
 	if err != nil {
 		return UpsertUserResult{}, fmt.Errorf("check user email block: %w", err)
 	}
@@ -332,11 +346,11 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		return UpsertUserResult{}, ErrUserBlocked
 	}
 
-	resolved, err := r.resolveUser(ctx, idpUser)
+	resolved, err := r.resolveUser(ctx, qtx, idpUser)
 	if err != nil {
 		return UpsertUserResult{}, err
 	}
-	if err := r.rejectCollidingGmailAlias(ctx, idpUser, resolved); err != nil {
+	if err := r.rejectCollidingGmailAlias(ctx, qtx, idpUser, resolved); err != nil {
 		return UpsertUserResult{}, err
 	}
 
@@ -349,7 +363,7 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		attr.ExternalUserID(idpUser.ExternalID),
 	)
 
-	user, err := r.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
+	user, err := qtx.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          gramUserID,
 		Email:       idpUser.Email,
 		DisplayName: idpUser.Name,
@@ -360,11 +374,15 @@ func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, 
 		return UpsertUserResult{}, fmt.Errorf("upsert user: %w", err)
 	}
 
-	if err := r.userRepo.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
+	if err := qtx.OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
 		ID:       gramUserID,
 		WorkosID: pgtype.Text{String: idpUser.Sub, Valid: true},
 	}); err != nil {
 		return UpsertUserResult{}, fmt.Errorf("set workos_id on user: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return UpsertUserResult{}, fmt.Errorf("commit user upsert transaction: %w", err)
 	}
 	if err := r.reassignWorkOSIdentity(ctx, gramUserID, idpUser.Sub); err != nil {
 		return UpsertUserResult{}, err
@@ -442,8 +460,8 @@ type resolvedUser struct {
 	prevEmail   string
 }
 
-func (r *Resolver) resolveUser(ctx context.Context, idpUser *IDPUserInfo) (resolvedUser, error) {
-	existing, err := r.userRepo.GetUserByEmail(ctx, idpUser.Email)
+func (r *Resolver) resolveUser(ctx context.Context, userQueries *userRepo.Queries, idpUser *IDPUserInfo) (resolvedUser, error) {
+	existing, err := userQueries.GetUserByEmail(ctx, idpUser.Email)
 	switch {
 	case err == nil:
 		return resolvedUser{
@@ -462,7 +480,7 @@ func (r *Resolver) resolveUser(ctx context.Context, idpUser *IDPUserInfo) (resol
 		candidateID = idpUser.ExternalID
 	}
 
-	existingByID, err := r.userRepo.GetUser(ctx, candidateID)
+	existingByID, err := userQueries.GetUser(ctx, candidateID)
 	switch {
 	case err == nil:
 		return resolvedUser{
@@ -485,7 +503,7 @@ func (r *Resolver) resolveUser(ctx context.Context, idpUser *IDPUserInfo) (resol
 	}, nil
 }
 
-func (r *Resolver) rejectCollidingGmailAlias(ctx context.Context, idpUser *IDPUserInfo, resolved resolvedUser) error {
+func (r *Resolver) rejectCollidingGmailAlias(ctx context.Context, userQueries *userRepo.Queries, idpUser *IDPUserInfo, resolved resolvedUser) error {
 	if !emailnorm.IsGmailDomain(idpUser.Email) {
 		return nil
 	}
@@ -495,7 +513,7 @@ func (r *Resolver) rejectCollidingGmailAlias(ctx context.Context, idpUser *IDPUs
 		return nil
 	}
 
-	other, err := r.userRepo.GetOtherUserByCanonicalGmailEmail(ctx, userRepo.GetOtherUserByCanonicalGmailEmailParams{
+	other, err := userQueries.GetOtherUserByCanonicalGmailEmail(ctx, userRepo.GetOtherUserByCanonicalGmailEmailParams{
 		ExcludeUserID:  resolved.userID,
 		CanonicalEmail: canonicalEmail,
 	})

@@ -320,19 +320,19 @@ SELECT id, email, blacklisted_at
 FROM users
 WHERE id <> $1::text
   AND (
-    lower(btrim(email, E' \t\n\r\f\v')) LIKE '%@gmail.com'
-    OR lower(btrim(email, E' \t\n\r\f\v')) LIKE '%@googlemail.com'
+    lower(btrim(email, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+    OR lower(btrim(email, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
   )
-  AND strpos(lower(btrim(email, E' \t\n\r\f\v')), '@') > 1
+  AND strpos(lower(btrim(email, E' \t\n\r\f\013')), '@') > 1
   AND strpos(
     substr(
-      lower(btrim(email, E' \t\n\r\f\v')),
-      strpos(lower(btrim(email, E' \t\n\r\f\v')), '@') + 1
+      lower(btrim(email, E' \t\n\r\f\013')),
+      strpos(lower(btrim(email, E' \t\n\r\f\013')), '@') + 1
     ),
     '@'
   ) = 0
-  AND replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') <> ''
-  AND (replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') || '@gmail.com') = $2::text
+  AND replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+  AND (replace(split_part(split_part(lower(btrim(email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com') = $2::text
 ORDER BY (blacklisted_at IS NOT NULL) DESC, created_at ASC, id ASC
 LIMIT 1
 `
@@ -508,22 +508,22 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 const isEmailBlacklisted = `-- name: IsEmailBlacklisted :one
 WITH target AS (
   SELECT CASE
-    WHEN lower(btrim($1::text, E' \t\n\r\f\v')) LIKE '%@gmail.com'
-      OR lower(btrim($1::text, E' \t\n\r\f\v')) LIKE '%@googlemail.com'
+    WHEN lower(btrim($1::text, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+      OR lower(btrim($1::text, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
     THEN CASE
-      WHEN strpos(lower(btrim($1::text, E' \t\n\r\f\v')), '@') > 1
+      WHEN strpos(lower(btrim($1::text, E' \t\n\r\f\013')), '@') > 1
        AND strpos(
          substr(
-           lower(btrim($1::text, E' \t\n\r\f\v')),
-           strpos(lower(btrim($1::text, E' \t\n\r\f\v')), '@') + 1
+           lower(btrim($1::text, E' \t\n\r\f\013')),
+           strpos(lower(btrim($1::text, E' \t\n\r\f\013')), '@') + 1
          ),
          '@'
        ) = 0
-       AND replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') <> ''
-      THEN replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') || '@gmail.com'
-      ELSE lower(btrim($1::text, E' \t\n\r\f\v'))
+       AND replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+      THEN replace(split_part(split_part(lower(btrim($1::text, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com'
+      ELSE lower(btrim($1::text, E' \t\n\r\f\013'))
     END
-    ELSE lower(btrim($1::text, E' \t\n\r\f\v'))
+    ELSE lower(btrim($1::text, E' \t\n\r\f\013'))
   END AS canonical_email
 )
 SELECT EXISTS (
@@ -532,22 +532,22 @@ SELECT EXISTS (
   WHERE blacklisted_at IS NOT NULL
     AND (
       CASE
-        WHEN lower(btrim(users.email, E' \t\n\r\f\v')) LIKE '%@gmail.com'
-          OR lower(btrim(users.email, E' \t\n\r\f\v')) LIKE '%@googlemail.com'
+        WHEN lower(btrim(users.email, E' \t\n\r\f\013')) LIKE '%@gmail.com'
+          OR lower(btrim(users.email, E' \t\n\r\f\013')) LIKE '%@googlemail.com'
         THEN CASE
-          WHEN strpos(lower(btrim(users.email, E' \t\n\r\f\v')), '@') > 1
+          WHEN strpos(lower(btrim(users.email, E' \t\n\r\f\013')), '@') > 1
            AND strpos(
              substr(
-               lower(btrim(users.email, E' \t\n\r\f\v')),
-               strpos(lower(btrim(users.email, E' \t\n\r\f\v')), '@') + 1
+               lower(btrim(users.email, E' \t\n\r\f\013')),
+               strpos(lower(btrim(users.email, E' \t\n\r\f\013')), '@') + 1
              ),
              '@'
            ) = 0
-           AND replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') <> ''
-          THEN replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\v')), '@', 1), '+', 1), '.', '') || '@gmail.com'
-          ELSE lower(btrim(users.email, E' \t\n\r\f\v'))
+           AND replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') <> ''
+          THEN replace(split_part(split_part(lower(btrim(users.email, E' \t\n\r\f\013')), '@', 1), '+', 1), '.', '') || '@gmail.com'
+          ELSE lower(btrim(users.email, E' \t\n\r\f\013'))
         END
-        ELSE lower(btrim(users.email, E' \t\n\r\f\v'))
+        ELSE lower(btrim(users.email, E' \t\n\r\f\013'))
       END
     ) = target.canonical_email
 )::boolean AS blacklisted
@@ -636,6 +636,18 @@ func (q *Queries) ListBlacklistedUsers(ctx context.Context) ([]ListBlacklistedUs
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockCanonicalGmailEmail = `-- name: LockCanonicalGmailEmail :exec
+SELECT pg_advisory_xact_lock(hashtextextended('emailnorm:' || $1::text, 0))
+`
+
+// Acquires a transaction-scoped advisory lock for one canonical Gmail mailbox
+// so concurrent sign-ups or WorkOS user-sync events using different aliases of
+// the same mailbox serialize their duplicate check and insert.
+func (q *Queries) LockCanonicalGmailEmail(ctx context.Context, canonicalEmail string) error {
+	_, err := q.db.Exec(ctx, lockCanonicalGmailEmail, canonicalEmail)
+	return err
 }
 
 const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
