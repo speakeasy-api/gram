@@ -52,8 +52,22 @@ func TestBootstrapLaunchesOnce(t *testing.T) {
 		t.Fatal("Kit was not launched after bootstrap")
 	}
 
-	// Write-once: subsequent bootstrap attempts are rejected.
-	require.Equal(t, http.StatusConflict, post("/bootstrap", archive))
+	// Identical re-POST is idempotent (204); a different body is rejected (409).
+	require.Equal(t, http.StatusNoContent, post("/bootstrap", archive))
+
+	var diffBuf bytes.Buffer
+	tw := tar.NewWriter(&diffBuf)
+	for _, name := range bootstrapFiles {
+		data := []byte("different-fixture")
+		if name == ".kit/credentials/gateway-token" {
+			data = []byte(strings.Repeat("y", 43))
+		}
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(data)), Typeflag: tar.TypeReg}))
+		_, err := tw.Write(data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.Equal(t, http.StatusConflict, post("/bootstrap", diffBuf.Bytes()))
 
 	_, err = os.Stat(filepath.Join(homeDir, ".kit/ate-initialized"))
 	require.NoError(t, err)
