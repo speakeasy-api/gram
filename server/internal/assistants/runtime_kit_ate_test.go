@@ -200,7 +200,11 @@ func (f *fakeATECluster) SuspendActor(_ context.Context, req *ateapiv1.SuspendAc
 		}},
 	}
 	// Simulate ATE v1.0.1 router returning retryable 503s while the resumed actor registers on its new worker.
+	// SNAPSHOT_FIDELITY_ROOTFS preserves rootfs files but restarts kit-ate-init fresh on resume.
 	entry.resume503Left = 2
+	entry.bootstrapped = false
+	entry.hasBootstrapHash = false
+	entry.bootstrapHash = [32]byte{}
 	entry.kitReady = false
 	entry.draining = false
 	return &ateapiv1.SuspendActorResponse{Actor: entry.actor}, nil
@@ -228,9 +232,6 @@ func (f *fakeATECluster) ResumeActor(_ context.Context, req *ateapiv1.ResumeActo
 	entry.actor.Status.AssignedNode = workerNode
 	entry.actor.Status.WorkerAssignment = &ateapiv1.WorkerAssignment{Worker: &ateapiv1.ObjectRef{Name: workerNode}}
 	entry.draining = false
-	if entry.bootstrapped {
-		entry.kitReady = true
-	}
 	return &ateapiv1.ResumeActorResponse{Actor: entry.actor, Resumed: true}, nil
 }
 
@@ -254,6 +255,9 @@ func (f *fakeATECluster) RevertActor(_ context.Context, req *ateapiv1.RevertActo
 	entry.actor.Status.AssignedNode = ""
 	entry.actor.Status.WorkerAssignment = nil
 	entry.actor.Status.Crash = nil
+	entry.bootstrapped = false
+	entry.hasBootstrapHash = false
+	entry.bootstrapHash = [32]byte{}
 	entry.draining = false
 	entry.kitReady = false
 	return &ateapiv1.RevertActorResponse{Actor: entry.actor}, nil
@@ -332,9 +336,6 @@ func (f *fakeATECluster) handleRouterConnect(t *testing.T, w http.ResponseWriter
 	}
 	if entry.actor.GetStatus().GetState() == ateapiv1.ActorState_ACTOR_STATE_SUSPENDED {
 		entry.actor.Status.State = ateapiv1.ActorState_ACTOR_STATE_RUNNING
-		if entry.bootstrapped {
-			entry.kitReady = true
-		}
 	}
 	f.mu.Unlock()
 
@@ -822,8 +823,8 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 
 	// 5. Resume after suspend: prepare explicitly calls ResumeActor (placing
 	// the actor on a different worker), router returns retryable 503s while the
-	// new worker registers, /bootstrap is skipped (Configured == true), and
-	// second turn runs on the exact same actor UID.
+	// new worker registers, server re-POSTs /bootstrap to rewrite provisioned
+	// files before launching Kit, and the second turn runs on the same actor UID.
 	cluster.mu.Lock()
 	firstWorker := actorEntry.actor.GetStatus().GetAssignedNode()
 	cluster.mu.Unlock()
@@ -832,8 +833,8 @@ func TestKitATEBackendPrepareTurnStopResumeAndReap(t *testing.T) {
 
 	require.Equal(t, int32(1), cluster.resumeCalls.Load(), "suspended actor must be explicitly resumed before dial")
 	require.Equal(t, int32(2), cluster.connect503Count.Load(), "router 503 during resume must be retried")
-	require.Equal(t, 1, bootstrapCount, "resume must not re-run bootstrap")
-	require.Equal(t, int32(1), cluster.bootstrapCalls.Load(), "resume must not re-POST /bootstrap")
+	require.Equal(t, 2, bootstrapCount, "resume must re-run bootstrap to overwrite sandbox-writable files")
+	require.Equal(t, int32(2), cluster.bootstrapCalls.Load(), "resume must re-POST /bootstrap before launching Kit")
 	require.Equal(t, int32(2), cluster.acpRequestCount.Load())
 	require.Len(t, protoDriver.turns, 2)
 
@@ -1113,7 +1114,10 @@ func TestKitATEImageIdentityKeysOnDigestOnly(t *testing.T) {
 	require.Equal(t, int32(1), cluster.createTemplateCalls.Load(), "same digest with new tag must not create a new template")
 
 	require.NoError(t, b2.RunTurn(t.Context(), record, runTurnRequest{ThreadID: thread1, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
-	require.Equal(t, int32(1), cluster.bootstrapCalls.Load(), "existing actor must not be replaced on tag-only release")
+	cluster.mu.Lock()
+	require.Equal(t, uid1, cluster.actors[actor1Key].actor.GetMetadata().GetUid(), "existing actor must not be replaced on tag-only release")
+	cluster.mu.Unlock()
+	require.Equal(t, int32(2), cluster.bootstrapCalls.Load(), "resumed actor must re-bootstrap provisioned files")
 	require.NoError(t, b2.Stop(t.Context(), record))
 
 	// Release 3: DIFFERENT digest B -> creates new template version <template>-<digestB[:12]>;
@@ -1778,10 +1782,10 @@ func TestKitATEEvictionDrainLeadsToDurableSuspendAndResume(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, ateActorStateSuspended, row.State)
 
-		// Next turn explicitly resumes the actor onto a healthy worker.
+		// Next turn explicitly resumes the actor onto a healthy worker and re-bootstraps provisioned files.
 		require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
 		require.Equal(t, int32(1), cluster.resumeCalls.Load())
-		require.Equal(t, int32(1), cluster.bootstrapCalls.Load(), "resumed actor must reuse durable snapshot")
+		require.Equal(t, int32(2), cluster.bootstrapCalls.Load(), "resumed actor must re-POST /bootstrap")
 
 		cluster.mu.Lock()
 		newWorker := cluster.actors[actorKey].actor.GetStatus().GetAssignedNode()
@@ -1853,4 +1857,61 @@ func TestKitATEInitVersionMismatchFailsClearly(t *testing.T) {
 		ReasoningEffort: "medium",
 	})
 	require.ErrorContains(t, err, `ATE init helper version mismatch: got "99", want "1"`)
+}
+
+func TestKitATEResumeAndRevertReBootstrapOverwritingTamperedFiles(t *testing.T) {
+	t.Parallel()
+	cluster, backend, store, record, revoked, _ := newTestKitATEHarness(t, nil)
+	threadID := uuid.New()
+
+	// 1. Initial cold turn populates provisioned files.
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	row, ok, err := store.GetForThread(t.Context(), record, threadID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	actorKey := "prod-assistants/" + row.ActorName
+
+	provisionedPaths := []string{
+		".kit/AGENTS.md",
+		".kit/config.toml",
+		".kit/credentials/mcp.json",
+		".kit/credentials/gateway-token",
+	}
+	tamperFiles := func() {
+		cluster.mu.Lock()
+		defer cluster.mu.Unlock()
+		for _, p := range provisionedPaths {
+			cluster.actors[actorKey].bootstrapFiles[p] = []byte("tampered-by-kit")
+		}
+	}
+	assertRestored := func() {
+		cluster.mu.Lock()
+		defer cluster.mu.Unlock()
+		for _, p := range provisionedPaths {
+			require.NotEqual(t, "tampered-by-kit", string(cluster.actors[actorKey].bootstrapFiles[p]), p)
+			require.NotEmpty(t, cluster.actors[actorKey].bootstrapFiles[p], p)
+		}
+	}
+
+	// 2. Suspend after tampering, then resume -> server must re-POST /bootstrap and overwrite all provisioned files.
+	tamperFiles()
+	require.NoError(t, backend.Stop(t.Context(), record))
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.Equal(t, int32(1), cluster.resumeCalls.Load())
+	require.Equal(t, int32(2), cluster.bootstrapCalls.Load())
+	assertRestored()
+
+	// 3. Crash after tampering (with a completed durable snapshot) -> revert + resume must also re-POST /bootstrap.
+	tamperFiles()
+	cluster.mu.Lock()
+	cluster.actors[actorKey].actor.Status.State = ateapiv1.ActorState_ACTOR_STATE_CRASHED
+	cluster.actors[actorKey].actor.Status.LastAssignedGeneration++
+	cluster.mu.Unlock()
+
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadID, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	require.Equal(t, int32(1), cluster.revertCalls.Load())
+	require.Equal(t, int32(2), cluster.resumeCalls.Load())
+	require.Equal(t, int32(3), cluster.bootstrapCalls.Load())
+	require.Empty(t, *revoked)
+	assertRestored()
 }
