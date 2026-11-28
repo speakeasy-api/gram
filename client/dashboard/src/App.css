@@ -8,6 +8,31 @@
 @import "./components/ui/styles/base.css";
 @import "./components/ui/styles/utilities.css";
 
+/* Page column widths. List pages use --page-max-width; detail pages and the
+   page header use --detail-max-width, which sits 10px narrower so headers
+   line up with detail content. PageWidthPreview swaps these via
+   data-page-width on <html> so we can compare wider variants. */
+:root {
+  --page-max-width: 80rem;
+  --detail-max-width: 1270px;
+}
+:root[data-page-width="1440"] {
+  --page-max-width: 1440px;
+  --detail-max-width: 1430px;
+}
+:root[data-page-width="1600"] {
+  --page-max-width: 1600px;
+  --detail-max-width: 1590px;
+}
+:root[data-page-width="1920"] {
+  --page-max-width: 1920px;
+  --detail-max-width: 1910px;
+}
+:root[data-page-width="full"] {
+  --page-max-width: 100%;
+  --detail-max-width: 100%;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant short (@media (height <= 900px));
 @custom-variant interact {

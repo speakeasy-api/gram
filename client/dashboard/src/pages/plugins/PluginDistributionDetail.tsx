@@ -34,7 +34,7 @@ export function PluginDistributionDetail(): JSX.Element {
         />
       </Page.Header>
       <Page.Body fullWidth>
-        <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
+        <div className="mx-auto w-full max-w-(--detail-max-width) space-y-6 px-8 py-8">
           {error ? (
             <ErrorAlert error={error} />
           ) : (!requestedSkillId && skills.isPending) ||

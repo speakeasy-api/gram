@@ -42,7 +42,7 @@ import { Fragment, useEffect, useRef } from "react";
 import { Link } from "react-router";
 
 // Matches the page column OrgHome applies to everything below the banner.
-const COLUMN_CLASS = "mx-auto w-full max-w-7xl px-8";
+const COLUMN_CLASS = "mx-auto w-full max-w-(--page-max-width) px-8";
 
 const CARD_SHELL_CLASS =
   "group bg-card border-border hover:border-foreground relative flex min-h-[250px] flex-col gap-3 overflow-hidden border px-6.5 pt-7.5 pb-6.5 no-underline transition-colors hover:no-underline";

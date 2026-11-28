@@ -84,7 +84,7 @@ function PageBody({
           // rather than as margin.
           noPadding ? "p-0" : "px-8 pt-5",
           !noPadding && "pb-24",
-          !fullWidth && "mx-auto max-w-7xl",
+          !fullWidth && "mx-auto max-w-(--page-max-width)",
           fullHeight && "h-full",
           overflowHidden && "min-h-0 flex-1",
           className,

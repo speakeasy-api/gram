@@ -44,7 +44,7 @@ export function FullBleedBanner({
     >
       <div
         className={cn(
-          "mx-auto flex max-w-7xl items-center gap-4 px-8 py-5",
+          "mx-auto flex max-w-(--page-max-width) items-center gap-4 px-8 py-5",
           contentClassName,
         )}
       >

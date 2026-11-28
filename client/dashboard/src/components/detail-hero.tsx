@@ -26,12 +26,12 @@ export function DetailHero({
         className,
       )}
     >
-      <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-6">
+      <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-(--detail-max-width) px-8 py-6">
         {children}
       </div>
 
       {actions && (
-        <div className="absolute top-6 right-0 left-0 mx-auto w-full max-w-[1270px] px-8">
+        <div className="absolute top-6 right-0 left-0 mx-auto w-full max-w-(--detail-max-width) px-8">
           <div className="flex justify-end gap-2">{actions}</div>
         </div>
       )}

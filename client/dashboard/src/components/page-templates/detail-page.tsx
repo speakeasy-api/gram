@@ -163,7 +163,7 @@ export function DetailPage({
     >
       {hero ??
         (title != null && (
-          <div className="mx-auto w-full max-w-[1270px] px-8">
+          <div className="mx-auto w-full max-w-(--detail-max-width) px-8">
             <TemplateHeader
               title={title}
               description={description}

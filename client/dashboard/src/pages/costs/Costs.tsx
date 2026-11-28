@@ -77,7 +77,7 @@ function TabbedCostsPage(): JSX.Element {
         {/* Full-bleed border so the hairline matches the full-width
             explorer header below; tabs stay aligned to the content column. */}
         <div className="border-border w-full border-b pt-6">
-          <div className="mx-auto w-full max-w-7xl px-8">
+          <div className="mx-auto w-full max-w-(--page-max-width) px-8">
             <PageTabsList>
               <PageTabsTrigger value="costs">Costs</PageTabsTrigger>
               <PageTabsTrigger
@@ -96,7 +96,7 @@ function TabbedCostsPage(): JSX.Element {
           </RequireScope>
         </TabsContent>
         <TabsContent value="budgets" className="min-h-0 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 p-8 pt-6 pb-24">
+          <div className="mx-auto flex w-full max-w-(--page-max-width) flex-col gap-4 p-8 pt-6 pb-24">
             <RequireScope scope="org:admin" level="page">
               <BudgetsContent />
             </RequireScope>

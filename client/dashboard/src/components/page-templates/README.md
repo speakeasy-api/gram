@@ -151,7 +151,7 @@ hand-rolling:
 - `StatRow` (`@/components/stat-row`) — a `MetricCard` row with a loading swap.
 - `ChartCard` (`@/components/chart/ChartCard`) — titled panel with loading/error,
   the shared card for overview/dashboard bodies.
-- `DetailBody` (`@/components/detail-body`) — the `max-w-[1270px]` detail width.
+- `DetailBody` (`@/components/detail-body`) — the `max-w-(--detail-max-width)` detail width.
 
 ## Rules
 

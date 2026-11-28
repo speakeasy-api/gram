@@ -102,18 +102,18 @@ export function DetailFrame({
       )}
     >
       {strip !== undefined ? (
-        <div className="mx-auto flex h-12 w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
+        <div className="mx-auto flex h-12 w-full max-w-[calc(var(--detail-max-width)+4rem)] items-center gap-4 px-4 sm:px-8">
           {strip}
         </div>
       ) : tabsAside != null ? (
-        <div className="mx-auto flex w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
+        <div className="mx-auto flex w-full max-w-[calc(var(--detail-max-width)+4rem)] items-center gap-4 px-4 sm:px-8">
           <div className="flex min-w-0 flex-1 gap-7 overflow-x-auto">
             {tabLinks}
           </div>
           <div className="flex shrink-0 items-center gap-2">{tabsAside}</div>
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
+        <div className="mx-auto flex w-full max-w-[calc(var(--detail-max-width)+4rem)] gap-7 overflow-x-auto px-4 sm:px-8">
           {tabLinks}
         </div>
       )}
@@ -160,7 +160,7 @@ export function DetailFrame({
             <div
               ref={contentRef}
               className={cn(
-                "mx-auto flex w-full max-w-[1270px] flex-col",
+                "mx-auto flex w-full max-w-(--detail-max-width) flex-col",
                 // A filling tab is a workspace: on a short screen it keeps the
                 // margins thin so the space goes to the tab itself.
                 fill ? "short:py-4 h-full pt-8 pb-12" : "pt-8 pb-32",
@@ -212,7 +212,7 @@ function DetailHeaderBand({
       />
       <div
         className={cn(
-          "mx-auto w-full max-w-[1334px] px-4 sm:px-8",
+          "mx-auto w-full max-w-[calc(var(--detail-max-width)+4rem)] px-4 sm:px-8",
           "py-6",
           compact && "short:py-4",
         )}

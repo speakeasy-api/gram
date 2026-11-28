@@ -84,7 +84,7 @@ export function TabbedPage({
     >
       {hero ??
         (title != null && (
-          <div className="mx-auto w-full max-w-[1270px] px-8">
+          <div className="mx-auto w-full max-w-(--detail-max-width) px-8">
             <TemplateHeader
               title={title}
               description={description}
@@ -99,7 +99,7 @@ export function TabbedPage({
         <div className="shrink-0 border-b">
           <div
             ref={tabStrip}
-            className="mx-auto max-w-[1270px] overflow-x-auto px-8"
+            className="mx-auto max-w-(--detail-max-width) overflow-x-auto px-8"
           >
             <PageTabsList className="h-auto w-max gap-6 bg-transparent p-0">
               {tabs.map((tab) => (

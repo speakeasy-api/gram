@@ -131,7 +131,7 @@ function PageHeaderTitle({
     // 1270 carefully chosen to make the header line up with the max width of the page content
     <Heading
       variant="h4"
-      className={cn("ml-1 w-full max-w-[1270px]", className)}
+      className={cn("ml-1 w-full max-w-(--detail-max-width)", className)}
     >
       {children}
     </Heading>
