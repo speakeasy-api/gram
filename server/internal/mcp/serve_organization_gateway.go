@@ -1,8 +1,8 @@
 // The organization gateway MCP surface: one URL per organization, signed in
 // to through the organization's own user session issuer, whose members are
-// every server in the organization the signed-in user can reach. Like the
-// agent gateway it has no stored row and reuses the meta-server runtime
-// wholesale; what is particular to it is how the organization and its issuer
+// every server in the organization the signed-in user can reach. It has no
+// stored row and reuses the meta-server runtime wholesale; what is particular
+// to it is how the organization and its issuer
 // are found and that upstream credentials resolve per member project.
 
 package mcp
@@ -95,7 +95,7 @@ func (s *Service) ServeOrganizationGateway(w http.ResponseWriter, r *http.Reques
 		attr.SlogMetaMcpServerID(gateway.metaServer.ID.String()),
 	)
 
-	membership := metaMembership{agentID: uuid.Nil, organization: true}
+	membership := metaMembership{organization: true}
 	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, gateway.endpoint, gateway.metaServer, membership, gateway.resolved); err != nil {
 		return fmt.Errorf("serve organization gateway: %w", err)
 	}

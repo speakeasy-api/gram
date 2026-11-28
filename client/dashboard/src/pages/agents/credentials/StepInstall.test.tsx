@@ -4,7 +4,7 @@ import { StepInstall } from "./StepInstall";
 
 afterEach(cleanup);
 
-const gatewayURL = "https://app.example.test/agent-mcp/agent_1";
+const gatewayURL = "https://api.example.test/mcp/gateway/example/projects/main";
 
 it("adds the gateway to OpenClaw by hand with the key from the environment", () => {
   const writeText = vi.fn<(text: string) => Promise<void>>(() =>
@@ -16,10 +16,6 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   });
   render(
     <StepInstall
-      command={null}
-      commandError={null}
-      minting={false}
-      onRegenerate={vi.fn<() => void>()}
       onIssue={vi.fn<() => void>()}
       issuing={false}
       secret="gram_secret"
@@ -34,7 +30,7 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   );
 
   const copied = writeText.mock.calls[0]?.[0] ?? "";
-  // One plain command, named like the one-line setup's entry. The header is
+  // One plain command. The header is
   // single-quoted, so the shell never expands the key into argv: OpenClaw
   // saves the ${VAR} reference and resolves it from its environment.
   expect(copied).toContain(`openclaw mcp add speakeasy --url ${gatewayURL}`);
@@ -49,10 +45,6 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
 function covered(existingKey: { lastUsedAt?: Date } | null | undefined) {
   render(
     <StepInstall
-      command={null}
-      commandError={null}
-      minting={false}
-      onRegenerate={vi.fn<() => void>()}
       onIssue={vi.fn<() => void>()}
       issuing={false}
       secret={null}
@@ -110,58 +102,40 @@ it("says an agent already has a key that nothing has used yet", () => {
   ).toBeTruthy();
 });
 
-it("tells an OpenClaw user how to update, reinstall or uninstall", () => {
-  const writeText = vi.fn<(text: string) => Promise<void>>(() =>
-    Promise.resolve(),
-  );
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { writeText },
-  });
-  render(
-    <StepInstall
-      command="curl -fsSL https://app.example.test/install/code | sh"
-      commandError={null}
-      minting={false}
-      onRegenerate={vi.fn<() => void>()}
-      onIssue={vi.fn<() => void>()}
-      issuing={false}
-      secret="gram_secret"
-      existingKey={null}
-      gatewayURL={gatewayURL}
-      serverCount={1}
-    />,
-  );
+it.each([
+  [
+    "project_assignment_required" as const,
+    "This agent is not assigned to a project.",
+    "Assign the agent to a project before setting up its runtime.",
+  ],
+  [
+    "machine_access_disabled" as const,
+    "Machine access to this project gateway is disabled.",
+    "Ask an administrator to enable project gateway machine access, then reload this page.",
+  ],
+  [
+    "turned_off" as const,
+    "The project gateway is turned off.",
+    "Turn on the project gateway, then reload this page.",
+  ],
+])(
+  "withholds setup with an actionable %s state",
+  (reason, description, action) => {
+    render(
+      <StepInstall
+        onIssue={vi.fn<() => void>()}
+        issuing={false}
+        secret="gram_secret"
+        existingKey={null}
+        gatewayURL=""
+        gatewayUnavailableReason={reason}
+        serverCount={1}
+      />,
+    );
 
-  // Folded away on the one-line tab, where the setup command is.
-  const summary = screen.getByText(
-    "Need to update, reinstall or uninstall on OpenClaw?",
-  );
-  const disclosure = summary.closest("details");
-  expect(disclosure?.open).toBe(false);
-  fireEvent.click(summary);
-  expect(disclosure?.open).toBe(true);
-  const guidance = disclosure?.textContent ?? "";
-  // Updating is running a new setup command, which needs a release that can
-  // replace the gateway entry.
-  expect(guidance).toContain(
-    "does not update the Speakeasy hooks plugin on its own",
-  );
-  expect(guidance).toContain("update OpenClaw first");
-  // The uninstall runs in a terminal; a container is restarted instead.
-  expect(guidance).toContain("in a terminal where OpenClaw runs");
-  expect(guidance).toContain("restart the");
-  expect(guidance).toContain("container instead of running");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Copy Uninstall from OpenClaw" }),
-  );
-
-  // The plugin id and the gateway entry name the one-line setup uses.
-  expect(writeText.mock.calls[0]?.[0]).toBe(
-    [
-      "openclaw plugins uninstall speakeasy-observability --force",
-      "openclaw config unset mcp.servers.speakeasy",
-      "openclaw gateway restart",
-    ].join("\n"),
-  );
-});
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(action);
+    expect(screen.queryByRole("tab", { name: "One-line setup" })).toBeNull();
+    expect(screen.queryByLabelText("Claude Code")).toBeNull();
+  },
+);

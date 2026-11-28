@@ -21,9 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -229,42 +227,4 @@ func TestServePublic_MetaEndpoint_ExecuteTool_SavedKeyRefusedAsksAnAdmin(t *test
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
-}
-
-// An agent refused on its member's configured key is told it cannot change it.
-func TestAgentGateway_SavedKeyRefusedAsksAnAdmin(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	ti.service.manual = true
-	fx := seedAgentGateway(t, ctx, ti)
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	projectID := *ac.ProjectID
-
-	upstream := newKeyRefusingUpstream(t, http.StatusUnauthorized, "", refuseAll)
-	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.URL})
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
-	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
-	require.NoError(t, err)
-	saveServerKey(t, ti, projectID, remote.ID, "saved-key")
-	tx := testenv.BeginTx(t, ctx, ti.conn)
-	require.NoError(t, authclientbackfill.SyncRemoteSource(ctx, tx, ac.ActiveOrganizationID, remote.ID))
-	require.NoError(t, tx.Commit(ctx))
-	fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
-	rec := mcpconnectionattemptstest.New(t)
-	ti.service.SetConnectionRecorder(rec.Recorder)
-
-	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
-	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
-	require.NoError(t, err)
-	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
-	require.True(t, isError)
-	message, _, _ := strings.Cut(text, "\nReference: ")
-	require.Equal(t, `server "`+fx.granted+`" couldn't sign in: the service rejected the sign-in details saved for this server. This agent can't fix this. Ask your administrator to update the sign-in details saved for server "`+fx.granted+`".`, message)
-	upstream.requireRefused(t, "saved-key")
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
-	require.Equal(t, serverID.String(), row.MemberID)
-	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 }

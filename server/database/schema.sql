@@ -12100,9 +12100,9 @@ COMMENT ON COLUMN hooks_rollout_pins.updated_at IS '@access: confidential';
 -- organizations that follow the default pin for a newer hooks generator
 -- version before the default pin itself moves to it. The share is picked by a
 -- stable hash of the organization id, so an organization stays cleared as the
--- share grows. A scheduled workflow advances the share after each soak period
--- and pauses the rollout when hook health degrades; staff can pause, resume or
--- cancel it from the admin dashboard.
+-- share grows. A scheduled workflow advances the share after each soak period.
+-- It does not watch hook health: staff pause, resume or cancel the rollout from
+-- the admin dashboard.
 --
 -- The table is append-only like hooks_rollout_pins: the row with the highest
 -- seq is the current state and older rows are its history.
@@ -16991,6 +16991,24 @@ COMMENT ON COLUMN signup_offers.enabled IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS signup_offers_stripe_promotion_code_id_uidx
   ON signup_offers (stripe_promotion_code_id);
+
+-- Staff-controlled platform-wide switches, one row per key. A missing row
+-- means the switch is off.
+CREATE TABLE IF NOT EXISTS platform_switches (
+  key TEXT PRIMARY KEY,
+  engaged BOOLEAN NOT NULL DEFAULT false,
+  updated_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT platform_switches_key_check CHECK (key <> '')
+);
+
+COMMENT ON COLUMN platform_switches.key IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.engaged IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_by IS 'Email of the staff member who last changed the switch.
+@access: confidential-pii';
+COMMENT ON COLUMN platform_switches.created_at IS '@access: confidential';
+COMMENT ON COLUMN platform_switches.updated_at IS '@access: confidential';
 
 -- The top-level steps of a playbook in walking order. Cards under a group
 -- come with the group and are never listed on their own.

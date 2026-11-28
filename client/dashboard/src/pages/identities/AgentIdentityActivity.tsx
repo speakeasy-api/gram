@@ -405,10 +405,6 @@ export function AgentIdentityChallenges({
         outcome="deny"
         emptyText="No failed checks for this agent in this period."
         failedText="Failed checks could not be loaded."
-        note={
-          failed.groups.some((group) => group.scope === MCP_CONNECT) &&
-          "The agent gateway checks every server in the organization on each request and records a denial for each one outside this agent's grants, so a server here may be one the agent never asked for."
-        }
         maps={maps}
       />
       <ChecksHeading>MCP servers</ChecksHeading>

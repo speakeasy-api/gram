@@ -2,9 +2,12 @@ package auth_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
@@ -75,6 +80,108 @@ func TestService_Register(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, org.CreationSource.Valid)
 		require.Equal(t, orgprovision.SourceSignup, org.CreationSource.String)
+	})
+
+	t.Run("second organization-less session cannot register another organization", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		registerWithFreshSession := func(sessionID string) error {
+			session := sessions.Session{
+				SessionID:            sessionID,
+				UserID:               userInfo.UserID,
+				ActiveOrganizationID: "",
+				WorkOSSessionID:      "",
+				ImpersonatorEmail:    "",
+			}
+			require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+			sessionCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+				SessionID:            &session.SessionID,
+				UserID:               session.UserID,
+				ActiveOrganizationID: "",
+				ProjectID:            nil,
+				OrganizationSlug:     "",
+				Email:                &userInfo.Email,
+				AccountType:          "test",
+				ProjectSlug:          nil,
+				APIKeyScopes:         nil,
+			})
+			return instance.service.Register(sessionCtx, &gen.RegisterPayload{OrgName: "Test Organization", SessionToken: nil})
+		}
+
+		require.NoError(t, registerWithFreshSession(t.Name()+"-first"))
+
+		err := registerWithFreshSession(t.Name() + "-second")
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeConflict, oopsErr.Code)
+		require.ErrorIs(t, err, orgcap.ErrUserHasOrganization)
+
+		organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+		require.NoError(t, err)
+		require.Len(t, organizations, 1)
+
+		refused, err := instance.sessionManager.GetSession(ctx, t.Name()+"-second")
+		require.NoError(t, err)
+		require.Empty(t, refused.ActiveOrganizationID)
+	})
+
+	t.Run("concurrent registrations create one organization", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = []MockOrganizationEntry{}
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		const attempts = 5
+		sessionContexts := make([]context.Context, attempts)
+		for i := range attempts {
+			session := sessions.Session{
+				SessionID:            fmt.Sprintf("%s-%d", t.Name(), i),
+				UserID:               userInfo.UserID,
+				ActiveOrganizationID: "",
+				WorkOSSessionID:      "",
+				ImpersonatorEmail:    "",
+			}
+			require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+			sessionContexts[i] = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+				SessionID:            &session.SessionID,
+				UserID:               session.UserID,
+				ActiveOrganizationID: "",
+				ProjectID:            nil,
+				OrganizationSlug:     "",
+				Email:                &userInfo.Email,
+				AccountType:          "test",
+				ProjectSlug:          nil,
+				APIKeyScopes:         nil,
+			})
+		}
+
+		results := make([]error, attempts)
+		var wg sync.WaitGroup
+		for i := range attempts {
+			wg.Go(func() {
+				results[i] = instance.service.Register(sessionContexts[i], &gen.RegisterPayload{OrgName: fmt.Sprintf("Concurrent %d", i), SessionToken: nil})
+			})
+		}
+		wg.Wait()
+
+		succeeded := 0
+		for _, err := range results {
+			if err == nil {
+				succeeded++
+				continue
+			}
+			require.ErrorIs(t, err, orgcap.ErrUserHasOrganization)
+		}
+		require.Equal(t, 1, succeeded)
+
+		organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+		require.NoError(t, err)
+		require.Len(t, organizations, 1)
 	})
 
 	t.Run("register fails when user already has active organization", func(t *testing.T) {

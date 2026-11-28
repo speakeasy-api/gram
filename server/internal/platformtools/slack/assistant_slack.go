@@ -173,6 +173,7 @@ func (t *assistantSlackTool) Call(ctx context.Context, env toolconfig.ToolCallEn
 		systemEnv.Set(pair.key, pair.val)
 	}
 	env.SystemEnv = systemEnv
+	env.SavedConfig = toolconfig.NewCaseInsensitiveEnv()
 	env.UserConfig = toolconfig.NewCaseInsensitiveEnv()
 	// call, not Call: environment-based setup advice does not apply to a
 	// typed slack_app auth client.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +50,9 @@ import (
 // --- mock WorkOS membership fetcher ---
 
 type mockWorkOSFetcher struct {
+	// mu guards the recorded creates, which concurrent provisioning appends to.
+	mu sync.Mutex
+
 	members map[string][]workos.Member      // keyed by WorkOS user ID
 	orgs    map[string]*workos.Organization // keyed by WorkOS org ID
 
@@ -109,11 +113,15 @@ func (m *mockWorkOSFetcher) UpdateOrganizationExternalID(_ context.Context, _, _
 }
 
 func (m *mockWorkOSFetcher) CreateOrganization(_ context.Context, name, gramOrgID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.createdOrgs = append(m.createdOrgs, createdOrgRecord{Name: name, ExternalID: gramOrgID})
 	return "workos_org_" + name, nil
 }
 
 func (m *mockWorkOSFetcher) CreateOrganizationMembership(_ context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.createdMemberships = append(m.createdMemberships, createdMembershipRecord{WorkOSUserID: workosUserID, WorkOSOrgID: workosOrgID})
 	return &workos.Member{ID: "om_mock_" + workosUserID, RoleSlugs: []string{roleSlug}}, nil
 }

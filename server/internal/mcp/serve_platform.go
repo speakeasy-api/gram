@@ -471,10 +471,11 @@ func (s *Service) callPlatformToolsetTool(
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")
 	toolCallEnv := toolconfig.ToolCallEnv{
-		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		GramEmail:  gramEmail,
-		GramChatID: chatIDHeader,
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+		GramEmail:   gramEmail,
+		GramChatID:  chatIDHeader,
 		// Platform toolsets serve Speakeasy's own tools, never customer functions.
 		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		Credentials: nil,
