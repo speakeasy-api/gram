@@ -95,8 +95,19 @@ func TestBootstrapGenericPayloadWriteOnceAndResume(t *testing.T) {
 		t.Fatal("workload was not launched after bootstrap")
 	}
 
-	// Write-once: subsequent bootstrap attempts are rejected.
-	require.Equal(t, http.StatusConflict, post("/bootstrap", payload).Code)
+	// Identical re-POST is idempotent (204); a different body is rejected (409).
+	require.Equal(t, http.StatusNoContent, post("/bootstrap", payload).Code)
+
+	diffPayload := testPayloadJSON(t, bootstrapPayload{
+		Version: wireVersion,
+		Dirs: []bootstrapDir{
+			{Path: "conf", Mode: 0o700},
+		},
+		Files: []bootstrapFile{
+			{Path: "conf/app.toml", Mode: 0o600, Content: []byte("model = 'other'\n")},
+		},
+	})
+	require.Equal(t, http.StatusConflict, post("/bootstrap", diffPayload).Code)
 
 	// Files and generic marker exist on disk with exact content and permissions.
 	data, err := os.ReadFile(filepath.Join(rootDir, "conf/app.toml"))

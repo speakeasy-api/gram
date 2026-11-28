@@ -256,6 +256,31 @@ func (k *KitATERuntimeBackend) validateActorRow(r assistantRuntimeRecord, actor 
 	return nil
 }
 
+// metadataForReap verifies only runtime ownership (runtime, assistant, project
+// IDs) so Reap can still revoke workload bindings and delete recorded ATE
+// actors after configuration drift (changed egress hosts, template, or atespace).
+func (k *KitATERuntimeBackend) metadataForReap(r assistantRuntimeRecord) (kitATEMetadata, error) {
+	var m kitATEMetadata
+	if r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || r.ID == uuid.Nil || r.AssistantID == uuid.Nil || r.ProjectID == uuid.Nil {
+		return m, ErrKitRuntimeBinding
+	}
+	if kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+		return kitATEMetadata{
+			RuntimeID:   r.ID,
+			AssistantID: r.AssistantID,
+			ProjectID:   r.ProjectID,
+			ImageDigest: "",
+			Atespace:    k.config.Atespace,
+			Template:    "",
+			EgressHosts: nil,
+		}, nil
+	}
+	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID {
+		return m, ErrKitRuntimeBinding
+	}
+	return m, nil
+}
+
 func (k *KitATERuntimeBackend) actorRef(name string) *ateapiv1.ObjectRef {
 	return &ateapiv1.ObjectRef{Atespace: k.config.Atespace, Name: name}
 }
@@ -348,7 +373,7 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		if err != nil {
 			return fmt.Errorf("create ATE bootstrap transport: %w", err)
 		}
-		defer helper.CloseIdleConnections()
+		defer func() { helper.CloseIdleConnections() }()
 
 		base, err := ateclient.ActorEndpoint(entry.ActorName, ateInitPort)
 		if err != nil {
@@ -361,37 +386,66 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		}
 
 		if !entry.Configured {
-			bootstrap, err := k.config.Bootstrap(ctx, locked, thread, entry.ActorName, entry.Workload)
-			if err != nil {
-				return err
-			}
-			entry.Workload = bootstrap.Workload
-			entry.State = ateActorStateRunning
-			entry.WarmUntil = &warmUntil
-			entry, err = k.config.Store.UpdateBootstrap(ctx, locked, entry)
-			if err != nil {
-				return fmt.Errorf("save ATE actor workload binding: %w", err)
-			}
-			if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
-				return err
-			}
-			payload, err := kitATEBootstrapPayload(bootstrap)
-			if err != nil {
-				return err
-			}
-			code, err := kitATEPost(ctx, helper, base+"/bootstrap", payload)
-			if err != nil {
-				return fmt.Errorf("ATE Kit bootstrap failed: %w", err)
-			}
-			if code != http.StatusNoContent && code != http.StatusConflict {
+			for attempt := range 2 {
+				bootstrap, err := k.config.Bootstrap(ctx, locked, thread, entry.ActorName, entry.Workload)
+				if err != nil {
+					return err
+				}
+				entry.Workload = bootstrap.Workload
+				entry.State = ateActorStateRunning
+				entry.WarmUntil = &warmUntil
+				entry, err = k.config.Store.UpdateBootstrap(ctx, locked, entry)
+				if err != nil {
+					return fmt.Errorf("save ATE actor workload binding: %w", err)
+				}
+				if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
+					return err
+				}
+				payload, err := kitATEBootstrapPayload(bootstrap)
+				if err != nil {
+					return err
+				}
+				code, err := kitATEPost(ctx, helper, base+"/bootstrap", payload)
+				if err != nil {
+					return fmt.Errorf("ATE Kit bootstrap failed: %w", err)
+				}
+				if code == http.StatusNoContent {
+					entry.Configured = true
+					entry.State = ateActorStateRunning
+					entry.WarmUntil = &warmUntil
+					entry, err = k.config.Store.UpdateBootstrap(ctx, locked, entry)
+					if err != nil {
+						return fmt.Errorf("mark ATE actor configured: %w", err)
+					}
+					break
+				}
+				if code == http.StatusConflict {
+					if attempt == 1 {
+						if retireErr := k.retireActor(ctx, locked, thread, entry); retireErr != nil {
+							return retireErr
+						}
+						return errors.New("ATE Kit bootstrap conflicted after actor recreation")
+					}
+					entry, err = k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
+					if err != nil {
+						return err
+					}
+					helper.CloseIdleConnections()
+					helper, err = k.config.Client.ActorHTTPClient(entry.ActorName, ateInitPort)
+					if err != nil {
+						return fmt.Errorf("create ATE bootstrap transport: %w", err)
+					}
+					base, err = ateclient.ActorEndpoint(entry.ActorName, ateInitPort)
+					if err != nil {
+						return fmt.Errorf("build ATE init endpoint: %w", err)
+					}
+					base = strings.TrimSuffix(base, "/acp")
+					if err := waitKitATEHelper(ctx, helper, base+"/readyz", k.config.HelperPollInterval); err != nil {
+						return err
+					}
+					continue
+				}
 				return errors.New("ATE Kit bootstrap failed")
-			}
-			entry.Configured = true
-			entry.State = ateActorStateRunning
-			entry.WarmUntil = &warmUntil
-			entry, err = k.config.Store.UpdateBootstrap(ctx, locked, entry)
-			if err != nil {
-				return fmt.Errorf("mark ATE actor configured: %w", err)
 			}
 		} else {
 			entry, err = k.config.Store.UpdateState(ctx, locked, entry.ID, ateActorStateRunning, &warmUntil)
@@ -571,26 +625,32 @@ func (k *KitATERuntimeBackend) recoverCrashedActor(ctx context.Context, locked a
 	return k.retireAndRecreateActor(ctx, locked, thread, entry, warmUntil)
 }
 
-func (k *KitATERuntimeBackend) retireAndRecreateActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
-	var zero kitATEThreadActor
+func (k *KitATERuntimeBackend) retireActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor) error {
 	if entry.Workload != nil {
 		if err := k.config.Revoke(ctx, locked, entry.Workload); err != nil {
-			return zero, fmt.Errorf("revoke crashed ATE actor workload: %w", err)
+			return fmt.Errorf("revoke ATE actor workload: %w", err)
 		}
 	}
 	if _, err := k.config.Client.DeleteActor(ctx, &ateapiv1.DeleteActorRequest{
 		Actor:   k.actorRef(entry.ActorName),
 		Options: &ateapiv1.DeleteOptions{Version: 0, Uid: entry.ActorUID},
 	}); err != nil && status.Code(err) != codes.NotFound {
-		return zero, fmt.Errorf("delete crashed ATE actor: %w", err)
+		return fmt.Errorf("delete ATE actor: %w", err)
 	}
 	if err := k.config.Store.SoftDelete(ctx, locked, entry.ID); err != nil {
-		return zero, fmt.Errorf("soft-delete crashed ATE actor row: %w", err)
+		return fmt.Errorf("soft-delete ATE actor row: %w", err)
 	}
 	if k.config.ClearThreadSession != nil {
 		if err := k.config.ClearThreadSession(ctx, locked, thread); err != nil {
-			return zero, fmt.Errorf("clear replaced ATE thread session: %w", err)
+			return fmt.Errorf("clear replaced ATE thread session: %w", err)
 		}
+	}
+	return nil
+}
+
+func (k *KitATERuntimeBackend) retireAndRecreateActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThreadActor, warmUntil time.Time) (kitATEThreadActor, error) {
+	if err := k.retireActor(ctx, locked, thread, entry); err != nil {
+		return kitATEThreadActor{}, err
 	}
 	replacementName := kitATEActorReplacementName(locked, thread, uuid.New())
 	return k.createThreadActor(ctx, locked, thread, replacementName, warmUntil)
@@ -1047,40 +1107,54 @@ func hasCompletedDurableRootfsSnapshot(actor *ateapiv1.Actor, expectedUID string
 
 func (k *KitATERuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
 	return k.config.Lifecycle(ctx, r, func(ctx context.Context, locked assistantRuntimeRecord) error {
-		if _, err := k.metadata(locked); err != nil {
+		m, err := k.metadataForReap(locked)
+		if err != nil {
 			return err
+		}
+		atespace := m.Atespace
+		if atespace == "" {
+			atespace = k.config.Atespace
 		}
 		actors, err := k.config.Store.ListForRuntime(ctx, locked)
 		if err != nil {
 			return fmt.Errorf("list ATE actors for reap: %w", err)
 		}
+		var reapErrs []error
 		for _, t := range actors {
-			if err := k.validateActorRow(locked, t); err != nil {
-				return err
-			}
 			if t.Workload != nil {
 				if err := k.config.Revoke(ctx, locked, t.Workload); err != nil {
-					return err
+					reapErrs = append(reapErrs, err)
+					continue
 				}
 			}
-			_, err := k.getActor(ctx, t)
+			if err := k.validateActorRow(locked, t); err != nil || atespace == "" {
+				continue
+			}
+			ref := &ateapiv1.ObjectRef{Atespace: atespace, Name: t.ActorName}
+			actor, err := k.config.Client.GetActor(ctx, &ateapiv1.GetActorRequest{Actor: ref})
 			if status.Code(err) != codes.NotFound {
 				if err != nil {
-					return err
+					reapErrs = append(reapErrs, fmt.Errorf("ATE GetActor: %w", err))
+					continue
+				}
+				meta := actor.GetMetadata()
+				if meta.GetAtespace() != atespace || meta.GetName() != t.ActorName || meta.GetUid() != t.ActorUID {
+					continue
 				}
 				_, err = k.config.Client.DeleteActor(ctx, &ateapiv1.DeleteActorRequest{
-					Actor:   k.actorRef(t.ActorName),
+					Actor:   ref,
 					Options: &ateapiv1.DeleteOptions{Version: 0, Uid: t.ActorUID},
 				})
 				if err != nil && status.Code(err) != codes.NotFound {
-					return fmt.Errorf("ATE DeleteActor: %w", err)
+					reapErrs = append(reapErrs, fmt.Errorf("ATE DeleteActor: %w", err))
+					continue
 				}
 			}
 			if err := k.config.Store.SoftDelete(ctx, locked, t.ID); err != nil {
-				return fmt.Errorf("retire ATE thread actor: %w", err)
+				reapErrs = append(reapErrs, fmt.Errorf("retire ATE thread actor: %w", err))
 			}
 		}
-		return nil
+		return errors.Join(reapErrs...)
 	})
 }
 

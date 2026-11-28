@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -34,6 +35,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants/ateclient"
@@ -52,6 +54,8 @@ type fakeATEActor struct {
 	actor               *ateapiv1.Actor
 	egressPolicy        *ateapiv1.EgressPolicy
 	bootstrapped        bool
+	hasBootstrapHash    bool
+	bootstrapHash       [32]byte
 	bootstrapFiles      map[string][]byte
 	resume503Left       int
 	kitReady            bool
@@ -399,7 +403,13 @@ func (f *fakeATECluster) serveInit(entry *fakeATEActor, rw *bufio.ReadWriter, re
 		}
 	case req.Method == http.MethodPost && req.URL.Path == "/bootstrap":
 		f.bootstrapCalls.Add(1)
+		sum := sha256.Sum256(body)
 		if entry.bootstrapped {
+			if entry.hasBootstrapHash && sum == entry.bootstrapHash {
+				_, _ = fmt.Fprintf(rw, "HTTP/1.1 204 No Content\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
+				_ = rw.Flush()
+				return
+			}
 			_, _ = fmt.Fprintf(rw, "HTTP/1.1 409 Conflict\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
 			_ = rw.Flush()
 			return
@@ -416,6 +426,8 @@ func (f *fakeATECluster) serveInit(entry *fakeATEActor, rw *bufio.ReadWriter, re
 		}
 		entry.bootstrapFiles = files
 		entry.bootstrapped = true
+		entry.hasBootstrapHash = true
+		entry.bootstrapHash = sum
 		entry.kitReady = true
 		_, _ = fmt.Fprintf(rw, "HTTP/1.1 204 No Content\r\n%sContent-Length: 0\r\n\r\n", versionHdr)
 	default:
@@ -1153,6 +1165,357 @@ func TestKitATEStoppedTTLRetainsReusableActor(t *testing.T) {
 	err := k.ReapStoppedMachine(t.Context(), assistantRuntimeRecord{Backend: runtimeBackendATE, RuntimeVersion: 3})
 	require.ErrorContains(t, err, "must not be reaped by TTL")
 	require.Equal(t, 1, calls)
+}
+
+func TestKitATETemplateMatchRejectsSecurityRelevantDrift(t *testing.T) {
+	t.Parallel()
+	k := &KitATERuntimeBackend{
+		config: KitATERuntimeConfig{
+			Image:          testKitATEImage,
+			Atespace:       "prod-assistants",
+			Template:       "kit-v1",
+			WorkerSelector: testKitATEWorkerSelector,
+		},
+		imageDigest: testKitATEImageDigestA,
+	}
+	desired := k.desiredTemplate(k.templateVersionName())
+
+	// Identical spec with different mutable tag (same digest) and server-populated metadata/status matches.
+	sameDigest, ok := proto.Clone(desired).(*ateapiv1.ActorTemplate)
+	require.True(t, ok)
+	sameDigest.Metadata.Uid = "server-uid"
+	sameDigest.Metadata.Version = 3
+	sameDigest.Status = &ateapiv1.ActorTemplateStatus{}
+	sameDigest.Containers[0].Image = "gcr.io/example/gram-ate-runtime:sha-other@" + testKitATEImageDigestA
+	require.True(t, matchesKitATETemplate(sameDigest, desired, testKitATEImageDigestA))
+
+	mutations := []struct {
+		name   string
+		mutate func(*ateapiv1.ActorTemplate)
+	}{
+		{"container env", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Env = []*ateapiv1.EnvVar{{Name: "LD_PRELOAD", Value: "/tmp/evil.so"}}
+		}},
+		{"container security context", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].SecurityContext = &ateapiv1.SecurityContext{
+				Capabilities: &ateapiv1.Capabilities{Add: []string{"SYS_ADMIN"}},
+			}
+		}},
+		{"container resources", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Resources = &ateapiv1.ResourceRequirements{
+				Limits: &ateapiv1.Resources{CpuMillicores: 2000, MemoryBytes: 1 << 30},
+			}
+		}},
+		{"container args", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].Args = []string{"--extra"}
+		}},
+		{"container volume mounts", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Containers[0].VolumeMounts = []*ateapiv1.VolumeMount{{Name: "extra", MountPath: "/extra"}}
+		}},
+		{"template volumes", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Volumes = []*ateapiv1.Volume{{Name: "extra"}}
+		}},
+		{"snapshot storage location", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.SnapshotConfig.StorageLocation = "gs://attacker-bucket/snaps"
+		}},
+		{"golden egress policy", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.GoldenEgressPolicy = &ateapiv1.EgressPolicyTemplate{}
+		}},
+		{"extra template resource limits", func(tmpl *ateapiv1.ActorTemplate) {
+			tmpl.Resources.Limits.CpuMillicores = ateKitCPUMillicores + 500
+		}},
+	}
+
+	for _, tc := range mutations {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			candidate, ok := proto.Clone(desired).(*ateapiv1.ActorTemplate)
+			require.True(t, ok)
+			tc.mutate(candidate)
+			require.False(t, matchesKitATETemplate(candidate, desired, testKitATEImageDigestA), tc.name)
+		})
+	}
+}
+
+func TestKitATEReapCleansUpAcrossConfigDriftAndBadRow(t *testing.T) {
+	t.Parallel()
+	const (
+		recordedAtespace = "old-assistants"
+		liveAtespace     = "new-assistants"
+		recordedTemplate = "kit-v1"
+		liveTemplate     = "kit-v2"
+	)
+	cluster, client := startFakeATEStack(t, recordedAtespace)
+	cluster.mu.Lock()
+	cluster.atespaces[liveAtespace] = &ateapiv1.Atespace{Metadata: &ateapiv1.ResourceMetadata{Name: liveAtespace}}
+	cluster.mu.Unlock()
+
+	runtimeID := uuid.New()
+	assistantID := uuid.New()
+	projectID := uuid.New()
+	validThread := uuid.New()
+	validActorName := kitATEActorName(assistantRuntimeRecord{ID: runtimeID}, validThread)
+
+	// Seed a real actor in the RECORDED atespace with the RECORDED template.
+	created, err := client.CreateActor(t.Context(), &ateapiv1.CreateActorRequest{
+		Actor: &ateapiv1.Actor{
+			Metadata:      &ateapiv1.ResourceMetadata{Atespace: recordedAtespace, Name: validActorName},
+			ActorTemplate: &ateapiv1.ObjectRef{Atespace: recordedAtespace, Name: kitATETemplateVersionName(recordedTemplate, testKitATEImageDigestA)},
+		},
+	})
+	require.NoError(t, err)
+	validUID := created.GetMetadata().GetUid()
+	require.NotEmpty(t, validUID)
+
+	validBinding := &KitWorkloadBinding{
+		MCPProjectGateway: true,
+		IssuerID:          uuid.New(),
+		Subject:           "actor/" + recordedAtespace + "/" + validActorName,
+		Audience:          "https://api.speakeasy.test/oauth/usi/test",
+	}
+	meta := kitATEMetadata{
+		RuntimeID:   runtimeID,
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+		ImageDigest: testKitATEImageDigestA,
+		Atespace:    recordedAtespace,
+		Template:    recordedTemplate,
+		EgressHosts: []string{"legacy.speakeasy.test"},
+	}
+	rawMeta, err := json.Marshal(meta)
+	require.NoError(t, err)
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		Retired:             true,
+		BackendMetadataJSON: rawMeta,
+	}
+
+	store := newFakeKitATEActorStore()
+	_, err = store.Insert(t.Context(), record, kitATEThreadActor{
+		RuntimeID: runtimeID,
+		ThreadID:  uuid.Nil,
+		ActorName: "corrupted-actor-name",
+		ActorUID:  "",
+		State:     ateActorStateRunning,
+	})
+	require.NoError(t, err)
+	_, err = store.Insert(t.Context(), record, kitATEThreadActor{
+		RuntimeID:  runtimeID,
+		ThreadID:   validThread,
+		ActorName:  validActorName,
+		ActorUID:   validUID,
+		State:      ateActorStateRunning,
+		Configured: true,
+		Workload:   validBinding,
+	})
+	require.NoError(t, err)
+
+	serverURL, err := url.Parse("https://api.speakeasy.test")
+	require.NoError(t, err)
+	var revoked []*KitWorkloadBinding
+	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+		Image:          testKitATEImage,
+		Atespace:       liveAtespace,
+		Template:       liveTemplate,
+		WorkerSelector: testKitATEWorkerSelector,
+		ServerURL:      serverURL,
+		Client:         client,
+		EgressHosts:    []string{"current.speakeasy.test"},
+		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			return op(ctx, r)
+		},
+		Store: store,
+		Token: func(context.Context, assistantRuntimeRecord, uuid.UUID) (string, error) { return "tok", nil },
+		Bootstrap: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *KitWorkloadBinding) (KitLocalBootstrap, error) {
+			return KitLocalBootstrap{}, nil
+		},
+		Protocol: func(context.Context, assistantRuntimeRecord, uuid.UUID, string, *url.URL, *guardian.HTTPClient, string) (runtimeProtocol, error) {
+			return nil, nil
+		},
+		Revoke: func(_ context.Context, _ assistantRuntimeRecord, b *KitWorkloadBinding) error {
+			revoked = append(revoked, b)
+			return nil
+		},
+		CheckSettled: func(context.Context, assistantRuntimeRecord) error { return nil },
+	})
+	require.NoError(t, err)
+
+	// Non-Reap callers (like Status) still enforce strict live config matching.
+	_, err = backend.Status(t.Context(), record)
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
+
+	// Reap must succeed across config drift and bad rows, revoking and deleting the valid actor in the recorded atespace.
+	require.NoError(t, backend.Reap(t.Context(), record))
+	require.Len(t, revoked, 1)
+	require.Equal(t, validBinding.Subject, revoked[0].Subject)
+	cluster.mu.Lock()
+	require.Equal(t, []string{validUID}, cluster.deletedActorUIDs)
+	require.Empty(t, cluster.actors)
+	cluster.mu.Unlock()
+
+	// Ownership mismatch must still be rejected by Reap.
+	foreign := record
+	foreign.ProjectID = uuid.New()
+	require.ErrorIs(t, backend.Reap(t.Context(), foreign), ErrKitRuntimeBinding)
+}
+
+func TestKitATEBootstrapConflictRetiresAndRecreatesWhileIdenticalRetryIsIdempotent(t *testing.T) {
+	t.Parallel()
+	const (
+		atespace = "prod-assistants"
+		template = "kit-v1"
+	)
+	cluster, client := startFakeATEStack(t, atespace)
+	serverURL, err := url.Parse("https://api.speakeasy.test")
+	require.NoError(t, err)
+
+	var (
+		mu             sync.Mutex
+		storedMetadata = []byte("{}")
+		revoked        []*KitWorkloadBinding
+		store          = newFakeKitATEActorStore()
+	)
+	runtimeID := uuid.New()
+	assistantID := uuid.New()
+	projectID := uuid.New()
+	threadRetry := uuid.New()
+	threadConflict := uuid.New()
+
+	makeBootstrap := func(thread uuid.UUID, actorName string) KitLocalBootstrap {
+		return KitLocalBootstrap{
+			Model:              "openai/gpt-4.1-mini",
+			ReasoningEffort:    "medium",
+			EgressInjectedAuth: true,
+			InferenceEndpoint:  "https://ai.speakeasy.com/chat/completions",
+			AgentsMD:           []byte("# Speakeasy assistant\n"),
+			MCPJSON:            []byte(`{"mcpServers":{"project-gateway":{"type":"streamable-http","url":"https://api.speakeasy.test/mcp/gateway/org/projects/proj","headers":{}}}}`),
+			GatewayToken:       []byte(kitATEActorToken("root-secret", thread.String())),
+			Workload: &KitWorkloadBinding{
+				MCPProjectGateway: true,
+				IssuerID:          uuid.New(),
+				Subject:           "actor/" + atespace + "/" + actorName,
+				Audience:          "https://api.speakeasy.test/oauth/usi/test",
+			},
+		}
+	}
+
+	backend, err := NewKitATERuntimeBackend(KitATERuntimeConfig{
+		Image:          testKitATEImage,
+		Atespace:       atespace,
+		Template:       template,
+		WorkerSelector: testKitATEWorkerSelector,
+		ServerURL:      serverURL,
+		Client:         client,
+		EgressHosts:    []string{"ai.speakeasy.com"},
+		Lifecycle: func(ctx context.Context, r assistantRuntimeRecord, op func(context.Context, assistantRuntimeRecord) error) error {
+			mu.Lock()
+			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+			mu.Unlock()
+			return op(ctx, r)
+		},
+		ThreadLifecycle: func(ctx context.Context, r assistantRuntimeRecord, _ uuid.UUID, op func(context.Context, assistantRuntimeRecord) error) error {
+			mu.Lock()
+			r.BackendMetadataJSON = append([]byte(nil), storedMetadata...)
+			mu.Unlock()
+			return op(ctx, r)
+		},
+		Store: store,
+		Token: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID) (string, error) {
+			return kitATEActorToken("root-secret", thread.String()), nil
+		},
+		Bootstrap: func(_ context.Context, _ assistantRuntimeRecord, thread uuid.UUID, actorName string, _ *KitWorkloadBinding) (KitLocalBootstrap, error) {
+			return makeBootstrap(thread, actorName), nil
+		},
+		Protocol: func(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, endpoint *url.URL, hc *guardian.HTTPClient, token string) (runtimeProtocol, error) {
+			return &fakeATEProtocol{client: hc, endpoint: endpoint, token: token}, nil
+		},
+		Revoke: func(_ context.Context, _ assistantRuntimeRecord, b *KitWorkloadBinding) error {
+			revoked = append(revoked, b)
+			return nil
+		},
+		CheckSettled:       func(context.Context, assistantRuntimeRecord) error { return nil },
+		HelperPollInterval: 5 * time.Millisecond,
+	})
+	require.NoError(t, err)
+
+	record := assistantRuntimeRecord{
+		ID:                  runtimeID,
+		AssistantID:         assistantID,
+		ProjectID:           projectID,
+		RuntimeVersion:      3,
+		Backend:             runtimeBackendATE,
+		BackendMetadataJSON: []byte("{}"),
+	}
+	res, err := backend.Ensure(t.Context(), record)
+	require.NoError(t, err)
+	storedMetadata = res.BackendMetadataJSON
+	record.BackendMetadataJSON = res.BackendMetadataJSON
+
+	// 1. Crash-retry idempotency: actor already accepted the IDENTICAL bootstrap body
+	//    before server persisted Configured=true -> re-POST returns 204 and keeps the same UID.
+	retryActorName := kitATEActorName(record, threadRetry)
+	retryCreated, err := client.CreateActor(t.Context(), &ateapiv1.CreateActorRequest{
+		Actor: &ateapiv1.Actor{
+			Metadata:      &ateapiv1.ResourceMetadata{Atespace: atespace, Name: retryActorName},
+			ActorTemplate: &ateapiv1.ObjectRef{Atespace: atespace, Name: kitATETemplateVersionName(template, testKitATEImageDigestA)},
+		},
+	})
+	require.NoError(t, err)
+	retryUID := retryCreated.GetMetadata().GetUid()
+	expectedPayload, err := kitATEBootstrapPayload(makeBootstrap(threadRetry, retryActorName))
+	require.NoError(t, err)
+	cluster.mu.Lock()
+	cluster.actors[atespace+"/"+retryActorName].bootstrapped = true
+	cluster.actors[atespace+"/"+retryActorName].hasBootstrapHash = true
+	cluster.actors[atespace+"/"+retryActorName].bootstrapHash = sha256.Sum256(expectedPayload)
+	cluster.actors[atespace+"/"+retryActorName].kitReady = true
+	cluster.mu.Unlock()
+
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadRetry, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	cluster.mu.Lock()
+	require.Equal(t, retryUID, cluster.actors[atespace+"/"+retryActorName].actor.GetMetadata().GetUid(), "identical crash-retry must keep existing actor UID")
+	require.Empty(t, cluster.deletedActorUIDs)
+	cluster.mu.Unlock()
+	require.Empty(t, revoked)
+
+	// 2. 409 Conflict: actor already accepted a DIFFERENT bootstrap body -> server treats 409
+	//    as failure, revokes & deletes the conflicting actor, recreates a fresh replacement actor, and succeeds.
+	conflictActorName := kitATEActorName(record, threadConflict)
+	conflictCreated, err := client.CreateActor(t.Context(), &ateapiv1.CreateActorRequest{
+		Actor: &ateapiv1.Actor{
+			Metadata:      &ateapiv1.ResourceMetadata{Atespace: atespace, Name: conflictActorName},
+			ActorTemplate: &ateapiv1.ObjectRef{Atespace: atespace, Name: kitATETemplateVersionName(template, testKitATEImageDigestA)},
+		},
+	})
+	require.NoError(t, err)
+	conflictUID := conflictCreated.GetMetadata().GetUid()
+	cluster.mu.Lock()
+	cluster.actors[atespace+"/"+conflictActorName].bootstrapped = true
+	cluster.actors[atespace+"/"+conflictActorName].hasBootstrapHash = true
+	cluster.actors[atespace+"/"+conflictActorName].bootstrapHash = sha256.Sum256([]byte("different-bootstrap-body"))
+	cluster.actors[atespace+"/"+conflictActorName].kitReady = true
+	cluster.mu.Unlock()
+
+	require.NoError(t, backend.RunTurn(t.Context(), record, runTurnRequest{ThreadID: threadConflict, Model: "openai/gpt-4.1-mini", ReasoningEffort: "medium"}))
+	rowAfter, ok, err := store.GetForThread(t.Context(), record, threadConflict)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.True(t, rowAfter.Configured)
+	require.NotEqual(t, conflictUID, rowAfter.ActorUID, "409 conflict must retire and recreate the actor with a new UID")
+	require.NotEqual(t, conflictActorName, rowAfter.ActorName, "409 conflict must recreate with a fresh replacement name")
+	cluster.mu.Lock()
+	require.Equal(t, []string{conflictUID}, cluster.deletedActorUIDs)
+	require.NotNil(t, cluster.actors[atespace+"/"+rowAfter.ActorName])
+	cluster.mu.Unlock()
+	require.Len(t, revoked, 1, "conflicting actor workload must be revoked before recreation")
 }
 
 func newTestKitATEHarness(t *testing.T, onRunTurn func(runTurnRequest)) (*fakeATECluster, *KitATERuntimeBackend, *fakeKitATEActorStore, assistantRuntimeRecord, *[]*KitWorkloadBinding, *[]uuid.UUID) {

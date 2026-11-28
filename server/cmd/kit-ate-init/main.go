@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -78,11 +79,13 @@ type initializer struct {
 	probeAddr string
 	markerRel string
 
-	mu       sync.Mutex
-	started  bool
-	launched bool
-	draining bool
-	launch   chan struct{}
+	mu          sync.Mutex
+	started     bool
+	launched    bool
+	draining    bool
+	hasBodyHash bool
+	bodyHash    [32]byte
+	launch      chan struct{}
 }
 
 func (s *initializer) signalLaunchLocked() {
@@ -124,16 +127,27 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
 		// Initial write-once provisioning is reachable only through the authenticated ATE ingress.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
+		if err != nil {
+			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
+			return
+		}
+		sum := sha256.Sum256(body)
 		if s.started {
+			if s.hasBodyHash && sum == s.bodyHash {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
-		if err != nil || s.install(body) != nil {
+		if s.install(body) != nil {
 			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
 			return
 		}
 		s.started = true
+		s.bodyHash = sum
+		s.hasBodyHash = true
 		s.signalLaunchLocked()
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -359,14 +373,16 @@ func newInitializer(cfg config) (*initializer, error) {
 	}
 
 	state := &initializer{
-		rootDir:   filepath.Clean(cfg.rootDir),
-		probeAddr: cfg.probeAddr,
-		markerRel: markerRel,
-		mu:        sync.Mutex{},
-		started:   false,
-		launched:  false,
-		draining:  false,
-		launch:    make(chan struct{}),
+		rootDir:     filepath.Clean(cfg.rootDir),
+		probeAddr:   cfg.probeAddr,
+		markerRel:   markerRel,
+		mu:          sync.Mutex{},
+		started:     false,
+		launched:    false,
+		draining:    false,
+		hasBodyHash: false,
+		bodyHash:    [32]byte{},
+		launch:      make(chan struct{}),
 	}
 	if _, err := os.Stat(filepath.Join(state.rootDir, state.markerRel)); err == nil {
 		// Resuming from a durable rootfs snapshot: bootstrap files are already on

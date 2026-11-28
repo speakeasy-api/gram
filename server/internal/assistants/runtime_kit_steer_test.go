@@ -18,9 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/assistants/kitacp"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -1114,4 +1116,183 @@ func TestKitSteerSlackThreadPersistsOrderedUserMessagesAndSettlesAll(t *testing.
 	}
 	require.Equal(t, []string{"slack-msg-1", "slack-msg-2"}, userTexts)
 	require.True(t, foundAssistant)
+}
+
+func TestKitSteerRejectsIneligibleSenderOnNonSlackThread(t *testing.T) {
+	t.Parallel()
+	const catalog = `{"configOptions":[{"configId":"model","type":"select","currentValue":"speakeasy:openai/gpt-4o-mini","options":[{"value":"speakeasy:openai/gpt-4o-mini"}]},{"configId":"reasoning_effort","type":"select","currentValue":"medium","options":[{"value":"low"},{"value":"medium"},{"value":"high"}]}]}`
+
+	var mu sync.Mutex
+	streams := map[string]chan string{}
+	settled := false
+	receivedKeys := []string{}
+	receivedPrompts := []string{}
+	firstPromptRunning := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session := r.Header.Get("Acp-Session-Id")
+		switch r.Method {
+		case http.MethodPost:
+			var msg struct {
+				ID     json.RawMessage            `json:"id"`
+				Method string                     `json:"method"`
+				Params map[string]json.RawMessage `json:"params"`
+			}
+			if json.NewDecoder(r.Body).Decode(&msg) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if msg.Method == "initialize" {
+				w.Header().Set("Acp-Connection-Id", "elig-steer-conn")
+				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"_meta":{"kit/session/status":{}},"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}}`, msg.ID)
+				return
+			}
+			mu.Lock()
+			ch := streams[session]
+			mu.Unlock()
+			w.WriteHeader(http.StatusAccepted)
+			switch msg.Method {
+			case "session/new":
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", msg.ID, strings.TrimSuffix(catalog, "}")+`,"sessionId":"elig-steer-session"}`)
+			case "session/prompt":
+				var idempotencyKey string
+				_ = json.Unmarshal(msg.Params["idempotencyKey"], &idempotencyKey)
+				promptJSON := string(msg.Params["prompt"])
+				mu.Lock()
+				receivedKeys = append(receivedKeys, idempotencyKey)
+				receivedPrompts = append(receivedPrompts, promptJSON)
+				n := len(receivedKeys)
+				if n == 2 {
+					settled = true
+				}
+				mu.Unlock()
+				msgID := fmt.Sprintf("elig-u%d", n)
+				ch <- fmt.Sprintf(`data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"elig-steer-session","update":{"sessionUpdate":"user_message","messageId":%q,"content":[{"type":"text","text":"u"}]}}}`+"\n\n", msgID)
+				if n == 1 {
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"elig-steer-session","update":{"sessionUpdate":"state_update","state":"running"}}}` + "\n\n"
+				}
+				ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"messageId\":%q}}\n\n", msg.ID, msgID)
+				if n == 1 {
+					close(firstPromptRunning)
+				}
+				if n == 2 {
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"elig-steer-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"elig-a1","content":{"type":"text","text":"done"}}}}` + "\n\n"
+					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"elig-steer-session","update":{"sessionUpdate":"state_update","state":"idle","stopReason":"end_turn"}}}` + "\n\n"
+				}
+			case "kit/session/status":
+				mu.Lock()
+				done := settled
+				mu.Unlock()
+				ch <- fmt.Sprintf(`data: {"jsonrpc":"2.0","id":%s,"result":{"sessionId":"elig-steer-session","settled":%t,"foregroundActive":%t,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}}`+"\n\n", msg.ID, done, !done)
+			}
+		case http.MethodGet:
+			ch := make(chan string, 32)
+			mu.Lock()
+			streams[session] = ch
+			mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flushKitTestResponse(t, w)
+			for {
+				select {
+				case data := <-ch:
+					_, _ = fmt.Fprint(w, data)
+					flushKitTestResponse(t, w)
+				case <-r.Context().Done():
+					return
+				}
+			}
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+
+	core, db, key, chatID, _ := setupKitSteerOrchestration(t, server.URL)
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	core.assistantTokens = assistanttokens.New("test-jwt-secret", db, core.authz, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+
+	seedIdentityMembers(t, db)
+	seedProjectRead(t, db, "user-1", key.ProjectID)
+	upgraded, err := core.UpgradeAssistantIdentity(ctx, assistantidentity.ProvisionParams{
+		OrganizationID: "org-test", ProjectID: key.ProjectID, AssistantID: key.AssistantID, ActorUserID: "user-1", Staff: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, upgraded.AgentID)
+	_, err = core.resolveDashboardTriggerInstance(ctx, "org-test", key.ProjectID, key.AssistantID, upgraded.Name)
+	require.NoError(t, err)
+
+	insertDashboardAsUser := func(userID, text string) uuid.UUID {
+		msgID, err := testrepo.New(db).InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
+			ProjectID: uuid.NullUUID{UUID: key.ProjectID, Valid: true},
+			ChatID:    chatID,
+			Role:      "user",
+			Content:   text,
+		})
+		require.NoError(t, err)
+		norm, err := json.Marshal(dashboardEventPayload{Text: text, UserID: userID})
+		require.NoError(t, err)
+		source, err := json.Marshal(map[string]string{"idempotency_key": msgID.String()})
+		require.NoError(t, err)
+		eventID, err := assistantrepo.New(db).InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
+			AssistantThreadID:     key.ThreadID,
+			AssistantID:           key.AssistantID,
+			ProjectID:             key.ProjectID,
+			EventID:               uuid.NewString(),
+			CorrelationID:         chatID.String(),
+			Status:                eventStatusPending,
+			NormalizedPayloadJson: norm,
+			SourcePayloadJson:     source,
+		})
+		require.NoError(t, err)
+		return eventID
+	}
+
+	event1 := insertDashboardAsUser("user-1", "eligible initial prompt")
+	done := make(chan error, 1)
+	go func() {
+		_, err := core.ProcessThreadEvents(ctx, key.ProjectID, key.ThreadID)
+		done <- err
+	}()
+
+	select {
+	case <-firstPromptRunning:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for first prompt")
+	}
+
+	// Event 2 arrives from an ineligible user (org member without project:read)
+	// on a non-Slack dashboard thread; it must fail terminally with
+	// ErrTurnIdentity without being forwarded or disrupting the running turn.
+	q := assistantrepo.New(db)
+	event2Ineligible := insertDashboardAsUser("user-2", "unauthorized steer")
+	require.Eventually(t, func() bool {
+		ev, err := q.GetLatestAssistantThreadEventByThreadID(ctx, assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{
+			AssistantThreadID: key.ThreadID, ProjectID: key.ProjectID,
+		})
+		return err == nil && ev.ID == event2Ineligible && ev.Status == eventStatusFailed && strings.Contains(ev.LastError.String, ErrTurnIdentity.Error())
+	}, 5*time.Second, 50*time.Millisecond, "ineligible steered event must fail terminally with ErrTurnIdentity")
+
+	// Event 3 from the eligible user still steers and finishes the running turn.
+	event3Eligible := insertDashboardAsUser("user-1", "authorized follow-up steer")
+
+	require.NoError(t, <-done)
+
+	mu.Lock()
+	require.Equal(t, []string{event1.String(), event3Eligible.String()}, receivedKeys, "ineligible steered event must never reach Kit")
+	require.Len(t, receivedPrompts, 2)
+	for _, p := range receivedPrompts {
+		require.NotContains(t, p, speakeasySenderContextLabel, "non-Slack threads must not render SpeakeasySender context lines")
+	}
+	mu.Unlock()
+
+	ev3Row, err := q.GetLatestAssistantThreadEventByThreadID(ctx, assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{
+		AssistantThreadID: key.ThreadID, ProjectID: key.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, event3Eligible, ev3Row.ID)
+	require.Equal(t, eventStatusCompleted, ev3Row.Status)
 }
