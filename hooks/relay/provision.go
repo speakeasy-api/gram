@@ -46,11 +46,14 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode, copilot, openclaw) or "pi"/"vibe". For claude-code,
-// cursor and copilot, dir is a plugin directory; for codex, which has no plugin
-// layout for hooks, dir is the Codex home the config installs into; for
-// opencode, dir receives an .opencode/plugin shim usable either as a project
-// directory or referenced from an OpenCode config's plugin list; for openclaw,
+// cursor, codex, opencode, copilot-cli, vscode-copilot, openclaw) or
+// "pi"/"vibe". For claude-code, cursor and copilot-cli, dir is a plugin
+// directory; for vscode-copilot, dir is the ~/.copilot home whose
+// hooks/agenthooks-vscode.json VS Code and the Copilot CLI both read; for
+// codex, which has no plugin layout for hooks, dir is the Codex home the config
+// installs into; for opencode, dir receives an .opencode/plugin shim usable
+// either as a project directory or referenced from an OpenCode config's plugin
+// list; for openclaw,
 // dir is a native OpenClaw plugin package installed with `openclaw plugins
 // install <dir>` (plus a Gateway restart, and plugins.entries.<id>.hooks
 // .allowConversationAccess: true for the prompt/stop/llm events); for pi, dir
@@ -85,8 +88,10 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		target = install.Target{Provider: agenthooks.ProviderCodex, Scope: install.ScopeUser, Dir: dir}
 	case "opencode":
 		target = install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: dir}
-	case "copilot":
-		target = install.Target{Provider: agenthooks.ProviderCopilot, Scope: install.ScopePlugin, Dir: dir}
+	case "copilot-cli", "copilot":
+		target = install.Target{Provider: agenthooks.ProviderCopilotCLI, Scope: install.ScopePlugin, Dir: dir}
+	case "vscode-copilot":
+		target = install.Target{Provider: agenthooks.ProviderVSCodeCopilot, Scope: install.ScopeUser, Dir: dir}
 	case "openclaw":
 		target = install.Target{Provider: agenthooks.ProviderOpenClaw, Scope: install.ScopeProject, Dir: dir}
 	default:
@@ -158,7 +163,19 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 		observe(agenthooks.KindNotification),
 		observe(agenthooks.KindModelResponse),
 	}
-	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilot {
+	if provider == agenthooks.ProviderVSCodeCopilot {
+		hooks = []install.HookSpec{
+			gate(agenthooks.KindSessionStart, 330*time.Second),
+			gate(agenthooks.KindPromptSubmitted, 60*time.Second),
+			gate(agenthooks.KindToolPre, 60*time.Second),
+			observe(agenthooks.KindToolPost),
+			gate(agenthooks.KindStop, 60*time.Second),
+			observe(agenthooks.KindSubagentStart),
+			gate(agenthooks.KindSubagentStop, 60*time.Second),
+			observe(agenthooks.KindCompactPre),
+		}
+	}
+	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilotCLI {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
 	// OpenClaw's Codex app-server harness fires llm_input but no

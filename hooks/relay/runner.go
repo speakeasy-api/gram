@@ -97,7 +97,13 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 	runner.OnToolPost(r.onToolPost)
 	runner.OnToolError(r.onToolPost)
 	runner.OnStop(r.onStop)
+	runner.OnSubagentStart(observeOutsideCowork(func(ctx context.Context, e *agenthooks.SubagentStartEvent) error {
+		return r.onObserve(ctx, e)
+	}))
 	runner.OnSubagentStop(r.onStop)
+	runner.OnCompactPre(observeOutsideCowork(func(ctx context.Context, e *agenthooks.CompactEvent) error {
+		return r.onObserve(ctx, e)
+	}))
 	runner.OnSessionStart(outsideCowork(r.onSessionStart, agenthooks.ContinueSession))
 	runner.OnMCPInventory(observeOutsideCowork(r.onMCPInventory))
 	runner.OnSessionEnd(observeOutsideCowork(func(ctx context.Context, e *agenthooks.SessionEndEvent) error {

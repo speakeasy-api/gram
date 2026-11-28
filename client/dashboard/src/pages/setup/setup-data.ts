@@ -497,7 +497,7 @@ const setupAgentPlatforms = (
       {
         title: "Load the plugin in Copilot CLI",
         description:
-          "Extract the ZIP and launch GitHub Copilot CLI with the plugin directory. Hooks run in Copilot CLI only, not the VS Code extension or the Copilot app. After publishing changes, download a fresh ZIP and start a new session.",
+          "Extract the ZIP and launch GitHub Copilot CLI with the plugin directory. For Copilot in VS Code, the Speakeasy Device Agent installs the hook registration instead. After publishing changes, download a fresh ZIP and start a new session.",
         code: "unzip observability-copilot.zip -d speakeasy-hooks && copilot --plugin-dir speakeasy-hooks",
         language: "bash",
       },

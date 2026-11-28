@@ -38,11 +38,13 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   pi: "Pi",
   openclaw: "OpenClaw",
   litellm: "LiteLLM",
-  // Copilot hooks emit CLI sessions; Microsoft Copilot is a separate product.
+  // Copilot hooks emit CLI or VS Code sessions; Microsoft Copilot is a
+  // separate product.
   copilot: "Copilot CLI",
   "github-copilot": "Copilot CLI",
   "copilot-cli": "Copilot CLI",
   "github-copilot-cli": "Copilot CLI",
+  "vscode-copilot": "Copilot in VS Code",
   "microsoft-copilot": "Microsoft Copilot",
   gemini: "Gemini",
   glean: "Glean",

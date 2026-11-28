@@ -34,6 +34,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
@@ -42,6 +43,7 @@ import { usePublishPluginsMutation } from "@gram/client/react-query/publishPlugi
 import { PublishDialog } from "./PublishDialog";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
+import { useOrgRoutes } from "@/routes";
 
 const COWORK_DOCS_URL =
   "https://support.claude.com/en/articles/13837433-manage-claude-cowork-plugins-for-your-organization";
@@ -858,16 +860,39 @@ cp -R speakeasy-marketplace/opencode-plugins/${slug}/. .opencode/`;
 export function CopilotInstallContent(): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("copilot", "observability-copilot.zip");
+  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* ── Quick install ─────────────────────────────────────────────────── */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          GitHub Copilot in VS Code
+        </h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Install the Speakeasy Device Agent to sync your assigned Copilot
+          plugin and create the VS Code hook registration automatically.
+        </p>
+        <Button variant="secondary" size="sm" asChild>
+          <Link to={deviceAgentUrl}>Go to Device Agent setup</Link>
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Launch Copilot once so its configuration directory exists. The agent
+          reconciles within 60 seconds; reload VS Code after{" "}
+          <code className="bg-muted px-1 py-0.5">
+            ~/.copilot/hooks/agenthooks-vscode.json
+          </code>{" "}
+          appears.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Copilot CLI</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download the Speakeasy observability plugin as a ZIP — a
           self-contained Copilot plugin with a hooks-scoped API key already
-          embedded (no CLI, no key to export).
+          embedded — then extract it and load the plugin directory explicitly.
         </p>
         <Button
           variant="secondary"
@@ -890,17 +915,23 @@ export function CopilotInstallContent(): JSX.Element {
 
       <div className="border-t" />
 
-      {/* ── Caveats ───────────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
           Before you install
         </p>
         <p className="text-muted-foreground text-sm">
-          Hooks run in{" "}
-          <span className="text-foreground font-medium">Copilot CLI</span> only.
-          MCP servers and skills from your Speakeasy plugin also load in VS Code
-          and the Copilot app, but those surfaces never fire hooks — so no
-          telemetry, spend gating, or policy enforcement there.
+          VS Code uses the{" "}
+          <span className="text-foreground font-medium">vscode-copilot</span>{" "}
+          codec, while Copilot CLI uses{" "}
+          <span className="text-foreground font-medium">copilot-cli</span>, so
+          each runtime receives the correct wire and response format. Do not add
+          separate, overlapping hook registrations for both runtimes in the same
+          workspace; each event may fire twice.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Local hooks do not cover WSL, Remote SSH, Dev Containers, or
+          Codespaces. Deploy the hook separately inside those remote
+          environments.
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If

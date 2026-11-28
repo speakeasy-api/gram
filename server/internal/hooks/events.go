@@ -12,6 +12,8 @@ const (
 	HookEventUserPromptSubmit   HookEvent = "UserPromptSubmit"
 	HookEventStop               HookEvent = "Stop"
 	HookEventSubagentStop       HookEvent = "SubagentStop"
+	HookEventSubagentStart      HookEvent = "SubagentStart"
+	HookEventPreCompact         HookEvent = "PreCompact"
 	HookEventSessionEnd         HookEvent = "SessionEnd"
 	HookEventNotification       HookEvent = "Notification"
 	HookEventPermissionRequest  HookEvent = "PermissionRequest"
@@ -94,32 +96,33 @@ func parseCursorHookEvent(raw string) (HookEvent, bool) {
 }
 
 // parseCopilotHookEvent maps source.raw_event_name values to canonical
-// HookEvent names. These are Copilot's own camelCase hook event names, which
-// are close to Cursor's but not identical: the prompt event is
-// userPromptSubmitted rather than beforeSubmitPrompt, and stop is split into
-// agentStop/subagentStop. Copilot's preCompact, errorOccurred, subagentStart
-// and userPromptTransformed have no canonical equivalent and are deliberately
-// unmapped — they fall through to the canonical Event.Type instead.
+// HookEvent names. It accepts both Copilot CLI's camelCase names and VS Code's
+// PascalCase names; provider codecs remain separate before this canonical
+// ingest boundary.
 func parseCopilotHookEvent(raw string) (HookEvent, bool) {
 	switch raw {
-	case "sessionStart":
+	case "sessionStart", "SessionStart":
 		return HookEventSessionStart, true
-	case "sessionEnd":
+	case "sessionEnd", "SessionEnd":
 		return HookEventSessionEnd, true
-	case "userPromptSubmitted":
+	case "userPromptSubmitted", "UserPromptSubmit":
 		return HookEventUserPromptSubmit, true
-	case "preToolUse":
+	case "preToolUse", "PreToolUse":
 		return HookEventPreToolUse, true
-	case "postToolUse":
+	case "postToolUse", "PostToolUse":
 		return HookEventPostToolUse, true
-	case "postToolUseFailure":
+	case "postToolUseFailure", "PostToolUseFailure":
 		return HookEventPostToolUseFailure, true
-	case "permissionRequest":
+	case "permissionRequest", "PermissionRequest":
 		return HookEventPermissionRequest, true
-	case "agentStop":
+	case "agentStop", "Stop":
 		return HookEventStop, true
-	case "subagentStop":
+	case "subagentStop", "SubagentStop":
 		return HookEventSubagentStop, true
+	case "subagentStart", "SubagentStart":
+		return HookEventSubagentStart, true
+	case "preCompact", "PreCompact":
+		return HookEventPreCompact, true
 	case "notification":
 		return HookEventNotification, true
 	default:

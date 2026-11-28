@@ -35,6 +35,8 @@ describe("formatPlatform", () => {
     expect(formatPlatform("pi")).toBe("Pi");
     expect(formatPlatform("PI")).toBe("Pi");
     expect(formatPlatform("litellm")).toBe("LiteLLM");
+    expect(formatPlatform("copilot-cli")).toBe("Copilot CLI");
+    expect(formatPlatform("vscode-copilot")).toBe("Copilot in VS Code");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 
