@@ -232,16 +232,17 @@ func (q *Queries) AdminSeedUpsertOrganization(ctx context.Context, arg AdminSeed
 }
 
 const adminSeedUpsertTrial = `-- name: AdminSeedUpsertTrial :exec
-INSERT INTO trials (organization_id,tier,ends_at)
-   VALUES ($1::text,$2::text,$3::timestamptz)
-   ON CONFLICT (organization_id) DO UPDATE SET tier=EXCLUDED.tier,ends_at=EXCLUDED.ends_at,
-   converted_at=NULL,demoted_at=NULL,updated_at= $4::timestamptz
+INSERT INTO trials (organization_id,tier,ends_at,created_at)
+   VALUES ($1::text,$2::text,$3::timestamptz,$4::timestamptz)
+   ON CONFLICT (organization_id) DO UPDATE SET tier=EXCLUDED.tier,ends_at=EXCLUDED.ends_at,created_at=EXCLUDED.created_at,
+   converted_at=NULL,demoted_at=NULL,updated_at= $5::timestamptz
 `
 
 type AdminSeedUpsertTrialParams struct {
 	OrganizationID string
 	Tier           string
 	EndsAt         pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
 
@@ -250,6 +251,7 @@ func (q *Queries) AdminSeedUpsertTrial(ctx context.Context, arg AdminSeedUpsertT
 		arg.OrganizationID,
 		arg.Tier,
 		arg.EndsAt,
+		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
 	return err

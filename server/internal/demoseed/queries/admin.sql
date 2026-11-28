@@ -78,9 +78,9 @@ DELETE FROM trials WHERE organization_id= @organization_id::text;
 DELETE FROM trial_payment_methods WHERE organization_id= @organization_id::text;
 
 -- name: AdminSeedUpsertTrial :exec
-INSERT INTO trials (organization_id,tier,ends_at)
-   VALUES (@organization_id::text,@tier::text,@ends_at::timestamptz)
-   ON CONFLICT (organization_id) DO UPDATE SET tier=EXCLUDED.tier,ends_at=EXCLUDED.ends_at,
+INSERT INTO trials (organization_id,tier,ends_at,created_at)
+   VALUES (@organization_id::text,@tier::text,@ends_at::timestamptz,@created_at::timestamptz)
+   ON CONFLICT (organization_id) DO UPDATE SET tier=EXCLUDED.tier,ends_at=EXCLUDED.ends_at,created_at=EXCLUDED.created_at,
    converted_at=NULL,demoted_at=NULL,updated_at= @updated_at::timestamptz;
 
 -- name: AdminSeedUpsertTrialPaymentMethod :exec

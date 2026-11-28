@@ -390,6 +390,7 @@ func seedAdminTrialFixtures(ctx context.Context, q *repo.Queries, fixtures []adm
 			OrganizationID: fixture.ID,
 			Tier:           string(billing.TierEnterprise),
 			EndsAt:         conv.ToPGTimestamptz(fixture.Card.TrialEndsAt),
+			CreatedAt:      conv.ToPGTimestamptz(fixture.Card.TrialEndsAt.AddDate(0, 0, -14)),
 			UpdatedAt:      updatedAt,
 		}); err != nil {
 			return fmt.Errorf("seed fictional trial: %w", err)
