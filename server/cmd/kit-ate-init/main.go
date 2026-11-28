@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,14 +31,6 @@ const (
 
 	// defaultListenAddr is the helper HTTP control address inside the actor sandbox.
 	defaultListenAddr = ":8082"
-
-	// defaultMarkerRelPath is the relative path inside --root recording completed
-	// write-once bootstrap across rootfs snapshot resumes.
-	defaultMarkerRelPath = ".ate-initialized"
-
-	// defaultEnvRelPath stores persisted bootstrap process environment variables
-	// alongside the initialization marker so resumed actors inherit them.
-	defaultEnvRelPath = ".ate-env.json"
 
 	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
 	maxBootstrapBytes = 2 << 20 // 2 MiB
@@ -77,22 +70,21 @@ type config struct {
 	rootDir   string
 	probeAddr string
 	listen    string
-	marker    string
 	command   []string
 }
 
 type initializer struct {
 	rootDir   string
 	probeAddr string
-	markerRel string
-	envRel    string
 
-	mu       sync.Mutex
-	started  bool
-	launched bool
-	draining bool
-	env      map[string]string
-	launch   chan struct{}
+	mu          sync.Mutex
+	started     bool
+	launched    bool
+	draining    bool
+	hasBodyHash bool
+	bodyHash    [32]byte
+	env         map[string]string
+	launch      chan struct{}
 }
 
 func (s *initializer) childEnv() []string {
@@ -146,17 +138,30 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		w.WriteHeader(http.StatusOK)
 	case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
-		// Initial write-once provisioning is reachable only through the authenticated ATE ingress.
+		// Provisioning is reachable only through the authenticated ATE ingress.
+		// On cold start, resume, or revert, PID 1 starts fresh and waits for
+		// POST /bootstrap to rewrite provisioned files before launching the workload.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
+		if err != nil {
+			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
+			return
+		}
+		sum := sha256.Sum256(body)
 		if s.started {
+			if s.hasBodyHash && sum == s.bodyHash {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
-		if err != nil || s.install(body) != nil {
+		if s.install(body) != nil {
 			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
 			return
 		}
 		s.started = true
+		s.bodyHash = sum
+		s.hasBodyHash = true
 		s.signalLaunchLocked()
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -279,8 +284,16 @@ func atomicWriteUnderRoot(rootDir, rel string, data []byte, mode os.FileMode) er
 	return nil
 }
 
+// allowedBootstrapEnvKeys is the fixed allowlist of workload environment
+// variable names accepted in POST /bootstrap. Process environment is held only
+// in memory and never persisted to or loaded from the sandbox-writable root.
+var allowedBootstrapEnvKeys = map[string]struct{}{
+	"OPENROUTER_BASE_URL": {},
+	"OPENROUTER_API_KEY":  {},
+}
+
 func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
-	if len(env) > maxBootstrapEntries {
+	if len(env) > len(allowedBootstrapEnvKeys) {
 		return nil, errors.New("too many bootstrap environment variables")
 	}
 	if len(env) == 0 {
@@ -288,7 +301,10 @@ func validateBootstrapEnv(env map[string]string) (map[string]string, error) {
 	}
 	clean := make(map[string]string, len(env))
 	for k, v := range env {
-		if k == "" || len(k) > 128 || strings.ContainsAny(k, "=\x00\r\n") || len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
+		if _, allowed := allowedBootstrapEnvKeys[k]; !allowed {
+			return nil, fmt.Errorf("bootstrap environment key %q is not allowlisted", k)
+		}
+		if len(v) > maxEnvValueBytes || strings.ContainsRune(v, 0) {
 			return nil, errors.New("invalid bootstrap environment entry")
 		}
 		clean[k] = v
@@ -331,7 +347,7 @@ func (s *initializer) install(body []byte) error {
 	dirs := make([]cleanDir, 0, len(payload.Dirs))
 	for _, d := range payload.Dirs {
 		rel, err := validateRelativePath(d.Path)
-		if err != nil || rel == s.markerRel || rel == s.envRel {
+		if err != nil {
 			return errors.New("invalid bootstrap directory path")
 		}
 		if _, dup := seenDirs[rel]; dup {
@@ -353,7 +369,7 @@ func (s *initializer) install(body []byte) error {
 	totalBytes := 0
 	for _, f := range payload.Files {
 		rel, err := validateRelativePath(f.Path)
-		if err != nil || rel == s.markerRel || rel == s.envRel {
+		if err != nil {
 			return errors.New("invalid bootstrap file path")
 		}
 		if _, dup := seenFiles[rel]; dup {
@@ -387,17 +403,8 @@ func (s *initializer) install(body []byte) error {
 			return err
 		}
 	}
-	if len(cleanEnv) > 0 {
-		rawEnv, err := json.Marshal(cleanEnv)
-		if err != nil {
-			return fmt.Errorf("encode bootstrap environment: %w", err)
-		}
-		if err := atomicWriteUnderRoot(s.rootDir, s.envRel, rawEnv, 0o600); err != nil {
-			return err
-		}
-		s.env = cleanEnv
-	}
-	return atomicWriteUnderRoot(s.rootDir, s.markerRel, []byte("1"), 0o600)
+	s.env = cleanEnv
+	return nil
 }
 
 func newInitializer(cfg config) (*initializer, error) {
@@ -407,48 +414,19 @@ func newInitializer(cfg config) (*initializer, error) {
 	if _, _, err := net.SplitHostPort(cfg.probeAddr); err != nil {
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
-	markerRel, err := validateRelativePath(cfg.marker)
-	if err != nil {
-		return nil, fmt.Errorf("invalid marker path: %w", err)
-	}
-	if markerRel == defaultEnvRelPath {
-		return nil, fmt.Errorf("marker path must not collide with %s", defaultEnvRelPath)
-	}
 
-	state := &initializer{
-		rootDir:   filepath.Clean(cfg.rootDir),
-		probeAddr: cfg.probeAddr,
-		markerRel: markerRel,
-		envRel:    defaultEnvRelPath,
-		mu:        sync.Mutex{},
-		started:   false,
-		launched:  false,
-		draining:  false,
-		env:       nil,
-		launch:    make(chan struct{}),
-	}
-	if _, err := os.Stat(filepath.Join(state.rootDir, state.markerRel)); err == nil {
-		// Resuming from a durable rootfs snapshot: bootstrap files and any
-		// persisted environment are already on disk, so launch immediately.
-		if rawEnv, envErr := os.ReadFile(filepath.Join(state.rootDir, state.envRel)); envErr == nil {
-			var persisted map[string]string
-			if err := json.Unmarshal(rawEnv, &persisted); err != nil {
-				return nil, fmt.Errorf("decode persisted bootstrap environment: %w", err)
-			}
-			cleanEnv, err := validateBootstrapEnv(persisted)
-			if err != nil {
-				return nil, fmt.Errorf("validate persisted bootstrap environment: %w", err)
-			}
-			state.env = cleanEnv
-		} else if !errors.Is(envErr, os.ErrNotExist) {
-			return nil, fmt.Errorf("read persisted bootstrap environment: %w", envErr)
-		}
-		state.started = true
-		state.signalLaunchLocked()
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("check initialization marker: %w", err)
-	}
-	return state, nil
+	return &initializer{
+		rootDir:     filepath.Clean(cfg.rootDir),
+		probeAddr:   cfg.probeAddr,
+		mu:          sync.Mutex{},
+		started:     false,
+		launched:    false,
+		draining:    false,
+		hasBodyHash: false,
+		bodyHash:    [32]byte{},
+		env:         nil,
+		launch:      make(chan struct{}),
+	}, nil
 }
 
 // run manages bootstrap HTTP handling, worker-drain SIGTERM trapping, and the
@@ -531,7 +509,6 @@ func parseConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.rootDir, "root", "", "Absolute root directory that bootstrap files may be written under")
 	fs.StringVar(&cfg.probeAddr, "probe-addr", "", "TCP host:port probed by GET /app-readyz")
 	fs.StringVar(&cfg.listen, "listen", defaultListenAddr, "HTTP listen address for init endpoints")
-	fs.StringVar(&cfg.marker, "marker", defaultMarkerRelPath, "Relative path under --root marking completed initialization")
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse init flags: %w", err)
 	}
