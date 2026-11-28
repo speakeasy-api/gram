@@ -381,7 +381,7 @@ INSERT INTO organization_metadata (
     TRUE,
     $8::text
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -488,7 +488,7 @@ const createOrganizationMetadataWithRequests = `-- name: CreateOrganizationMetad
 WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES ($1, $2, $3, $4::text)
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, TRUE AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at, TRUE AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -1091,7 +1091,7 @@ func (q *Queries) GetOnboardingUseCaseBySlug(ctx context.Context, slug string) (
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -1118,6 +1118,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1126,7 +1127,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -1153,6 +1154,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1161,7 +1163,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -1188,6 +1190,7 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2597,7 +2600,7 @@ func (q *Queries) LockOnboardingSteps(ctx context.Context) error {
 }
 
 const lockOrganizationForAdminConfiguration = `-- name: LockOrganizationForAdminConfiguration :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR NO KEY UPDATE
@@ -2627,6 +2630,7 @@ func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id 
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2635,7 +2639,7 @@ func (q *Queries) LockOrganizationForAdminConfiguration(ctx context.Context, id 
 }
 
 const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -2663,6 +2667,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -2671,7 +2676,7 @@ func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id st
 }
 
 const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 FOR UPDATE
@@ -2699,6 +2704,7 @@ func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organi
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3103,7 +3109,7 @@ SET gram_account_type = $1,
 WHERE id = $2
   AND gram_account_type = $3
   AND gram_account_type NOT IN ('payg', 'enterprise')
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 `
 
 type SetAccountTypeIfUnchangedParams struct {
@@ -3134,6 +3140,7 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3163,7 +3170,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -3193,6 +3200,7 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3714,7 +3722,7 @@ SET name = $1,
     verified_domains = $5::text[],
     updated_at = clock_timestamp()
 WHERE id = $6
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -3759,6 +3767,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.CreationSource,
 		&i.DefaultHost,
 		&i.AdoptionDashboardUrl,
+		&i.Internal,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -3830,7 +3839,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -3970,7 +3979,7 @@ ON CONFLICT (id) DO UPDATE SET
     -- is created, and a later upsert must not move an existing organization's
     -- URLs to another host.
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, internal, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
