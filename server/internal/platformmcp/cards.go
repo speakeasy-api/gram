@@ -25,6 +25,9 @@ const (
 	cardMIMEType = "text/html;profile=mcp-app"
 	// cardMetaKey is the result _meta key that carries the rendered card.
 	cardMetaKey = "com.speakeasy/card"
+	// cardWidgetDescription tells ChatGPT what the card view shows, for every
+	// tool that renders in it.
+	cardWidgetDescription = "Shows a summary card for the result of a Speakeasy AI Control Plane tool call: the resource it read or changed, a short list of items, or why the request did not complete, with at most one link to the matching page in the Speakeasy dashboard. The card repeats the tool result; it takes no actions of its own."
 )
 
 //go:embed card.html
@@ -185,8 +188,13 @@ func registerCardResource(reg *Registrar) {
 		MIMEType:    cardMIMEType,
 		// No csp: the card loads nothing from the network, so the host's
 		// restrictive default applies.
-		// The card draws its own border and corners.
-		Meta: mcp.Meta{"ui": map[string]any{"prefersBorder": false}},
+		// The card draws its own border and corners. The widget description
+		// is set here because every tool shares this one view; without it
+		// ChatGPT attaches one tool's description to all of them.
+		Meta: mcp.Meta{
+			"ui":                       map[string]any{"prefersBorder": false},
+			"openai/widgetDescription": cardWidgetDescription,
+		},
 	}, ResourceMeta{
 		Authorization: ExternalAuthorizationMember,
 		Audiences:     []Audience{AudienceExternal},

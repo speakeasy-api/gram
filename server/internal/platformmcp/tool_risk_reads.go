@@ -205,7 +205,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 		if handlers.CreateExclusion != nil {
 			createExclusion = handlers.CreateExclusion
-			createExclusionDescription = "Create a non-regex risk exclusion in an explicit project with idempotent replay safety."
+			createExclusionDescription = "Create a risk exclusion in one project: findings that match it are hidden, both those already recorded and new ones, so it weakens detection for everything it matches. Use it for a known false positive, such as a published test key, never to hide a real leak. Before calling, show the user the exact project, match type, match value (masked for an exact value), optional rule, source or policy limit, and enabled state, and call only after the user explicitly asks for that exclusion. Never ask the user to paste a live secret or credential: an exact exclusion is for a value that is already known to be safe. Regex exclusions are made in the dashboard. Repeating the call with the same idempotency_key returns the first result instead of creating a second exclusion."
 		}
 		if handlers.UpdateExclusion != nil {
 			updateExclusion = handlers.UpdateExclusion
