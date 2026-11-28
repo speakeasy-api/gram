@@ -18570,6 +18570,8 @@ CREATE TABLE IF NOT EXISTS assistant_ate_actors (
   configured boolean NOT NULL DEFAULT false,
   workload_binding_json JSONB,
   warm_until timestamptz,
+  initiating_user_id TEXT,
+  initiating_user_resolution TEXT NOT NULL DEFAULT 'not_recorded',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -18618,6 +18620,10 @@ COMMENT ON COLUMN assistant_ate_actors.configured IS 'True once initial bootstra
 COMMENT ON COLUMN assistant_ate_actors.workload_binding_json IS 'Serialized workload admission binding for this thread actor.
 @access: restricted';
 COMMENT ON COLUMN assistant_ate_actors.warm_until IS 'Deadline after which an idle running actor is eligible for synchronous suspend.
+@access: confidential';
+COMMENT ON COLUMN assistant_ate_actors.initiating_user_id IS 'WorkOS user ID of the human who initiated this thread, or NULL for userless or unrecorded actors. Immutable after insert.
+@access: confidential-pii';
+COMMENT ON COLUMN assistant_ate_actors.initiating_user_resolution IS 'How initiating_user_id was resolved at thread actor creation (Go constants are canonical; defaults to not_recorded for pre-existing rows). Immutable after insert.
 @access: confidential';
 COMMENT ON COLUMN assistant_ate_actors.created_at IS '@access: confidential';
 COMMENT ON COLUMN assistant_ate_actors.updated_at IS '@access: confidential';

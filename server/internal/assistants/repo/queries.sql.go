@@ -1365,7 +1365,7 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 }
 
 const getAssistantATEActorByUID = `-- name: GetAssistantATEActorByUID :one
-SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
 WHERE organization_id = $1 AND project_id = $2
   AND actor_uid = $3 AND deleted IS FALSE
 `
@@ -1393,6 +1393,8 @@ func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, arg GetAssistan
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1402,7 +1404,7 @@ func (q *Queries) GetAssistantATEActorByUID(ctx context.Context, arg GetAssistan
 }
 
 const getAssistantATEActorForThread = `-- name: GetAssistantATEActorForThread :one
-SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
 WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
   AND deleted IS FALSE
 `
@@ -1429,6 +1431,8 @@ func (q *Queries) GetAssistantATEActorForThread(ctx context.Context, arg GetAssi
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2437,7 +2441,7 @@ WHERE r.id = $7 AND r.project_id = $8 AND r.assistant_id = $9
   AND t.id = $10
   AND r.runtime_version = 3 AND r.backend = 'ate' AND r.deleted IS FALSE AND r.ended IS FALSE
   AND a.deleted IS FALSE AND t.deleted IS FALSE
-RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertAssistantATEActorParams struct {
@@ -2480,6 +2484,8 @@ func (q *Queries) InsertAssistantATEActor(ctx context.Context, arg InsertAssista
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2717,7 +2723,7 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 }
 
 const listAssistantATEActorsForRuntime = `-- name: ListAssistantATEActorsForRuntime :many
-SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
 WHERE project_id = $1 AND runtime_id = $2 AND deleted IS FALSE
 ORDER BY created_at ASC, id ASC
 `
@@ -2749,6 +2755,8 @@ func (q *Queries) ListAssistantATEActorsForRuntime(ctx context.Context, arg List
 			&i.Configured,
 			&i.WorkloadBindingJson,
 			&i.WarmUntil,
+			&i.InitiatingUserID,
+			&i.InitiatingUserResolution,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -3618,7 +3626,7 @@ func (q *Queries) ListProjectsWithSupersededKitRuntimes(ctx context.Context, arg
 }
 
 const listRunningAssistantATEActorsPage = `-- name: ListRunningAssistantATEActorsPage :many
-SELECT a.id, a.organization_id, a.project_id, a.assistant_id, a.runtime_id, a.assistant_thread_id, a.actor_name, a.actor_uid, a.state, a.configured, a.workload_binding_json, a.warm_until, a.created_at, a.updated_at, a.deleted_at, a.deleted
+SELECT a.id, a.organization_id, a.project_id, a.assistant_id, a.runtime_id, a.assistant_thread_id, a.actor_name, a.actor_uid, a.state, a.configured, a.workload_binding_json, a.warm_until, a.initiating_user_id, a.initiating_user_resolution, a.created_at, a.updated_at, a.deleted_at, a.deleted
 FROM assistant_ate_actors a
 JOIN assistant_runtimes r ON r.id = a.runtime_id AND r.project_id = a.project_id
 JOIN assistants asst ON asst.id = a.assistant_id AND asst.project_id = a.project_id
@@ -3662,6 +3670,8 @@ func (q *Queries) ListRunningAssistantATEActorsPage(ctx context.Context, arg Lis
 			&i.Configured,
 			&i.WorkloadBindingJson,
 			&i.WarmUntil,
+			&i.InitiatingUserID,
+			&i.InitiatingUserResolution,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -4527,7 +4537,7 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 }
 
 const lockAssistantATEActorForThread = `-- name: LockAssistantATEActorForThread :one
-SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
+SELECT id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted FROM assistant_ate_actors
 WHERE project_id = $1 AND runtime_id = $2 AND assistant_thread_id = $3
   AND deleted IS FALSE
 FOR UPDATE
@@ -4555,6 +4565,8 @@ func (q *Queries) LockAssistantATEActorForThread(ctx context.Context, arg LockAs
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -6203,7 +6215,7 @@ SET workload_binding_json = $1,
     warm_until = $4,
     updated_at = clock_timestamp()
 WHERE project_id = $5 AND id = $6 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateAssistantATEActorBootstrapParams struct {
@@ -6238,6 +6250,8 @@ func (q *Queries) UpdateAssistantATEActorBootstrap(ctx context.Context, arg Upda
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -6252,7 +6266,7 @@ SET state = $1,
     warm_until = $2,
     updated_at = clock_timestamp()
 WHERE project_id = $3 AND id = $4 AND deleted IS FALSE
-RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, assistant_id, runtime_id, assistant_thread_id, actor_name, actor_uid, state, configured, workload_binding_json, warm_until, initiating_user_id, initiating_user_resolution, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateAssistantATEActorStateParams struct {
@@ -6283,6 +6297,8 @@ func (q *Queries) UpdateAssistantATEActorState(ctx context.Context, arg UpdateAs
 		&i.Configured,
 		&i.WorkloadBindingJson,
 		&i.WarmUntil,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
