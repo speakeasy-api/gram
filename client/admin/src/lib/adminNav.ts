@@ -23,6 +23,7 @@ import {
   ChartColumnStackedIcon,
   ActivityIcon,
   GlobeIcon,
+  GitForkIcon,
   MessageSquareIcon,
   FlaskConicalIcon,
   RocketIcon,
@@ -147,6 +148,13 @@ export const ADMIN_NAV_GROUPS = [
         keywords:
           "kms organization keys platform key dual write enroll rollback roll back finalize backfill",
         icon: LockKeyholeIcon,
+      },
+      {
+        to: "/plugin-repository-migrations",
+        label: "Plugin repository migrations",
+        keywords:
+          "github legacy plugins backfill immutable repository identity replacement",
+        icon: GitForkIcon,
       },
       {
         to: "/platform-credentials",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -33,7 +34,7 @@ func TestService_UpdateRole_DeliversServerToExistingAudiencePlugin(t *testing.T)
 	ctx, f := newRoleDeliveryFixture(t)
 	repoName := strings.ToLower(f.ac.OrganizationSlug + "-" + *f.ac.ProjectSlug + "-plugins")
 	var files map[string][]byte
-	f.github.On("CreateRepo", mock.Anything, int64(12345), "test-org", repoName, true).Return(nil)
+	f.github.On("CreatePrivateRepository", mock.Anything, int64(12345), "test-org", repoName).Return(nil)
 	f.github.On("PushFiles", mock.Anything, int64(12345), "test-org", repoName, "main", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			pushed, ok := args.Get(6).(map[string][]byte)
@@ -304,8 +305,17 @@ func (f *roleDeliveryFixture) read(t *testing.T, ctx context.Context, count int)
 // roleDeliveryGitHub mocks only the external boundary; artifact generation stays real.
 type roleDeliveryGitHub struct{ mock.Mock }
 
-func (g *roleDeliveryGitHub) CreateRepo(ctx context.Context, installationID int64, owner, repo string, private bool) error {
-	return g.Called(ctx, installationID, owner, repo, private).Error(0)
+var roleDeliveryRepositoryIDs atomic.Int64
+
+func (g *roleDeliveryGitHub) CreatePrivateRepository(ctx context.Context, installationID int64, owner, repo string) (int64, error) {
+	if err := g.Called(ctx, installationID, owner, repo).Error(0); err != nil {
+		return 0, err
+	}
+	return roleDeliveryRepositoryIDs.Add(1), nil
+}
+
+func (g *roleDeliveryGitHub) ForRepository(_ context.Context, _, _ int64, _, _ string) (plugins.GitHubRepository, error) {
+	return g, nil
 }
 func (g *roleDeliveryGitHub) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, message string, files map[string][]byte) (string, error) {
 	args := g.Called(ctx, installationID, owner, repo, branch, message, files)

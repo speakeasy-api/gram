@@ -10,6 +10,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -33,11 +34,34 @@ func (c *ttlRecordingCache) Set(_ context.Context, _ string, _ any, ttl time.Dur
 	return nil
 }
 
+// bindingQuery supplies the verified repository identity required to read the
+// fixture's published files, without turning the cache test into a database test.
+type bindingQuery struct {
+	repo.DBTX
+	projectID uuid.UUID
+}
+
+func (q bindingQuery) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row { return q }
+
+func (q bindingQuery) Scan(dest ...any) error {
+	*dest[0].(*uuid.UUID) = q.projectID
+	*dest[1].(*int64) = 1
+	*dest[2].(*string) = "org"
+	*dest[3].(*string) = "repo"
+	*dest[4].(*int64) = 1
+	return nil
+}
+
 // repoFilesGitHub answers GetRepoFiles with files or err.
 type repoFilesGitHub struct {
 	GitHubPublisher
+	GitHubRepository
 	files map[string][]byte
 	err   error
+}
+
+func (g repoFilesGitHub) ForRepository(_ context.Context, _, _ int64, _, _ string) (GitHubRepository, error) {
+	return g, nil
 }
 
 func (g repoFilesGitHub) GetRepoFiles(_ context.Context, _ int64, _, _, _ string, include func(string) bool) (map[string][]byte, error) {
@@ -92,8 +116,13 @@ func TestHoldPendingPluginEntriesCachesFailedReadsBriefly(t *testing.T) {
 			t.Parallel()
 
 			recording := &ttlRecordingCache{}
-			s := &Service{logger: testenv.NewLogger(t), cache: recording, github: &GitHubConfig{Client: test.github, Org: "org", InstallationID: 1}}
-			plan := s.holdPendingPluginEntries(t.Context(), uuid.New(), repo.PluginGithubConnection{RepoOwner: "org", RepoName: "repo"},
+			projectID := uuid.New()
+			s := &Service{
+				logger: testenv.NewLogger(t), cache: recording,
+				github: &GitHubConfig{Client: test.github, Org: "org", InstallationID: 1},
+				repo:   repo.New(bindingQuery{projectID: projectID}),
+			}
+			plan := s.holdPendingPluginEntries(t.Context(), projectID, repo.PluginGithubConnection{RepoOwner: "org", RepoName: "repo"},
 				[]PluginInfo{info}, map[string]string{slug: "published"}, pausedPluginPlan{}, map[string]PluginInfo{slug: info})
 
 			require.Equal(t, []time.Duration{test.wantTTL}, recording.ttls)

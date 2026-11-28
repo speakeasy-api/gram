@@ -974,6 +974,71 @@ func (q *Queries) GetPluginGatewayNetworkAccessMode(ctx context.Context, arg Get
 	return network_access_mode, err
 }
 
+const getPluginPublishDestination = `-- name: GetPluginPublishDestination :one
+SELECT c.id, c.project_id, c.installation_id, c.repo_owner, c.repo_name, c.marketplace_token, c.organization_id, c.marketplace_token_hash, c.marketplace_token_encrypted, c.marketplace_token_org_encrypted, c.published_fingerprint, c.published_mcp_fingerprints, c.published_hooks_version, c.published_hooks_config, c.created_at, c.updated_at, EXISTS (
+  SELECT 1 FROM plugin_repository_bindings b
+  WHERE b.project_id = c.project_id AND b.installation_id = c.installation_id
+    AND lower(b.repo_owner) = lower(c.repo_owner) AND lower(b.repo_name) = lower(c.repo_name)
+) AS bound
+FROM plugin_github_connections c
+WHERE c.project_id = $1
+`
+
+type GetPluginPublishDestinationRow struct {
+	PluginGithubConnection PluginGithubConnection
+	Bound                  bool
+}
+
+// Read publication state and its write-once binding in one snapshot. Recovery
+// only changes unbound connections, and commits the new location, binding and
+// reset fingerprints together. A publisher sees the whole change or refuses
+// the old connection, without holding a pool connection across GitHub calls.
+func (q *Queries) GetPluginPublishDestination(ctx context.Context, projectID uuid.UUID) (GetPluginPublishDestinationRow, error) {
+	row := q.db.QueryRow(ctx, getPluginPublishDestination, projectID)
+	var i GetPluginPublishDestinationRow
+	err := row.Scan(
+		&i.PluginGithubConnection.ID,
+		&i.PluginGithubConnection.ProjectID,
+		&i.PluginGithubConnection.InstallationID,
+		&i.PluginGithubConnection.RepoOwner,
+		&i.PluginGithubConnection.RepoName,
+		&i.PluginGithubConnection.MarketplaceToken,
+		&i.PluginGithubConnection.OrganizationID,
+		&i.PluginGithubConnection.MarketplaceTokenHash,
+		&i.PluginGithubConnection.MarketplaceTokenEncrypted,
+		&i.PluginGithubConnection.MarketplaceTokenOrgEncrypted,
+		&i.PluginGithubConnection.PublishedFingerprint,
+		&i.PluginGithubConnection.PublishedMcpFingerprints,
+		&i.PluginGithubConnection.PublishedHooksVersion,
+		&i.PluginGithubConnection.PublishedHooksConfig,
+		&i.PluginGithubConnection.CreatedAt,
+		&i.PluginGithubConnection.UpdatedAt,
+		&i.Bound,
+	)
+	return i, err
+}
+
+const getPluginRepositoryBinding = `-- name: GetPluginRepositoryBinding :one
+SELECT project_id, repository_id, repo_owner, repo_name, installation_id, created_at, updated_at
+FROM plugin_repository_bindings
+WHERE project_id = $1
+`
+
+func (q *Queries) GetPluginRepositoryBinding(ctx context.Context, projectID uuid.UUID) (PluginRepositoryBinding, error) {
+	row := q.db.QueryRow(ctx, getPluginRepositoryBinding, projectID)
+	var i PluginRepositoryBinding
+	err := row.Scan(
+		&i.ProjectID,
+		&i.RepositoryID,
+		&i.RepoOwner,
+		&i.RepoName,
+		&i.InstallationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
 SELECT id, plugin_id, project_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = $1
@@ -1320,6 +1385,31 @@ func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeli
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const insertPluginRepositoryBinding = `-- name: InsertPluginRepositoryBinding :exec
+INSERT INTO plugin_repository_bindings (project_id, repository_id, repo_owner, repo_name, installation_id)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertPluginRepositoryBindingParams struct {
+	ProjectID      uuid.UUID
+	RepositoryID   int64
+	RepoOwner      string
+	RepoName       string
+	InstallationID int64
+}
+
+// A binding cannot be replaced by another repository or claimed by another project.
+func (q *Queries) InsertPluginRepositoryBinding(ctx context.Context, arg InsertPluginRepositoryBindingParams) error {
+	_, err := q.db.Exec(ctx, insertPluginRepositoryBinding,
+		arg.ProjectID,
+		arg.RepositoryID,
+		arg.RepoOwner,
+		arg.RepoName,
+		arg.InstallationID,
+	)
+	return err
 }
 
 const isDefaultProject = `-- name: IsDefaultProject :one

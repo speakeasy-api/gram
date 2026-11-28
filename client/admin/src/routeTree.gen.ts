@@ -24,6 +24,7 @@ import { Route as OnboardingStepsRouteImport } from './routes/onboarding-steps'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as PlatformCredentialsRouteImport } from './routes/platform-credentials'
 import { Route as PlatformMcpFeedbackRouteImport } from './routes/platform-mcp-feedback'
+import { Route as PluginRepositoryMigrationsRouteImport } from './routes/plugin-repository-migrations'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
@@ -141,6 +142,12 @@ const PlatformMcpFeedbackRoute = PlatformMcpFeedbackRouteImport.update({
   path: '/platform-mcp-feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PluginRepositoryMigrationsRoute =
+  PluginRepositoryMigrationsRouteImport.update({
+    id: '/plugin-repository-migrations',
+    path: '/plugin-repository-migrations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -386,6 +393,7 @@ export interface FileRoutesByFullPath {
   '/organizations': typeof OrganizationsRouteWithChildren
   '/platform-credentials': typeof PlatformCredentialsRouteWithChildren
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
+  '/plugin-repository-migrations': typeof PluginRepositoryMigrationsRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -442,6 +450,7 @@ export interface FileRoutesByTo {
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
+  '/plugin-repository-migrations': typeof PluginRepositoryMigrationsRoute
   '/secret-backfills': typeof SecretBackfillsRoute
   '/self-serve': typeof SelfServeRoute
   '/signup-offers': typeof SignupOffersRoute
@@ -494,6 +503,7 @@ export interface FileRoutesById {
   '/organizations': typeof OrganizationsRouteWithChildren
   '/platform-credentials': typeof PlatformCredentialsRouteWithChildren
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
+  '/plugin-repository-migrations': typeof PluginRepositoryMigrationsRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -554,6 +564,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/platform-credentials'
     | '/platform-mcp-feedback'
+    | '/plugin-repository-migrations'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -610,6 +621,7 @@ export interface FileRouteTypes {
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/platform-mcp-feedback'
+    | '/plugin-repository-migrations'
     | '/secret-backfills'
     | '/self-serve'
     | '/signup-offers'
@@ -661,6 +673,7 @@ export interface FileRouteTypes {
     | '/organizations'
     | '/platform-credentials'
     | '/platform-mcp-feedback'
+    | '/plugin-repository-migrations'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -720,6 +733,7 @@ export interface RootRouteChildren {
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   PlatformCredentialsRoute: typeof PlatformCredentialsRouteWithChildren
   PlatformMcpFeedbackRoute: typeof PlatformMcpFeedbackRoute
+  PluginRepositoryMigrationsRoute: typeof PluginRepositoryMigrationsRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
@@ -837,6 +851,13 @@ declare module '@tanstack/react-router' {
       path: '/platform-mcp-feedback'
       fullPath: '/platform-mcp-feedback'
       preLoaderRoute: typeof PlatformMcpFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plugin-repository-migrations': {
+      id: '/plugin-repository-migrations'
+      path: '/plugin-repository-migrations'
+      fullPath: '/plugin-repository-migrations'
+      preLoaderRoute: typeof PluginRepositoryMigrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
@@ -1308,6 +1329,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrganizationsRoute: OrganizationsRouteWithChildren,
   PlatformCredentialsRoute: PlatformCredentialsRouteWithChildren,
   PlatformMcpFeedbackRoute: PlatformMcpFeedbackRoute,
+  PluginRepositoryMigrationsRoute: PluginRepositoryMigrationsRoute,
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,

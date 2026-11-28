@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -156,8 +157,14 @@ func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context
 // successfully and leaves behind a real plugin_github_connections row.
 type fakeGitHubPublisher struct{}
 
-func (fakeGitHubPublisher) CreateRepo(ctx context.Context, installationID int64, org, name string, private bool) error {
-	return nil
+var fakeGitHubRepositoryIDs atomic.Int64
+
+func (fakeGitHubPublisher) CreatePrivateRepository(_ context.Context, _ int64, _, _ string) (int64, error) {
+	return fakeGitHubRepositoryIDs.Add(1), nil
+}
+
+func (g fakeGitHubPublisher) ForRepository(_ context.Context, _, _ int64, _, _ string) (plugins.GitHubRepository, error) {
+	return g, nil
 }
 
 func (fakeGitHubPublisher) PushFiles(ctx context.Context, installationID int64, owner, repo, branch, commitMsg string, files map[string][]byte) (string, error) {

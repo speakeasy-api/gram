@@ -1515,6 +1515,7 @@ var _ = Service("admin", func() {
 	mcpConnectBackfillMethods()
 	secretBackfillMethods()
 	projectRedeployMethods()
+	pluginRepositoryMigrationMethods()
 	customDomainMethods()
 	platformExternalCredentialMethods()
 	memoryEvalMethods()

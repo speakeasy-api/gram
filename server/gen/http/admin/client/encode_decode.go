@@ -26829,6 +26829,714 @@ func DecodeRedeployProjectResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListPluginRepositoryMigrationsRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "listPluginRepositoryMigrations" endpoint
+func (c *Client) BuildListPluginRepositoryMigrationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPluginRepositoryMigrationsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listPluginRepositoryMigrations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPluginRepositoryMigrationsRequest returns an encoder for requests
+// sent to the admin listPluginRepositoryMigrations server.
+func EncodeListPluginRepositoryMigrationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListPluginRepositoryMigrationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listPluginRepositoryMigrations", "*admin.ListPluginRepositoryMigrationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.After != nil {
+			values.Add("after", *p.After)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListPluginRepositoryMigrationsResponse returns a decoder for responses
+// returned by the admin listPluginRepositoryMigrations endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListPluginRepositoryMigrationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPluginRepositoryMigrationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPluginRepositoryMigrationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			res := NewListPluginRepositoryMigrationsAdminPluginRepositoryMigrationListOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPluginRepositoryMigrationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPluginRepositoryMigrationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPluginRepositoryMigrationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPluginRepositoryMigrationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPluginRepositoryMigrationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPluginRepositoryMigrationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPluginRepositoryMigrationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPluginRepositoryMigrationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+				}
+				err = ValidateListPluginRepositoryMigrationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+				}
+				return nil, NewListPluginRepositoryMigrationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPluginRepositoryMigrationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+				}
+				err = ValidateListPluginRepositoryMigrationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+				}
+				return nil, NewListPluginRepositoryMigrationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listPluginRepositoryMigrations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPluginRepositoryMigrationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPluginRepositoryMigrations", err)
+			}
+			err = ValidateListPluginRepositoryMigrationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPluginRepositoryMigrations", err)
+			}
+			return nil, NewListPluginRepositoryMigrationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listPluginRepositoryMigrations", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildApplyPluginRepositoryMigrationsRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "applyPluginRepositoryMigrations" endpoint
+func (c *Client) BuildApplyPluginRepositoryMigrationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ApplyPluginRepositoryMigrationsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "applyPluginRepositoryMigrations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeApplyPluginRepositoryMigrationsRequest returns an encoder for requests
+// sent to the admin applyPluginRepositoryMigrations server.
+func EncodeApplyPluginRepositoryMigrationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ApplyPluginRepositoryMigrationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "applyPluginRepositoryMigrations", "*admin.ApplyPluginRepositoryMigrationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewApplyPluginRepositoryMigrationsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "applyPluginRepositoryMigrations", err)
+		}
+		return nil
+	}
+}
+
+// DecodeApplyPluginRepositoryMigrationsResponse returns a decoder for
+// responses returned by the admin applyPluginRepositoryMigrations endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeApplyPluginRepositoryMigrationsResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeApplyPluginRepositoryMigrationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ApplyPluginRepositoryMigrationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			res := NewApplyPluginRepositoryMigrationsAdminPluginRepositoryMigrationApplyResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ApplyPluginRepositoryMigrationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ApplyPluginRepositoryMigrationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ApplyPluginRepositoryMigrationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ApplyPluginRepositoryMigrationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ApplyPluginRepositoryMigrationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ApplyPluginRepositoryMigrationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ApplyPluginRepositoryMigrationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+				}
+				err = ValidateApplyPluginRepositoryMigrationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+				}
+				return nil, NewApplyPluginRepositoryMigrationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ApplyPluginRepositoryMigrationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+				}
+				err = ValidateApplyPluginRepositoryMigrationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+				}
+				return nil, NewApplyPluginRepositoryMigrationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "applyPluginRepositoryMigrations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ApplyPluginRepositoryMigrationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			err = ValidateApplyPluginRepositoryMigrationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "applyPluginRepositoryMigrations", err)
+			}
+			return nil, NewApplyPluginRepositoryMigrationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "applyPluginRepositoryMigrations", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReprovisionPluginRepositoryRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "reprovisionPluginRepository" endpoint
+func (c *Client) BuildReprovisionPluginRepositoryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReprovisionPluginRepositoryAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "reprovisionPluginRepository", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReprovisionPluginRepositoryRequest returns an encoder for requests
+// sent to the admin reprovisionPluginRepository server.
+func EncodeReprovisionPluginRepositoryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ReprovisionPluginRepositoryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "reprovisionPluginRepository", "*admin.ReprovisionPluginRepositoryPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewReprovisionPluginRepositoryRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "reprovisionPluginRepository", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReprovisionPluginRepositoryResponse returns a decoder for responses
+// returned by the admin reprovisionPluginRepository endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeReprovisionPluginRepositoryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReprovisionPluginRepositoryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReprovisionPluginRepositoryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			res := NewReprovisionPluginRepositoryAdminPluginRepositoryReprovisionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReprovisionPluginRepositoryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReprovisionPluginRepositoryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReprovisionPluginRepositoryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReprovisionPluginRepositoryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReprovisionPluginRepositoryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReprovisionPluginRepositoryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReprovisionPluginRepositoryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReprovisionPluginRepositoryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+				}
+				err = ValidateReprovisionPluginRepositoryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+				}
+				return nil, NewReprovisionPluginRepositoryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReprovisionPluginRepositoryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+				}
+				err = ValidateReprovisionPluginRepositoryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+				}
+				return nil, NewReprovisionPluginRepositoryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "reprovisionPluginRepository", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReprovisionPluginRepositoryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "reprovisionPluginRepository", err)
+			}
+			err = ValidateReprovisionPluginRepositoryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "reprovisionPluginRepository", err)
+			}
+			return nil, NewReprovisionPluginRepositoryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "reprovisionPluginRepository", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListCustomDomainsRequest instantiates a HTTP request object with method
 // and path set to call the "admin" service "listCustomDomains" endpoint
 func (c *Client) BuildListCustomDomainsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -36681,6 +37389,60 @@ func unmarshalAdminSecretBackfillOrganizationResponseBodyToAdminAdminSecretBackf
 		LegacyTokens:            *v.LegacyTokens,
 		UnattributedConnections: *v.UnattributedConnections,
 		PendingRunnerKeys:       *v.PendingRunnerKeys,
+	}
+
+	return res
+}
+
+// unmarshalAdminPluginRepositoryMigrationResponseBodyToAdminAdminPluginRepositoryMigration
+// builds a value of type *admin.AdminPluginRepositoryMigration from a value of
+// type *AdminPluginRepositoryMigrationResponseBody.
+func unmarshalAdminPluginRepositoryMigrationResponseBodyToAdminAdminPluginRepositoryMigration(v *AdminPluginRepositoryMigrationResponseBody) *admin.AdminPluginRepositoryMigration {
+	res := &admin.AdminPluginRepositoryMigration{
+		ProjectID:      *v.ProjectID,
+		OrganizationID: *v.OrganizationID,
+		RepoOwner:      *v.RepoOwner,
+		RepoName:       *v.RepoName,
+		Bound:          *v.Bound,
+	}
+
+	return res
+}
+
+// marshalAdminAdminPluginRepositoryMigrationEntryToAdminPluginRepositoryMigrationEntryRequestBody
+// builds a value of type *AdminPluginRepositoryMigrationEntryRequestBody from
+// a value of type *admin.AdminPluginRepositoryMigrationEntry.
+func marshalAdminAdminPluginRepositoryMigrationEntryToAdminPluginRepositoryMigrationEntryRequestBody(v *admin.AdminPluginRepositoryMigrationEntry) *AdminPluginRepositoryMigrationEntryRequestBody {
+	res := &AdminPluginRepositoryMigrationEntryRequestBody{
+		ProjectID:    v.ProjectID,
+		RepositoryID: v.RepositoryID,
+		Evidence:     v.Evidence,
+	}
+
+	return res
+}
+
+// marshalAdminPluginRepositoryMigrationEntryRequestBodyToAdminAdminPluginRepositoryMigrationEntry
+// builds a value of type *admin.AdminPluginRepositoryMigrationEntry from a
+// value of type *AdminPluginRepositoryMigrationEntryRequestBody.
+func marshalAdminPluginRepositoryMigrationEntryRequestBodyToAdminAdminPluginRepositoryMigrationEntry(v *AdminPluginRepositoryMigrationEntryRequestBody) *admin.AdminPluginRepositoryMigrationEntry {
+	res := &admin.AdminPluginRepositoryMigrationEntry{
+		ProjectID:    v.ProjectID,
+		RepositoryID: v.RepositoryID,
+		Evidence:     v.Evidence,
+	}
+
+	return res
+}
+
+// unmarshalAdminPluginRepositoryMigrationOutcomeResponseBodyToAdminAdminPluginRepositoryMigrationOutcome
+// builds a value of type *admin.AdminPluginRepositoryMigrationOutcome from a
+// value of type *AdminPluginRepositoryMigrationOutcomeResponseBody.
+func unmarshalAdminPluginRepositoryMigrationOutcomeResponseBodyToAdminAdminPluginRepositoryMigrationOutcome(v *AdminPluginRepositoryMigrationOutcomeResponseBody) *admin.AdminPluginRepositoryMigrationOutcome {
+	res := &admin.AdminPluginRepositoryMigrationOutcome{
+		ProjectID: *v.ProjectID,
+		Status:    *v.Status,
+		Message:   *v.Message,
 	}
 
 	return res

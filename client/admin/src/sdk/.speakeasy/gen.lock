@@ -32,6 +32,7 @@ trackedFiles:
   FUNCTIONS.md: {}
   REACT_QUERY.md: {}
   src/core.ts: {}
+  src/funcs/adminApplyPluginRepositoryMigrations.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
@@ -118,6 +119,7 @@ trackedFiles:
   src/funcs/adminListOrganizations.ts: {}
   src/funcs/adminListPlatformExternalCredentials.ts: {}
   src/funcs/adminListPlatformMcpFeedback.ts: {}
+  src/funcs/adminListPluginRepositoryMigrations.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
   src/funcs/adminListRegistryOktaUnmapped.ts: {}
@@ -139,6 +141,7 @@ trackedFiles:
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/funcs/adminReprovisionPluginRepository.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
   src/funcs/adminRetryRegistryPromotionDocs.ts: {}
   src/funcs/adminRollbackOrganizationEncryption.ts: {}
@@ -300,6 +303,12 @@ trackedFiles:
   src/models/components/adminorganizationstats.ts: {}
   src/models/components/adminpaygbillingsummary.ts: {}
   src/models/components/adminplatformmcpfeedback.ts: {}
+  src/models/components/adminpluginrepositorymigration.ts: {}
+  src/models/components/adminpluginrepositorymigrationapplyresult.ts: {}
+  src/models/components/adminpluginrepositorymigrationentry.ts: {}
+  src/models/components/adminpluginrepositorymigrationlist.ts: {}
+  src/models/components/adminpluginrepositorymigrationoutcome.ts: {}
+  src/models/components/adminpluginrepositoryreprovisionresult.ts: {}
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminprojectredeploypreview.ts: {}
@@ -346,6 +355,7 @@ trackedFiles:
   src/models/components/adminupstreamoauthmigrationunresolvedassociation.ts: {}
   src/models/components/adminuser.ts: {}
   src/models/components/adminuserorganization.ts: {}
+  src/models/components/applypluginrepositorymigrationsrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
   src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
@@ -407,6 +417,7 @@ trackedFiles:
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/repairorganizationassistantagentnamesrequestbody.ts: {}
+  src/models/components/reprovisionpluginrepositoryrequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
@@ -503,6 +514,7 @@ trackedFiles:
   src/models/operations/adminlistorganizations.ts: {}
   src/models/operations/adminlistplatformexternalcredentials.ts: {}
   src/models/operations/adminlistplatformmcpfeedback.ts: {}
+  src/models/operations/adminlistpluginrepositorymigrations.ts: {}
   src/models/operations/adminlistprojectmcpservers.ts: {}
   src/models/operations/adminlistregistryentries.ts: {}
   src/models/operations/adminlistregistrypromotioncandidates.ts: {}
@@ -511,6 +523,7 @@ trackedFiles:
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
+  src/react-query/adminApplyPluginRepositoryMigrations.ts: {}
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
@@ -633,6 +646,8 @@ trackedFiles:
   src/react-query/adminListPlatformExternalCredentials.ts: {}
   src/react-query/adminListPlatformMcpFeedback.core.ts: {}
   src/react-query/adminListPlatformMcpFeedback.ts: {}
+  src/react-query/adminListPluginRepositoryMigrations.core.ts: {}
+  src/react-query/adminListPluginRepositoryMigrations.ts: {}
   src/react-query/adminListProjectMcpServers.core.ts: {}
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
@@ -677,6 +692,7 @@ trackedFiles:
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/react-query/adminReprovisionPluginRepository.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminRetryRegistryPromotionDocs.ts: {}
   src/react-query/adminRollbackOrganizationEncryption.ts: {}
@@ -751,6 +767,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminApplyPluginRepositoryMigrations:
+    speakeasy-default-admin-apply-plugin-repository-migrations:
+      requestBody:
+        application/json: {"dry_run": false, "entries": []}
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminAssignOrganizationOnboardingPlaybook:
     speakeasy-default-admin-assign-organization-onboarding-playbook:
       requestBody:
@@ -1819,6 +1846,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListPluginRepositoryMigrations:
+    speakeasy-default-admin-list-plugin-repository-migrations:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListProjectMcpServers:
     speakeasy-default-admin-list-project-mcp-servers:
       parameters:
@@ -2083,6 +2119,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminReprovisionPluginRepository:
+    speakeasy-default-admin-reprovision-plugin-repository:
+      requestBody:
+        application/json: {"project_id": "7f560ab6-0f23-4f6e-a085-67eefaae7e7e", "reason": "<value>"}
+      responses:
+        "200":
+          application/json: {"message": "<value>", "status": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminResumeStripeSubscription:
     speakeasy-default-admin-resume-stripe-subscription:
       requestBody:

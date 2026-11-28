@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,33 +14,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 )
 
-// InstallationTokenSource mints short-lived GitHub App installation tokens.
-// Implemented by *thirdparty/github.Client. Decoupled here so the marketplace
-// package doesn't depend on the wider github client surface.
-type InstallationTokenSource interface {
-	InstallationToken(ctx context.Context, installationID int64) (string, error)
+// RepositoryClient verifies the current GitHub repository identity and returns
+// a client whose installation token is scoped to that repository ID.
+type RepositoryClient interface {
+	ForRepository(ctx context.Context, installationID, repositoryID int64, owner, name string) (*ghclient.Client, error)
 }
 
-// DBResolver resolves a marketplace URL token to an upstream by reading
-// plugin_github_connections and minting a fresh GitHub App installation token
-// for use as the git fetch credential.
+// DBResolver resolves a marketplace URL token to a verified repository binding
+// and obtains a repository-scoped credential for Git fetches.
 type DBResolver struct {
 	logger  *slog.Logger
 	queries *pluginsrepo.Queries
-	tokens  InstallationTokenSource
+	github  RepositoryClient
+	local   bool
 }
 
-func NewDBResolver(logger *slog.Logger, db *pgxpool.Pool, tokens InstallationTokenSource) *DBResolver {
-	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), tokens: tokens}
+func NewDBResolver(logger *slog.Logger, db *pgxpool.Pool, github RepositoryClient) *DBResolver {
+	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), github: github, local: false}
 }
 
 // NewLocalDBResolver resolves the same opaque marketplace tokens as production
 // without minting a GitHub installation token. It is used only with LocalServer,
 // which reads from the standard local in-memory publisher rather than GitHub.
 func NewLocalDBResolver(logger *slog.Logger, db *pgxpool.Pool) *DBResolver {
-	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), tokens: nil}
+	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), github: nil, local: true}
 }
 
 func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error) {
@@ -52,19 +53,36 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 		return Upstream{}, err
 	}
 
-	instToken := ""
-	if r.tokens != nil {
-		instToken, err = r.tokens.InstallationToken(ctx, conn.InstallationID)
-		if err != nil {
-			return Upstream{}, fmt.Errorf("mint installation token (installation %d): %w", conn.InstallationID, err)
-		}
+	if r.local {
+		return Upstream{Token: token, Owner: conn.RepoOwner, Repo: conn.RepoName, AccessToken: ""}, nil
 	}
 
+	binding, err := r.queries.GetPluginRepositoryBinding(ctx, conn.ProjectID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Upstream{}, ErrNotFound
+	}
+	if err != nil {
+		return Upstream{}, fmt.Errorf("get marketplace repository binding: %w", err)
+	}
+	if binding.InstallationID != conn.InstallationID ||
+		!strings.EqualFold(binding.RepoOwner, conn.RepoOwner) ||
+		!strings.EqualFold(binding.RepoName, conn.RepoName) {
+		return Upstream{}, ErrNotFound
+	}
+
+	client, err := r.github.ForRepository(ctx, binding.InstallationID, binding.RepositoryID, binding.RepoOwner, binding.RepoName)
+	if err != nil {
+		return Upstream{}, fmt.Errorf("verify marketplace repository binding: %w", err)
+	}
+	accessToken, err := client.InstallationToken(ctx, binding.InstallationID)
+	if err != nil {
+		return Upstream{}, fmt.Errorf("get marketplace repository token: %w", err)
+	}
 	return Upstream{
 		Token:       token,
-		Owner:       conn.RepoOwner,
-		Repo:        conn.RepoName,
-		AccessToken: instToken,
+		Owner:       binding.RepoOwner,
+		Repo:        binding.RepoName,
+		AccessToken: accessToken,
 	}, nil
 }
 

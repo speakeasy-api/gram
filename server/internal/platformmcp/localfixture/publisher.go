@@ -4,6 +4,7 @@ package localfixture
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -81,33 +82,61 @@ func removeStalePublisherTemps(root string, before time.Time) error {
 	return nil
 }
 
-func (p *InMemoryGitHubPublisher) CreateRepo(_ context.Context, _ int64, owner, repo string, _ bool) error {
+func (p *InMemoryGitHubPublisher) CreatePrivateRepository(_ context.Context, installationID int64, owner, repo string) (int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	key := p.key(owner, repo, "main")
+	id := fixtureRepositoryID(installationID, key)
 	if p.root == "" {
-		if _, ok := p.files[key]; !ok {
-			p.files[key] = make(map[string][]byte)
+		if _, ok := p.files[key]; ok {
+			return 0, fmt.Errorf("create local fixture repository: %w", fs.ErrExist)
 		}
-		return nil
+		p.files[key] = make(map[string][]byte)
+		return id, nil
 	}
 
 	path := p.snapshotPath("repositories", key)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // Path is a SHA-256 filename beneath the configured local-only root.
-	if errors.Is(err, fs.ErrExist) {
-		return nil
-	}
 	if err != nil {
-		return fmt.Errorf("create local fixture repository: %w", err)
+		return 0, fmt.Errorf("create local fixture repository: %w", err)
 	}
 	if _, err := file.WriteString("{}\n"); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("initialize local fixture repository: %w", err)
+		return 0, fmt.Errorf("initialize local fixture repository: %w", err)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("close local fixture repository: %w", err)
+		return 0, fmt.Errorf("close local fixture repository: %w", err)
 	}
-	return nil
+	return id, nil
+}
+
+func (p *InMemoryGitHubPublisher) ForRepository(_ context.Context, installationID, repositoryID int64, owner, repo string) (plugins.GitHubRepository, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	key := p.key(owner, repo, "main")
+	if repositoryID != fixtureRepositoryID(installationID, key) {
+		return nil, ghclient.ErrRepoNotFound
+	}
+	if p.root == "" {
+		if _, ok := p.files[key]; !ok {
+			return nil, ghclient.ErrRepoNotFound
+		}
+		return p, nil
+	}
+	if _, err := os.Stat(p.snapshotPath("repositories", key)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ghclient.ErrRepoNotFound
+		}
+		return nil, fmt.Errorf("find local fixture repository: %w", err)
+	}
+	return p, nil
+}
+
+// A deterministic ID lets local server and worker processes share a fixture
+// repository identity without changing the snapshot format.
+func fixtureRepositoryID(installationID int64, key string) int64 {
+	hash := sha256.Sum256(fmt.Appendf(nil, "%d/%s", installationID, key))
+	return int64(binary.BigEndian.Uint64(hash[:])>>2) + 1
 }
 
 func (p *InMemoryGitHubPublisher) PushFiles(_ context.Context, _ int64, owner, repo, branch, _ string, files map[string][]byte) (string, error) {
@@ -210,11 +239,11 @@ func (p *InMemoryGitHubPublisher) GetFileContent(ctx context.Context, installati
 }
 
 func (p *InMemoryGitHubPublisher) key(owner, repo, branch string) string {
-	return owner + "/" + repo + "/" + branch
+	return strings.ToLower(owner+"/"+repo) + "/" + branch
 }
 
 func (p *InMemoryGitHubPublisher) collaboratorKey(owner, repo, username string) string {
-	return owner + "/" + repo + "/" + username
+	return p.key(owner, repo, username)
 }
 
 func (p *InMemoryGitHubPublisher) snapshotPath(kind, key string) string {

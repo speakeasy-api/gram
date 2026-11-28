@@ -76,6 +76,40 @@ func TestMalformedTokensSkipResolver(t *testing.T) {
 	}
 }
 
+func TestProxyRejectsGitHubRedirect(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/info/refs?service=git-upload-pack"},
+		{http.MethodPost, "/git-upload-pack"},
+	} {
+		t.Run(tt.method, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				require.Contains(t, req.URL.Path, "/speakeasy-plugins/test-plugins.git/")
+				return &http.Response{
+					StatusCode: http.StatusTemporaryRedirect,
+					Header:     http.Header{"Location": {"https://github.com/speakeasy-plugins/replacement.git" + tt.path}},
+					Body:       io.NopCloser(strings.NewReader("upstream redirect")),
+				}, nil
+			})}
+			server := NewServer(&fixedResolver{}, client, testenv.NewLogger(t))
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, RoutePrefix+strings.Repeat("a", 43)+".git"+tt.path, strings.NewReader(""))
+			server.Routes().ServeHTTP(rec, req)
+			require.Equal(t, 1, calls)
+			require.Equal(t, http.StatusBadGateway, rec.Code)
+			require.Empty(t, rec.Header().Get("Location"))
+			require.NotContains(t, rec.Body.String(), "replacement")
+		})
+	}
+}
+
 func TestUploadPackRequestIsReplayable(t *testing.T) {
 	t.Parallel()
 

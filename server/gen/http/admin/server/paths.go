@@ -567,6 +567,21 @@ func RedeployProjectAdminPath() string {
 	return "/admin/project.redeploy"
 }
 
+// ListPluginRepositoryMigrationsAdminPath returns the URL path to the admin service listPluginRepositoryMigrations HTTP endpoint.
+func ListPluginRepositoryMigrationsAdminPath() string {
+	return "/admin/plugin-repository-migrations"
+}
+
+// ApplyPluginRepositoryMigrationsAdminPath returns the URL path to the admin service applyPluginRepositoryMigrations HTTP endpoint.
+func ApplyPluginRepositoryMigrationsAdminPath() string {
+	return "/admin/plugin-repository-migrations/apply"
+}
+
+// ReprovisionPluginRepositoryAdminPath returns the URL path to the admin service reprovisionPluginRepository HTTP endpoint.
+func ReprovisionPluginRepositoryAdminPath() string {
+	return "/admin/plugin-repository-migrations/reprovision"
+}
+
 // ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
 func ListCustomDomainsAdminPath() string {
 	return "/admin/customDomains.list"

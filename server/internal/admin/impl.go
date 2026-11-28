@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -71,6 +72,8 @@ import (
 )
 
 type Service struct {
+	pluginRepositoryGitHub *plugins.GitHubConfig
+
 	catalogPromotion *catalogpromotion.Service
 	providerHealth   *mcpconnectionattempts.ProviderHealth
 	registry         *mcpregistry.Service
@@ -530,6 +533,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListMemoryEvalRuns = service.preauthorizeAdmin(server.ListMemoryEvalRuns)
 	server.GetMemoryEvalRun = service.preauthorizeAdmin(server.GetMemoryEvalRun)
 	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
+	server.ListPluginRepositoryMigrations = service.preauthorizeAdmin(server.ListPluginRepositoryMigrations)
+	server.ApplyPluginRepositoryMigrations = service.strictAdminJSON(server.ApplyPluginRepositoryMigrations, func() any { return new(adminserver.ApplyPluginRepositoryMigrationsRequestBody) })
+	server.ReprovisionPluginRepository = service.strictAdminJSON(server.ReprovisionPluginRepository, func() any { return new(adminserver.ReprovisionPluginRepositoryRequestBody) })
 	server.GetHooksRollout = service.preauthorizeAdmin(server.GetHooksRollout)
 	server.GetHooksReleaseProgress = service.preauthorizeAdmin(server.GetHooksReleaseProgress)
 	server.GetOrganizationHooksRollout = service.preauthorizeAdmin(server.GetOrganizationHooksRollout)

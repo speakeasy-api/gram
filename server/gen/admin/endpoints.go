@@ -129,6 +129,9 @@ type Endpoints struct {
 	RunRunnerKeyOrganizationBackfill           goa.Endpoint
 	GetProjectRedeployPreview                  goa.Endpoint
 	RedeployProject                            goa.Endpoint
+	ListPluginRepositoryMigrations             goa.Endpoint
+	ApplyPluginRepositoryMigrations            goa.Endpoint
+	ReprovisionPluginRepository                goa.Endpoint
 	ListCustomDomains                          goa.Endpoint
 	ListPlatformExternalCredentials            goa.Endpoint
 	GetGcpIamPlatformCredential                goa.Endpoint
@@ -298,6 +301,9 @@ func NewEndpoints(s Service) *Endpoints {
 		RunRunnerKeyOrganizationBackfill:           NewRunRunnerKeyOrganizationBackfillEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:                  NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                            NewRedeployProjectEndpoint(s, a.APIKeyAuth),
+		ListPluginRepositoryMigrations:             NewListPluginRepositoryMigrationsEndpoint(s, a.APIKeyAuth),
+		ApplyPluginRepositoryMigrations:            NewApplyPluginRepositoryMigrationsEndpoint(s, a.APIKeyAuth),
+		ReprovisionPluginRepository:                NewReprovisionPluginRepositoryEndpoint(s, a.APIKeyAuth),
 		ListCustomDomains:                          NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
 		ListPlatformExternalCredentials:            NewListPlatformExternalCredentialsEndpoint(s, a.APIKeyAuth),
 		GetGcpIamPlatformCredential:                NewGetGcpIamPlatformCredentialEndpoint(s, a.APIKeyAuth),
@@ -447,6 +453,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RunRunnerKeyOrganizationBackfill = m(e.RunRunnerKeyOrganizationBackfill)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
+	e.ListPluginRepositoryMigrations = m(e.ListPluginRepositoryMigrations)
+	e.ApplyPluginRepositoryMigrations = m(e.ApplyPluginRepositoryMigrations)
+	e.ReprovisionPluginRepository = m(e.ReprovisionPluginRepository)
 	e.ListCustomDomains = m(e.ListCustomDomains)
 	e.ListPlatformExternalCredentials = m(e.ListPlatformExternalCredentials)
 	e.GetGcpIamPlatformCredential = m(e.GetGcpIamPlatformCredential)
@@ -3017,6 +3026,75 @@ func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.RedeployProject(ctx, p)
+	}
+}
+
+// NewListPluginRepositoryMigrationsEndpoint returns an endpoint function that
+// calls the method "listPluginRepositoryMigrations" of service "admin".
+func NewListPluginRepositoryMigrationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPluginRepositoryMigrationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPluginRepositoryMigrations(ctx, p)
+	}
+}
+
+// NewApplyPluginRepositoryMigrationsEndpoint returns an endpoint function that
+// calls the method "applyPluginRepositoryMigrations" of service "admin".
+func NewApplyPluginRepositoryMigrationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ApplyPluginRepositoryMigrationsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ApplyPluginRepositoryMigrations(ctx, p)
+	}
+}
+
+// NewReprovisionPluginRepositoryEndpoint returns an endpoint function that
+// calls the method "reprovisionPluginRepository" of service "admin".
+func NewReprovisionPluginRepositoryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReprovisionPluginRepositoryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ReprovisionPluginRepository(ctx, p)
 	}
 }
 

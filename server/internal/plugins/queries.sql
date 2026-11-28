@@ -839,6 +839,19 @@ SELECT *
 FROM plugin_github_connections
 WHERE project_id = @project_id;
 
+-- name: GetPluginPublishDestination :one
+-- Read publication state and its write-once binding in one snapshot. Recovery
+-- only changes unbound connections, and commits the new location, binding and
+-- reset fingerprints together. A publisher sees the whole change or refuses
+-- the old connection, without holding a pool connection across GitHub calls.
+SELECT sqlc.embed(c), EXISTS (
+  SELECT 1 FROM plugin_repository_bindings b
+  WHERE b.project_id = c.project_id AND b.installation_id = c.installation_id
+    AND lower(b.repo_owner) = lower(c.repo_owner) AND lower(b.repo_name) = lower(c.repo_name)
+) AS bound
+FROM plugin_github_connections c
+WHERE c.project_id = @project_id;
+
 -- name: ListPluginPublishCandidates :many
 -- Lists candidates for the automated generator rollout, paginated by
 -- project_id (pass the zero UUID to start): the union of (a) projects that
@@ -990,6 +1003,16 @@ WHERE (
        )
    )
 LIMIT 1;
+
+-- name: GetPluginRepositoryBinding :one
+SELECT *
+FROM plugin_repository_bindings
+WHERE project_id = @project_id;
+
+-- name: InsertPluginRepositoryBinding :exec
+-- A binding cannot be replaced by another repository or claimed by another project.
+INSERT INTO plugin_repository_bindings (project_id, repository_id, repo_owner, repo_name, installation_id)
+VALUES (@project_id, @repository_id, @repo_owner, @repo_name, @installation_id);
 
 -- name: UpsertGitHubConnection :one
 -- Inserts or refreshes a project's GitHub connection. It never writes the
