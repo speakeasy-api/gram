@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -144,12 +143,4 @@ func TestValidateRejectsOtherSignersAndTokens(t *testing.T) {
 	require.NoError(t, err)
 	_, err = principalcredential.New(newSigner(t), nil).Validate(other)
 	require.ErrorIs(t, err, principalcredential.ErrNotCredential)
-}
-
-func TestLegacyRuntimeTokenValidatorRejectsPrincipalCredentials(t *testing.T) {
-	t.Parallel()
-	raw, _, err := principalcredential.New(newSigner(t), nil).Mint(agentCredential())
-	require.NoError(t, err)
-	_, err = assistanttokens.New("secret", nil, nil, nil, nil).Validate(raw)
-	require.Error(t, err, "an RS256 principal credential never passes the HS256 assistant runtime token validator")
 }

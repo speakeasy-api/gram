@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/userblock"
@@ -1223,6 +1224,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	trialPendingPaymentMethod, trialCardRejection := s.trialPendingPaymentMethod(ctx, authCtx)
 	trial := loadTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
@@ -1359,6 +1361,8 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		AcceptedSignupOfferFlow:        acceptedSignupOfferFlow,
 		Whitelisted:                    authCtx.Whitelisted,
 		Trial:                          trial,
+		TrialPendingPaymentMethod:      trialPendingPaymentMethod,
+		TrialCardRejection:             trialCardRejection,
 		UserID:                         userInfo.UserID,
 		UserEmail:                      userInfo.Email,
 		UserSignature:                  userInfo.UserPylonSignature,
@@ -1388,6 +1392,44 @@ func (s *Service) activeOrganizationDashboardURL(ctx context.Context, organizati
 		return nil, nil
 	}
 	return new(strings.TrimRight(move.siteURL.String(), "/")), nil
+}
+
+// trialPendingPaymentMethod reports whether the active organization's trial
+// starts once an admin adds a card, and why the last card added could not
+// start it. A lookup failure is logged and reported as not pending, which
+// shows the dashboard's ordinary gate instead of failing the session.
+func (s *Service) trialPendingPaymentMethod(ctx context.Context, authCtx *contextvalues.AuthContext) (bool, *gen.TrialCardRejection) {
+	organizationID := authCtx.ActiveOrganizationID
+	if organizationID == "" || authCtx.Whitelisted || !s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, organizationID) {
+		return false, nil
+	}
+	org, err := s.orgRepo.GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error loading organization for trial payment method gate", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false, nil
+	}
+	awaiting, err := trials.AwaitingPaymentMethod(ctx, s.db, org)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "error checking trial payment method gate", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false, nil
+	}
+	if !awaiting {
+		return false, nil
+	}
+	card, err := trialsRepo.New(s.db).GetTrialPaymentMethod(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return true, nil
+	case err != nil:
+		s.logger.ErrorContext(ctx, "error loading trial card", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return true, nil
+	case !card.RejectionReason.Valid:
+		return true, nil
+	}
+	return true, &gen.TrialCardRejection{
+		Reason:     card.RejectionReason.String,
+		RejectedAt: conv.FromPGTimestamptz(card.UpdatedAt),
+	}
 }
 
 // loadTrial returns the organization's trial unless it converted, including
@@ -1438,6 +1480,18 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []auth
 		}
 	}
 
+	// Whitelisting would let an organization that can start a trial with a
+	// card into the product without one; the card gate shows instead.
+	if s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, orgMetadata.ID) {
+		awaiting, err := trials.AwaitingPaymentMethod(ctx, s.db, orgMetadata)
+		if err != nil {
+			return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("check trial payment method gate: %w", err)
+		}
+		if awaiting {
+			return activeOrgID, orgMetadata, nil
+		}
+	}
+
 	whitelisted, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          orgMetadata.ID,
 		Name:        orgMetadata.Name,
@@ -1466,7 +1520,8 @@ type orgProvisionOptions struct {
 	Whitelisted bool
 
 	// ProvisionTrial arms a 14-day enterprise trial in the same transaction
-	// that creates the organization.
+	// that creates the organization. When trials wait for a validated card,
+	// the organization is created without the trial and without the whitelist.
 	ProvisionTrial bool
 
 	// ActorEmail names the human this provisioning is attributed to in the
@@ -1519,6 +1574,13 @@ func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName strin
 	provisionedOrg, err := s.identity.ProvisionOrgInWorkOS(ctx, orgName, userID)
 	if err != nil {
 		return empty, fmt.Errorf("provision org in WorkOS: %w", err)
+	}
+
+	// A trial that waits for a validated card leaves the organization behind
+	// the dashboard gate until Stripe confirms one, so it is not whitelisted.
+	if opts.ProvisionTrial && s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, provisionedOrg.GramOrganizationID) {
+		opts.ProvisionTrial = false
+		opts.Whitelisted = false
 	}
 
 	// Metadata, the user relationship, the admin grant, and any trial all land

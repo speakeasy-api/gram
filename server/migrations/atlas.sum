@@ -1,4 +1,4 @@
-h1:6RqCZgbnEO5zhqD4X2EzIaeISuxqmUPnyGp3IRb7q6s=
+h1:gDqxU/0QTPRjLZm8PKBfCCzzHHQ4FehZFn9UJIO8i44=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -573,5 +573,6 @@ h1:6RqCZgbnEO5zhqD4X2EzIaeISuxqmUPnyGp3IRb7q6s=
 20261127170611_users-add-blacklisted-at.sql h1:VFhfJAeXWsuIhuK4MQetOWaGUsj3Xnwaru1BKCyPomc=
 20261127181003_trigger-instances-add-auth-client.sql h1:mIFZ75XD24sLQfTRKXMLC3JernTnayKEULuq3p1FyjQ=
 20261128084835_platform-switches.sql h1:tc9alZ96LVo4lgzFZMC43kdRLTlq87T0ZSi27E5hn7s=
-20261128125338_add-assistant-ate-actors.sql h1:L5hDziIde5UY/FpkbSPRzbTYi2b2f4FL5psW+tFPnuE=
-20261128125629_add_initiating_user_to_ate_actors.sql h1:uxOvRh9hPQc0yZi05WY0qjlDU8K7MZMRgOwvBaNSC5w=
+20261128101621_add_trial_payment_methods.sql h1:RxCA4241NKzukWqEnC9wl+uk790iq6aDSpngKEwdRqg=
+20261128145952_add-assistant-ate-actors.sql h1:FfpfSYFslL9O3mbYZSzt/5P/llQJQeI0DP+XjqxP0aA=
+20261128150237_add_initiating_user_to_ate_actors.sql h1:OqZOX1A6BHALs4F7+UDrdmseXcmKp6raOgh6/GTNXww=

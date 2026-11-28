@@ -11,6 +11,13 @@ const (
 	// routes feedback records to the feedback export rather than to telemetry,
 	// and is removed once that is deployed and the flag is at 100%.
 	FlagMCPFeedbackExport Flag = "mcp-feedback-export"
+	// FlagSelfServeTrialRequiresPaymentMethod is the kill switch for starting
+	// self-serve trials only after Stripe validates a card. Evaluated
+	// server-side with local evaluation wherever a trial would start and in
+	// auth.info, keyed by organization ID with no groups, so it is targeted by
+	// a release condition with no properties at 100%. Off, missing, or
+	// indeterminate starts trials without a card, as before.
+	FlagSelfServeTrialRequiresPaymentMethod Flag = "self-serve-trial-requires-payment-method"
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
 	// FlagToolApprovals gates creating require_approval risk policies (tool

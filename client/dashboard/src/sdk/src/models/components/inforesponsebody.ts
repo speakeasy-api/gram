@@ -11,6 +11,10 @@ import {
   OrganizationEntry,
   OrganizationEntry$inboundSchema,
 } from "./organizationentry.js";
+import {
+  TrialCardRejection,
+  TrialCardRejection$inboundSchema,
+} from "./trialcardrejection.js";
 
 export type Trial = {
   endsAt: Date;
@@ -47,6 +51,14 @@ export type InfoResponseBody = {
   organizationOverrideExpiresAt?: Date | undefined;
   organizations: Array<OrganizationEntry>;
   trial: Trial | null;
+  /**
+   * Why the last card an organization admin added could not start the free trial.
+   */
+  trialCardRejection?: TrialCardRejection | undefined;
+  /**
+   * Whether the organization's free trial starts once an organization admin adds a card
+   */
+  trialPendingPaymentMethod?: boolean | undefined;
   userDisplayName?: string | undefined;
   userEmail: string;
   userId: string;
@@ -107,6 +119,8 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     ),
     organizations: z.array(OrganizationEntry$inboundSchema),
     trial: z.nullable(z.lazy(() => Trial$inboundSchema)),
+    trial_card_rejection: z.optional(TrialCardRejection$inboundSchema),
+    trial_pending_payment_method: z.optional(z.boolean()),
     user_display_name: z.optional(z.string()),
     user_email: z.string(),
     user_id: z.string(),
@@ -125,6 +139,8 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
       "is_admin": "isAdmin",
       "organization_override": "organizationOverride",
       "organization_override_expires_at": "organizationOverrideExpiresAt",
+      "trial_card_rejection": "trialCardRejection",
+      "trial_pending_payment_method": "trialPendingPaymentMethod",
       "user_display_name": "userDisplayName",
       "user_email": "userEmail",
       "user_id": "userId",

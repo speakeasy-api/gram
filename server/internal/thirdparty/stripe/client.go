@@ -264,6 +264,11 @@ type CreateCheckoutSessionInput struct {
 	// EmbeddedForm selects the adopted custom form checkout UI.
 	EmbeddedForm bool
 
+	// RedisplaySavedPaymentMethods offers the customer's saved cards, including
+	// the card a free trial started with. Leave false when replaying intents
+	// created before saved cards were offered.
+	RedisplaySavedPaymentMethods bool
+
 	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
 	TrialEnd *time.Time
@@ -488,6 +493,7 @@ type stripeAPI interface {
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
 	expireCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error)
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
+	detachPaymentMethod(context.Context, string, *stripesdk.PaymentMethodDetachParams) (*stripesdk.PaymentMethod, error)
 	retrieveSubscription(context.Context, string, *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error)
 	updateSubscription(context.Context, string, *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error)
 	createPortalSession(context.Context, *stripesdk.BillingPortalSessionCreateParams) (*stripesdk.BillingPortalSession, error)
@@ -568,6 +574,14 @@ func (s *sdkAPI) retrieveCheckoutSession(ctx context.Context, id string, params 
 		return nil, fmt.Errorf("stripe SDK retrieve Checkout session: %w", err)
 	}
 	return session, nil
+}
+
+func (s *sdkAPI) detachPaymentMethod(ctx context.Context, id string, params *stripesdk.PaymentMethodDetachParams) (*stripesdk.PaymentMethod, error) {
+	method, err := s.client.V1PaymentMethods.Detach(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK detach payment method: %w", err)
+	}
+	return method, nil
 }
 
 func (s *sdkAPI) retrieveSubscription(ctx context.Context, id string, params *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error) {
@@ -899,6 +913,19 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	}
 	params.Metadata = contractMetadata(identity)
 	params.Mode = stripesdk.String(stripesdk.CheckoutSessionModeSubscription)
+	if input.RedisplaySavedPaymentMethods {
+		// Stripe shows only allow_redisplay=always cards by default. A card saved
+		// by setup Checkout may carry another value, and it belongs to this customer.
+		params.SavedPaymentMethodOptions = &stripesdk.CheckoutSessionCreateSavedPaymentMethodOptionsParams{
+			AllowRedisplayFilters: []*string{
+				stripesdk.String("always"),
+				stripesdk.String("limited"),
+				stripesdk.String("unspecified"),
+			},
+			PaymentMethodRemove: nil,
+			PaymentMethodSave:   nil,
+		}
+	}
 	params.PaymentMethodCollection = stripesdk.String(stripesdk.CheckoutSessionPaymentMethodCollectionAlways)
 	params.SubscriptionData = new(stripesdk.CheckoutSessionCreateSubscriptionDataParams)
 	// Subscription metadata is also copied by Stripe onto invoice.parent.subscription_details.metadata.

@@ -329,6 +329,7 @@ trackedFiles:
   src/models/components/adminstripesubscriptioncandidate.ts: {}
   src/models/components/admintailscaleoauthmigrationorganization.ts: {}
   src/models/components/admintailscaleoauthmigrationorganizations.ts: {}
+  src/models/components/admintrialcardsharingorganization.ts: {}
   src/models/components/adminuploadimageresult.ts: {}
   src/models/components/adminupstreamauthenforcement.ts: {}
   src/models/components/adminupstreamoauthmigrationauthclientkind.ts: {}

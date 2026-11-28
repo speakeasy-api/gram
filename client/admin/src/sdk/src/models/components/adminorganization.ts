@@ -8,6 +8,24 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AdminTrialCardSharingOrganization,
+  AdminTrialCardSharingOrganization$inboundSchema,
+} from "./admintrialcardsharingorganization.js";
+
+/**
+ * Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.
+ */
+export const TrialCardRejectionReason = {
+  PrepaidCard: "prepaid_card",
+  CardUsed: "card_used",
+} as const;
+/**
+ * Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.
+ */
+export type TrialCardRejectionReason = ClosedEnum<
+  typeof TrialCardRejectionReason
+>;
 
 /**
  * Lifecycle state of the organization's enterprise trial.
@@ -62,6 +80,12 @@ export type AdminOrganization = {
    */
   name: string;
   /**
+   * Other organizations that offered the same card as this organization's latest card, oldest first, with whether it started their trial. Absent when none did or no card was offered, and absent on list rows.
+   */
+  organizationsSharingTrialCard?:
+    | Array<AdminTrialCardSharingOrganization>
+    | undefined;
+  /**
    * The slug of the organization
    */
   slug: string;
@@ -81,6 +105,14 @@ export type AdminOrganization = {
    * Current Stripe subscription ID, if subscribed.
    */
   stripeSubscriptionId?: string | undefined;
+  /**
+   * The time at which the organization last offered a card to start its self-serve trial. Absent when it never offered one, and absent on list rows.
+   */
+  trialCardAddedAt?: Date | undefined;
+  /**
+   * Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.
+   */
+  trialCardRejectionReason?: TrialCardRejectionReason | undefined;
   /**
    * The time at which the trial converted to a paid plan, if any.
    */
@@ -120,6 +152,11 @@ export type AdminOrganization = {
 };
 
 /** @internal */
+export const TrialCardRejectionReason$inboundSchema: z.ZodMiniEnum<
+  typeof TrialCardRejectionReason
+> = z.enum(TrialCardRejectionReason);
+
+/** @internal */
 export const TrialState$inboundSchema: z.ZodMiniEnum<typeof TrialState> = z
   .enum(TrialState);
 
@@ -142,11 +179,20 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     id: z.string(),
     member_count: z.int(),
     name: z.string(),
+    organizations_sharing_trial_card: z.optional(
+      z.array(AdminTrialCardSharingOrganization$inboundSchema),
+    ),
     slug: z.string(),
     stripe_customer_dashboard_url: z.optional(z.string()),
     stripe_customer_id: z.optional(z.string()),
     stripe_subscription_dashboard_url: z.optional(z.string()),
     stripe_subscription_id: z.optional(z.string()),
+    trial_card_added_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    trial_card_rejection_reason: z.optional(
+      TrialCardRejectionReason$inboundSchema,
+    ),
     trial_converted_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -174,10 +220,13 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       "creation_source": "creationSource",
       "disabled_at": "disabledAt",
       "member_count": "memberCount",
+      "organizations_sharing_trial_card": "organizationsSharingTrialCard",
       "stripe_customer_dashboard_url": "stripeCustomerDashboardUrl",
       "stripe_customer_id": "stripeCustomerId",
       "stripe_subscription_dashboard_url": "stripeSubscriptionDashboardUrl",
       "stripe_subscription_id": "stripeSubscriptionId",
+      "trial_card_added_at": "trialCardAddedAt",
+      "trial_card_rejection_reason": "trialCardRejectionReason",
       "trial_converted_at": "trialConvertedAt",
       "trial_demoted_at": "trialDemotedAt",
       "trial_ends_at": "trialEndsAt",

@@ -869,6 +869,7 @@ trackedFiles:
   src/funcs/usageCreateStripeCheckout.ts: {}
   src/funcs/usageCreateStripePortalSession.ts: {}
   src/funcs/usageCreateTopUpCheckout.ts: {}
+  src/funcs/usageCreateTrialPaymentMethodCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
   src/funcs/usageGetInferenceSpendCaps.ts: {}
   src/funcs/usageGetMeterUsage.ts: {}
@@ -2234,6 +2235,7 @@ trackedFiles:
   src/models/components/toolvariationgroup.ts: {}
   src/models/components/toolvariationgroupresult.ts: {}
   src/models/components/topserver.ts: {}
+  src/models/components/trialcardrejection.ts: {}
   src/models/components/triggeranalysisrequestbody.ts: {}
   src/models/components/triggeranalysisresponsebody.ts: {}
   src/models/components/triggerdefinition.ts: {}
@@ -2528,6 +2530,7 @@ trackedFiles:
   src/models/operations/createtemporarygrant.ts: {}
   src/models/operations/createtoolset.ts: {}
   src/models/operations/createtopupcheckout.ts: {}
+  src/models/operations/createtrialpaymentmethodcheckout.ts: {}
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createtunneledmcpserver.ts: {}
   src/models/operations/createunproxiedmcpserver.ts: {}
@@ -3505,6 +3508,7 @@ trackedFiles:
   src/react-query/createTemporaryGrant.ts: {}
   src/react-query/createToolset.ts: {}
   src/react-query/createTopUpCheckout.ts: {}
+  src/react-query/createTrialPaymentMethodCheckout.ts: {}
   src/react-query/createTrigger.ts: {}
   src/react-query/createTunneledMcpServer.ts: {}
   src/react-query/createUnproxiedMcpServer.ts: {}
@@ -6196,6 +6200,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createTrialPaymentMethodCheckout:
+    speakeasy-default-create-trial-payment-method-checkout:
+      parameters:
+        query:
+          theme: "light"
+      responses:
+        "200":
+          application/json: {"client_secret": "<value>", "publishable_key": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   createTriggerInstance:
     speakeasy-default-create-trigger-instance:
       requestBody:

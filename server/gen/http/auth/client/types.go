@@ -60,9 +60,15 @@ type InfoResponseBody struct {
 	// eligibility
 	AcceptedSignupOfferFlow *string `form:"accepted_signup_offer_flow,omitempty" json:"accepted_signup_offer_flow,omitempty" xml:"accepted_signup_offer_flow,omitempty"`
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
-	Trial         *TrialResponseBody               `json:"trial"`
-	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	Whitelisted *bool              `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Trial       *TrialResponseBody `json:"trial"`
+	// Whether the organization's free trial starts once an organization admin adds
+	// a card
+	TrialPendingPaymentMethod *bool `form:"trial_pending_payment_method,omitempty" json:"trial_pending_payment_method,omitempty" xml:"trial_pending_payment_method,omitempty"`
+	// Set while the trial waits for a card and the last card added could not start
+	// it
+	TrialCardRejection *TrialCardRejectionResponseBody  `form:"trial_card_rejection,omitempty" json:"trial_card_rejection,omitempty" xml:"trial_card_rejection,omitempty"`
+	Organizations      []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1875,6 +1881,15 @@ type TrialResponseBody struct {
 	EndsAt    *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
 }
 
+// TrialCardRejectionResponseBody is used to define fields on response body
+// types.
+type TrialCardRejectionResponseBody struct {
+	// prepaid_card: prepaid cards cannot start a trial. card_used: the card
+	// already started another organization's trial.
+	Reason     *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	RejectedAt *string `form:"rejected_at,omitempty" json:"rejected_at,omitempty" xml:"rejected_at,omitempty"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -3017,9 +3032,13 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		HasActiveSubscription:          *body.HasActiveSubscription,
 		AcceptedSignupOfferFlow:        body.AcceptedSignupOfferFlow,
 		Whitelisted:                    *body.Whitelisted,
+		TrialPendingPaymentMethod:      *body.TrialPendingPaymentMethod,
 	}
 	if body.Trial != nil {
 		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
+	}
+	if body.TrialCardRejection != nil {
+		v.TrialCardRejection = unmarshalTrialCardRejectionResponseBodyToAuthTrialCardRejection(body.TrialCardRejection)
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -3537,6 +3556,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
+	if body.TrialPendingPaymentMethod == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trial_pending_payment_method", "body"))
+	}
 	if body.OrganizationOverrideExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_override_expires_at", *body.OrganizationOverrideExpiresAt, goa.FormatDateTime))
 	}
@@ -3545,6 +3567,11 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Trial != nil {
 		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.TrialCardRejection != nil {
+		if err2 := ValidateTrialCardRejectionResponseBody(body.TrialCardRejection); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -5971,6 +5998,26 @@ func ValidateTrialResponseBody(body *TrialResponseBody) (err error) {
 	}
 	if body.EndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", *body.EndsAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateTrialCardRejectionResponseBody runs the validations defined on
+// TrialCardRejectionResponseBody
+func ValidateTrialCardRejectionResponseBody(body *TrialCardRejectionResponseBody) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.RejectedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rejected_at", "body"))
+	}
+	if body.Reason != nil {
+		if !(*body.Reason == "prepaid_card" || *body.Reason == "card_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reason", *body.Reason, []any{"prepaid_card", "card_used"}))
+		}
+	}
+	if body.RejectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.rejected_at", *body.RejectedAt, goa.FormatDateTime))
 	}
 	return
 }
