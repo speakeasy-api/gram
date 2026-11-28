@@ -97,7 +97,6 @@ func TestRuntimeRoutes_TrailingSlash(t *testing.T) {
 				"/mcp/runtime-route/install/",
 				"/.well-known/oauth-protected-resource/mcp/runtime-route/",
 				"/.well-known/oauth-authorization-server/mcp/runtime-route/",
-				"/agent-mcp/agent/",
 				"/platform/mcp/server/",
 				"/platform-mcp/",
 				"/mcp/runtime-route//",

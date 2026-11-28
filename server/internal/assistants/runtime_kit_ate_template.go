@@ -15,6 +15,7 @@ import (
 	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/atecred"
 )
@@ -151,7 +152,33 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 	}
 
 	templateName := k.templateVersionName()
-	desired := &ateapiv1.ActorTemplate{
+	desired := k.desiredTemplate(templateName)
+
+	existing, err := k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
+		ActorTemplate: k.actorRef(templateName),
+	})
+	if status.Code(err) == codes.NotFound {
+		existing, err = k.config.Client.CreateActorTemplate(ctx, &ateapiv1.CreateActorTemplateRequest{
+			ActorTemplate: desired,
+		})
+		if status.Code(err) == codes.AlreadyExists {
+			existing, err = k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
+				ActorTemplate: k.actorRef(templateName),
+			})
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("ensure ATE actor template: %w", err)
+	}
+
+	if !matchesKitATETemplate(existing, desired, k.imageDigest) {
+		return errors.New("ATE template does not match the configured Kit image digest, worker selector, and rootfs contract")
+	}
+	return nil
+}
+
+func (k *KitATERuntimeBackend) desiredTemplate(templateName string) *ateapiv1.ActorTemplate {
+	return &ateapiv1.ActorTemplate{
 		Metadata: &ateapiv1.ResourceMetadata{
 			Atespace:   k.config.Atespace,
 			Name:       templateName,
@@ -208,82 +235,46 @@ func (k *KitATERuntimeBackend) ensureTemplate(ctx context.Context) error {
 		GoldenEgressPolicy: nil,
 		Status:             nil,
 	}
-
-	existing, err := k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
-		ActorTemplate: k.actorRef(templateName),
-	})
-	if status.Code(err) == codes.NotFound {
-		existing, err = k.config.Client.CreateActorTemplate(ctx, &ateapiv1.CreateActorTemplateRequest{
-			ActorTemplate: desired,
-		})
-		if status.Code(err) == codes.AlreadyExists {
-			existing, err = k.config.Client.GetActorTemplate(ctx, &ateapiv1.GetActorTemplateRequest{
-				ActorTemplate: k.actorRef(templateName),
-			})
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("ensure ATE actor template: %w", err)
-	}
-
-	if !matchesKitATETemplate(existing, k.imageDigest, k.config.WorkerSelector) {
-		return errors.New("ATE template does not match the configured Kit image digest, worker selector, and rootfs contract")
-	}
-	return nil
 }
 
-func matchesKitATETemplate(existing *ateapiv1.ActorTemplate, expectedDigest string, expectedWorkerSelector map[string]string) bool {
-	containers := existing.GetContainers()
-	if len(containers) != 1 {
+func matchesKitATETemplate(existing, desired *ateapiv1.ActorTemplate, expectedDigest string) bool {
+	if existing == nil || desired == nil {
 		return false
 	}
-	c := containers[0]
-	existingDigest, err := kitATEImageDigest(c.GetImage())
+	containers := existing.GetContainers()
+	if len(containers) != 1 || len(desired.GetContainers()) != 1 {
+		return false
+	}
+	existingDigest, err := kitATEImageDigest(containers[0].GetImage())
 	if err != nil || existingDigest != expectedDigest {
 		return false
 	}
-	probe := c.GetWakeupProbe()
-	limits := existing.GetResources().GetLimits()
-	snap := existing.GetSnapshotConfig()
-
-	return c.GetName() == "kit" &&
-		len(c.GetCommand()) == 0 &&
-		len(c.GetArgs()) == 0 &&
-		matchesKitATETemplateTrustBundle(existing, c) &&
-		maps.Equal(existing.GetWorkerSelector().GetMatchLabels(), expectedWorkerSelector) &&
-		probe.GetHttpGet().GetPort() == ateInitPort &&
-		probe.GetHttpGet().GetPath() == "/readyz" &&
-		probe.GetTimeoutSeconds() == ateKitWakeupTimeoutSeconds &&
-		limits.GetCpuMillicores() == ateKitCPUMillicores &&
-		limits.GetMemoryBytes() == ateKitMemoryBytes &&
-		snap.GetPreferredFidelity() == ateapiv1.SnapshotFidelity_SNAPSHOT_FIDELITY_ROOTFS &&
-		snap.GetGoldenSnapshotConfig().GetMode() == ateapiv1.GoldenSnapshotMode_GOLDEN_SNAPSHOT_MODE_DISABLED
+	normExisting, ok := proto.Clone(existing).(*ateapiv1.ActorTemplate)
+	if !ok {
+		return false
+	}
+	normDesired, ok := proto.Clone(desired).(*ateapiv1.ActorTemplate)
+	if !ok {
+		return false
+	}
+	normExisting.Metadata = nil
+	normExisting.Status = nil
+	normExisting.Containers[0].Image = normDesired.Containers[0].Image
+	normDesired.Metadata = nil
+	normDesired.Status = nil
+	sortTrustBundleNames(normExisting)
+	sortTrustBundleNames(normDesired)
+	return proto.Equal(normExisting, normDesired)
 }
 
-func matchesKitATETemplateTrustBundle(existing *ateapiv1.ActorTemplate, c *ateapiv1.Container) bool {
-	vols := existing.GetVolumes()
-	mounts := c.GetVolumeMounts()
-	if len(vols) != 1 || len(mounts) != 1 {
-		return false
+func sortTrustBundleNames(tmpl *ateapiv1.ActorTemplate) {
+	for _, v := range tmpl.GetVolumes() {
+		for _, src := range v.GetSystemInfo().GetDataSources() {
+			if tb := src.GetTrustBundle(); tb != nil {
+				slices.Sort(tb.Names)
+			}
+		}
 	}
-	v := vols[0]
-	m := mounts[0]
-	if v.GetName() != ateEgressTrustBundleVolumeName || m.GetName() != ateEgressTrustBundleVolumeName || m.GetMountPath() != ateEgressTrustBundleMountPath {
-		return false
-	}
-	sources := v.GetSystemInfo().GetDataSources()
-	if len(sources) != 1 {
-		return false
-	}
-	tb := sources[0].GetTrustBundle()
-	if tb == nil || tb.GetPath() != ateEgressTrustBundleFilePath {
-		return false
-	}
-	gotNames := slices.Clone(tb.GetNames())
-	slices.Sort(gotNames)
-	wantNames := []string{ateEgressMITMTrustBundleName, ateSystemRootsTrustBundleName}
-	slices.Sort(wantNames)
-	return slices.Equal(gotNames, wantNames)
 }
 
 type kitATEEgressEndpoint struct {

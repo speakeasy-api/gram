@@ -107,7 +107,7 @@ func TestActorTunnel(t *testing.T) {
 			t.Parallel()
 			cfg, cert, pool := testConfig(t)
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodConnect || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "Bearer rotated-token" || len(r.TLS.PeerCertificates) == 0 {
+				if r.Method != http.MethodConnect || r.Host != "actor-one:8081" || r.Header.Get("ate-target-actor") != "test-space/actor-one" || r.Header.Get("Authorization") != "" || len(r.TLS.PeerCertificates) == 0 {
 					t.Error("invalid CONNECT identity")
 					w.WriteHeader(http.StatusForbidden)
 					return

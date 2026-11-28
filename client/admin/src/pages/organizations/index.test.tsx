@@ -285,7 +285,7 @@ function picker(group: string): HTMLElement {
 // choice does not close it, because the group takes more than one, so a second
 // call must not toggle the open list shut.
 async function chooseFilter(group: string, option: string): Promise<void> {
-  if (group === "Organization Status") {
+  if (group === "Organization Status" || group === "Whitelist") {
     openOn(picker(group));
     fireEvent.click(await screen.findByRole("option", { name: option }));
     return;
@@ -541,6 +541,7 @@ describe("organizations list", () => {
     ["Clear Type pro", "type", ["enterprise"]],
     [`Clear Trial ${TRIAL_LABELS.running}`, "trial", ["expired"]],
     ["Clear Organization Status Disabled", "disabledStatus", undefined],
+    ["Clear Whitelist", "whitelisted", undefined],
     ["Clear minimum members", "minMembers", undefined],
     ["Clear maximum members", "maxMembers", undefined],
     ["Clear created from", "createdFrom", undefined],
@@ -552,6 +553,7 @@ describe("organizations list", () => {
         type: ["pro", "enterprise"],
         trial: ["running", "expired"],
         disabledStatus: "disabled",
+        whitelisted: "yes",
         minMembers: "0",
         maxMembers: "9223372036854775807",
         createdFrom: "2024-02-01",
@@ -1093,6 +1095,33 @@ describe("organizations list", () => {
         }),
       ).toBeTruthy();
     }
+  });
+
+  it("keeps the whitelist filter a draft until Apply and sends it as text", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: urlFor({ type: ["pro"] }),
+    });
+    await waitFor(() =>
+      expect(lastListParams().account_types).toEqual(["pro"]),
+    );
+    expect(lastListParams().whitelisted).toBeUndefined();
+    await openFilters("Whitelist");
+    expect(picker("Whitelist").textContent).toBe("All");
+    await chooseFilter("Whitelist", "Not whitelisted");
+    expect(lastListParams().whitelisted).toBeUndefined();
+    applyFilters();
+    await waitFor(() => expect(lastListParams().whitelisted).toBe("false"));
+    expect(lastListParams().account_types).toEqual(["pro"]);
+    expect(currentSearch(router)).toContain("whitelisted=no");
+    expect(screen.getByText("Whitelist: Not whitelisted")).toBeTruthy();
+    await openFilters("Whitelist");
+    expect(picker("Whitelist").textContent).toBe("Not whitelisted");
+    await chooseFilter("Whitelist", "Whitelisted");
+    applyFilters();
+    await waitFor(() => expect(lastListParams().whitelisted).toBe("true"));
+    fireEvent.click(screen.getByRole("button", { name: "Clear Whitelist" }));
+    await waitFor(() => expect(lastListParams().whitelisted).toBeUndefined());
+    expect(lastListParams().account_types).toEqual(["pro"]);
   });
 
   it("preserves a legacy active-only bookmark until its restriction is cleared", async () => {

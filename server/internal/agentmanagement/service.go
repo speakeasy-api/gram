@@ -28,8 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,13 +46,13 @@ import (
 // and return masked identities only, and the access-role mutations pass
 // AgentIds: nil on purpose, so they never touch agent principals.
 //
-//   - Credential issuance (CreateKey, and the single-use install code that
-//     carries it) is omitted permanently, not deferred. The only useful result
-//     is a plaintext secret, which the Platform MCP contract never returns, and
-//     an agent-driven issuance would lose the dashboard's show-once surface and
-//     the 15-minute single-use exchange that keeps the key out of transcripts
-//     and shell history. This is the same reasoning as the plugin observability
-//     rotation omission (internal/plugins/rotate_observability.go).
+//   - Credential issuance is omitted permanently, not deferred. The only
+//     useful result is a plaintext secret, which the Platform MCP contract never
+//     returns, and an agent-driven issuance would lose the dashboard's
+//     show-once handoff. The runtime-gateway lookup supports that same
+//     credential handoff and is not an independent user outcome, so it does not
+//     add a Platform MCP tool. This is the same reasoning as the plugin
+//     observability rotation omission (internal/plugins/rotate_observability.go).
 //
 //   - Register, rename, suspend, resume, revoke and delete are deferred while
 //     the capability sits behind the agent-management rollout and its product
@@ -97,14 +99,16 @@ type sessionAuthorizer interface {
 }
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	db             *pgxpool.Pool
-	auth           sessionAuthorizer
-	authorizer     *Authorizer
-	audit          *audit.Logger
-	sessionTokens  sessionTokenRevoker
-	sessionRevoker agentSessionRevoker
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	auth                sessionAuthorizer
+	authorizer          *Authorizer
+	audit               *audit.Logger
+	sessionTokens       sessionTokenRevoker
+	sessionRevoker      agentSessionRevoker
+	runtimeGatewayFlags feature.Provider
+	runtimeGatewayHosts *orghost.Resolver
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -122,14 +126,16 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agents"))
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
-		logger:         logger,
-		db:             db,
-		auth:           auth.New(logger, db, sessionManager, authzEngine),
-		authorizer:     NewAuthorizer(authzEngine),
-		audit:          auditLogger,
-		sessionTokens:  sessionTokens,
-		sessionRevoker: sessionRevoker,
+		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agents"),
+		logger:              logger,
+		db:                  db,
+		auth:                auth.New(logger, db, sessionManager, authzEngine),
+		authorizer:          NewAuthorizer(authzEngine),
+		audit:               auditLogger,
+		sessionTokens:       sessionTokens,
+		sessionRevoker:      sessionRevoker,
+		runtimeGatewayFlags: nil,
+		runtimeGatewayHosts: nil,
 	}
 }
 

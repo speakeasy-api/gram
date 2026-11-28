@@ -21,6 +21,7 @@ import {
   FILTER_GROUPS,
   statusSelection,
   optionsFor,
+  WHITELIST_LABELS,
   type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
@@ -128,6 +129,7 @@ export function Toolbar({
     createdPreset: search.createdPreset,
     minMembers: search.minMembers,
     maxMembers: search.maxMembers,
+    whitelisted: search.whitelisted,
   };
 
   const relativePreset = createdPresetMetadata(filters);
@@ -188,6 +190,14 @@ export function Toolbar({
             </AppliedFilterChip>
           );
         }),
+      )}
+      {filters.whitelisted && (
+        <AppliedFilterChip
+          clearLabel="Clear Whitelist"
+          onClear={() => clearFilter({ ...filters, whitelisted: undefined })}
+        >
+          Whitelist: {WHITELIST_LABELS[filters.whitelisted]}
+        </AppliedFilterChip>
       )}
       {(["minMembers", "maxMembers"] as const).map(
         (key) =>

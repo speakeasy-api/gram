@@ -890,7 +890,6 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		agentMembership:  false,
 		caller:           emptyGatewayCaller(),
 		fromRequest:      mcpconnectionattempts.FromRequest(nil),
 		skippedUpstreams: nil,

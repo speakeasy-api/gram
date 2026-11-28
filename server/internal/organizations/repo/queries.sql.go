@@ -165,6 +165,40 @@ func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartn
 	return result.RowsAffected(), nil
 }
 
+const backdateOrganizationCreatedAtForTest = `-- name: BackdateOrganizationCreatedAtForTest :exec
+UPDATE organization_metadata
+SET created_at = $1
+WHERE id = $2
+`
+
+type BackdateOrganizationCreatedAtForTestParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        string
+}
+
+func (q *Queries) BackdateOrganizationCreatedAtForTest(ctx context.Context, arg BackdateOrganizationCreatedAtForTestParams) error {
+	_, err := q.db.Exec(ctx, backdateOrganizationCreatedAtForTest, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const backdateOrganizationUserRelationshipForTest = `-- name: BackdateOrganizationUserRelationshipForTest :exec
+UPDATE organization_user_relationships
+SET created_at = $1
+WHERE organization_id = $2
+  AND user_id = $3
+`
+
+type BackdateOrganizationUserRelationshipForTestParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) BackdateOrganizationUserRelationshipForTest(ctx context.Context, arg BackdateOrganizationUserRelationshipForTestParams) error {
+	_, err := q.db.Exec(ctx, backdateOrganizationUserRelationshipForTest, arg.CreatedAt, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -334,6 +368,7 @@ INSERT INTO organization_metadata (
     workos_updated_at,
     workos_last_event_id,
     verified_domains,
+    whitelisted,
     default_host
 ) VALUES (
     $1,
@@ -343,6 +378,7 @@ INSERT INTO organization_metadata (
     $5,
     $6,
     $7::text[],
+    TRUE,
     $8::text
 )
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, adoption_dashboard_url, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
@@ -688,6 +724,88 @@ func (q *Queries) DisableOrganizationByWorkosID(ctx context.Context, arg Disable
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const disableOrganizationOverUserCap = `-- name: DisableOrganizationOverUserCap :one
+UPDATE organization_metadata AS target
+SET disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE target.id = $1
+  AND target.disabled_at IS NULL
+  AND target.creation_source IS NULL
+  AND target.sso_enabled IS NOT TRUE
+  AND target.scim_enabled IS NOT TRUE
+  AND COALESCE(cardinality(target.verified_domains), 0) = 0
+  AND NOT EXISTS (
+      SELECT 1
+      FROM users
+      WHERE users.admin IS TRUE
+        AND users.deleted_at IS NULL
+        AND (
+            users.id = $2::text
+            OR users.workos_id = $3::text
+        )
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM organization_user_relationships AS other_member
+      WHERE other_member.organization_id = target.id
+        AND other_member.deleted_at IS NULL
+        AND NOT EXISTS (
+            SELECT 1
+            FROM users AS departed
+            WHERE departed.id = other_member.user_id
+              AND departed.deleted_at IS NOT NULL
+        )
+        AND NOT (
+            COALESCE(other_member.user_id = $2::text, FALSE)
+            OR COALESCE(other_member.workos_user_id = $3::text, FALSE)
+        )
+  )
+  AND (
+      SELECT count(DISTINCT other_org.id)
+      FROM organization_user_relationships AS mine
+      JOIN organization_metadata AS other_org ON other_org.id = mine.organization_id
+      WHERE mine.deleted IS FALSE
+        AND other_org.id <> target.id
+        AND other_org.disabled_at IS NULL
+        AND (
+            mine.user_id = $2::text
+            OR mine.workos_user_id = $3::text
+        )
+  ) >= $4::int
+RETURNING target.id, target.name, target.slug, target.disabled_at
+`
+
+type DisableOrganizationOverUserCapParams struct {
+	OrganizationID   string
+	UserID           pgtype.Text
+	WorkosUserID     pgtype.Text
+	MaxOrganizations int32
+}
+
+type DisableOrganizationOverUserCapRow struct {
+	ID         string
+	Name       string
+	Slug       string
+	DisabledAt pgtype.Timestamptz
+}
+
+func (q *Queries) DisableOrganizationOverUserCap(ctx context.Context, arg DisableOrganizationOverUserCapParams) (DisableOrganizationOverUserCapRow, error) {
+	row := q.db.QueryRow(ctx, disableOrganizationOverUserCap,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.WorkosUserID,
+		arg.MaxOrganizations,
+	)
+	var i DisableOrganizationOverUserCapRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const expireInvitationForTest = `-- name: ExpireInvitationForTest :exec
@@ -2594,6 +2712,15 @@ SELECT pg_advisory_xact_lock(hashtext($1))
 
 func (q *Queries) LockOrganizationSlug(ctx context.Context, slug string) error {
 	_, err := q.db.Exec(ctx, lockOrganizationSlug, slug)
+	return err
+}
+
+const lockUserOrganizationCap = `-- name: LockUserOrganizationCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('organization-cap:' || $1::text, 0))
+`
+
+func (q *Queries) LockUserOrganizationCap(ctx context.Context, workosUserID string) error {
+	_, err := q.db.Exec(ctx, lockUserOrganizationCap, workosUserID)
 	return err
 }
 

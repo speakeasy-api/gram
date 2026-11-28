@@ -98,7 +98,7 @@ func (a *sharedAuthorizationServer) origin() string {
 // urls are the endpoints the authorization server advertises, rooted at its
 // issuer identifier.
 func (a *sharedAuthorizationServer) urls() (AuthorizationServerURLs, error) {
-	urls := AuthorizationServerURLs{Issuer: a.issuer, Authorize: "", Token: "", Register: "", Revoke: ""}
+	urls := AuthorizationServerURLs{Issuer: a.issuer, Authorize: "", Token: "", Register: "", Revoke: "", IssuerAlias: ""}
 	for _, p := range []struct {
 		target *string
 		suffix string

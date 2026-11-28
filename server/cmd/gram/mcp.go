@@ -488,6 +488,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
+	if err := setNotFoundHandler(mux, mcp.NotFoundHandler(logger)); err != nil {
+		return err
+	}
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
 	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)

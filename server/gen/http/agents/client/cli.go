@@ -308,6 +308,31 @@ func BuildGetPayload(agentsGetID string, agentsGetSessionToken string) (*agents.
 	return v, nil
 }
 
+// BuildGetRuntimeGatewayPayload builds the payload for the agents
+// getRuntimeGateway endpoint from CLI flags.
+func BuildGetRuntimeGatewayPayload(agentsGetRuntimeGatewayAgentID string, agentsGetRuntimeGatewaySessionToken string) (*agents.GetRuntimeGatewayPayload, error) {
+	var err error
+	var agentID string
+	{
+		agentID = agentsGetRuntimeGatewayAgentID
+		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if agentsGetRuntimeGatewaySessionToken != "" {
+			sessionToken = &agentsGetRuntimeGatewaySessionToken
+		}
+	}
+	v := &agents.GetRuntimeGatewayPayload{}
+	v.AgentID = agentID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRenamePayload builds the payload for the agents rename endpoint from
 // CLI flags.
 func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string) (*agents.RenamePayload, error) {

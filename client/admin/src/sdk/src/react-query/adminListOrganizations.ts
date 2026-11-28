@@ -218,6 +218,7 @@ export function setAdminListOrganizationsData(
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
       disabledStatus?: DisabledStatus | undefined;
+      whitelisted?: boolean | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
       createdFrom?: string | undefined;
@@ -245,6 +246,7 @@ export function invalidateAdminListOrganizations(
       accountTypes?: Array<string> | undefined;
       trialStates?: Array<string> | undefined;
       disabledStatus?: DisabledStatus | undefined;
+      whitelisted?: boolean | undefined;
       minMembers?: bigint | undefined;
       maxMembers?: bigint | undefined;
       createdFrom?: string | undefined;

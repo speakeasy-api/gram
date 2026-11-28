@@ -645,6 +645,11 @@ func NewTemporalWorker(
 		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
 	}
 
+	if opts.DB != nil {
+		temporalWorker.RegisterActivityWithOptions(newHooksRolloutStageAdvancer(logger, opts.DB).Advance, activity.RegisterOptions{Name: hooksRolloutStagesActivity})
+		temporalWorker.RegisterWorkflow(HooksRolloutStagesWorkflow)
+	}
+
 	if opts.HookFleetMetrics != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.HookFleetMetrics.Emit, activity.RegisterOptions{Name: hookFleetMetricsActivity})
 		temporalWorker.RegisterWorkflow(HookFleetMetricsWorkflow)
@@ -1039,6 +1044,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
+	if opts.DB != nil {
+		go retryScheduleRegistration(ctx, logger, "hooks rollout stages", func(ctx context.Context) error {
+			return addHooksRolloutStagesSchedule(ctx, env)
+		}, time.Second, 5*time.Minute)
+	}
+
 	if opts.HookFleetMetrics != nil {
 		if err := addHookFleetMetricsSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register hook fleet metrics schedule", attr.SlogError(err))
@@ -1282,12 +1293,15 @@ type Workers struct {
 // Run registers the recurring schedules, starts every worker, then blocks
 // until interruptCh receives and the workers have stopped.
 func (w *Workers) Run(interruptCh <-chan any) error {
-	w.registerSchedules(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.registerSchedules(ctx)
 
 	if err := w.Start(); err != nil {
 		return err
 	}
 	<-interruptCh
+	cancel()
 	w.Stop()
 	return nil
 }
