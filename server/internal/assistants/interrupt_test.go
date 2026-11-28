@@ -10,11 +10,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const interruptTestUserID = "user-owner"
@@ -95,7 +97,7 @@ func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeB
 		nil,
 		backend,
 		nil,
-		assistanttokens.New("test-jwt-secret", conn, nil, nil, nil),
+		newTurnReadyTokens(t, conn),
 		nil,
 		telemetry.NewStub(logger),
 		nil,
@@ -149,6 +151,13 @@ func TestInterruptDashboardTurnInterruptsRunningTurn(t *testing.T) {
 	require.NoError(t, err)
 
 	projectID, assistantID, chatID, threadID := insertDashboardAssistantFixture(t, conn, "interrupt-running")
+	_, err = usersrepo.New(conn).UpsertUser(t.Context(), usersrepo.UpsertUserParams{ID: interruptTestUserID, Email: "owner@example.test", DisplayName: "Owner"})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{ID: "org-test", Name: "Test Org", Slug: "org-test"})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: "org-test", UserID: pgtype.Text{String: interruptTestUserID, Valid: true}})
+	require.NoError(t, err)
+	seedProjectRead(t, conn, interruptTestUserID, projectID)
 
 	interruptedThread := &atomic.Pointer[uuid.UUID]{}
 	backend := testRuntimeBackend{
@@ -157,6 +166,8 @@ func TestInterruptDashboardTurnInterruptsRunningTurn(t *testing.T) {
 		interruptThreadID: interruptedThread,
 	}
 	core := newInterruptTestCore(t, conn, backend)
+	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: projectID, AssistantID: assistantID, ActorUserID: interruptTestUserID, Staff: nil})
+	require.NoError(t, err)
 
 	// Drive the real admit → process path so the runtime row lands in the
 	// state a live turn actually leaves behind.

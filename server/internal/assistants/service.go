@@ -3623,17 +3623,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 	if err != nil {
 		return nil, err
 	}
-	var turnToken string
-	if identity.AgentBacked {
-		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
-	} else {
-		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
-	}
+	turnToken, err := s.mintTurnCredential(ctx, assistant, thread, event, identity)
 	if err != nil {
 		return nil, err
 	}
 
-	mcpServers, deliveryMode, platformSlugs, err := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, identity.AgentBacked, turnToken)
+	mcpServers, deliveryMode, platformSlugs, err := s.currentRuntimeMCPServersForTurn(ctx, assistant, runtime.RuntimeVersion, turnToken)
 	if err != nil {
 		return nil, err
 	}
@@ -3731,7 +3726,6 @@ func (s *ServiceCore) currentRuntimeMCPServersForTurn(
 	ctx context.Context,
 	assistant assistantRecord,
 	runtimeVersion int16,
-	agentBacked bool,
 	turnToken string,
 ) ([]runtimeMCPServer, MCPDeliveryMode, []string, error) {
 	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
@@ -3748,11 +3742,9 @@ func (s *ServiceCore) currentRuntimeMCPServersForTurn(
 	if serverURL == nil {
 		return nil, MCPDeliveryPerServer, platformSlugs, nil
 	}
-	if agentBacked {
-		elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
-		if elig.Eligible {
-			return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs, nil
-		}
+	elig := s.EvaluateProjectGatewayEligibility(ctx, assistant.OrganizationID, assistant.ProjectID, assistant.ID, serverURL, turnToken, assistant.MCPServers, platformSlugs)
+	if elig.Eligible {
+		return projectGatewayRuntimeServer(elig.GatewayURL), MCPDeliveryProjectGateway, platformSlugs, nil
 	}
 	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.MCPServers, platformSlugs), MCPDeliveryPerServer, platformSlugs, nil
 }
@@ -3838,27 +3830,6 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 		return fmt.Errorf("touch assistant processing lease: %w", err)
 	}
 	return nil
-}
-
-// MintThreadScopedRuntimeToken issues the JWT the runner uses for every
-// outbound call originating from a specific thread (chat completions, MCP,
-// platform tools). The ThreadID claim populates principal.ThreadID
-// downstream, so platform tools that key on the calling thread (wake,
-// memory, telemetry) keep working under the v2 single-VM-per-assistant
-// runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
-	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
-		OrgID:       assistant.OrganizationID,
-		ProjectID:   assistant.ProjectID,
-		UserID:      userID,
-		AssistantID: assistant.ID,
-		ThreadID:    threadID,
-		TTL:         assistantRuntimeTokenTTL,
-	})
-	if err != nil {
-		return "", fmt.Errorf("generate assistant execution token: %w", err)
-	}
-	return token, nil
 }
 
 // BuildThreadBootstrap composes the response the v2 runner pulls from
@@ -4049,13 +4020,6 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		SourceRefJSON:   thread.SourceRefJSON,
 	}, nil
 }
-
-// assistantRuntimeTokenTTL bounds the lifetime of tokens handed to runners.
-// Long enough to cover a typical 30-min turn plus bootstrap slack; short
-// enough that a leaked token ages out well before the thread retires. Fresh
-// tokens are pushed on /configure and on every /turn, so this is the upper
-// bound between refreshes for an idle runtime.
-const assistantRuntimeTokenTTL = 60 * time.Minute
 
 // mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
 // AuthURL, when auth events appear, and what each event carries. A connection
