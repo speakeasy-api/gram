@@ -572,8 +572,8 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("configure plugin GitHub recovery: %w", err)
 			}
 			if serviceEnv == "local" && pluginGitHub == nil {
-				assetsURI := strings.TrimSpace(c.String("assets-uri"))
-				if assetsURI == "" {
+				assetsURI := c.String("assets-uri")
+				if strings.TrimSpace(assetsURI) == "" {
 					return errors.New("local plugin repository recovery requires assets-uri")
 				}
 				publisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(assetsURI, "local-plugin-marketplaces"))
