@@ -217,7 +217,6 @@ export function AppSidebar({
       label: "Observability",
       icon: "eye",
       items: [
-        { item: routes.costs, ...accessFor(routes.costs) },
         ...(isExploreEnabled
           ? [
               { item: routes.explore, ...accessFor(routes.explore) },
@@ -238,6 +237,7 @@ export function AppSidebar({
           ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
           : []),
         { item: routes.logs, ...accessFor(routes.logs) },
+        { item: routes.costs, ...accessFor(routes.costs) },
       ],
     },
   ];
