@@ -1604,33 +1604,42 @@ var (
 	errInvitationOrganizationDisabled = errors.New("invitation organization is disabled")
 )
 
-func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string, requireSSO func(orgrepo.OrganizationMetadatum) bool) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, bool, error) {
+// invitationTrial reports what an accepted invitation did for the
+// organization's trial. offered is a first acceptance of a staff invitation
+// into an organization with no trial; armed is whether the trial started then,
+// rather than waiting for a card.
+type invitationTrial struct {
+	offered bool
+	armed   bool
+}
+
+func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID string, requireSSO func(orgrepo.OrganizationMetadatum) bool) (orgrepo.OrganizationMetadatum, orgrepo.OrganizationInvitation, invitationTrial, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("begin invite acceptance transaction: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("begin invite acceptance transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	repo := orgrepo.New(tx)
 	org, err := repo.LockOrganizationForInviteAcceptance(ctx, organizationID)
 	if err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("lock invite organization: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("lock invite organization: %w", err)
 	}
 	// Checked under the lock, so an organization disabled after the
 	// invitation was listed gains no member.
 	if org.DisabledAt.Valid {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationOrganizationDisabled
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, errInvitationOrganizationDisabled
 	}
 	if requireSSO != nil && requireSSO(org) {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, ErrInvitationRequiresSSO
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, ErrInvitationRequiresSSO
 	}
 
 	acceptedInvite, err := repo.AcceptInvitation(ctx, inviteID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errInvitationAcceptanceRace
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, errInvitationAcceptanceRace
 	}
 	if err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("accept invitation: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("accept invitation: %w", err)
 	}
 
 	hasOtherActiveUsers, err := repo.HasOtherActiveOrganizationUsers(ctx, orgrepo.HasOtherActiveOrganizationUsersParams{
@@ -1638,7 +1647,7 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 		UserID:         gramUserID,
 	})
 	if err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("check for other active organization users: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("check for other active organization users: %w", err)
 	}
 
 	eligibleInviter := false
@@ -1649,7 +1658,7 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 			eligibleInviter = inviter.Admin && !inviter.DeletedAt.Valid
 			inviterEmail = inviter.Email
 		} else if !errors.Is(inviterErr, pgx.ErrNoRows) {
-			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("get invitation creator: %w", inviterErr)
+			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("get invitation creator: %w", inviterErr)
 		}
 	}
 
@@ -1657,14 +1666,14 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 	if _, err := trialsrepo.New(tx).GetTrial(ctx, acceptedInvite.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
 		hasLifecycle = false
 	} else if err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("get trial lifecycle: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("get trial lifecycle: %w", err)
 	}
 
 	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
 		OrganizationID: acceptedInvite.OrganizationID,
 		UserID:         conv.ToPGText(gramUserID),
 	}); err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("create organization user relationship: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("create organization user relationship: %w", err)
 	}
 
 	if acceptedInvite.RoleSlug.Valid {
@@ -1677,25 +1686,30 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 		}); err != nil {
-			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("sync invitation role assignments: %w", err)
+			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("sync invitation role assignments: %w", err)
 		}
 	}
 
-	trialArmed := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle
+	// When trials wait for a validated card, the staff invitation only offers
+	// the trial: the invitee starts it by adding one. An organization staff
+	// already let into the product has no card gate to show, so it is armed.
+	trialOffered := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle
+	trialArmed := trialOffered &&
+		(org.Whitelisted || !s.sessions.SelfServeTrialRequiresPaymentMethod(ctx, acceptedInvite.OrganizationID))
 	if trialArmed {
 		if s.trialBundleSeeder == nil {
-			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, errors.New("enterprise trial bundle seeder is not configured")
+			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, errors.New("enterprise trial bundle seeder is not configured")
 		}
 		if err := auth.ArmEnterpriseTrialTx(ctx, tx, org, acceptedInvite.InviterUserID.String, inviterEmail, s.trialBundleSeeder, s.audit); err != nil {
-			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("arm invitation enterprise trial: %w", err)
+			return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("arm invitation enterprise trial: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, false, fmt.Errorf("commit invite acceptance transaction: %w", err)
+		return orgrepo.OrganizationMetadatum{}, orgrepo.OrganizationInvitation{}, invitationTrial{offered: false, armed: false}, fmt.Errorf("commit invite acceptance transaction: %w", err)
 	}
 
-	return org, acceptedInvite, trialArmed, nil
+	return org, acceptedInvite, invitationTrial{offered: trialOffered, armed: trialArmed}, nil
 }
 
 // acceptInvitation makes the user a member of the invitation's organization
@@ -1704,10 +1718,11 @@ func (s *Service) acceptInvitationTx(ctx context.Context, inviteID uuid.UUID, or
 // acceptance itself can fail. A non-nil requireSSO is checked under the
 // organization lock and refuses the acceptance with ErrInvitationRequiresSSO.
 func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, organizationID, gramUserID, workosUserID, inviteeEmail string, requireSSO func(orgrepo.OrganizationMetadatum) bool) error {
-	org, acceptedInvite, trialArmed, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID, requireSSO)
+	org, acceptedInvite, trial, err := s.acceptInvitationTx(ctx, inviteID, organizationID, gramUserID, workosUserID, requireSSO)
 	if err != nil {
 		return err
 	}
+	trialArmed := trial.armed
 
 	if trialArmed {
 		for _, feature := range productfeatures.EnterpriseAccessBundle {
@@ -1721,11 +1736,15 @@ func (s *Service) acceptInvitation(ctx context.Context, inviteID uuid.UUID, orga
 		if err := s.trial.TrialStarted(ctx, acceptedInvite.OrganizationID); err != nil {
 			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID))
 		}
-		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
 	} else if acceptedInvite.RoleSlug.Valid && acceptedInvite.RoleSlug.String == authz.SystemRoleAdmin {
 		if err := s.trial.AdminAdded(ctx, acceptedInvite.OrganizationID, gramUserID); err != nil {
 			s.logger.ErrorContext(ctx, "invitation acceptance: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(acceptedInvite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(acceptedInvite.ID.String()))
 		}
+	}
+	// The first staff-invite acceptance creates the organization for growth
+	// reporting whether its trial started now or waits for a card.
+	if trial.offered {
+		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
 	}
 
 	return nil

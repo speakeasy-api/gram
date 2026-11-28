@@ -783,6 +783,8 @@ SELECT
     t.ends_at AS trial_ends_at,
     t.converted_at AS trial_converted_at,
     t.demoted_at AS trial_demoted_at,
+    tpm.updated_at AS trial_card_added_at,
+    tpm.rejection_reason AS trial_card_rejection_reason,
     om.creation_source,
     om.adoption_dashboard_url,
     om.created_at,
@@ -795,6 +797,7 @@ SELECT
     )::bigint AS member_count
 FROM organization_metadata om
 LEFT JOIN trials t ON t.organization_id = om.id
+LEFT JOIN trial_payment_methods tpm ON tpm.organization_id = om.id
 LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
 WHERE om.id = $1::text
    OR ($2::boolean AND om.slug = $1::text)
@@ -808,25 +811,27 @@ type AdminGetOrganizationParams struct {
 }
 
 type AdminGetOrganizationRow struct {
-	ID                   string
-	Name                 string
-	Slug                 string
-	AccountType          string
-	WorkosID             pgtype.Text
-	StripeCustomerID     pgtype.Text
-	StripeSubscriptionID pgtype.Text
-	Whitelisted          bool
-	DisabledAt           pgtype.Timestamptz
-	TrialState           string
-	TrialTier            pgtype.Text
-	TrialEndsAt          pgtype.Timestamptz
-	TrialConvertedAt     pgtype.Timestamptz
-	TrialDemotedAt       pgtype.Timestamptz
-	CreationSource       pgtype.Text
-	AdoptionDashboardUrl pgtype.Text
-	CreatedAt            pgtype.Timestamptz
-	UpdatedAt            pgtype.Timestamptz
-	MemberCount          int64
+	ID                       string
+	Name                     string
+	Slug                     string
+	AccountType              string
+	WorkosID                 pgtype.Text
+	StripeCustomerID         pgtype.Text
+	StripeSubscriptionID     pgtype.Text
+	Whitelisted              bool
+	DisabledAt               pgtype.Timestamptz
+	TrialState               string
+	TrialTier                pgtype.Text
+	TrialEndsAt              pgtype.Timestamptz
+	TrialConvertedAt         pgtype.Timestamptz
+	TrialDemotedAt           pgtype.Timestamptz
+	TrialCardAddedAt         pgtype.Timestamptz
+	TrialCardRejectionReason pgtype.Text
+	CreationSource           pgtype.Text
+	AdoptionDashboardUrl     pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+	MemberCount              int64
 }
 
 // Resolving a slug is opt-in because every admin write is keyed on id alone.
@@ -856,6 +861,8 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.TrialEndsAt,
 		&i.TrialConvertedAt,
 		&i.TrialDemotedAt,
+		&i.TrialCardAddedAt,
+		&i.TrialCardRejectionReason,
 		&i.CreationSource,
 		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,

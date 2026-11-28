@@ -2143,6 +2143,21 @@ func marshalAuthTrialToTrialResponseBody(v *auth.Trial) *TrialResponseBody {
 	return res
 }
 
+// marshalAuthTrialCardRejectionToTrialCardRejectionResponseBody builds a value
+// of type *TrialCardRejectionResponseBody from a value of type
+// *auth.TrialCardRejection.
+func marshalAuthTrialCardRejectionToTrialCardRejectionResponseBody(v *auth.TrialCardRejection) *TrialCardRejectionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &TrialCardRejectionResponseBody{
+		Reason:     v.Reason,
+		RejectedAt: v.RejectedAt,
+	}
+
+	return res
+}
+
 // marshalAuthOrganizationEntryToOrganizationEntryResponseBody builds a value
 // of type *OrganizationEntryResponseBody from a value of type
 // *auth.OrganizationEntry.

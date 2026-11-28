@@ -212,6 +212,15 @@ type CreateStripeCheckoutResponseBody struct {
 	PublishableKey string `form:"publishable_key" json:"publishable_key" xml:"publishable_key"`
 }
 
+// CreateTrialPaymentMethodCheckoutResponseBody is the type of the "usage"
+// service "createTrialPaymentMethodCheckout" endpoint HTTP response body.
+type CreateTrialPaymentMethodCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey string `form:"publishable_key" json:"publishable_key" xml:"publishable_key"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -2730,6 +2739,196 @@ type CreateStripeCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "unauthorized" error.
+type CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutForbiddenResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "forbidden" error.
+type CreateTrialPaymentMethodCheckoutForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutBadRequestResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "bad_request" error.
+type CreateTrialPaymentMethodCheckoutBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutNotFoundResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "not_found" error.
+type CreateTrialPaymentMethodCheckoutNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutConflictResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "conflict" error.
+type CreateTrialPaymentMethodCheckoutConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody is the type of
+// the "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutInvalidResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "invalid" error.
+type CreateTrialPaymentMethodCheckoutInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody is the type
+// of the "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutUnexpectedResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "unexpected" error.
+type CreateTrialPaymentMethodCheckoutUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody is the type of the
+// "usage" service "createTrialPaymentMethodCheckout" endpoint HTTP response
+// body for the "gateway_error" error.
+type CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionUnauthorizedResponseBody is the type of the "usage"
 // service "getStripeSubscription" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4222,6 +4421,17 @@ func NewGetStripeCheckoutStatusResponseBody(res *usage.GetStripeCheckoutStatusRe
 // result of the "createStripeCheckout" endpoint of the "usage" service.
 func NewCreateStripeCheckoutResponseBody(res *usage.StripeEmbeddedCheckout) *CreateStripeCheckoutResponseBody {
 	body := &CreateStripeCheckoutResponseBody{
+		ClientSecret:   res.ClientSecret,
+		PublishableKey: res.PublishableKey,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutResponseBody builds the HTTP response
+// body from the result of the "createTrialPaymentMethodCheckout" endpoint of
+// the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutResponseBody(res *usage.StripeEmbeddedCheckout) *CreateTrialPaymentMethodCheckoutResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutResponseBody{
 		ClientSecret:   res.ClientSecret,
 		PublishableKey: res.PublishableKey,
 	}
@@ -6180,6 +6390,156 @@ func NewCreateStripeCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 	return body
 }
 
+// NewCreateTrialPaymentMethodCheckoutUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutUnauthorizedResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutForbiddenResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutForbiddenResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutForbiddenResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutBadRequestResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutBadRequestResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutBadRequestResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutNotFoundResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutNotFoundResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutNotFoundResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutConflictResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutConflictResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutConflictResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutInvalidResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutInvalidResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutInvalidResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutInvariantViolationResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutUnexpectedResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutUnexpectedResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutUnexpectedResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateTrialPaymentMethodCheckoutGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "createTrialPaymentMethodCheckout"
+// endpoint of the "usage" service.
+func NewCreateTrialPaymentMethodCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody {
+	body := &CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getStripeSubscription" endpoint of the "usage"
 // service.
@@ -7191,6 +7551,16 @@ func NewGetStripeCheckoutStatusPayload(sessionID string, sessionToken *string) *
 // endpoint payload.
 func NewCreateStripeCheckoutPayload(theme string, sessionToken *string) *usage.CreateStripeCheckoutPayload {
 	v := &usage.CreateStripeCheckoutPayload{}
+	v.Theme = theme
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewCreateTrialPaymentMethodCheckoutPayload builds a usage service
+// createTrialPaymentMethodCheckout endpoint payload.
+func NewCreateTrialPaymentMethodCheckoutPayload(theme string, sessionToken *string) *usage.CreateTrialPaymentMethodCheckoutPayload {
+	v := &usage.CreateTrialPaymentMethodCheckoutPayload{}
 	v.Theme = theme
 	v.SessionToken = sessionToken
 

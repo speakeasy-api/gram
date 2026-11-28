@@ -3037,6 +3037,242 @@ func DecodeCreateStripeCheckoutResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildCreateTrialPaymentMethodCheckoutRequest instantiates a HTTP request
+// object with method and path set to call the "usage" service
+// "createTrialPaymentMethodCheckout" endpoint
+func (c *Client) BuildCreateTrialPaymentMethodCheckoutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateTrialPaymentMethodCheckoutUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "createTrialPaymentMethodCheckout", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateTrialPaymentMethodCheckoutRequest returns an encoder for
+// requests sent to the usage createTrialPaymentMethodCheckout server.
+func EncodeCreateTrialPaymentMethodCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.CreateTrialPaymentMethodCheckoutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "createTrialPaymentMethodCheckout", "*usage.CreateTrialPaymentMethodCheckoutPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("theme", p.Theme)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCreateTrialPaymentMethodCheckoutResponse returns a decoder for
+// responses returned by the usage createTrialPaymentMethodCheckout endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeCreateTrialPaymentMethodCheckoutResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateTrialPaymentMethodCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateTrialPaymentMethodCheckoutResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			res := NewCreateTrialPaymentMethodCheckoutStripeEmbeddedCheckoutOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateTrialPaymentMethodCheckoutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateTrialPaymentMethodCheckoutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateTrialPaymentMethodCheckoutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateTrialPaymentMethodCheckoutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateTrialPaymentMethodCheckoutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateTrialPaymentMethodCheckoutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateTrialPaymentMethodCheckoutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+				}
+				err = ValidateCreateTrialPaymentMethodCheckoutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+				}
+				return nil, NewCreateTrialPaymentMethodCheckoutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateTrialPaymentMethodCheckoutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+				}
+				err = ValidateCreateTrialPaymentMethodCheckoutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+				}
+				return nil, NewCreateTrialPaymentMethodCheckoutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createTrialPaymentMethodCheckout", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateTrialPaymentMethodCheckoutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			err = ValidateCreateTrialPaymentMethodCheckoutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createTrialPaymentMethodCheckout", err)
+			}
+			return nil, NewCreateTrialPaymentMethodCheckoutGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "createTrialPaymentMethodCheckout", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetStripeSubscriptionRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "getStripeSubscription"
 // endpoint

@@ -4,13 +4,14 @@ use std::sync::Arc;
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{Json, Router, middleware};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 use tracing::Instrument;
 
 use crate::errors::RunnerError;
 use crate::http_layer::TokenRegistry;
+use crate::peer_guard::{PeerAddrs, reject_same_host};
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, lookup_thread, snapshot_threads,
 };
@@ -47,23 +48,31 @@ pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
     .await
     .map_err(std::io::Error::other)?;
 
-    let app = Router::new()
-        .route("/healthz", get(healthz))
+    let listener = TcpListener::bind(config.addr).await?;
+    let shutdown_wait = shutdown.clone();
+    axum::serve(
+        listener,
+        router(host).into_make_service_with_connect_info::<PeerAddrs>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown_wait.notified().await;
+        tracing::info!("graceful shutdown requested — draining in-flight requests");
+    })
+    .await?;
+    Ok(())
+}
+
+/// The runner API. Everything but `/healthz` rejects callers inside the
+/// runtime's own pod; see [`crate::peer_guard`].
+fn router(host: AppState) -> Router {
+    Router::new()
         .route("/state", get(state_handler))
         .route("/threads/{thread_id}/turn", post(thread_turn))
         .route("/threads/{thread_id}/interrupt", post(thread_interrupt))
+        .route_layer(middleware::from_fn(reject_same_host))
+        .route("/healthz", get(healthz))
         .layer(DefaultBodyLimit::max(TURN_BODY_LIMIT_BYTES))
-        .with_state(host);
-
-    let listener = TcpListener::bind(config.addr).await?;
-    let shutdown_wait = shutdown.clone();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown_wait.notified().await;
-            tracing::info!("graceful shutdown requested — draining in-flight requests");
-        })
-        .await?;
-    Ok(())
+        .with_state(host)
 }
 
 async fn healthz() -> &'static str {
@@ -308,6 +317,60 @@ mod tests {
             serde_json::json!({"input":"test", "auth_token":token, "assistant_id":hint}),
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn runner_api_rejects_callers_on_the_same_host() {
+        let host = build_host(
+            Arc::new(SpanIdentity::default()),
+            "http://127.0.0.1:1".into(),
+            String::new(),
+            DEFAULT_THREAD_IDLE_TTL,
+        )
+        .await
+        .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router(host).into_make_service_with_connect_info::<PeerAddrs>(),
+            )
+            .await
+            .unwrap();
+        });
+        let client = reqwest::Client::new();
+
+        let health = client
+            .get(format!("http://{addr}/healthz"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(health.status(), StatusCode::OK);
+
+        let state = client
+            .get(format!("http://{addr}/state"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(state.status(), StatusCode::FORBIDDEN);
+
+        let interrupt = client
+            .post(format!("http://{addr}/threads/T/interrupt"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(interrupt.status(), StatusCode::FORBIDDEN);
+
+        let turn = client
+            .post(format!("http://{addr}/threads/T/turn"))
+            .json(&serde_json::json!({"input": "test", "auth_token": "opaque-valid"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(turn.status(), StatusCode::FORBIDDEN);
+
+        task.abort();
     }
 
     #[tokio::test]
