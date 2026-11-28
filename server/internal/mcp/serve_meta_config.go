@@ -12,6 +12,10 @@ type MetaRuntimeConfig struct {
 	// ValidationTimeout budgets consent verification, legacy cleanup, and the verdict write.
 	ValidationTimeout time.Duration
 
+	// GatewayListingTimeout bounds a whole gateway inventory, retries included,
+	// for an agent's listing and the consent page's capture alike.
+	GatewayListingTimeout time.Duration
+
 	// AutoVerifyWait is how long a remote login callback holds its redirect for the probe a fresh grant starts, so a fast member's verdict is on the first render.
 	AutoVerifyWait time.Duration
 
@@ -26,6 +30,9 @@ func (c MetaRuntimeConfig) withDefaults() MetaRuntimeConfig {
 	}
 	if c.ValidationTimeout <= 0 {
 		c.ValidationTimeout = 15 * time.Second
+	}
+	if c.GatewayListingTimeout <= 0 {
+		c.GatewayListingTimeout = maxGatewayListingTime
 	}
 	if c.AutoVerifyWait <= 0 {
 		c.AutoVerifyWait = 3 * time.Second
