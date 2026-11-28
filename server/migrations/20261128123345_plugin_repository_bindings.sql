@@ -1,19 +1,24 @@
 -- Create "plugin_repository_bindings" table
 CREATE TABLE "plugin_repository_bindings" (
-  "project_id" uuid NOT NULL,
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "project_id" uuid NULL,
   "repository_id" bigint NOT NULL,
   "repo_owner" text NOT NULL,
   "repo_name" text NOT NULL,
   "installation_id" bigint NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY ("project_id"),
+  PRIMARY KEY ("id"),
   CONSTRAINT "plugin_repository_bindings_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "plugin_repository_bindings_repo_name_check" CHECK (repo_name <> ''::text),
   CONSTRAINT "plugin_repository_bindings_repo_owner_check" CHECK (repo_owner <> ''::text)
 );
+-- Create index "plugin_repository_bindings_project_id_key" to table: "plugin_repository_bindings"
+CREATE UNIQUE INDEX "plugin_repository_bindings_project_id_key" ON "plugin_repository_bindings" ("project_id");
 -- Create index "plugin_repository_bindings_repository_id_key" to table: "plugin_repository_bindings"
 CREATE UNIQUE INDEX "plugin_repository_bindings_repository_id_key" ON "plugin_repository_bindings" ("repository_id");
+-- Set comment to column: "id" on table: "plugin_repository_bindings"
+COMMENT ON COLUMN "plugin_repository_bindings"."id" IS '@access: confidential';
 -- Set comment to column: "project_id" on table: "plugin_repository_bindings"
 COMMENT ON COLUMN "plugin_repository_bindings"."project_id" IS '@access: confidential';
 -- Set comment to column: "repository_id" on table: "plugin_repository_bindings"
