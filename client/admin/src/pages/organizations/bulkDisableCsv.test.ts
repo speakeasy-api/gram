@@ -46,7 +46,11 @@ describe("parseBulkDisableCsv", () => {
 
   it("refuses a row that names no organization", () => {
     expect(() => parseBulkDisableCsv("id,name\norg_1,A\n,B\n")).toThrow(
-      "Row 3 has no value for an id.",
+      "Data row 2 has no value for an id.",
+    );
+    // Blank lines are not counted, so the number still names the right row.
+    expect(() => parseBulkDisableCsv("id,name\n\norg_1,A\n\n,B\n")).toThrow(
+      "Data row 2 has no value for an id.",
     );
   });
 

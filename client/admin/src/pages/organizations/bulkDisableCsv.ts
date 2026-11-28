@@ -72,14 +72,15 @@ export function parseBulkDisableCsv(text: string): BulkDisableTargets {
     if (id) ids.push(id);
     else if (slug) slugs.push(slug);
     else {
-      // Row numbers count the header as row 1, as a spreadsheet does.
+      // Counted among data rows only: readCsv has already dropped blank lines,
+      // so a spreadsheet row number would be wrong for a file that has them.
       const column =
         idColumn !== -1 && slugColumn !== -1
           ? "an id or a slug"
           : idColumn !== -1
             ? "an id"
             : "a slug";
-      throw new Error(`Row ${index + 2} has no value for ${column}.`);
+      throw new Error(`Data row ${index + 1} has no value for ${column}.`);
     }
   });
 

@@ -624,27 +624,6 @@ export async function enableOrganization(
   );
 }
 
-const resolveOrganizationsMutation =
-  buildAdminResolveOrganizationsMutation(redirectingClient);
-const bulkDisableOrganizationsMutation =
-  buildAdminBulkDisableOrganizationsMutation(redirectingClient);
-
-// The review step of a bulk disable. A POST because a CSV can carry a thousand
-// identifiers, but it writes nothing.
-export function resolveOrganizations(
-  request: ResolveOrganizationsRequestBody,
-): Promise<AdminResolveOrganizationsResult> {
-  return redirecting(resolveOrganizationsMutation.mutationFn({ request }));
-}
-
-// `missingIds` names what was not written. A caller that drops it reports the
-// batch as having done more than it did.
-export function bulkDisableOrganizations(
-  request: BulkDisableOrganizationsRequestBody,
-): Promise<AdminBulkDisableOrganizationsResult> {
-  return redirecting(bulkDisableOrganizationsMutation.mutationFn({ request }));
-}
-
 // The days are added to the trial's current end date, not to today, so an
 // extension applied early does not shorten the trial.
 export async function extendTrial(
@@ -1447,4 +1426,28 @@ export function finalizeOrganizationEncryption(request: {
       },
     }),
   );
+}
+
+// Bulk disable sits apart from the organization writes above: neither call
+// answers with an organization record. The first is the read-only review, the
+// second the batch outcome.
+const resolveOrganizationsMutation =
+  buildAdminResolveOrganizationsMutation(redirectingClient);
+const bulkDisableOrganizationsMutation =
+  buildAdminBulkDisableOrganizationsMutation(redirectingClient);
+
+// The review step of a bulk disable. A POST because a CSV can carry a thousand
+// identifiers, but it writes nothing.
+export function resolveOrganizations(
+  request: ResolveOrganizationsRequestBody,
+): Promise<AdminResolveOrganizationsResult> {
+  return redirecting(resolveOrganizationsMutation.mutationFn({ request }));
+}
+
+// `missingIds` names what was not written. A caller that drops it reports the
+// batch as having done more than it did.
+export function bulkDisableOrganizations(
+  request: BulkDisableOrganizationsRequestBody,
+): Promise<AdminBulkDisableOrganizationsResult> {
+  return redirecting(bulkDisableOrganizationsMutation.mutationFn({ request }));
 }

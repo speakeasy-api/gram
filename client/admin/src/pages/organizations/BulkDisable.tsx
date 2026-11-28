@@ -59,7 +59,7 @@ export function BulkDisable({
   // table by the page that owns the live region, not from inside a row.
   reporter: WriteReporter;
 }): JSX.Element {
-  const { announce } = reporter;
+  const { announce, showFailure } = reporter;
   const qc = useQueryClient();
   const fileField = useId();
   const fileHintID = useId();
@@ -84,6 +84,8 @@ export function BulkDisable({
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (result) => {
       setOutcome(result);
+      // A banner from an earlier write on this page no longer describes it.
+      showFailure(null);
       const done = `Disabled ${organizationCount(result.disabledIds.length)}.`;
       announce(
         result.missingIds.length
@@ -91,6 +93,10 @@ export function BulkDisable({
           : done,
       );
     },
+    // The dialog stays open holding the reason, because that is where the
+    // operator is looking; the page's live region hears it too.
+    onError: (error) =>
+      announce(`Could not disable organizations: ${errorMessage(error)}`),
     // Settled rather than success: a batch that failed may still have raced a
     // change from someone else, and the list should show what is there now.
     onSettled: () => invalidateOrganizations(qc),
@@ -178,6 +184,12 @@ export function BulkDisable({
                   accept=".csv,text/csv"
                   aria-describedby={fileHintID}
                   disabled={busy}
+                  // Cleared on every open of the picker, so choosing the same
+                  // file again after fixing it, or after a failed lookup, still
+                  // fires a change.
+                  onClick={(event) => {
+                    event.currentTarget.value = "";
+                  }}
                   onChange={(event) => {
                     void readFile(event.target.files?.[0]);
                   }}
@@ -261,8 +273,10 @@ function Review({
             and will be skipped:
           </p>
           <ul className="text-muted-foreground max-h-32 overflow-y-auto font-mono text-xs">
-            {missing.map((identifier) => (
-              <li key={identifier}>{identifier}</li>
+            {missing.map((identifier, index) => (
+              // An id and a slug can be spelled the same, so the text alone is
+              // not a unique key.
+              <li key={`${index}:${identifier}`}>{identifier}</li>
             ))}
           </ul>
         </div>
