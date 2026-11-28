@@ -479,13 +479,11 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	if acPre.ActiveOrganizationID == "" {
 		return &gen.ListUserGrantsResult{Grants: nil}, nil
 	}
-	// Sessions in the shared demo org have no membership rows. Return the
-	// full user-visible scope set so every dashboard page is browsable in the
-	// demo (page gates like Costs require org:admin). This is the same set
-	// authz.DemoScopeGrants installs on the request context;
-	// TestDemoGrantsMatchEnforcedScopes holds the two together.
+	// Sessions in the shared demo org have no membership rows. Report the
+	// read-only set authz.DemoScopeGrants installs on the request context, so
+	// the dashboard hides the controls the server refuses.
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
-		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+		return &gen.ListUserGrantsResult{Grants: demoScopeGrants()}, nil
 	}
 	if contextvalues.IsSupportSession(ctx) {
 		trace.SpanFromContext(ctx).SetAttributes(
@@ -748,6 +746,17 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 
 // userVisibleScopeGrants returns unrestricted grants for every first-class
 // permission scope. Used when RBAC is not enforced or for admin impersonation.
+// demoScopeGrants reports the grants authz.DemoScopeGrants enforces on demo
+// sessions, in the dashboard's shape.
+func demoScopeGrants() []*gen.ListRoleGrant {
+	enforced := authz.DemoScopeGrants()
+	grants := make([]*gen.ListRoleGrant, 0, len(enforced))
+	for _, grant := range enforced {
+		grants = append(grants, &gen.ListRoleGrant{Scope: string(grant.Scope), Selectors: nil, SubScopes: nil, DirectSelectors: nil})
+	}
+	return grants
+}
+
 func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},

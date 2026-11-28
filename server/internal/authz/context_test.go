@@ -284,7 +284,7 @@ func TestCredentialCeilingFromContextIsImmutable(t *testing.T) {
 	require.Equal(t, "project-original", second[0].Selector[SelectorKeyProjectID])
 }
 
-func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
+func TestPrepareContext_demoOrgIsReadOnly(t *testing.T) {
 	t.Parallel()
 
 	ctx := demoTestCtx(t)
@@ -298,19 +298,42 @@ func TestPrepareContext_demoOrgGetsEveryUserVisibleScope(t *testing.T) {
 	require.True(t, ok)
 	require.NotEmpty(t, grants)
 
-	// Demo sessions hold the same set access.ListGrants reports to the
-	// dashboard, so no page is offered that the server then refuses.
+	// Demo visitors can browse the demo org.
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgRead, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
 	require.NoError(t, engine.Require(ctx, Environment(EnvironmentIDFrom("env_demo"), ProjectIDFrom(testProjectID)).Read()))
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}))
-	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom("mcp_demo"), ProjectIDFrom(testProjectID)).Write()))
+	require.NoError(t, engine.Require(ctx, MCPServer(MCPServerIDFrom("mcp_demo"), ProjectIDFrom(testProjectID)).Read()))
 
-	// Internal scopes stay internal: the demo set is the user-visible
-	// catalogue, not every scope the server declares.
+	// Anyone can enter the demo, and everyone shares it, so no demo session
+	// may change it, administer it, or act through it.
+	refused := []Check{
+		{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID},
+		{Scope: ScopeProjectWrite, ResourceID: "project_demo"},
+		{Scope: ScopePluginWrite, ResourceID: "plugin_demo"},
+		{Scope: ScopeChatWrite, ResourceID: "chat_demo"},
+		{Scope: ScopeMemoryWrite, ResourceID: "memory_demo"},
+		{Scope: ScopeChannelsAdmin, ResourceID: constants.DemoOrganizationID},
+		{Scope: ScopeChannelsConnect, ResourceID: constants.DemoOrganizationID},
+		InferenceExecuteCheck(testProjectID),
+		{Scope: ScopeRiskPolicyBypass, ResourceID: "policy_demo"},
+		{Scope: ScopeAgentWrite, ResourceID: "agent_demo"},
+		{Scope: ScopeAgentAuthorize, ResourceID: "agent_demo"},
+		{Scope: ScopeAgentTransfer, ResourceID: "agent_demo"},
+		MCPServer(MCPServerIDFrom("mcp_demo"), ProjectIDFrom(testProjectID)).Write(),
+		Environment(EnvironmentIDFrom("env_demo"), ProjectIDFrom(testProjectID)).Write(),
+	}
+	for _, check := range refused {
+		// Forbidden, not an invalid-check error, so the refusal comes from
+		// the missing grant.
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, engine.Require(ctx, check), &oopsErr, "demo session must not hold %s", check.Scope)
+		require.Equal(t, oops.CodeForbidden, oopsErr.Code, "demo session must not hold %s", check.Scope)
+	}
+
+	// Every grant is a read-only scope from the allowlist.
 	for _, grant := range grants {
+		require.Contains(t, demoReadOnlyScopes, grant.Scope)
 		visibility, ok := ScopeVisibilityFor(grant.Scope)
 		require.True(t, ok, "scope %q has no declared visibility", grant.Scope)
 		require.Equal(t, ScopeVisibilityUserVisible, visibility, "scope %q is not user-visible", grant.Scope)
@@ -335,10 +358,13 @@ func TestPrepareContext_demoOrgIgnoresScopeOverrides(t *testing.T) {
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
-	// org:admin is outside the override, so passing it proves the demo branch
-	// produced these grants rather than GrantsFromOverrides.
-	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeOrgAdmin, ResourceID: constants.DemoOrganizationID}))
+	// The override asked for project:write; the demo branch ignores it and
+	// installs the read-only set instead.
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceID: "project_demo"}), &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project_demo"}))
+	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeChatRead, ResourceID: "chat_demo"}))
 }
 
 func challengeLoggingAlwaysEnabled(context.Context, string) (bool, error) { return true, nil }

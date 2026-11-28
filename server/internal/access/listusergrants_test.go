@@ -51,15 +51,29 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeOrgHooksIngest),
 }
 
+// expectedDemoScopes is the read-only set every demo session holds.
+var expectedDemoScopes = []string{
+	string(authz.ScopeOrgRead),
+	string(authz.ScopeChatRead),
+	string(authz.ScopeProjectRead),
+	string(authz.ScopeLogRead),
+	string(authz.ScopeMemoryRead),
+	string(authz.ScopeMCPRead),
+	string(authz.ScopeEnvironmentRead),
+	string(authz.ScopeSkillRead),
+	string(authz.ScopeAssistantRead),
+	string(authz.ScopeAgentRead),
+	string(authz.ScopeWorkloadRead),
+}
+
 // TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
-// dashboard against the set authz.Engine.PrepareContext enforces. Different
-// functions produce them on the same condition, and any drift lets the demo
-// org render pages whose handlers then return 403.
+// dashboard against the set authz.Engine.PrepareContext enforces, and both to
+// the read-only demo set.
 func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
 	t.Parallel()
 
-	reported := make([]string, 0, len(userVisibleScopeGrants()))
-	for _, grant := range userVisibleScopeGrants() {
+	reported := make([]string, 0, len(demoScopeGrants()))
+	for _, grant := range demoScopeGrants() {
 		reported = append(reported, grant.Scope)
 	}
 
@@ -69,7 +83,7 @@ func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
 	}
 
 	require.ElementsMatch(t, reported, enforced)
-	require.ElementsMatch(t, expectedFullAccessScopes, enforced)
+	require.ElementsMatch(t, expectedDemoScopes, enforced)
 }
 
 func TestService_ListGrants(t *testing.T) {
