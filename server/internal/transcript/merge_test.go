@@ -1,0 +1,842 @@
+package transcript
+
+import (
+	"encoding/binary"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+)
+
+// sequentialIDs makes predictable node IDs.
+func sequentialIDs() func() (uuid.UUID, error) {
+	var n uint64
+	return func() (uuid.UUID, error) {
+		n++
+		var id uuid.UUID
+		binary.BigEndian.PutUint64(id[8:], n)
+		return id, nil
+	}
+}
+
+func line(id string) NaturalID { return NaturalID{Kind: KindClaudeEntry, Value: id, Block: 0} }
+
+func parentLine(id string) *NaturalID {
+	return &NaturalID{Kind: KindClaudeEntry, Value: id, Block: LastBlock}
+}
+
+func promptID(id string) NaturalID { return NaturalID{Kind: KindPrompt, Value: id, Block: 0} }
+
+// transcriptPrompt is a Claude transcript user line.
+func transcriptPrompt(uuid, parent, prompt, text string) Entry {
+	e := Entry{Role: RoleUser, Text: text, IDs: []NaturalID{line(uuid), promptID(prompt)}}
+	if parent != "" {
+		e.Parent = parentLine(parent)
+	}
+	return e
+}
+
+// transcriptReply is a Claude transcript assistant text line.
+func transcriptReply(uuid, parent, text string) Entry {
+	return Entry{Role: RoleAssistant, Text: text, IDs: []NaturalID{line(uuid)}, Parent: parentLine(parent)}
+}
+
+func transcriptToolUse(uuid, parent, callID string) Entry {
+	return Entry{
+		Role:   RoleAssistant,
+		Call:   &ToolCall{ID: callID, Name: "Bash", Input: []byte(`{"command":"ls"}`)},
+		IDs:    []NaturalID{line(uuid), {Kind: KindToolCall, Value: callID}},
+		Parent: parentLine(parent),
+	}
+}
+
+func transcriptToolResult(uuid, parent, callID, out string) Entry {
+	return Entry{
+		Role:   RoleTool,
+		Text:   out,
+		Result: &ToolResult{CallID: callID, Text: out},
+		IDs:    []NaturalID{line(uuid), {Kind: KindToolResult, Value: callID}},
+		Parent: parentLine(parent),
+	}
+}
+
+// inferenceFrame is a whole trajectory with no IDs on text entries.
+func inferenceFrame(msgs ...Message) Delivery {
+	d := Delivery{Source: SourceAnthropicInference}
+	for _, m := range msgs {
+		d.Entries = append(d.Entries, Split(m)...)
+	}
+	return d
+}
+
+func user(text string) Message {
+	return Message{Role: RoleUser, Blocks: []Block{{Type: "text", Text: text}}}
+}
+
+func assistant(text string) Message {
+	return Message{Role: RoleAssistant, Blocks: []Block{{Type: "text", Text: text}}}
+}
+
+func transcriptDelivery(entries ...Entry) Delivery {
+	return Delivery{Source: SourceClaudeTranscript, Entries: entries}
+}
+
+func texts(nodes []*Node) []string {
+	out := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, n.Entry.Text)
+	}
+	return out
+}
+
+func mustNode(t *testing.T, tr *Transcript, id NaturalID) *Node {
+	t.Helper()
+	n, ok := tr.lookup(id)
+	require.True(t, ok, "no node for %v", id)
+	return n
+}
+
+func TestMerge_InferenceFramesGrowWithoutDuplicates(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+
+	res, err := tr.Merge(inferenceFrame(user("hi"), assistant("hello")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 2)
+
+	res, err = tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("next"), assistant("done")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 2)
+	require.Len(t, res.Seen, 2)
+	last := res.Added[1]
+
+	res, err = tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("next"), assistant("done")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "a re-sent frame adds nothing")
+
+	require.Equal(t, []string{"hi", "hello", "next", "done"}, texts(Path(last)))
+	require.Len(t, tr.root.Children, 1, "one tree")
+}
+
+func TestMerge_RewindThatRepeatsTheSameTextBranches(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+
+	res, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+		transcriptPrompt("u3", "u2", "p2", "yes"),
+		transcriptReply("u4", "u3", "ok"),
+		// The user rewinds to u2 and types "yes" again.
+		transcriptPrompt("u5", "u2", "p3", "yes"),
+		transcriptReply("u6", "u5", "sure"),
+	))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 6)
+
+	hello := mustNode(t, tr, line("u2"))
+	require.Len(t, hello.Children, 2, "two separate \"yes\" entries")
+	require.Equal(t, []string{"yes", "yes"}, texts(hello.Children))
+
+	sure := mustNode(t, tr, line("u6"))
+	require.Equal(t, []string{"hi", "hello", "yes", "sure"}, texts(Path(sure)))
+	ok := mustNode(t, tr, line("u4"))
+	require.Equal(t, []string{"hi", "hello", "yes", "ok"}, texts(Path(ok)))
+}
+
+func TestMerge_TranscriptAdoptsEntriesInferenceStoredFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+
+	res, err := tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("yes"), assistant("ok")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 4)
+
+	res, err = tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+		transcriptPrompt("u3", "u2", "p2", "yes"),
+		transcriptReply("u4", "u3", "ok"),
+	))
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "the transcript joins what inference stored")
+	require.Len(t, res.Seen, 4)
+	for _, s := range res.Seen {
+		require.NotEmpty(t, s.NewIDs, "the stored node gains the transcript's IDs")
+	}
+	require.Equal(t, mustNode(t, tr, line("u4")), mustNode(t, tr, promptID("p2")).Children[0])
+}
+
+func TestMerge_InferenceJoinsTheNewestBranch(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+		transcriptPrompt("u3", "u2", "p2", "yes"),
+		transcriptReply("u4", "u3", "ok"),
+		transcriptPrompt("u5", "u2", "p3", "yes"),
+		transcriptReply("u6", "u5", "sure"),
+	))
+	require.NoError(t, err)
+
+	res, err := tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("yes"), assistant("sure")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+	require.Equal(t, mustNode(t, tr, line("u5")), res.Seen[2].Node, "\"yes\" joins the newest branch")
+}
+
+func TestMerge_ToolCallsMatchAcrossSourcesByID(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "list files"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+		transcriptToolResult("u3", "u2", "toolu_1", "a.go"),
+		transcriptReply("u4", "u3", "one file"),
+	))
+	require.NoError(t, err)
+
+	res, err := tr.Merge(inferenceFrame(
+		user("list files"),
+		Message{Role: RoleAssistant, Blocks: []Block{{Type: "tool_use", ID: "toolu_1", Name: "Bash", Input: []byte(`{"command":"ls"}`)}}},
+		Message{Role: RoleUser, Blocks: []Block{{Type: "tool_result", ToolUseID: "toolu_1", Text: "a.go"}}},
+		assistant("one file"),
+	))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_SideEntriesOfOneStepStayOnOneLine(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "check both"),
+		transcriptToolUse("u2", "u1", "toolu_a"),
+		transcriptToolResult("u3", "u2", "toolu_a", "A"),
+		// The next parallel tool call names the same parent as the result.
+		transcriptToolUse("u4", "u2", "toolu_b"),
+		transcriptToolResult("u5", "u4", "toolu_b", "B"),
+	))
+	require.NoError(t, err)
+
+	callA := mustNode(t, tr, line("u2"))
+	require.Len(t, callA.Children, 1, "no branch for a side entry")
+	callB := mustNode(t, tr, line("u4"))
+	require.Equal(t, mustNode(t, tr, line("u3")), callB.Parent, "chained after the result before it")
+}
+
+func TestMerge_CompactionStartsANewTreeWithTheSummaryAsRoot(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+
+	summary := Entry{Role: RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")}
+	res, err := tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("b1"), To: parentLine("u2"), Compaction: true}},
+		Entries: []Entry{summary, transcriptPrompt("u3", "s1", "p2", "go on"), transcriptReply("u4", "u3", "done")},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 3)
+
+	root := mustNode(t, tr, line("s1"))
+	require.False(t, root.ParentID().Valid, "the summary is a tree root")
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, root.ContinuesID().UUID)
+	require.True(t, root.Entry.Synthetic)
+
+	done := mustNode(t, tr, line("u4"))
+	require.Equal(t, []string{"summary of the chat", "go on", "done"}, texts(Path(done)))
+	require.Equal(t, []string{"hi", "hello", "summary of the chat", "go on", "done"}, texts(FullPath(done)))
+}
+
+func TestMerge_DroppedLinesLinkThroughAndPersistAsAliases(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+	))
+	require.NoError(t, err)
+
+	// An attachment line (dropped by the shipper) sits between the call and its result.
+	res, err := tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("att"), To: parentLine("u2")}},
+		Entries: []Entry{transcriptToolResult("u3", "att", "toolu_1", "contents")},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.Equal(t, mustNode(t, tr, line("u2")), res.Added[0].Parent)
+	require.Len(t, res.Aliases, 1)
+	require.Equal(t, mustNode(t, tr, line("u2")), res.Aliases[0].Node)
+
+	// A later delivery can name the dropped line without resending the link.
+	res, err = tr.Merge(transcriptDelivery(transcriptReply("u4", "att", "done")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+}
+
+func TestMerge_UnknownParentIsAnError(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(transcriptReply("u2", "missing", "hello")))
+	var unknown *UnknownParentError
+	require.ErrorAs(t, err, &unknown)
+	require.Equal(t, "missing", unknown.ID.Value)
+}
+
+func TestMerge_SystemRemindersDoNotChangeTheKey(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(transcriptPrompt("u1", "", "p1", "fix the bug")))
+	require.NoError(t, err)
+
+	res, err := tr.Merge(inferenceFrame(user("<system-reminder>\nToday is Monday.\n</system-reminder>\nfix the bug")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_ComplianceContinuesAfterTheCursor(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	msg := func(id string, role Role, text string) Entry {
+		return Entry{Role: role, Text: text, IDs: []NaturalID{{Kind: KindComplianceMessage, Value: id}}}
+	}
+	_, err := tr.Merge(Delivery{Source: SourceCompliance, Entries: []Entry{msg("c1", RoleUser, "q"), msg("c2", RoleAssistant, "a")}})
+	require.NoError(t, err)
+
+	next := msg("c3", RoleUser, "follow up")
+	next.Parent = &NaturalID{Kind: KindComplianceMessage, Value: "c2"}
+	page := Delivery{Source: SourceCompliance, Entries: []Entry{next, msg("c4", RoleAssistant, "answer")}}
+
+	res, err := tr.Merge(page)
+	require.NoError(t, err)
+	require.Len(t, res.Added, 2)
+	require.Equal(t, []string{"q", "a", "follow up", "answer"}, texts(Path(res.Added[1])))
+
+	res, err = tr.Merge(page)
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_ContinuesFromStoredNodes(t *testing.T) {
+	t.Parallel()
+	first := New(sequentialIDs())
+	res, err := first.Merge(inferenceFrame(user("hi"), assistant("hello")))
+	require.NoError(t, err)
+
+	stored := make([]Stored, 0, len(res.Added))
+	for _, n := range res.Added {
+		stored = append(stored, Stored{
+			ID:          n.ID,
+			ParentID:    n.ParentID(),
+			ContinuesID: n.ContinuesID(),
+			Role:        n.Entry.Role,
+			ContentKey:  n.ContentKey,
+			PathKey:     n.PathKey,
+			IDs:         n.Entry.IDs,
+		})
+	}
+
+	ids := sequentialIDs()
+	for range stored {
+		_, _ = ids()
+	}
+	second := New(ids)
+	second.Load(stored)
+
+	res, err = second.Merge(inferenceFrame(user("hi"), assistant("hello"), user("more")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.Equal(t, stored[1].ID, res.Added[0].ParentID().UUID)
+	require.Equal(t, PathKey(stored[1].PathKey, res.Added[0].ContentKey), res.Added[0].PathKey)
+}
+
+func TestMerge_CompactionThroughAChainOfDroppedLines(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+
+	summary := Entry{Role: RoleUser, Text: "summary", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("meta")}
+	res, err := tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links: []Link{
+			{ID: line("b1"), To: parentLine("u2"), Compaction: true},
+			{ID: line("meta"), To: parentLine("b1")},
+		},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.False(t, res.Added[0].ParentID().Valid)
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, res.Added[0].ContinuesID().UUID, "the continuation survives the dropped line")
+}
+
+func TestMerge_NewCompactionDoesNotMatchAnOlderOne(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	summary := func(id string) Entry {
+		return Entry{Role: RoleUser, Text: "same summary", Synthetic: true, IDs: []NaturalID{line(id)}, Parent: parentLine("b" + id)}
+	}
+
+	_, err := tr.Merge(transcriptDelivery(transcriptPrompt("u1", "", "p1", "hi")))
+	require.NoError(t, err)
+	_, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("bs1"), To: parentLine("u1"), Compaction: true}}, Entries: []Entry{summary("s1")}})
+	require.NoError(t, err)
+	_, err = tr.Merge(transcriptDelivery(transcriptPrompt("u2", "s1", "p2", "more")))
+	require.NoError(t, err)
+
+	// An inference "summary" with no IDs and the second compaction's summary
+	// have the same text as the first summary.
+	res, err := tr.Merge(Delivery{
+		Source:  SourceAnthropicInference,
+		Entries: []Entry{{Role: RoleUser, Text: "same summary", Synthetic: true, Continues: &NaturalID{Kind: KindClaudeEntry, Value: "u2", Block: LastBlock}}},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1, "a root that continues from another leaf is not a match")
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, res.Added[0].ContinuesID().UUID)
+}
+
+func TestMerge_TranscriptSummaryLinksARootInferenceStoredFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+
+	// After compaction, inference sees a frame that starts with the summary.
+	res, err := tr.Merge(inferenceFrame(user("summary of the chat"), assistant("continuing")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 2)
+	root := res.Added[0]
+	require.False(t, root.ContinuesID().Valid, "inference cannot know the old leaf")
+
+	summary := Entry{Role: RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")}
+	res, err = tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("b1"), To: parentLine("u2"), Compaction: true}},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+	require.Len(t, res.Seen, 1)
+	require.Equal(t, root, res.Seen[0].Node)
+	require.Equal(t, mustNode(t, tr, line("u2")), res.Seen[0].Continues, "the stored root gains its continuation")
+	require.Equal(t, mustNode(t, tr, line("u2")).ID, root.ContinuesID().UUID)
+}
+
+func TestLoad_IncrementalLoadsStayConnected(t *testing.T) {
+	t.Parallel()
+	ids := sequentialIDs()
+	grand, _ := ids()
+	parent, _ := ids()
+	child, _ := ids()
+	key := ContentKey(Entry{Role: RoleUser, Text: "x"})
+
+	tr := New(ids)
+	tr.Load([]Stored{{ID: child, ParentID: uuid.NullUUID{UUID: parent, Valid: true}, Role: RoleUser, ContentKey: key}})
+	childNode := tr.nodes[child]
+	require.Len(t, Path(childNode), 1, "a path stops before a parent that is not loaded")
+
+	tr.Load([]Stored{{ID: parent, ParentID: uuid.NullUUID{UUID: grand, Valid: true}, Role: RoleAssistant, ContentKey: key}})
+	require.Same(t, tr.nodes[parent], childNode.Parent, "the later load fills the same parent")
+	require.Len(t, Path(childNode), 2)
+
+	tr.Load([]Stored{{ID: grand, Role: RoleUser, ContentKey: key}})
+	require.Len(t, Path(childNode), 3)
+	require.Len(t, tr.root.Children, 1)
+
+	tr.Load([]Stored{{ID: grand, Role: RoleUser, ContentKey: key}})
+	require.Len(t, tr.root.Children, 1, "loading a node twice does not attach it twice")
+}
+
+func TestMerge_AliasesAreEmittedOnce(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+	))
+	require.NoError(t, err)
+
+	d := Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("att"), To: parentLine("u2")}},
+		Entries: []Entry{transcriptToolResult("u3", "att", "toolu_1", "contents")},
+	}
+	res, err := tr.Merge(d)
+	require.NoError(t, err)
+	require.Len(t, res.Aliases, 1)
+
+	res, err = tr.Merge(d)
+	require.NoError(t, err)
+	require.Empty(t, res.Aliases, "a re-sent link is not new")
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_AMovedAliasIsEmittedWithItsNewTarget(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+		transcriptToolUse("u3", "u2", "toolu_2"),
+	))
+	require.NoError(t, err)
+
+	res, err := tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u2")}}, Entries: nil})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("att"), Node: mustNode(t, tr, line("u2"))}}, res.Aliases)
+
+	res, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u3")}}, Entries: nil})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("att"), Node: mustNode(t, tr, line("u3"))}}, res.Aliases, "a changed target is emitted, not only a new ID")
+}
+
+func TestMerge_RejectsDeliveredIDsWithTheCopySeparator(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(transcriptPrompt("u1"+copySep+"x", "", "p1", "hello")))
+	require.ErrorIs(t, err, ErrReservedID)
+
+	_, err = tr.Merge(Delivery{Source: SourceClaudeTranscript, Links: []Link{{ID: line("att"), To: parentLine("u1" + copySep + "x")}}, Entries: nil})
+	require.ErrorIs(t, err, ErrReservedID)
+}
+
+func TestCanonicalJSON_KeepsInputWithTrailingBytes(t *testing.T) {
+	t.Parallel()
+	require.JSONEq(t, `{"a":1,"b":[2]}`, canonicalJSON([]byte(` {"b": [2], "a": 1} `)))
+	require.Equal(t, `{"a":1}}`, canonicalJSON([]byte(`{"a":1}}`)), "a stray } is not dropped")
+	require.Equal(t, `{"a":1}]`, canonicalJSON([]byte(`{"a":1}]`)))
+	require.Equal(t, `{"a":1} 2`, canonicalJSON([]byte(`{"a":1} 2`)))
+}
+
+func TestMerge_AliasThroughAnotherLinkInAnyOrder(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "read it"),
+		transcriptToolUse("u2", "u1", "toolu_1"),
+	))
+	require.NoError(t, err)
+
+	// "outer" points at "inner", which is listed after it.
+	res, err := tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links: []Link{
+			{ID: line("outer"), To: parentLine("inner")},
+			{ID: line("inner"), To: parentLine("u2")},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Aliases, 2)
+	for _, a := range res.Aliases {
+		require.Equal(t, mustNode(t, tr, line("u2")), a.Node)
+	}
+
+	res, err = tr.Merge(transcriptDelivery(transcriptToolResult("u3", "outer", "toolu_1", "contents")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1, "a later delivery can name the outer line")
+}
+
+func TestMerge_DroppedFirstLineCanBeNamedLater(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	res, err := tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("start"), To: nil}},
+		Entries: []Entry{transcriptPrompt("u1", "start", "p1", "hi")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []Alias{{ID: line("start"), Node: nil}}, res.Aliases, "nil Node: the start of the conversation")
+
+	// The user rewinds to the very start in a later upload.
+	res, err = tr.Merge(transcriptDelivery(transcriptPrompt("u2", "start", "p2", "hello again")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+	require.False(t, res.Added[0].ParentID().Valid)
+	require.Len(t, tr.root.Children, 2)
+
+	// A transcript rebuilt from storage knows the alias too.
+	fresh := New(sequentialIDs())
+	fresh.LoadStartAliases([]NaturalID{line("start")})
+	res, err = fresh.Merge(transcriptDelivery(transcriptPrompt("u9", "start", "p9", "hi")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 1)
+}
+
+func TestContentKey_Normalization(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reminders with attributes are ignored in prompts", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleUser, Text: "fix it"})
+		tagged := ContentKey(Entry{Role: RoleUser, Text: "<system-reminder source=\"memory\">notes</system-reminder>\nfix it"})
+		require.Equal(t, plain, tagged)
+	})
+
+	t.Run("reminders are ignored in tool results", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleTool, Result: &ToolResult{CallID: "toolu_1", Text: "ok"}})
+		tagged := ContentKey(Entry{Role: RoleTool, Result: &ToolResult{CallID: "toolu_1", Text: "ok\n<system-reminder>file changed</system-reminder>"}})
+		require.Equal(t, plain, tagged)
+	})
+
+	t.Run("assistant text keeps a literal reminder tag", func(t *testing.T) {
+		t.Parallel()
+		plain := ContentKey(Entry{Role: RoleAssistant, Text: "done"})
+		tagged := ContentKey(Entry{Role: RoleAssistant, Text: "<system-reminder>x</system-reminder>done"})
+		require.NotEqual(t, plain, tagged)
+	})
+
+	t.Run("tool input formatting and key order do not change the key", func(t *testing.T) {
+		t.Parallel()
+		compact := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(`{"command":"ls","timeout":120000}`)}})
+		spaced := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte("{\n  \"timeout\": 120000,\n  \"command\": \"ls\"\n}")}})
+		require.Equal(t, compact, spaced)
+	})
+
+	t.Run("invalid tool input is used as written", func(t *testing.T) {
+		t.Parallel()
+		a := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(` {not json `)}})
+		b := ContentKey(Entry{Role: RoleAssistant, Call: &ToolCall{Name: "Bash", Input: []byte(`{not json`)}})
+		require.Equal(t, a, b)
+	})
+}
+
+func TestMerge_InferenceAfterARewindJoinsTheBranchThatKeepsMatching(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+		transcriptPrompt("u3", "u2", "p2", "yes"),
+		transcriptReply("u4", "u3", "ok"),
+		transcriptPrompt("u5", "u2", "p3", "yes"),
+		transcriptReply("u6", "u5", "sure"),
+	))
+	require.NoError(t, err)
+
+	// A late frame from the first branch: its "yes" must join u3, not the newer u5.
+	res, err := tr.Merge(inferenceFrame(user("hi"), assistant("hello"), user("yes"), assistant("ok")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+	require.Equal(t, mustNode(t, tr, line("u3")), res.Seen[2].Node)
+	require.Equal(t, mustNode(t, tr, line("u4")), res.Seen[3].Node)
+}
+
+func TestMerge_SummaryStoredByInferenceFirstBecomesSynthetic(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "hi"),
+		transcriptReply("u2", "u1", "hello"),
+	))
+	require.NoError(t, err)
+	res, err := tr.Merge(inferenceFrame(user("summary of the chat")))
+	require.NoError(t, err)
+	root := res.Added[0]
+	require.False(t, root.Entry.Synthetic, "inference cannot tell a summary from a prompt")
+
+	summary := Entry{Role: RoleUser, Text: "summary of the chat", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")}
+	res, err = tr.Merge(Delivery{
+		Source:  SourceClaudeTranscript,
+		Links:   []Link{{ID: line("b1"), To: parentLine("u2"), Compaction: true}},
+		Entries: []Entry{summary},
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Seen, 1)
+	require.True(t, res.Seen[0].Synthetic, "the writer is told to mark the row")
+	require.True(t, root.Entry.Synthetic)
+}
+
+func TestMerge_PartialCompactionCopiesKeptMessagesUnderTheSummary(t *testing.T) {
+	t.Parallel()
+	before := transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptReply("u4", "u3", "two"),
+	)
+	// Claude Code summarises u1..u2, then repeats the kept u3 and u4 after the
+	// summary, with their original IDs.
+	compaction := Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u4"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptReply("u4", "u3", "two"),
+		},
+	}
+	next := transcriptDelivery(
+		transcriptPrompt("u5", "u4", "p5", "third"),
+		transcriptReply("u6", "u5", "three"),
+	)
+
+	tr := New(sequentialIDs())
+	for _, d := range []Delivery{before, compaction, next} {
+		_, err := tr.Merge(d)
+		require.NoError(t, err)
+	}
+
+	summary := mustNode(t, tr, line("s1"))
+	require.Len(t, summary.Children, 1, "the kept messages are copied under the summary")
+	copyOfU3 := summary.Children[0]
+	require.NotSame(t, mustNode(t, tr, line("u3")), copyOfU3, "a copy, not the original")
+
+	three := mustNode(t, tr, line("u6"))
+	require.Equal(t, []string{"summary of first and one", "second", "two", "third", "three"}, texts(Path(three)),
+		"the turns after the compaction follow the copies, in the new tree")
+	original := mustNode(t, tr, line("u4"))
+	require.Empty(t, original.Children, "the old tree ends where it ended")
+
+	// A full resend of the file adds nothing.
+	for _, d := range []Delivery{before, compaction, next} {
+		res, err := tr.Merge(d)
+		require.NoError(t, err)
+		require.Empty(t, res.Added)
+	}
+
+	// An inference frame after the compaction joins the new tree.
+	res, err := tr.Merge(inferenceFrame(user("summary of first and one"), user("second"), assistant("two"), user("third"), assistant("three")))
+	require.NoError(t, err)
+	require.Empty(t, res.Added)
+}
+
+func TestMerge_PartialCompactionWithInferenceFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptReply("u4", "u3", "two"),
+	))
+	require.NoError(t, err)
+
+	// Live frames after the compaction arrive before the transcript upload.
+	res, err := tr.Merge(inferenceFrame(user("summary of first and one"), user("second"), assistant("two"), user("third"), assistant("three")))
+	require.NoError(t, err)
+	require.Len(t, res.Added, 5)
+
+	res, err = tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u4"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptReply("u4", "u3", "two"),
+			transcriptPrompt("u5", "u4", "p5", "third"),
+			transcriptReply("u6", "u5", "three"),
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "the transcript joins what inference stored in the new tree")
+	require.Len(t, res.Seen, 5)
+	for _, s := range res.Seen[1:3] {
+		for _, id := range s.NewIDs {
+			_, scopedID := unscoped(id)
+			require.True(t, scopedID, "repeated entries take tree-scoped IDs, not the originals'")
+		}
+	}
+	require.Empty(t, mustNode(t, tr, line("u4")).Children, "the old tree ends where it ended")
+}
+
+func TestMerge_PartialCompactionWithAKeptToolCallAndInferenceFirst(t *testing.T) {
+	t.Parallel()
+	tr := New(sequentialIDs())
+	_, err := tr.Merge(transcriptDelivery(
+		transcriptPrompt("u1", "", "p1", "first"),
+		transcriptReply("u2", "u1", "one"),
+		transcriptPrompt("u3", "u2", "p2", "second"),
+		transcriptToolUse("u4", "u3", "toolu_kept"),
+		transcriptToolResult("u5", "u4", "toolu_kept", "kept output"),
+		transcriptReply("u6", "u5", "two"),
+	))
+	require.NoError(t, err)
+	oldTwo := mustNode(t, tr, line("u6"))
+
+	// The frame after the compaction starts with the summary, which inference
+	// stores as a plain root, then repeats the kept messages and the tool call.
+	frame := inferenceFrame(
+		user("summary of first and one"),
+		user("second"),
+		Message{Role: RoleAssistant, Blocks: []Block{{Type: "tool_use", ID: "toolu_kept", Name: "Bash", Input: []byte(`{"command":"ls"}`)}}},
+		Message{Role: RoleUser, Blocks: []Block{{Type: "tool_result", ToolUseID: "toolu_kept", Text: "kept output"}}},
+		assistant("two"),
+		user("third"),
+		assistant("three"),
+	)
+	res, err := tr.Merge(frame)
+	require.NoError(t, err)
+	require.Len(t, res.Added, 7, "the frame stays in its own tree")
+	require.Empty(t, oldTwo.Children, "nothing is hung off the old tree")
+
+	res, err = tr.Merge(Delivery{
+		Source: SourceClaudeTranscript,
+		Links:  []Link{{ID: line("b1"), To: parentLine("u6"), Compaction: true}},
+		Entries: []Entry{
+			{Role: RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []NaturalID{line("s1")}, Parent: parentLine("b1")},
+			transcriptPrompt("u3", "s1", "p2", "second"),
+			transcriptToolUse("u4", "u3", "toolu_kept"),
+			transcriptToolResult("u5", "u4", "toolu_kept", "kept output"),
+			transcriptReply("u6", "u5", "two"),
+			transcriptPrompt("u7", "u6", "p7", "third"),
+			transcriptReply("u8", "u7", "three"),
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "the transcript joins the frame's tree")
+	require.Empty(t, oldTwo.Children)
+
+	res, err = tr.Merge(frame)
+	require.NoError(t, err)
+	require.Empty(t, res.Added, "a re-sent frame adds nothing")
+}
+
+func TestSplit_DropsEmptyAndReminderOnlyTextBlocks(t *testing.T) {
+	t.Parallel()
+	entries := Split(Message{Role: RoleUser, Blocks: []Block{
+		{Type: "text", Text: "<system-reminder>Today is Monday.</system-reminder>"},
+		{Type: "text", Text: "   "},
+		{Type: "text", Text: "fix the bug"},
+	}})
+	require.Len(t, entries, 1)
+	require.Equal(t, "fix the bug", entries[0].Text)
+
+	reply := Split(Message{Role: RoleAssistant, Blocks: []Block{
+		{Type: "text", Text: ""},
+		{Type: "text", Text: "<system-reminder>kept in model output</system-reminder>"},
+	}})
+	require.Len(t, reply, 1, "assistant text keeps a literal reminder tag")
+}
+
+func TestSplit_OneEntryPerBlock(t *testing.T) {
+	t.Parallel()
+	entries := Split(Message{Role: RoleAssistant, MessageID: "msg_1", Blocks: []Block{
+		{Type: "thinking", Text: "hmm"},
+		{Type: "text", Text: "Let me look."},
+		{Type: "tool_use", ID: "toolu_1", Name: "Read", Input: []byte(`{}`)},
+		{Type: "tool_result", ToolUseID: "toolu_0", Text: "earlier output"},
+	}})
+	require.Len(t, entries, 3, "thinking is not an entry")
+	require.Equal(t, RoleAssistant, entries[0].Role)
+	require.Equal(t, []NaturalID{{Kind: KindToolCall, Value: "toolu_1"}}, entries[1].IDs)
+	require.Equal(t, RoleTool, entries[2].Role)
+	require.Equal(t, []NaturalID{{Kind: KindToolResult, Value: "toolu_0"}}, entries[2].IDs)
+	for _, e := range entries {
+		require.Equal(t, "msg_1", e.MessageID)
+	}
+}
