@@ -18,7 +18,7 @@ type githubProvisioner struct{ *ghclient.Client }
 func (g githubProvisioner) ForRepository(ctx context.Context, installationID, repositoryID int64, owner, name string) (GitHubRepository, error) {
 	client, err := g.Client.ForRepository(ctx, installationID, repositoryID, owner, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scope GitHub repository: %w", err)
 	}
 	return client, nil
 }
@@ -46,7 +46,10 @@ func (s *Service) resolveProjectRepository(ctx context.Context, projectID uuid.U
 			return nil, "", fmt.Errorf("%w: repository binding does not match the requested destination", ErrGitHubRepoConflict)
 		}
 		client, err := s.github.Client.ForRepository(ctx, installationID, binding.RepositoryID, owner, name)
-		return client, name, err
+		if err != nil {
+			return nil, "", fmt.Errorf("verify bound GitHub repository: %w", err)
+		}
+		return client, name, nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return nil, "", fmt.Errorf("get repository binding: %w", err)
 	case !allowCreate:
@@ -75,5 +78,8 @@ func (s *Service) resolveProjectRepository(ctx context.Context, projectID uuid.U
 		return nil, "", fmt.Errorf("record new repository identity: %w", err)
 	}
 	client, err := s.github.Client.ForRepository(ctx, installationID, id, owner, name)
-	return client, name, err
+	if err != nil {
+		return nil, "", fmt.Errorf("verify newly bound GitHub repository: %w", err)
+	}
+	return client, name, nil
 }

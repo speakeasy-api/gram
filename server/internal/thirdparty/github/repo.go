@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -58,6 +59,10 @@ const maxErrBodyLen = 256
 
 func truncatedBody(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrBodyLen+1))
+	return truncateErrorBody(body)
+}
+
+func truncateErrorBody(body []byte) string {
 	s := string(body)
 	if len(s) > maxErrBodyLen {
 		s = s[:maxErrBodyLen] + "..."
@@ -101,10 +106,11 @@ func (c *Client) CreatePrivateRepository(ctx context.Context, installationID int
 	case resp.StatusCode == http.StatusCreated:
 		return decodePrivateRepository(resp.Body, org, name)
 	case resp.StatusCode == http.StatusUnprocessableEntity:
-		if isRepositoryNameTaken(resp.Body) {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		if isRepositoryNameTaken(bytes.NewReader(body)) {
 			return 0, fmt.Errorf("create repo: %w", ErrRepositoryNameTaken)
 		}
-		return 0, fmt.Errorf("create repo: status %d", resp.StatusCode)
+		return 0, fmt.Errorf("create repo: status %d: %s", resp.StatusCode, truncateErrorBody(body))
 	case isRedirect(resp.StatusCode):
 		return 0, fmt.Errorf("create repo: %w: unexpected redirect (status %d)", ErrRepositoryConflict, resp.StatusCode)
 	default:
@@ -121,7 +127,7 @@ func isRepositoryNameTaken(body io.Reader) bool {
 			Message  string `json:"message"`
 		} `json:"errors"`
 	}
-	if err := json.NewDecoder(io.LimitReader(body, 8192)).Decode(&validation); err != nil {
+	if err := json.NewDecoder(body).Decode(&validation); err != nil {
 		return false
 	}
 	for _, issue := range validation.Errors {
@@ -135,9 +141,9 @@ func isRepositoryNameTaken(body io.Reader) bool {
 	return false
 }
 
-// ForRepository verifies the private repository's ID and name with a newly
-// minted, repository-restricted installation token. Use the returned client for
-// operations on that repository; obtain a new scoped client when the token expires.
+// ForRepository verifies the private repository's ID, name and visibility
+// on every call. The token may be cached, but the identity check must never be.
+// Use the returned client for immediate operations on that repository.
 func (c *Client) ForRepository(ctx context.Context, installationID, repositoryID int64, owner, name string) (*Client, error) {
 	if c.repository != nil {
 		return nil, fmt.Errorf("scope repository: client is already scoped")
@@ -145,19 +151,19 @@ func (c *Client) ForRepository(ctx context.Context, installationID, repositoryID
 	if installationID <= 0 || repositoryID <= 0 || !validRepository(owner, name) {
 		return nil, fmt.Errorf("scope repository: invalid installation, repository ID, or repository name")
 	}
-	token, err := c.requestInstallationToken(ctx, installationID, repositoryID)
+	token, err := c.cachedInstallationToken(ctx, installationTokenKey{installationID: installationID, repositoryID: repositoryID})
 	if err != nil {
 		return nil, fmt.Errorf("scope repository: %w", err)
 	}
 
 	repoPath := "/repos/" + owner + "/" + name
-	scoped := &Client{
+	scoped := &Client{appID: 0, privateKey: nil, mu: sync.Mutex{}, tokens: nil, tokenFlight: singleflight.Group{},
 		httpClient: withoutRedirects(c.httpClient),
 		tracer:     c.tracer,
 		repository: &repositoryScope{
 			installationID: installationID,
 			path:           strings.ToLower(repoPath),
-			token:          token.token,
+			token:          token,
 		},
 	}
 	resp, err := scoped.doAPI(ctx, installationID, http.MethodGet, apiBase+repoPath, nil)
@@ -189,7 +195,7 @@ func decodePrivateRepository(body io.Reader, owner, name string) (int64, error) 
 		return 0, fmt.Errorf("decode private repository: %w", err)
 	}
 	// GitHub repository and owner names are case-insensitive.
-	if repo.ID <= 0 || !repo.Private || (repo.Visibility != "" && repo.Visibility != "private") ||
+	if repo.ID <= 0 || !repo.Private || repo.Visibility != "private" ||
 		!strings.EqualFold(repo.FullName, owner+"/"+name) {
 		return 0, fmt.Errorf("%w: invalid identity or visibility for private repository", ErrRepositoryConflict)
 	}

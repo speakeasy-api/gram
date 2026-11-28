@@ -89,7 +89,7 @@ func (p *InMemoryGitHubPublisher) CreatePrivateRepository(_ context.Context, ins
 	id := fixtureRepositoryID(installationID, key)
 	if p.root == "" {
 		if _, ok := p.files[key]; ok {
-			return 0, fmt.Errorf("create local fixture repository: %w", fs.ErrExist)
+			return 0, fmt.Errorf("create local fixture repository: %w", ghclient.ErrRepositoryNameTaken)
 		}
 		p.files[key] = make(map[string][]byte)
 		return id, nil
@@ -97,6 +97,9 @@ func (p *InMemoryGitHubPublisher) CreatePrivateRepository(_ context.Context, ins
 
 	path := p.snapshotPath("repositories", key)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // Path is a SHA-256 filename beneath the configured local-only root.
+	if errors.Is(err, fs.ErrExist) {
+		return 0, fmt.Errorf("create local fixture repository: %w", ghclient.ErrRepositoryNameTaken)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("create local fixture repository: %w", err)
 	}
@@ -180,7 +183,7 @@ func (p *InMemoryGitHubPublisher) HasDirectCollaborator(_ context.Context, _ int
 	defer p.mu.RUnlock()
 	if p.root == "" {
 		for key := range p.collaborators {
-			if strings.HasPrefix(key, owner+"/"+repo+"/") {
+			if strings.HasPrefix(key, p.key(owner, repo, "")) {
 				return true, nil
 			}
 		}

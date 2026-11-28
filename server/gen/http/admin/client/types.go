@@ -688,24 +688,6 @@ type RedeployProjectRequestBody struct {
 	ExpectedActiveDeploymentID string `form:"expected_active_deployment_id" json:"expected_active_deployment_id" xml:"expected_active_deployment_id"`
 }
 
-// ApplyPluginRepositoryMigrationsRequestBody is the type of the "admin"
-// service "applyPluginRepositoryMigrations" endpoint HTTP request body.
-type ApplyPluginRepositoryMigrationsRequestBody struct {
-	// Repository bindings to verify or apply.
-	Entries []*AdminPluginRepositoryMigrationEntryRequestBody `form:"entries" json:"entries" xml:"entries"`
-	// Verify bindings without recording them.
-	DryRun bool `form:"dry_run" json:"dry_run" xml:"dry_run"`
-}
-
-// ReprovisionPluginRepositoryRequestBody is the type of the "admin" service
-// "reprovisionPluginRepository" endpoint HTTP request body.
-type ReprovisionPluginRepositoryRequestBody struct {
-	// Project ID.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Staff reason for reprovisioning.
-	Reason string `form:"reason" json:"reason" xml:"reason"`
-}
-
 // CreateGcpIamPlatformCredentialRequestBody is the type of the "admin" service
 // "createGcpIamPlatformCredential" endpoint HTTP request body.
 type CreateGcpIamPlatformCredentialRequestBody struct {
@@ -875,6 +857,24 @@ type FinalizeOrganizationEncryptionRequestBody struct {
 	// The number of unreadable values the administrator acknowledged will be
 	// destroyed.
 	AcknowledgedUnreadableValues int64 `form:"acknowledged_unreadable_values" json:"acknowledged_unreadable_values" xml:"acknowledged_unreadable_values"`
+}
+
+// ApplyPluginRepositoryMigrationsRequestBody is the type of the "admin"
+// service "applyPluginRepositoryMigrations" endpoint HTTP request body.
+type ApplyPluginRepositoryMigrationsRequestBody struct {
+	// Repository bindings to verify or apply.
+	Entries []*AdminPluginRepositoryMigrationEntryRequestBody `form:"entries" json:"entries" xml:"entries"`
+	// Verify bindings without recording them.
+	DryRun bool `form:"dry_run" json:"dry_run" xml:"dry_run"`
+}
+
+// ReprovisionPluginRepositoryRequestBody is the type of the "admin" service
+// "reprovisionPluginRepository" endpoint HTTP request body.
+type ReprovisionPluginRepositoryRequestBody struct {
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Staff reason for reprovisioning.
+	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -3470,31 +3470,6 @@ type RedeployProjectResponseBody struct {
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 }
 
-// ListPluginRepositoryMigrationsResponseBody is the type of the "admin"
-// service "listPluginRepositoryMigrations" endpoint HTTP response body.
-type ListPluginRepositoryMigrationsResponseBody struct {
-	// Projects with a plugin repository, ordered by project ID.
-	Items []*AdminPluginRepositoryMigrationResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
-	// Pass as after for the next page; absent on the last page.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsResponseBody is the type of the "admin"
-// service "applyPluginRepositoryMigrations" endpoint HTTP response body.
-type ApplyPluginRepositoryMigrationsResponseBody struct {
-	// Outcome for each entry, in request order.
-	Items []*AdminPluginRepositoryMigrationOutcomeResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
-}
-
-// ReprovisionPluginRepositoryResponseBody is the type of the "admin" service
-// "reprovisionPluginRepository" endpoint HTTP response body.
-type ReprovisionPluginRepositoryResponseBody struct {
-	// Reprovisioning outcome.
-	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Details of the outcome.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-}
-
 // ListCustomDomainsResponseBody is the type of the "admin" service
 // "listCustomDomains" endpoint HTTP response body.
 type ListCustomDomainsResponseBody struct {
@@ -4120,6 +4095,31 @@ type FinalizeOrganizationEncryptionResponseBody struct {
 	// the hourly background run finishes clearing, or an administrator starts a
 	// run.
 	ClearingStarted *bool `form:"clearing_started,omitempty" json:"clearing_started,omitempty" xml:"clearing_started,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsResponseBody is the type of the "admin"
+// service "listPluginRepositoryMigrations" endpoint HTTP response body.
+type ListPluginRepositoryMigrationsResponseBody struct {
+	// Projects with a plugin repository, ordered by project ID.
+	Items []*AdminPluginRepositoryMigrationResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+	// Pass as after for the next page; absent on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsResponseBody is the type of the "admin"
+// service "applyPluginRepositoryMigrations" endpoint HTTP response body.
+type ApplyPluginRepositoryMigrationsResponseBody struct {
+	// Outcome for each entry, in request order.
+	Items []*AdminPluginRepositoryMigrationOutcomeResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
+// ReprovisionPluginRepositoryResponseBody is the type of the "admin" service
+// "reprovisionPluginRepository" endpoint HTTP response body.
+type ReprovisionPluginRepositoryResponseBody struct {
+	// Reprovisioning outcome.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Details of the outcome.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -25504,576 +25504,6 @@ type RedeployProjectGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListPluginRepositoryMigrationsUnauthorizedResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "unauthorized" error.
-type ListPluginRepositoryMigrationsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsForbiddenResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "forbidden" error.
-type ListPluginRepositoryMigrationsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsBadRequestResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "bad_request" error.
-type ListPluginRepositoryMigrationsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsNotFoundResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "not_found" error.
-type ListPluginRepositoryMigrationsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsConflictResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "conflict" error.
-type ListPluginRepositoryMigrationsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsUnsupportedMediaResponseBody is the type of
-// the "admin" service "listPluginRepositoryMigrations" endpoint HTTP response
-// body for the "unsupported_media" error.
-type ListPluginRepositoryMigrationsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsInvalidResponseBody is the type of the "admin"
-// service "listPluginRepositoryMigrations" endpoint HTTP response body for the
-// "invalid" error.
-type ListPluginRepositoryMigrationsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsInvariantViolationResponseBody is the type of
-// the "admin" service "listPluginRepositoryMigrations" endpoint HTTP response
-// body for the "invariant_violation" error.
-type ListPluginRepositoryMigrationsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsUnexpectedResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "unexpected" error.
-type ListPluginRepositoryMigrationsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListPluginRepositoryMigrationsGatewayErrorResponseBody is the type of the
-// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
-// for the "gateway_error" error.
-type ListPluginRepositoryMigrationsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsUnauthorizedResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "unauthorized" error.
-type ApplyPluginRepositoryMigrationsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsForbiddenResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "forbidden" error.
-type ApplyPluginRepositoryMigrationsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsBadRequestResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "bad_request" error.
-type ApplyPluginRepositoryMigrationsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsNotFoundResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "not_found" error.
-type ApplyPluginRepositoryMigrationsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsConflictResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "conflict" error.
-type ApplyPluginRepositoryMigrationsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody is the type of
-// the "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "unsupported_media" error.
-type ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsInvalidResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "invalid" error.
-type ApplyPluginRepositoryMigrationsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsInvariantViolationResponseBody is the type of
-// the "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "invariant_violation" error.
-type ApplyPluginRepositoryMigrationsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsUnexpectedResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "unexpected" error.
-type ApplyPluginRepositoryMigrationsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ApplyPluginRepositoryMigrationsGatewayErrorResponseBody is the type of the
-// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
-// body for the "gateway_error" error.
-type ApplyPluginRepositoryMigrationsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryUnauthorizedResponseBody is the type of the
-// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
-// for the "unauthorized" error.
-type ReprovisionPluginRepositoryUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryForbiddenResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "forbidden" error.
-type ReprovisionPluginRepositoryForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryBadRequestResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "bad_request" error.
-type ReprovisionPluginRepositoryBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryNotFoundResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "not_found" error.
-type ReprovisionPluginRepositoryNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryConflictResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "conflict" error.
-type ReprovisionPluginRepositoryConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryUnsupportedMediaResponseBody is the type of the
-// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
-// for the "unsupported_media" error.
-type ReprovisionPluginRepositoryUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryInvalidResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "invalid" error.
-type ReprovisionPluginRepositoryInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryInvariantViolationResponseBody is the type of the
-// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
-// for the "invariant_violation" error.
-type ReprovisionPluginRepositoryInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryUnexpectedResponseBody is the type of the "admin"
-// service "reprovisionPluginRepository" endpoint HTTP response body for the
-// "unexpected" error.
-type ReprovisionPluginRepositoryUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ReprovisionPluginRepositoryGatewayErrorResponseBody is the type of the
-// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
-// for the "gateway_error" error.
-type ReprovisionPluginRepositoryGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // ListCustomDomainsUnauthorizedResponseBody is the type of the "admin" service
 // "listCustomDomains" endpoint HTTP response body for the "unauthorized" error.
 type ListCustomDomainsUnauthorizedResponseBody struct {
@@ -32437,6 +31867,633 @@ type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPluginRepositoryMigrationsUnavailableResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "unavailable" error.
+type ListPluginRepositoryMigrationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsUnauthorizedResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListPluginRepositoryMigrationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsForbiddenResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "forbidden" error.
+type ListPluginRepositoryMigrationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsBadRequestResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "bad_request" error.
+type ListPluginRepositoryMigrationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsNotFoundResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "not_found" error.
+type ListPluginRepositoryMigrationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsConflictResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "conflict" error.
+type ListPluginRepositoryMigrationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsUnsupportedMediaResponseBody is the type of
+// the "admin" service "listPluginRepositoryMigrations" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListPluginRepositoryMigrationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsInvalidResponseBody is the type of the "admin"
+// service "listPluginRepositoryMigrations" endpoint HTTP response body for the
+// "invalid" error.
+type ListPluginRepositoryMigrationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsInvariantViolationResponseBody is the type of
+// the "admin" service "listPluginRepositoryMigrations" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListPluginRepositoryMigrationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsUnexpectedResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "unexpected" error.
+type ListPluginRepositoryMigrationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPluginRepositoryMigrationsGatewayErrorResponseBody is the type of the
+// "admin" service "listPluginRepositoryMigrations" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListPluginRepositoryMigrationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsUnavailableResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "unavailable" error.
+type ApplyPluginRepositoryMigrationsUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsUnauthorizedResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "unauthorized" error.
+type ApplyPluginRepositoryMigrationsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsForbiddenResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "forbidden" error.
+type ApplyPluginRepositoryMigrationsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsBadRequestResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "bad_request" error.
+type ApplyPluginRepositoryMigrationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsNotFoundResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "not_found" error.
+type ApplyPluginRepositoryMigrationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsConflictResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "conflict" error.
+type ApplyPluginRepositoryMigrationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody is the type of
+// the "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsInvalidResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "invalid" error.
+type ApplyPluginRepositoryMigrationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsInvariantViolationResponseBody is the type of
+// the "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ApplyPluginRepositoryMigrationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsUnexpectedResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "unexpected" error.
+type ApplyPluginRepositoryMigrationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyPluginRepositoryMigrationsGatewayErrorResponseBody is the type of the
+// "admin" service "applyPluginRepositoryMigrations" endpoint HTTP response
+// body for the "gateway_error" error.
+type ApplyPluginRepositoryMigrationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryUnavailableResponseBody is the type of the
+// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
+// for the "unavailable" error.
+type ReprovisionPluginRepositoryUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryUnauthorizedResponseBody is the type of the
+// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
+// for the "unauthorized" error.
+type ReprovisionPluginRepositoryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryForbiddenResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "forbidden" error.
+type ReprovisionPluginRepositoryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryBadRequestResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "bad_request" error.
+type ReprovisionPluginRepositoryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryNotFoundResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "not_found" error.
+type ReprovisionPluginRepositoryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryConflictResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "conflict" error.
+type ReprovisionPluginRepositoryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryUnsupportedMediaResponseBody is the type of the
+// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ReprovisionPluginRepositoryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryInvalidResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "invalid" error.
+type ReprovisionPluginRepositoryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryInvariantViolationResponseBody is the type of the
+// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ReprovisionPluginRepositoryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryUnexpectedResponseBody is the type of the "admin"
+// service "reprovisionPluginRepository" endpoint HTTP response body for the
+// "unexpected" error.
+type ReprovisionPluginRepositoryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReprovisionPluginRepositoryGatewayErrorResponseBody is the type of the
+// "admin" service "reprovisionPluginRepository" endpoint HTTP response body
+// for the "gateway_error" error.
+type ReprovisionPluginRepositoryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminTrialCardSharingOrganizationResponseBody is used to define fields on
 // response body types.
 type AdminTrialCardSharingOrganizationResponseBody struct {
@@ -34119,44 +34176,6 @@ type AdminSecretBackfillOrganizationResponseBody struct {
 	PendingRunnerKeys *int64 `form:"pending_runner_keys,omitempty" json:"pending_runner_keys,omitempty" xml:"pending_runner_keys,omitempty"`
 }
 
-// AdminPluginRepositoryMigrationResponseBody is used to define fields on
-// response body types.
-type AdminPluginRepositoryMigrationResponseBody struct {
-	// Project ID.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Organization that owns the project.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Stored GitHub repository owner.
-	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
-	// Stored GitHub repository name.
-	RepoName *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
-	// Whether the project has a trusted repository ID binding.
-	Bound *bool `form:"bound,omitempty" json:"bound,omitempty" xml:"bound,omitempty"`
-}
-
-// AdminPluginRepositoryMigrationEntryRequestBody is used to define fields on
-// request body types.
-type AdminPluginRepositoryMigrationEntryRequestBody struct {
-	// Project ID.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The historically verified GitHub repository ID as a decimal string.
-	RepositoryID string `form:"repository_id" json:"repository_id" xml:"repository_id"`
-	// Reference to trusted historical evidence that identifies this repository for
-	// the project.
-	Evidence string `form:"evidence" json:"evidence" xml:"evidence"`
-}
-
-// AdminPluginRepositoryMigrationOutcomeResponseBody is used to define fields
-// on response body types.
-type AdminPluginRepositoryMigrationOutcomeResponseBody struct {
-	// Project ID.
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// Outcome of verifying or applying the binding.
-	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Details of the outcome.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-}
-
 // AdminCustomDomainResponseBody is used to define fields on response body
 // types.
 type AdminCustomDomainResponseBody struct {
@@ -34635,6 +34654,44 @@ type AdminOrganizationEncryptionStateCountResponseBody struct {
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Organizations in the state.
 	Organizations *int64 `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+}
+
+// AdminPluginRepositoryMigrationResponseBody is used to define fields on
+// response body types.
+type AdminPluginRepositoryMigrationResponseBody struct {
+	// Project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Organization that owns the project.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Stored GitHub repository owner.
+	RepoOwner *string `form:"repo_owner,omitempty" json:"repo_owner,omitempty" xml:"repo_owner,omitempty"`
+	// Stored GitHub repository name.
+	RepoName *string `form:"repo_name,omitempty" json:"repo_name,omitempty" xml:"repo_name,omitempty"`
+	// Whether the project has a trusted repository ID binding.
+	Bound *bool `form:"bound,omitempty" json:"bound,omitempty" xml:"bound,omitempty"`
+}
+
+// AdminPluginRepositoryMigrationEntryRequestBody is used to define fields on
+// request body types.
+type AdminPluginRepositoryMigrationEntryRequestBody struct {
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The historically verified GitHub repository ID as a decimal string.
+	RepositoryID string `form:"repository_id" json:"repository_id" xml:"repository_id"`
+	// Reference to trusted historical evidence that identifies this repository for
+	// the project.
+	Evidence string `form:"evidence" json:"evidence" xml:"evidence"`
+}
+
+// AdminPluginRepositoryMigrationOutcomeResponseBody is used to define fields
+// on response body types.
+type AdminPluginRepositoryMigrationOutcomeResponseBody struct {
+	// Project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// Outcome of verifying or applying the binding.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Details of the outcome.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -35437,39 +35494,6 @@ func NewRedeployProjectRequestBody(p *admin.RedeployProjectPayload) *RedeployPro
 	return body
 }
 
-// NewApplyPluginRepositoryMigrationsRequestBody builds the HTTP request body
-// from the payload of the "applyPluginRepositoryMigrations" endpoint of the
-// "admin" service.
-func NewApplyPluginRepositoryMigrationsRequestBody(p *admin.ApplyPluginRepositoryMigrationsPayload) *ApplyPluginRepositoryMigrationsRequestBody {
-	body := &ApplyPluginRepositoryMigrationsRequestBody{
-		DryRun: p.DryRun,
-	}
-	if p.Entries != nil {
-		body.Entries = make([]*AdminPluginRepositoryMigrationEntryRequestBody, len(p.Entries))
-		for i, val := range p.Entries {
-			if val == nil {
-				body.Entries[i] = nil
-				continue
-			}
-			body.Entries[i] = marshalAdminAdminPluginRepositoryMigrationEntryToAdminPluginRepositoryMigrationEntryRequestBody(val)
-		}
-	} else {
-		body.Entries = []*AdminPluginRepositoryMigrationEntryRequestBody{}
-	}
-	return body
-}
-
-// NewReprovisionPluginRepositoryRequestBody builds the HTTP request body from
-// the payload of the "reprovisionPluginRepository" endpoint of the "admin"
-// service.
-func NewReprovisionPluginRepositoryRequestBody(p *admin.ReprovisionPluginRepositoryPayload) *ReprovisionPluginRepositoryRequestBody {
-	body := &ReprovisionPluginRepositoryRequestBody{
-		ProjectID: p.ProjectID,
-		Reason:    p.Reason,
-	}
-	return body
-}
-
 // NewCreateGcpIamPlatformCredentialRequestBody builds the HTTP request body
 // from the payload of the "createGcpIamPlatformCredential" endpoint of the
 // "admin" service.
@@ -35668,6 +35692,39 @@ func NewFinalizeOrganizationEncryptionRequestBody(p *admin.FinalizeOrganizationE
 		UseCase:                      p.UseCase,
 		Confirmation:                 p.Confirmation,
 		AcknowledgedUnreadableValues: p.AcknowledgedUnreadableValues,
+	}
+	return body
+}
+
+// NewApplyPluginRepositoryMigrationsRequestBody builds the HTTP request body
+// from the payload of the "applyPluginRepositoryMigrations" endpoint of the
+// "admin" service.
+func NewApplyPluginRepositoryMigrationsRequestBody(p *admin.ApplyPluginRepositoryMigrationsPayload) *ApplyPluginRepositoryMigrationsRequestBody {
+	body := &ApplyPluginRepositoryMigrationsRequestBody{
+		DryRun: p.DryRun,
+	}
+	if p.Entries != nil {
+		body.Entries = make([]*AdminPluginRepositoryMigrationEntryRequestBody, len(p.Entries))
+		for i, val := range p.Entries {
+			if val == nil {
+				body.Entries[i] = nil
+				continue
+			}
+			body.Entries[i] = marshalAdminAdminPluginRepositoryMigrationEntryToAdminPluginRepositoryMigrationEntryRequestBody(val)
+		}
+	} else {
+		body.Entries = []*AdminPluginRepositoryMigrationEntryRequestBody{}
+	}
+	return body
+}
+
+// NewReprovisionPluginRepositoryRequestBody builds the HTTP request body from
+// the payload of the "reprovisionPluginRepository" endpoint of the "admin"
+// service.
+func NewReprovisionPluginRepositoryRequestBody(p *admin.ReprovisionPluginRepositoryPayload) *ReprovisionPluginRepositoryRequestBody {
+	body := &ReprovisionPluginRepositoryRequestBody{
+		ProjectID: p.ProjectID,
+		Reason:    p.Reason,
 	}
 	return body
 }
@@ -55681,504 +55738,6 @@ func NewRedeployProjectGatewayError(body *RedeployProjectGatewayErrorResponseBod
 	return v
 }
 
-// NewListPluginRepositoryMigrationsAdminPluginRepositoryMigrationListOK builds
-// a "admin" service "listPluginRepositoryMigrations" endpoint result from a
-// HTTP "OK" response.
-func NewListPluginRepositoryMigrationsAdminPluginRepositoryMigrationListOK(body *ListPluginRepositoryMigrationsResponseBody) *admin.AdminPluginRepositoryMigrationList {
-	v := &admin.AdminPluginRepositoryMigrationList{
-		NextCursor: body.NextCursor,
-	}
-	v.Items = make([]*admin.AdminPluginRepositoryMigration, len(body.Items))
-	for i, val := range body.Items {
-		if val == nil {
-			v.Items[i] = nil
-			continue
-		}
-		v.Items[i] = unmarshalAdminPluginRepositoryMigrationResponseBodyToAdminAdminPluginRepositoryMigration(val)
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsUnauthorized builds a admin service
-// listPluginRepositoryMigrations endpoint unauthorized error.
-func NewListPluginRepositoryMigrationsUnauthorized(body *ListPluginRepositoryMigrationsUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsForbidden builds a admin service
-// listPluginRepositoryMigrations endpoint forbidden error.
-func NewListPluginRepositoryMigrationsForbidden(body *ListPluginRepositoryMigrationsForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsBadRequest builds a admin service
-// listPluginRepositoryMigrations endpoint bad_request error.
-func NewListPluginRepositoryMigrationsBadRequest(body *ListPluginRepositoryMigrationsBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsNotFound builds a admin service
-// listPluginRepositoryMigrations endpoint not_found error.
-func NewListPluginRepositoryMigrationsNotFound(body *ListPluginRepositoryMigrationsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsConflict builds a admin service
-// listPluginRepositoryMigrations endpoint conflict error.
-func NewListPluginRepositoryMigrationsConflict(body *ListPluginRepositoryMigrationsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsUnsupportedMedia builds a admin service
-// listPluginRepositoryMigrations endpoint unsupported_media error.
-func NewListPluginRepositoryMigrationsUnsupportedMedia(body *ListPluginRepositoryMigrationsUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsInvalid builds a admin service
-// listPluginRepositoryMigrations endpoint invalid error.
-func NewListPluginRepositoryMigrationsInvalid(body *ListPluginRepositoryMigrationsInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsInvariantViolation builds a admin service
-// listPluginRepositoryMigrations endpoint invariant_violation error.
-func NewListPluginRepositoryMigrationsInvariantViolation(body *ListPluginRepositoryMigrationsInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsUnexpected builds a admin service
-// listPluginRepositoryMigrations endpoint unexpected error.
-func NewListPluginRepositoryMigrationsUnexpected(body *ListPluginRepositoryMigrationsUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListPluginRepositoryMigrationsGatewayError builds a admin service
-// listPluginRepositoryMigrations endpoint gateway_error error.
-func NewListPluginRepositoryMigrationsGatewayError(body *ListPluginRepositoryMigrationsGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsAdminPluginRepositoryMigrationApplyResultOK
-// builds a "admin" service "applyPluginRepositoryMigrations" endpoint result
-// from a HTTP "OK" response.
-func NewApplyPluginRepositoryMigrationsAdminPluginRepositoryMigrationApplyResultOK(body *ApplyPluginRepositoryMigrationsResponseBody) *admin.AdminPluginRepositoryMigrationApplyResult {
-	v := &admin.AdminPluginRepositoryMigrationApplyResult{}
-	v.Items = make([]*admin.AdminPluginRepositoryMigrationOutcome, len(body.Items))
-	for i, val := range body.Items {
-		if val == nil {
-			v.Items[i] = nil
-			continue
-		}
-		v.Items[i] = unmarshalAdminPluginRepositoryMigrationOutcomeResponseBodyToAdminAdminPluginRepositoryMigrationOutcome(val)
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsUnauthorized builds a admin service
-// applyPluginRepositoryMigrations endpoint unauthorized error.
-func NewApplyPluginRepositoryMigrationsUnauthorized(body *ApplyPluginRepositoryMigrationsUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsForbidden builds a admin service
-// applyPluginRepositoryMigrations endpoint forbidden error.
-func NewApplyPluginRepositoryMigrationsForbidden(body *ApplyPluginRepositoryMigrationsForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsBadRequest builds a admin service
-// applyPluginRepositoryMigrations endpoint bad_request error.
-func NewApplyPluginRepositoryMigrationsBadRequest(body *ApplyPluginRepositoryMigrationsBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsNotFound builds a admin service
-// applyPluginRepositoryMigrations endpoint not_found error.
-func NewApplyPluginRepositoryMigrationsNotFound(body *ApplyPluginRepositoryMigrationsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsConflict builds a admin service
-// applyPluginRepositoryMigrations endpoint conflict error.
-func NewApplyPluginRepositoryMigrationsConflict(body *ApplyPluginRepositoryMigrationsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsUnsupportedMedia builds a admin service
-// applyPluginRepositoryMigrations endpoint unsupported_media error.
-func NewApplyPluginRepositoryMigrationsUnsupportedMedia(body *ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsInvalid builds a admin service
-// applyPluginRepositoryMigrations endpoint invalid error.
-func NewApplyPluginRepositoryMigrationsInvalid(body *ApplyPluginRepositoryMigrationsInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsInvariantViolation builds a admin service
-// applyPluginRepositoryMigrations endpoint invariant_violation error.
-func NewApplyPluginRepositoryMigrationsInvariantViolation(body *ApplyPluginRepositoryMigrationsInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsUnexpected builds a admin service
-// applyPluginRepositoryMigrations endpoint unexpected error.
-func NewApplyPluginRepositoryMigrationsUnexpected(body *ApplyPluginRepositoryMigrationsUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewApplyPluginRepositoryMigrationsGatewayError builds a admin service
-// applyPluginRepositoryMigrations endpoint gateway_error error.
-func NewApplyPluginRepositoryMigrationsGatewayError(body *ApplyPluginRepositoryMigrationsGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryAdminPluginRepositoryReprovisionResultOK
-// builds a "admin" service "reprovisionPluginRepository" endpoint result from
-// a HTTP "OK" response.
-func NewReprovisionPluginRepositoryAdminPluginRepositoryReprovisionResultOK(body *ReprovisionPluginRepositoryResponseBody) *admin.AdminPluginRepositoryReprovisionResult {
-	v := &admin.AdminPluginRepositoryReprovisionResult{
-		Status:  *body.Status,
-		Message: *body.Message,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryUnauthorized builds a admin service
-// reprovisionPluginRepository endpoint unauthorized error.
-func NewReprovisionPluginRepositoryUnauthorized(body *ReprovisionPluginRepositoryUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryForbidden builds a admin service
-// reprovisionPluginRepository endpoint forbidden error.
-func NewReprovisionPluginRepositoryForbidden(body *ReprovisionPluginRepositoryForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryBadRequest builds a admin service
-// reprovisionPluginRepository endpoint bad_request error.
-func NewReprovisionPluginRepositoryBadRequest(body *ReprovisionPluginRepositoryBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryNotFound builds a admin service
-// reprovisionPluginRepository endpoint not_found error.
-func NewReprovisionPluginRepositoryNotFound(body *ReprovisionPluginRepositoryNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryConflict builds a admin service
-// reprovisionPluginRepository endpoint conflict error.
-func NewReprovisionPluginRepositoryConflict(body *ReprovisionPluginRepositoryConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryUnsupportedMedia builds a admin service
-// reprovisionPluginRepository endpoint unsupported_media error.
-func NewReprovisionPluginRepositoryUnsupportedMedia(body *ReprovisionPluginRepositoryUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryInvalid builds a admin service
-// reprovisionPluginRepository endpoint invalid error.
-func NewReprovisionPluginRepositoryInvalid(body *ReprovisionPluginRepositoryInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryInvariantViolation builds a admin service
-// reprovisionPluginRepository endpoint invariant_violation error.
-func NewReprovisionPluginRepositoryInvariantViolation(body *ReprovisionPluginRepositoryInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryUnexpected builds a admin service
-// reprovisionPluginRepository endpoint unexpected error.
-func NewReprovisionPluginRepositoryUnexpected(body *ReprovisionPluginRepositoryUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewReprovisionPluginRepositoryGatewayError builds a admin service
-// reprovisionPluginRepository endpoint gateway_error error.
-func NewReprovisionPluginRepositoryGatewayError(body *ReprovisionPluginRepositoryGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewListCustomDomainsAdminListCustomDomainsResultOK builds a "admin" service
 // "listCustomDomains" endpoint result from a HTTP "OK" response.
 func NewListCustomDomainsAdminListCustomDomainsResultOK(body *ListCustomDomainsResponseBody) *admin.AdminListCustomDomainsResult {
@@ -61934,6 +61493,549 @@ func NewFinalizeOrganizationEncryptionGatewayError(body *FinalizeOrganizationEnc
 	return v
 }
 
+// NewListPluginRepositoryMigrationsAdminPluginRepositoryMigrationListOK builds
+// a "admin" service "listPluginRepositoryMigrations" endpoint result from a
+// HTTP "OK" response.
+func NewListPluginRepositoryMigrationsAdminPluginRepositoryMigrationListOK(body *ListPluginRepositoryMigrationsResponseBody) *admin.AdminPluginRepositoryMigrationList {
+	v := &admin.AdminPluginRepositoryMigrationList{
+		NextCursor: body.NextCursor,
+	}
+	v.Items = make([]*admin.AdminPluginRepositoryMigration, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalAdminPluginRepositoryMigrationResponseBodyToAdminAdminPluginRepositoryMigration(val)
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsUnavailable builds a admin service
+// listPluginRepositoryMigrations endpoint unavailable error.
+func NewListPluginRepositoryMigrationsUnavailable(body *ListPluginRepositoryMigrationsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsUnauthorized builds a admin service
+// listPluginRepositoryMigrations endpoint unauthorized error.
+func NewListPluginRepositoryMigrationsUnauthorized(body *ListPluginRepositoryMigrationsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsForbidden builds a admin service
+// listPluginRepositoryMigrations endpoint forbidden error.
+func NewListPluginRepositoryMigrationsForbidden(body *ListPluginRepositoryMigrationsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsBadRequest builds a admin service
+// listPluginRepositoryMigrations endpoint bad_request error.
+func NewListPluginRepositoryMigrationsBadRequest(body *ListPluginRepositoryMigrationsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsNotFound builds a admin service
+// listPluginRepositoryMigrations endpoint not_found error.
+func NewListPluginRepositoryMigrationsNotFound(body *ListPluginRepositoryMigrationsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsConflict builds a admin service
+// listPluginRepositoryMigrations endpoint conflict error.
+func NewListPluginRepositoryMigrationsConflict(body *ListPluginRepositoryMigrationsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsUnsupportedMedia builds a admin service
+// listPluginRepositoryMigrations endpoint unsupported_media error.
+func NewListPluginRepositoryMigrationsUnsupportedMedia(body *ListPluginRepositoryMigrationsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsInvalid builds a admin service
+// listPluginRepositoryMigrations endpoint invalid error.
+func NewListPluginRepositoryMigrationsInvalid(body *ListPluginRepositoryMigrationsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsInvariantViolation builds a admin service
+// listPluginRepositoryMigrations endpoint invariant_violation error.
+func NewListPluginRepositoryMigrationsInvariantViolation(body *ListPluginRepositoryMigrationsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsUnexpected builds a admin service
+// listPluginRepositoryMigrations endpoint unexpected error.
+func NewListPluginRepositoryMigrationsUnexpected(body *ListPluginRepositoryMigrationsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPluginRepositoryMigrationsGatewayError builds a admin service
+// listPluginRepositoryMigrations endpoint gateway_error error.
+func NewListPluginRepositoryMigrationsGatewayError(body *ListPluginRepositoryMigrationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsAdminPluginRepositoryMigrationApplyResultOK
+// builds a "admin" service "applyPluginRepositoryMigrations" endpoint result
+// from a HTTP "OK" response.
+func NewApplyPluginRepositoryMigrationsAdminPluginRepositoryMigrationApplyResultOK(body *ApplyPluginRepositoryMigrationsResponseBody) *admin.AdminPluginRepositoryMigrationApplyResult {
+	v := &admin.AdminPluginRepositoryMigrationApplyResult{}
+	v.Items = make([]*admin.AdminPluginRepositoryMigrationOutcome, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalAdminPluginRepositoryMigrationOutcomeResponseBodyToAdminAdminPluginRepositoryMigrationOutcome(val)
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsUnavailable builds a admin service
+// applyPluginRepositoryMigrations endpoint unavailable error.
+func NewApplyPluginRepositoryMigrationsUnavailable(body *ApplyPluginRepositoryMigrationsUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsUnauthorized builds a admin service
+// applyPluginRepositoryMigrations endpoint unauthorized error.
+func NewApplyPluginRepositoryMigrationsUnauthorized(body *ApplyPluginRepositoryMigrationsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsForbidden builds a admin service
+// applyPluginRepositoryMigrations endpoint forbidden error.
+func NewApplyPluginRepositoryMigrationsForbidden(body *ApplyPluginRepositoryMigrationsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsBadRequest builds a admin service
+// applyPluginRepositoryMigrations endpoint bad_request error.
+func NewApplyPluginRepositoryMigrationsBadRequest(body *ApplyPluginRepositoryMigrationsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsNotFound builds a admin service
+// applyPluginRepositoryMigrations endpoint not_found error.
+func NewApplyPluginRepositoryMigrationsNotFound(body *ApplyPluginRepositoryMigrationsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsConflict builds a admin service
+// applyPluginRepositoryMigrations endpoint conflict error.
+func NewApplyPluginRepositoryMigrationsConflict(body *ApplyPluginRepositoryMigrationsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsUnsupportedMedia builds a admin service
+// applyPluginRepositoryMigrations endpoint unsupported_media error.
+func NewApplyPluginRepositoryMigrationsUnsupportedMedia(body *ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsInvalid builds a admin service
+// applyPluginRepositoryMigrations endpoint invalid error.
+func NewApplyPluginRepositoryMigrationsInvalid(body *ApplyPluginRepositoryMigrationsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsInvariantViolation builds a admin service
+// applyPluginRepositoryMigrations endpoint invariant_violation error.
+func NewApplyPluginRepositoryMigrationsInvariantViolation(body *ApplyPluginRepositoryMigrationsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsUnexpected builds a admin service
+// applyPluginRepositoryMigrations endpoint unexpected error.
+func NewApplyPluginRepositoryMigrationsUnexpected(body *ApplyPluginRepositoryMigrationsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyPluginRepositoryMigrationsGatewayError builds a admin service
+// applyPluginRepositoryMigrations endpoint gateway_error error.
+func NewApplyPluginRepositoryMigrationsGatewayError(body *ApplyPluginRepositoryMigrationsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryAdminPluginRepositoryReprovisionResultOK
+// builds a "admin" service "reprovisionPluginRepository" endpoint result from
+// a HTTP "OK" response.
+func NewReprovisionPluginRepositoryAdminPluginRepositoryReprovisionResultOK(body *ReprovisionPluginRepositoryResponseBody) *admin.AdminPluginRepositoryReprovisionResult {
+	v := &admin.AdminPluginRepositoryReprovisionResult{
+		Status:  *body.Status,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryUnavailable builds a admin service
+// reprovisionPluginRepository endpoint unavailable error.
+func NewReprovisionPluginRepositoryUnavailable(body *ReprovisionPluginRepositoryUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryUnauthorized builds a admin service
+// reprovisionPluginRepository endpoint unauthorized error.
+func NewReprovisionPluginRepositoryUnauthorized(body *ReprovisionPluginRepositoryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryForbidden builds a admin service
+// reprovisionPluginRepository endpoint forbidden error.
+func NewReprovisionPluginRepositoryForbidden(body *ReprovisionPluginRepositoryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryBadRequest builds a admin service
+// reprovisionPluginRepository endpoint bad_request error.
+func NewReprovisionPluginRepositoryBadRequest(body *ReprovisionPluginRepositoryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryNotFound builds a admin service
+// reprovisionPluginRepository endpoint not_found error.
+func NewReprovisionPluginRepositoryNotFound(body *ReprovisionPluginRepositoryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryConflict builds a admin service
+// reprovisionPluginRepository endpoint conflict error.
+func NewReprovisionPluginRepositoryConflict(body *ReprovisionPluginRepositoryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryUnsupportedMedia builds a admin service
+// reprovisionPluginRepository endpoint unsupported_media error.
+func NewReprovisionPluginRepositoryUnsupportedMedia(body *ReprovisionPluginRepositoryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryInvalid builds a admin service
+// reprovisionPluginRepository endpoint invalid error.
+func NewReprovisionPluginRepositoryInvalid(body *ReprovisionPluginRepositoryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryInvariantViolation builds a admin service
+// reprovisionPluginRepository endpoint invariant_violation error.
+func NewReprovisionPluginRepositoryInvariantViolation(body *ReprovisionPluginRepositoryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryUnexpected builds a admin service
+// reprovisionPluginRepository endpoint unexpected error.
+func NewReprovisionPluginRepositoryUnexpected(body *ReprovisionPluginRepositoryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReprovisionPluginRepositoryGatewayError builds a admin service
+// reprovisionPluginRepository endpoint gateway_error error.
+func NewReprovisionPluginRepositoryGatewayError(body *ReprovisionPluginRepositoryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -65646,53 +65748,6 @@ func ValidateRedeployProjectResponseBody(body *RedeployProjectResponseBody) (err
 	return
 }
 
-// ValidateListPluginRepositoryMigrationsResponseBody runs the validations
-// defined on ListPluginRepositoryMigrationsResponseBody
-func ValidateListPluginRepositoryMigrationsResponseBody(body *ListPluginRepositoryMigrationsResponseBody) (err error) {
-	if body.Items == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
-	}
-	for _, e := range body.Items {
-		if e != nil {
-			if err2 := ValidateAdminPluginRepositoryMigrationResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	if body.NextCursor != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_cursor", *body.NextCursor, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsResponseBody runs the validations
-// defined on ApplyPluginRepositoryMigrationsResponseBody
-func ValidateApplyPluginRepositoryMigrationsResponseBody(body *ApplyPluginRepositoryMigrationsResponseBody) (err error) {
-	if body.Items == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
-	}
-	for _, e := range body.Items {
-		if e != nil {
-			if err2 := ValidateAdminPluginRepositoryMigrationOutcomeResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryResponseBody runs the validations defined
-// on ReprovisionPluginRepositoryResponseBody
-func ValidateReprovisionPluginRepositoryResponseBody(body *ReprovisionPluginRepositoryResponseBody) (err error) {
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	return
-}
-
 // ValidateListCustomDomainsResponseBody runs the validations defined on
 // ListCustomDomainsResponseBody
 func ValidateListCustomDomainsResponseBody(body *ListCustomDomainsResponseBody) (err error) {
@@ -66677,6 +66732,53 @@ func ValidateFinalizeOrganizationEncryptionResponseBody(body *FinalizeOrganizati
 		if err2 := ValidateAdminOrganizationEncryptionUseCaseResponseBody(body.UseCase); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsResponseBody runs the validations
+// defined on ListPluginRepositoryMigrationsResponseBody
+func ValidateListPluginRepositoryMigrationsResponseBody(body *ListPluginRepositoryMigrationsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateAdminPluginRepositoryMigrationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.NextCursor != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_cursor", *body.NextCursor, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsResponseBody runs the validations
+// defined on ApplyPluginRepositoryMigrationsResponseBody
+func ValidateApplyPluginRepositoryMigrationsResponseBody(body *ApplyPluginRepositoryMigrationsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateAdminPluginRepositoryMigrationOutcomeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryResponseBody runs the validations defined
+// on ReprovisionPluginRepositoryResponseBody
+func ValidateReprovisionPluginRepositoryResponseBody(body *ReprovisionPluginRepositoryResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
 	return
 }
@@ -94404,743 +94506,6 @@ func ValidateRedeployProjectGatewayErrorResponseBody(body *RedeployProjectGatewa
 	return
 }
 
-// ValidateListPluginRepositoryMigrationsUnauthorizedResponseBody runs the
-// validations defined on
-// listPluginRepositoryMigrations_unauthorized_response_body
-func ValidateListPluginRepositoryMigrationsUnauthorizedResponseBody(body *ListPluginRepositoryMigrationsUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsForbiddenResponseBody runs the
-// validations defined on listPluginRepositoryMigrations_forbidden_response_body
-func ValidateListPluginRepositoryMigrationsForbiddenResponseBody(body *ListPluginRepositoryMigrationsForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsBadRequestResponseBody runs the
-// validations defined on
-// listPluginRepositoryMigrations_bad_request_response_body
-func ValidateListPluginRepositoryMigrationsBadRequestResponseBody(body *ListPluginRepositoryMigrationsBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsNotFoundResponseBody runs the
-// validations defined on listPluginRepositoryMigrations_not_found_response_body
-func ValidateListPluginRepositoryMigrationsNotFoundResponseBody(body *ListPluginRepositoryMigrationsNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsConflictResponseBody runs the
-// validations defined on listPluginRepositoryMigrations_conflict_response_body
-func ValidateListPluginRepositoryMigrationsConflictResponseBody(body *ListPluginRepositoryMigrationsConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsUnsupportedMediaResponseBody runs the
-// validations defined on
-// listPluginRepositoryMigrations_unsupported_media_response_body
-func ValidateListPluginRepositoryMigrationsUnsupportedMediaResponseBody(body *ListPluginRepositoryMigrationsUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsInvalidResponseBody runs the
-// validations defined on listPluginRepositoryMigrations_invalid_response_body
-func ValidateListPluginRepositoryMigrationsInvalidResponseBody(body *ListPluginRepositoryMigrationsInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsInvariantViolationResponseBody runs
-// the validations defined on
-// listPluginRepositoryMigrations_invariant_violation_response_body
-func ValidateListPluginRepositoryMigrationsInvariantViolationResponseBody(body *ListPluginRepositoryMigrationsInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsUnexpectedResponseBody runs the
-// validations defined on
-// listPluginRepositoryMigrations_unexpected_response_body
-func ValidateListPluginRepositoryMigrationsUnexpectedResponseBody(body *ListPluginRepositoryMigrationsUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListPluginRepositoryMigrationsGatewayErrorResponseBody runs the
-// validations defined on
-// listPluginRepositoryMigrations_gateway_error_response_body
-func ValidateListPluginRepositoryMigrationsGatewayErrorResponseBody(body *ListPluginRepositoryMigrationsGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsUnauthorizedResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_unauthorized_response_body
-func ValidateApplyPluginRepositoryMigrationsUnauthorizedResponseBody(body *ApplyPluginRepositoryMigrationsUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsForbiddenResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_forbidden_response_body
-func ValidateApplyPluginRepositoryMigrationsForbiddenResponseBody(body *ApplyPluginRepositoryMigrationsForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsBadRequestResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_bad_request_response_body
-func ValidateApplyPluginRepositoryMigrationsBadRequestResponseBody(body *ApplyPluginRepositoryMigrationsBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsNotFoundResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_not_found_response_body
-func ValidateApplyPluginRepositoryMigrationsNotFoundResponseBody(body *ApplyPluginRepositoryMigrationsNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsConflictResponseBody runs the
-// validations defined on applyPluginRepositoryMigrations_conflict_response_body
-func ValidateApplyPluginRepositoryMigrationsConflictResponseBody(body *ApplyPluginRepositoryMigrationsConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_unsupported_media_response_body
-func ValidateApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody(body *ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsInvalidResponseBody runs the
-// validations defined on applyPluginRepositoryMigrations_invalid_response_body
-func ValidateApplyPluginRepositoryMigrationsInvalidResponseBody(body *ApplyPluginRepositoryMigrationsInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsInvariantViolationResponseBody runs
-// the validations defined on
-// applyPluginRepositoryMigrations_invariant_violation_response_body
-func ValidateApplyPluginRepositoryMigrationsInvariantViolationResponseBody(body *ApplyPluginRepositoryMigrationsInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsUnexpectedResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_unexpected_response_body
-func ValidateApplyPluginRepositoryMigrationsUnexpectedResponseBody(body *ApplyPluginRepositoryMigrationsUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateApplyPluginRepositoryMigrationsGatewayErrorResponseBody runs the
-// validations defined on
-// applyPluginRepositoryMigrations_gateway_error_response_body
-func ValidateApplyPluginRepositoryMigrationsGatewayErrorResponseBody(body *ApplyPluginRepositoryMigrationsGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryUnauthorizedResponseBody runs the
-// validations defined on reprovisionPluginRepository_unauthorized_response_body
-func ValidateReprovisionPluginRepositoryUnauthorizedResponseBody(body *ReprovisionPluginRepositoryUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryForbiddenResponseBody runs the
-// validations defined on reprovisionPluginRepository_forbidden_response_body
-func ValidateReprovisionPluginRepositoryForbiddenResponseBody(body *ReprovisionPluginRepositoryForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryBadRequestResponseBody runs the
-// validations defined on reprovisionPluginRepository_bad_request_response_body
-func ValidateReprovisionPluginRepositoryBadRequestResponseBody(body *ReprovisionPluginRepositoryBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryNotFoundResponseBody runs the validations
-// defined on reprovisionPluginRepository_not_found_response_body
-func ValidateReprovisionPluginRepositoryNotFoundResponseBody(body *ReprovisionPluginRepositoryNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryConflictResponseBody runs the validations
-// defined on reprovisionPluginRepository_conflict_response_body
-func ValidateReprovisionPluginRepositoryConflictResponseBody(body *ReprovisionPluginRepositoryConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryUnsupportedMediaResponseBody runs the
-// validations defined on
-// reprovisionPluginRepository_unsupported_media_response_body
-func ValidateReprovisionPluginRepositoryUnsupportedMediaResponseBody(body *ReprovisionPluginRepositoryUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryInvalidResponseBody runs the validations
-// defined on reprovisionPluginRepository_invalid_response_body
-func ValidateReprovisionPluginRepositoryInvalidResponseBody(body *ReprovisionPluginRepositoryInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryInvariantViolationResponseBody runs the
-// validations defined on
-// reprovisionPluginRepository_invariant_violation_response_body
-func ValidateReprovisionPluginRepositoryInvariantViolationResponseBody(body *ReprovisionPluginRepositoryInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryUnexpectedResponseBody runs the
-// validations defined on reprovisionPluginRepository_unexpected_response_body
-func ValidateReprovisionPluginRepositoryUnexpectedResponseBody(body *ReprovisionPluginRepositoryUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateReprovisionPluginRepositoryGatewayErrorResponseBody runs the
-// validations defined on
-// reprovisionPluginRepository_gateway_error_response_body
-func ValidateReprovisionPluginRepositoryGatewayErrorResponseBody(body *ReprovisionPluginRepositoryGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateListCustomDomainsUnauthorizedResponseBody runs the validations
 // defined on listCustomDomains_unauthorized_response_body
 func ValidateListCustomDomainsUnauthorizedResponseBody(body *ListCustomDomainsUnauthorizedResponseBody) (err error) {
@@ -103382,6 +102747,817 @@ func ValidateFinalizeOrganizationEncryptionGatewayErrorResponseBody(body *Finali
 	return
 }
 
+// ValidateListPluginRepositoryMigrationsUnavailableResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_unavailable_response_body
+func ValidateListPluginRepositoryMigrationsUnavailableResponseBody(body *ListPluginRepositoryMigrationsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsUnauthorizedResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_unauthorized_response_body
+func ValidateListPluginRepositoryMigrationsUnauthorizedResponseBody(body *ListPluginRepositoryMigrationsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsForbiddenResponseBody runs the
+// validations defined on listPluginRepositoryMigrations_forbidden_response_body
+func ValidateListPluginRepositoryMigrationsForbiddenResponseBody(body *ListPluginRepositoryMigrationsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsBadRequestResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_bad_request_response_body
+func ValidateListPluginRepositoryMigrationsBadRequestResponseBody(body *ListPluginRepositoryMigrationsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsNotFoundResponseBody runs the
+// validations defined on listPluginRepositoryMigrations_not_found_response_body
+func ValidateListPluginRepositoryMigrationsNotFoundResponseBody(body *ListPluginRepositoryMigrationsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsConflictResponseBody runs the
+// validations defined on listPluginRepositoryMigrations_conflict_response_body
+func ValidateListPluginRepositoryMigrationsConflictResponseBody(body *ListPluginRepositoryMigrationsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsUnsupportedMediaResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_unsupported_media_response_body
+func ValidateListPluginRepositoryMigrationsUnsupportedMediaResponseBody(body *ListPluginRepositoryMigrationsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsInvalidResponseBody runs the
+// validations defined on listPluginRepositoryMigrations_invalid_response_body
+func ValidateListPluginRepositoryMigrationsInvalidResponseBody(body *ListPluginRepositoryMigrationsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsInvariantViolationResponseBody runs
+// the validations defined on
+// listPluginRepositoryMigrations_invariant_violation_response_body
+func ValidateListPluginRepositoryMigrationsInvariantViolationResponseBody(body *ListPluginRepositoryMigrationsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsUnexpectedResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_unexpected_response_body
+func ValidateListPluginRepositoryMigrationsUnexpectedResponseBody(body *ListPluginRepositoryMigrationsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPluginRepositoryMigrationsGatewayErrorResponseBody runs the
+// validations defined on
+// listPluginRepositoryMigrations_gateway_error_response_body
+func ValidateListPluginRepositoryMigrationsGatewayErrorResponseBody(body *ListPluginRepositoryMigrationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsUnavailableResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_unavailable_response_body
+func ValidateApplyPluginRepositoryMigrationsUnavailableResponseBody(body *ApplyPluginRepositoryMigrationsUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsUnauthorizedResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_unauthorized_response_body
+func ValidateApplyPluginRepositoryMigrationsUnauthorizedResponseBody(body *ApplyPluginRepositoryMigrationsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsForbiddenResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_forbidden_response_body
+func ValidateApplyPluginRepositoryMigrationsForbiddenResponseBody(body *ApplyPluginRepositoryMigrationsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsBadRequestResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_bad_request_response_body
+func ValidateApplyPluginRepositoryMigrationsBadRequestResponseBody(body *ApplyPluginRepositoryMigrationsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsNotFoundResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_not_found_response_body
+func ValidateApplyPluginRepositoryMigrationsNotFoundResponseBody(body *ApplyPluginRepositoryMigrationsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsConflictResponseBody runs the
+// validations defined on applyPluginRepositoryMigrations_conflict_response_body
+func ValidateApplyPluginRepositoryMigrationsConflictResponseBody(body *ApplyPluginRepositoryMigrationsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_unsupported_media_response_body
+func ValidateApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody(body *ApplyPluginRepositoryMigrationsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsInvalidResponseBody runs the
+// validations defined on applyPluginRepositoryMigrations_invalid_response_body
+func ValidateApplyPluginRepositoryMigrationsInvalidResponseBody(body *ApplyPluginRepositoryMigrationsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsInvariantViolationResponseBody runs
+// the validations defined on
+// applyPluginRepositoryMigrations_invariant_violation_response_body
+func ValidateApplyPluginRepositoryMigrationsInvariantViolationResponseBody(body *ApplyPluginRepositoryMigrationsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsUnexpectedResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_unexpected_response_body
+func ValidateApplyPluginRepositoryMigrationsUnexpectedResponseBody(body *ApplyPluginRepositoryMigrationsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyPluginRepositoryMigrationsGatewayErrorResponseBody runs the
+// validations defined on
+// applyPluginRepositoryMigrations_gateway_error_response_body
+func ValidateApplyPluginRepositoryMigrationsGatewayErrorResponseBody(body *ApplyPluginRepositoryMigrationsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryUnavailableResponseBody runs the
+// validations defined on reprovisionPluginRepository_unavailable_response_body
+func ValidateReprovisionPluginRepositoryUnavailableResponseBody(body *ReprovisionPluginRepositoryUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryUnauthorizedResponseBody runs the
+// validations defined on reprovisionPluginRepository_unauthorized_response_body
+func ValidateReprovisionPluginRepositoryUnauthorizedResponseBody(body *ReprovisionPluginRepositoryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryForbiddenResponseBody runs the
+// validations defined on reprovisionPluginRepository_forbidden_response_body
+func ValidateReprovisionPluginRepositoryForbiddenResponseBody(body *ReprovisionPluginRepositoryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryBadRequestResponseBody runs the
+// validations defined on reprovisionPluginRepository_bad_request_response_body
+func ValidateReprovisionPluginRepositoryBadRequestResponseBody(body *ReprovisionPluginRepositoryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryNotFoundResponseBody runs the validations
+// defined on reprovisionPluginRepository_not_found_response_body
+func ValidateReprovisionPluginRepositoryNotFoundResponseBody(body *ReprovisionPluginRepositoryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryConflictResponseBody runs the validations
+// defined on reprovisionPluginRepository_conflict_response_body
+func ValidateReprovisionPluginRepositoryConflictResponseBody(body *ReprovisionPluginRepositoryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryUnsupportedMediaResponseBody runs the
+// validations defined on
+// reprovisionPluginRepository_unsupported_media_response_body
+func ValidateReprovisionPluginRepositoryUnsupportedMediaResponseBody(body *ReprovisionPluginRepositoryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryInvalidResponseBody runs the validations
+// defined on reprovisionPluginRepository_invalid_response_body
+func ValidateReprovisionPluginRepositoryInvalidResponseBody(body *ReprovisionPluginRepositoryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryInvariantViolationResponseBody runs the
+// validations defined on
+// reprovisionPluginRepository_invariant_violation_response_body
+func ValidateReprovisionPluginRepositoryInvariantViolationResponseBody(body *ReprovisionPluginRepositoryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryUnexpectedResponseBody runs the
+// validations defined on reprovisionPluginRepository_unexpected_response_body
+func ValidateReprovisionPluginRepositoryUnexpectedResponseBody(body *ReprovisionPluginRepositoryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReprovisionPluginRepositoryGatewayErrorResponseBody runs the
+// validations defined on
+// reprovisionPluginRepository_gateway_error_response_body
+func ValidateReprovisionPluginRepositoryGatewayErrorResponseBody(body *ReprovisionPluginRepositoryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminTrialCardSharingOrganizationResponseBody runs the validations
 // defined on AdminTrialCardSharingOrganizationResponseBody
 func ValidateAdminTrialCardSharingOrganizationResponseBody(body *AdminTrialCardSharingOrganizationResponseBody) (err error) {
@@ -106107,62 +106283,6 @@ func ValidateAdminSecretBackfillOrganizationResponseBody(body *AdminSecretBackfi
 	return
 }
 
-// ValidateAdminPluginRepositoryMigrationResponseBody runs the validations
-// defined on AdminPluginRepositoryMigrationResponseBody
-func ValidateAdminPluginRepositoryMigrationResponseBody(body *AdminPluginRepositoryMigrationResponseBody) (err error) {
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.RepoOwner == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_owner", "body"))
-	}
-	if body.RepoName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("repo_name", "body"))
-	}
-	if body.Bound == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("bound", "body"))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	return
-}
-
-// ValidateAdminPluginRepositoryMigrationEntryRequestBody runs the validations
-// defined on AdminPluginRepositoryMigrationEntryRequestBody
-func ValidateAdminPluginRepositoryMigrationEntryRequestBody(body *AdminPluginRepositoryMigrationEntryRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.repository_id", body.RepositoryID, "^[0-9]+$"))
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.evidence", body.Evidence, "\\S"))
-	return
-}
-
-// ValidateAdminPluginRepositoryMigrationOutcomeResponseBody runs the
-// validations defined on AdminPluginRepositoryMigrationOutcomeResponseBody
-func ValidateAdminPluginRepositoryMigrationOutcomeResponseBody(body *AdminPluginRepositoryMigrationOutcomeResponseBody) (err error) {
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.ProjectID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "verified" || *body.Status == "bound" || *body.Status == "already_bound" || *body.Status == "conflict" || *body.Status == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"verified", "bound", "already_bound", "conflict", "unavailable"}))
-		}
-	}
-	return
-}
-
 // ValidateAdminCustomDomainResponseBody runs the validations defined on
 // AdminCustomDomainResponseBody
 func ValidateAdminCustomDomainResponseBody(body *AdminCustomDomainResponseBody) (err error) {
@@ -106880,6 +107000,62 @@ func ValidateAdminOrganizationEncryptionStateCountResponseBody(body *AdminOrgani
 	if body.State != nil {
 		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminPluginRepositoryMigrationResponseBody runs the validations
+// defined on AdminPluginRepositoryMigrationResponseBody
+func ValidateAdminPluginRepositoryMigrationResponseBody(body *AdminPluginRepositoryMigrationResponseBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.RepoOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_owner", "body"))
+	}
+	if body.RepoName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("repo_name", "body"))
+	}
+	if body.Bound == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bound", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateAdminPluginRepositoryMigrationEntryRequestBody runs the validations
+// defined on AdminPluginRepositoryMigrationEntryRequestBody
+func ValidateAdminPluginRepositoryMigrationEntryRequestBody(body *AdminPluginRepositoryMigrationEntryRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.repository_id", body.RepositoryID, "^[0-9]+$"))
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.evidence", body.Evidence, "\\S"))
+	return
+}
+
+// ValidateAdminPluginRepositoryMigrationOutcomeResponseBody runs the
+// validations defined on AdminPluginRepositoryMigrationOutcomeResponseBody
+func ValidateAdminPluginRepositoryMigrationOutcomeResponseBody(body *AdminPluginRepositoryMigrationOutcomeResponseBody) (err error) {
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "verified" || *body.Status == "bound" || *body.Status == "already_bound" || *body.Status == "conflict" || *body.Status == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"verified", "bound", "already_bound", "conflict", "unavailable"}))
 		}
 	}
 	return

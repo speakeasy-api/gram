@@ -1007,12 +1007,12 @@ LIMIT 1;
 -- name: GetPluginRepositoryBinding :one
 SELECT *
 FROM plugin_repository_bindings
-WHERE project_id = @project_id;
+WHERE project_id = @project_id::uuid;
 
 -- name: InsertPluginRepositoryBinding :exec
 -- A binding cannot be replaced by another repository or claimed by another project.
 INSERT INTO plugin_repository_bindings (project_id, repository_id, repo_owner, repo_name, installation_id)
-VALUES (@project_id, @repository_id, @repo_owner, @repo_name, @installation_id);
+VALUES (@project_id::uuid, @repository_id, @repo_owner, @repo_name, @installation_id);
 
 -- name: UpsertGitHubConnection :one
 -- Inserts or refreshes a project's GitHub connection. It never writes the

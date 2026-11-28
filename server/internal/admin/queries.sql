@@ -1848,7 +1848,7 @@ WITH candidates AS (
   WHERE b.project_id > @after_project_id::uuid
     AND NOT EXISTS (SELECT 1 FROM plugin_github_connections c WHERE c.project_id = b.project_id)
 )
-SELECT c.project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
+SELECT p.id AS project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
 FROM candidates c
 JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
 ORDER BY c.project_id
@@ -1866,7 +1866,7 @@ WHERE c.project_id = @project_id
 FOR UPDATE OF c, p;
 
 -- name: AdminFindPluginRepositoryID :one
-SELECT project_id
+SELECT repository_id
 FROM plugin_repository_bindings
 WHERE repository_id = @repository_id;
 

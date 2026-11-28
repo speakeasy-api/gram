@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -23,8 +24,8 @@ type LogPluginRepositoryBindingEvent struct {
 	ProjectID        uuid.UUID
 	Actor            urn.Principal
 	ActorDisplayName *string
-	RepositoryID     string
-	InstallationID   string
+	RepositoryID     string //nolint:glint // auditeventurnnaming: GitHub identifier kept as metadata, not an audit subject.
+	InstallationID   string //nolint:glint // auditeventurnnaming: GitHub identifier kept as metadata, not an audit subject.
 	RepositoryOwner  string
 	RepositoryName   string
 	Evidence         string
@@ -55,15 +56,22 @@ func (l *Logger) LogPluginRepositoryBinding(ctx context.Context, dbtx repo.DBTX,
 		return fmt.Errorf("marshal plugin repository binding audit: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{
-		IsInternal:       true,
-		OrganizationID:   event.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: event.ProjectID, Valid: true},
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		Action:           string(action),
-		SubjectID:        event.ProjectID.String(),
-		SubjectType:      string(subjectTypePluginRepository),
-		Metadata:         metadata,
+		IsInternal:         true,
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: true},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		Action:             string(action),
+		SubjectID:          event.ProjectID.String(),
+		SubjectType:        string(subjectTypePluginRepository),
+		Metadata:           metadata,
+		ActorSlug:          pgtype.Text{},
+		SubjectDisplayName: pgtype.Text{},
+		SubjectSlug:        pgtype.Text{},
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
+		ActingSurface:      pgtype.Text{},
+		ActingClientID:     pgtype.Text{},
 	}, OutboxEvent: nil})
 }

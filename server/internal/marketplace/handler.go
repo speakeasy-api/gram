@@ -207,6 +207,7 @@ func (s *Server) proxyToGitHub(
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		s.logger.WarnContext(ctx, "upstream redirect refused", attr.SlogHTTPResponseStatusCode(resp.StatusCode))
 		http.Error(w, "unexpected upstream redirect", http.StatusBadGateway)
 		return
 	}

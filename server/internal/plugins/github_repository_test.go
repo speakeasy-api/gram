@@ -110,9 +110,11 @@ func TestPublishRegeneratesOnVerifiedReplacement(t *testing.T) {
 	require.NoError(t, err)
 	const replacement = "verified-replacement"
 	replacementID := mockGitHubRepositoryIDs.Add(1)
-	_, err = f.ti.conn.Exec(ctx, `UPDATE plugin_repository_bindings SET repo_name = $2, repository_id = $3 WHERE project_id = $1`, f.projectID, replacement, replacementID)
+	_, err = f.ti.conn.Exec(ctx, //nolint:glint // notestingrawsql: simulate a staff-driven repository replacement without invoking the admin service.
+		`UPDATE plugin_repository_bindings SET repo_name = $2, repository_id = $3 WHERE project_id = $1`, f.projectID, replacement, replacementID)
 	require.NoError(t, err)
-	_, err = f.ti.conn.Exec(ctx, `UPDATE plugin_github_connections SET repo_name = $2, published_fingerprint = NULL, published_mcp_fingerprints = NULL, published_hooks_version = NULL, published_hooks_config = NULL WHERE project_id = $1`, f.projectID, replacement)
+	_, err = f.ti.conn.Exec(ctx, //nolint:glint // notestingrawsql: simulate the state reset performed by staff recovery without invoking the admin service.
+		`UPDATE plugin_github_connections SET repo_name = $2, published_fingerprint = NULL, published_mcp_fingerprints = NULL, published_hooks_version = NULL, published_hooks_config = NULL WHERE project_id = $1`, f.projectID, replacement)
 	require.NoError(t, err)
 	f.mock.createRepoNames = nil
 	f.mock.getRepoFilesCalled = false
@@ -138,7 +140,8 @@ func TestPublishRefusesUnverifiedLegacyConnection(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAutoSyncFixture(t, "binding")
 	// A pre-migration project has publication metadata but no trusted repository ID.
-	_, err := f.ti.conn.Exec(ctx, "DELETE FROM plugin_repository_bindings WHERE project_id = $1", f.projectID)
+	_, err := f.ti.conn.Exec(ctx, //nolint:glint // notestingrawsql: simulate a legacy connection with no binding before testing the fail-closed publish path.
+		"DELETE FROM plugin_repository_bindings WHERE project_id = $1", f.projectID)
 	require.NoError(t, err)
 	f.mock.createRepoCalled = false
 	f.mock.pushFilesCalled = false

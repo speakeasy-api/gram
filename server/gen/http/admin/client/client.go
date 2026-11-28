@@ -464,18 +464,6 @@ type Client struct {
 	// redeployProject endpoint.
 	RedeployProjectDoer goahttp.Doer
 
-	// ListPluginRepositoryMigrations Doer is the HTTP client used to make requests
-	// to the listPluginRepositoryMigrations endpoint.
-	ListPluginRepositoryMigrationsDoer goahttp.Doer
-
-	// ApplyPluginRepositoryMigrations Doer is the HTTP client used to make
-	// requests to the applyPluginRepositoryMigrations endpoint.
-	ApplyPluginRepositoryMigrationsDoer goahttp.Doer
-
-	// ReprovisionPluginRepository Doer is the HTTP client used to make requests to
-	// the reprovisionPluginRepository endpoint.
-	ReprovisionPluginRepositoryDoer goahttp.Doer
-
 	// ListCustomDomains Doer is the HTTP client used to make requests to the
 	// listCustomDomains endpoint.
 	ListCustomDomainsDoer goahttp.Doer
@@ -603,6 +591,18 @@ type Client struct {
 	// FinalizeOrganizationEncryption Doer is the HTTP client used to make requests
 	// to the finalizeOrganizationEncryption endpoint.
 	FinalizeOrganizationEncryptionDoer goahttp.Doer
+
+	// ListPluginRepositoryMigrations Doer is the HTTP client used to make requests
+	// to the listPluginRepositoryMigrations endpoint.
+	ListPluginRepositoryMigrationsDoer goahttp.Doer
+
+	// ApplyPluginRepositoryMigrations Doer is the HTTP client used to make
+	// requests to the applyPluginRepositoryMigrations endpoint.
+	ApplyPluginRepositoryMigrationsDoer goahttp.Doer
+
+	// ReprovisionPluginRepository Doer is the HTTP client used to make requests to
+	// the reprovisionPluginRepository endpoint.
+	ReprovisionPluginRepositoryDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -736,9 +736,6 @@ func NewClient(
 		RunRunnerKeyOrganizationBackfillDoer:           doer,
 		GetProjectRedeployPreviewDoer:                  doer,
 		RedeployProjectDoer:                            doer,
-		ListPluginRepositoryMigrationsDoer:             doer,
-		ApplyPluginRepositoryMigrationsDoer:            doer,
-		ReprovisionPluginRepositoryDoer:                doer,
 		ListCustomDomainsDoer:                          doer,
 		ListPlatformExternalCredentialsDoer:            doer,
 		GetGcpIamPlatformCredentialDoer:                doer,
@@ -771,6 +768,9 @@ func NewClient(
 		RollbackOrganizationEncryptionDoer:             doer,
 		RunOrganizationEncryptionDoer:                  doer,
 		FinalizeOrganizationEncryptionDoer:             doer,
+		ListPluginRepositoryMigrationsDoer:             doer,
+		ApplyPluginRepositoryMigrationsDoer:            doer,
+		ReprovisionPluginRepositoryDoer:                doer,
 		RestoreResponseBody:                            restoreBody,
 		scheme:                                         scheme,
 		host:                                           host,
@@ -3472,78 +3472,6 @@ func (c *Client) RedeployProject() goa.Endpoint {
 	}
 }
 
-// ListPluginRepositoryMigrations returns an endpoint that makes HTTP requests
-// to the admin service listPluginRepositoryMigrations server.
-func (c *Client) ListPluginRepositoryMigrations() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListPluginRepositoryMigrationsRequest(c.encoder)
-		decodeResponse = DecodeListPluginRepositoryMigrationsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListPluginRepositoryMigrationsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListPluginRepositoryMigrationsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "listPluginRepositoryMigrations", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ApplyPluginRepositoryMigrations returns an endpoint that makes HTTP requests
-// to the admin service applyPluginRepositoryMigrations server.
-func (c *Client) ApplyPluginRepositoryMigrations() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeApplyPluginRepositoryMigrationsRequest(c.encoder)
-		decodeResponse = DecodeApplyPluginRepositoryMigrationsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildApplyPluginRepositoryMigrationsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ApplyPluginRepositoryMigrationsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "applyPluginRepositoryMigrations", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ReprovisionPluginRepository returns an endpoint that makes HTTP requests to
-// the admin service reprovisionPluginRepository server.
-func (c *Client) ReprovisionPluginRepository() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeReprovisionPluginRepositoryRequest(c.encoder)
-		decodeResponse = DecodeReprovisionPluginRepositoryResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildReprovisionPluginRepositoryRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ReprovisionPluginRepositoryDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "reprovisionPluginRepository", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // ListCustomDomains returns an endpoint that makes HTTP requests to the admin
 // service listCustomDomains server.
 func (c *Client) ListCustomDomains() goa.Endpoint {
@@ -4308,6 +4236,78 @@ func (c *Client) FinalizeOrganizationEncryption() goa.Endpoint {
 		resp, err := c.FinalizeOrganizationEncryptionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "finalizeOrganizationEncryption", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPluginRepositoryMigrations returns an endpoint that makes HTTP requests
+// to the admin service listPluginRepositoryMigrations server.
+func (c *Client) ListPluginRepositoryMigrations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPluginRepositoryMigrationsRequest(c.encoder)
+		decodeResponse = DecodeListPluginRepositoryMigrationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPluginRepositoryMigrationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPluginRepositoryMigrationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listPluginRepositoryMigrations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApplyPluginRepositoryMigrations returns an endpoint that makes HTTP requests
+// to the admin service applyPluginRepositoryMigrations server.
+func (c *Client) ApplyPluginRepositoryMigrations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApplyPluginRepositoryMigrationsRequest(c.encoder)
+		decodeResponse = DecodeApplyPluginRepositoryMigrationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApplyPluginRepositoryMigrationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApplyPluginRepositoryMigrationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "applyPluginRepositoryMigrations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReprovisionPluginRepository returns an endpoint that makes HTTP requests to
+// the admin service reprovisionPluginRepository server.
+func (c *Client) ReprovisionPluginRepository() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReprovisionPluginRepositoryRequest(c.encoder)
+		decodeResponse = DecodeReprovisionPluginRepositoryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReprovisionPluginRepositoryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReprovisionPluginRepositoryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "reprovisionPluginRepository", err)
 		}
 		return decodeResponse(resp)
 	}

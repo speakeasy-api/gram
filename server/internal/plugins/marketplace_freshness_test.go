@@ -44,11 +44,16 @@ type bindingQuery struct {
 func (q bindingQuery) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row { return q }
 
 func (q bindingQuery) Scan(dest ...any) error {
-	*dest[0].(*uuid.UUID) = q.projectID
-	*dest[1].(*int64) = 1
-	*dest[2].(*string) = "org"
-	*dest[3].(*string) = "repo"
-	*dest[4].(*int64) = 1
+	project, projectOK := dest[1].(*uuid.NullUUID)
+	repository, repositoryOK := dest[2].(*int64)
+	owner, ownerOK := dest[3].(*string)
+	name, nameOK := dest[4].(*string)
+	installation, installationOK := dest[5].(*int64)
+	if !projectOK || !repositoryOK || !ownerOK || !nameOK || !installationOK {
+		return errors.New("unexpected repository binding scan shape")
+	}
+	*project = uuid.NullUUID{UUID: q.projectID, Valid: true}
+	*repository, *owner, *name, *installation = 1, "org", "repo", 1
 	return nil
 }
 

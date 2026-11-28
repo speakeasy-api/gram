@@ -75,6 +75,7 @@ export function parseRepositoryEvidence(source: string): RepositoryEvidence[] {
     );
   }
   const projectIds = new Set<string>();
+  const repositoryIds = new Set<string>();
   return rows.map((row: unknown, index) => {
     try {
       if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -99,7 +100,10 @@ export function parseRepositoryEvidence(source: string): RepositoryEvidence[] {
       );
       if (projectIds.has(entry.projectId))
         throw new Error("Duplicate project UUID.");
+      if (repositoryIds.has(entry.repositoryId))
+        throw new Error("Duplicate GitHub repository ID.");
       projectIds.add(entry.projectId);
+      repositoryIds.add(entry.repositoryId);
       return entry;
     } catch (error) {
       throw new Error(

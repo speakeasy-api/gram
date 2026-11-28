@@ -514,16 +514,16 @@ func (q *Queries) AdminFindAgentSlackAuthClient(ctx context.Context, arg AdminFi
 }
 
 const adminFindPluginRepositoryID = `-- name: AdminFindPluginRepositoryID :one
-SELECT project_id
+SELECT repository_id
 FROM plugin_repository_bindings
 WHERE repository_id = $1
 `
 
-func (q *Queries) AdminFindPluginRepositoryID(ctx context.Context, repositoryID int64) (uuid.UUID, error) {
+func (q *Queries) AdminFindPluginRepositoryID(ctx context.Context, repositoryID int64) (int64, error) {
 	row := q.db.QueryRow(ctx, adminFindPluginRepositoryID, repositoryID)
-	var project_id uuid.UUID
-	err := row.Scan(&project_id)
-	return project_id, err
+	var repository_id int64
+	err := row.Scan(&repository_id)
+	return repository_id, err
 }
 
 const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
@@ -2921,7 +2921,7 @@ WITH candidates AS (
   WHERE b.project_id > $2::uuid
     AND NOT EXISTS (SELECT 1 FROM plugin_github_connections c WHERE c.project_id = b.project_id)
 )
-SELECT c.project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
+SELECT p.id AS project_id, p.organization_id, c.repo_owner, c.repo_name, c.bound::boolean AS bound
 FROM candidates c
 JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
 ORDER BY c.project_id

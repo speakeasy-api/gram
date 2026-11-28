@@ -21,15 +21,15 @@ func TestCreatePrivateRepository(t *testing.T) {
 		conflict bool
 		taken    bool
 	}{
-		{"created", http.StatusCreated, `{"id":9007199254740993,"full_name":"Org/Repo","private":true}`, 9007199254740993, false, false},
+		{"created", http.StatusCreated, `{"id":9007199254740993,"full_name":"Org/Repo","private":true,"visibility":"private"}`, 9007199254740993, false, false},
 		{"existing", http.StatusUnprocessableEntity, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"custom","field":"name","message":"name already exists on this account"}]}`, 0, true, true},
 		{"existing structured", http.StatusUnprocessableEntity, `{"errors":[{"resource":"Repository","code":"already_exists","field":"name"}]}`, 0, true, true},
 		{"unrelated validation error", http.StatusUnprocessableEntity, `{"errors":[{"resource":"Repository","code":"invalid","field":"name"}]}`, 0, false, false},
-		{"wrong status", http.StatusOK, `{"id":42,"full_name":"org/repo","private":true}`, 0, false, false},
-		{"wrong name", http.StatusCreated, `{"id":42,"full_name":"org/other","private":true}`, 0, true, false},
+		{"wrong status", http.StatusOK, `{"id":42,"full_name":"org/repo","private":true,"visibility":"private"}`, 0, false, false},
+		{"wrong name", http.StatusCreated, `{"id":42,"full_name":"org/other","private":true,"visibility":"private"}`, 0, true, false},
 		{"public", http.StatusCreated, `{"id":42,"full_name":"org/repo","private":false}`, 0, true, false},
 		{"internal", http.StatusCreated, `{"id":42,"full_name":"org/repo","private":true,"visibility":"internal"}`, 0, true, false},
-		{"missing ID", http.StatusCreated, `{"full_name":"org/repo","private":true}`, 0, true, false},
+		{"missing ID", http.StatusCreated, `{"full_name":"org/repo","private":true,"visibility":"private"}`, 0, true, false},
 		{"redirect", http.StatusTemporaryRedirect, `null`, 0, true, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,9 +87,10 @@ func TestForRepository(t *testing.T) {
 		wantOK       bool
 		conflict     bool
 	}{
-		{"scoped", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"Org/Repo","private":true}`, true, false},
-		{"wrong ID", http.StatusCreated, http.StatusOK, `{"id":43,"full_name":"org/repo","private":true}`, false, true},
-		{"wrong name", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"org/renamed","private":true}`, false, true},
+		{"scoped", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"Org/Repo","private":true,"visibility":"private"}`, true, false},
+		{"wrong ID", http.StatusCreated, http.StatusOK, `{"id":43,"full_name":"org/repo","private":true,"visibility":"private"}`, false, true},
+		{"wrong name", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"org/renamed","private":true,"visibility":"private"}`, false, true},
+		{"missing visibility", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"org/repo","private":true}`, false, true},
 		{"public", http.StatusCreated, http.StatusOK, `{"id":42,"full_name":"org/repo","private":false}`, false, true},
 		{"mint denied", http.StatusForbidden, 0, `null`, false, false},
 		{"mint redirect", http.StatusTemporaryRedirect, 0, `null`, false, false},
@@ -150,6 +151,11 @@ func TestForRepository(t *testing.T) {
 				_, err = scoped.GetFileContent(t.Context(), 1, "org", "repo", "", "item")
 				require.ErrorIs(t, err, ErrRepositoryConflict)
 				wantRequests = append(wantRequests, "GET /repos/org/repo/contents/item")
+				// A repeat can reuse only the scoped credential, never the
+				// result of checking the destination's current identity.
+				_, err = client.ForRepository(t.Context(), 1, 42, "org", "repo")
+				require.NoError(t, err)
+				wantRequests = append(wantRequests, "GET /repos/org/repo")
 			} else {
 				require.Error(t, err)
 				if tt.conflict {

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -567,6 +569,13 @@ func newAdminCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("configure plugin GitHub recovery: %w", err)
+			}
+			if serviceEnv == "local" && pluginGitHub == nil {
+				publisher, err := localfixture.NewPersistentGitHubPublisher(filepath.Join(c.String("assets-uri"), "local-plugin-marketplaces"))
+				if err != nil {
+					return fmt.Errorf("create local plugin publisher: %w", err)
+				}
+				pluginGitHub = &plugins.GitHubConfig{Client: publisher, Org: "local-fixture", InstallationID: 1}
 			}
 			adminService.SetPluginRepositoryGitHub(pluginGitHub)
 

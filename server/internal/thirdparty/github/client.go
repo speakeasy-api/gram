@@ -30,7 +30,7 @@ type Client struct {
 	tracer      trace.Tracer
 	httpClient  *guardian.HTTPClient
 	mu          sync.Mutex
-	tokens      map[int64]cachedToken
+	tokens      map[installationTokenKey]cachedToken
 	tokenFlight singleflight.Group
 	repository  *repositoryScope
 }
@@ -40,6 +40,15 @@ type repositoryScope struct {
 	path           string
 	token          string
 }
+
+// An installation-wide credential has a zero repository ID. Keep it separate
+// from repository-scoped credentials, even for the same installation.
+type installationTokenKey struct {
+	installationID int64
+	repositoryID   int64
+}
+
+const installationTokenCacheLimit = 1024
 
 type cachedToken struct {
 	token     string
@@ -72,7 +81,8 @@ func NewClient(appID int64, privateKeyPEM []byte, httpClient *guardian.HTTPClien
 		httpClient:  httpClient,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/github"),
 		mu:          sync.Mutex{},
-		tokens:      make(map[int64]cachedToken),
+		tokens:      make(map[installationTokenKey]cachedToken),
+		repository:  nil,
 		tokenFlight: singleflight.Group{},
 	}, nil
 }
@@ -112,31 +122,49 @@ func (c *Client) installationToken(ctx context.Context, installationID int64) (s
 		return scope.token, nil
 	}
 
+	return c.cachedInstallationToken(ctx, installationTokenKey{installationID: installationID, repositoryID: 0})
+}
+
+func (c *Client) cachedInstallationToken(ctx context.Context, key installationTokenKey) (string, error) {
 	// Fast path: return cached token if still valid.
 	c.mu.Lock()
-	if ct, ok := c.tokens[installationID]; ok && time.Now().Before(ct.expiresAt) {
+	if ct, ok := c.tokens[key]; ok && time.Now().Before(ct.expiresAt) {
 		c.mu.Unlock()
 		return ct.token, nil
 	}
 	c.mu.Unlock()
 
 	// Deduplicate concurrent token refreshes for the same installation.
-	key := fmt.Sprintf("%d", installationID)
-	val, err, _ := c.tokenFlight.Do(key, func() (any, error) {
+	flightKey := fmt.Sprintf("%d/%d", key.installationID, key.repositoryID)
+	val, err, _ := c.tokenFlight.Do(flightKey, func() (any, error) {
 		// Re-check cache inside singleflight — another goroutine may have just refreshed.
 		c.mu.Lock()
-		if ct, ok := c.tokens[installationID]; ok && time.Now().Before(ct.expiresAt) {
+		if ct, ok := c.tokens[key]; ok && time.Now().Before(ct.expiresAt) {
 			c.mu.Unlock()
 			return ct.token, nil
 		}
 		c.mu.Unlock()
 
-		ct, err := c.requestInstallationToken(ctx, installationID, 0)
+		ct, err := c.requestInstallationToken(ctx, key.installationID, key.repositoryID)
 		if err != nil {
 			return "", err
 		}
 		c.mu.Lock()
-		c.tokens[installationID] = ct
+		if len(c.tokens) >= installationTokenCacheLimit {
+			now := time.Now()
+			for k, entry := range c.tokens {
+				if !now.Before(entry.expiresAt) {
+					delete(c.tokens, k)
+				}
+			}
+			if len(c.tokens) >= installationTokenCacheLimit {
+				for k := range c.tokens {
+					delete(c.tokens, k)
+					break
+				}
+			}
+		}
+		c.tokens[key] = ct
 		c.mu.Unlock()
 		return ct.token, nil
 	})
@@ -181,7 +209,7 @@ func (c *Client) requestInstallationToken(ctx context.Context, installationID, r
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated {
-		return cachedToken{}, fmt.Errorf("request installation token: status %d", resp.StatusCode)
+		return cachedToken{}, fmt.Errorf("request installation token: status %d (GitHub request ID %q)", resp.StatusCode, resp.Header.Get("X-GitHub-Request-Id"))
 	}
 
 	var result struct {
@@ -200,7 +228,7 @@ func (c *Client) requestInstallationToken(ctx context.Context, installationID, r
 	}, nil
 }
 
-func withoutRedirects(httpClient *http.Client) *http.Client {
+func withoutRedirects(httpClient *guardian.HTTPClient) *guardian.HTTPClient {
 	client := *httpClient
 	client.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -222,7 +250,7 @@ func (c *Client) doAPI(ctx context.Context, installationID int64, method, url st
 	return c.doAPIWithClient(ctx, c.httpClient, installationID, method, url, body)
 }
 
-func (c *Client) doAPIWithClient(ctx context.Context, httpClient *http.Client, installationID int64, method, url string, body io.Reader) (*http.Response, error) {
+func (c *Client) doAPIWithClient(ctx context.Context, httpClient *guardian.HTTPClient, installationID int64, method, url string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

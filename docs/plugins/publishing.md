@@ -63,6 +63,8 @@ A legacy publishing connection identifies a repository by name only. To keep ser
 3. Apply the verified rows and check the outcome for each project. An existing binding cannot be redirected to another repository through this workflow.
 4. When the original identity cannot be established, leave the connection unbound or provision a **new** private repository for that project. This does not recover the old contents, transfer GitHub collaborators, or update direct GitHub install URLs. Publish packages to the replacement before directing users to it.
 
+If GitHub creates a repository but the request fails before the binding is saved, an unused private repository may remain. Before retrying recovery, refresh the migration inventory and check for a binding. If the project is still unbound, a retry provisions a new repository. Use the GitHub organization’s creation audit records to identify any unused repository for manual review; a repository name alone is not proof that it is safe to reuse or remove.
+
 ## GitHub App topology
 
 | Environment | GitHub App          | Org                 | Secrets location                                           |

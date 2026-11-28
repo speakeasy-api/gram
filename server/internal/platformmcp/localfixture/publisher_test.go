@@ -1,7 +1,6 @@
 package localfixture
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +22,7 @@ func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, id, otherID)
 	_, err = publisher.CreatePrivateRepository(t.Context(), 1, "LOCAL", "FIXTURE")
-	require.ErrorIs(t, err, fs.ErrExist)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryNameTaken)
 	_, err = publisher.ForRepository(t.Context(), 1, otherID, "local", "fixture")
 	require.ErrorIs(t, err, ghclient.ErrRepoNotFound)
 	repo, err := publisher.ForRepository(t.Context(), 1, id, "local", "fixture")
@@ -32,6 +31,10 @@ func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
 	files, err := repo.GetRepoFiles(t.Context(), 1, "local", "fixture", "main", nil)
 	require.NoError(t, err)
 	require.Empty(t, files)
+	require.NoError(t, repo.AddCollaborator(t.Context(), 1, "local", "fixture", "test-user", "admin"))
+	has, err := repo.HasDirectCollaborator(t.Context(), 1, "LOCAL", "FIXTURE")
+	require.NoError(t, err)
+	require.True(t, has)
 }
 
 func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {
@@ -102,7 +105,7 @@ func TestPersistentGitHubPublisherRejectsCreateOverPublishedFiles(t *testing.T) 
 	require.NoError(t, err)
 
 	_, err = publisher.CreatePrivateRepository(t.Context(), 1, "local", "fixture")
-	require.ErrorIs(t, err, fs.ErrExist)
+	require.ErrorIs(t, err, ghclient.ErrRepositoryNameTaken)
 	stored, err := publisher.MainBranchFiles(t.Context(), "local", "fixture")
 	require.NoError(t, err)
 	require.Contains(t, stored, "platform-mcp/.mcp.json")

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -1661,7 +1660,7 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 
 // A new project reusing a deleted project's slug must not take over its
 // GitHub repository, even though the database allows reuse of the slug.
-func TestPluginsService_PublishPlugins_RejectsRepositoryFromDeletedProject(t *testing.T) {
+func TestPluginsService_PublishPlugins_SuffixesRepositoryFromDeletedProject(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
@@ -1716,17 +1715,24 @@ func TestPluginsService_PublishPlugins_RejectsRepositoryFromDeletedProject(t *te
 	})
 	require.NoError(t, err)
 
-	mock.createRepoErr = errors.New("repository name already exists")
+	mock.createRepoErrors = []error{ghclient.ErrRepositoryNameTaken}
 	mock.pushFilesCalled = false
+	mock.createRepoNames = nil
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
-	require.Error(t, err)
-	require.False(t, mock.pushFilesCalled)
-
-	_, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, projectB.ID)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	binding, err := pluginsrepo.New(ti.conn).GetPluginRepositoryBinding(ctx, projectAID)
 	require.NoError(t, err)
-	require.Equal(t, projectAID, binding.ProjectID)
+	require.True(t, mock.pushFilesCalled)
+	require.Len(t, mock.createRepoNames, 2)
+	require.True(t, strings.HasSuffix(mock.pushedRepoName, "-"+projectB.ID.String()))
+
+	queries := pluginsrepo.New(ti.conn)
+	old, err := queries.GetPluginRepositoryBinding(ctx, projectAID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: projectAID, Valid: true}, old.ProjectID)
+	require.Equal(t, old.RepoName, mock.createRepoNames[0])
+	current, err := queries.GetPluginRepositoryBinding(ctx, projectB.ID)
+	require.NoError(t, err)
+	require.NotEqual(t, old.RepositoryID, current.RepositoryID)
+	require.Equal(t, mock.pushedRepoName, current.RepoName)
 }
 
 // TestCreatePlugin_DefaultsToOrgWildcardOnlyInDefaultProject pins the audience

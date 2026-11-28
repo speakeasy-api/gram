@@ -14,6 +14,7 @@ import {
   ExternalLinkIcon,
   FolderIcon,
   GlobeIcon,
+  GitForkIcon,
   HistoryIcon,
   SearchIcon,
   ServerIcon,
@@ -42,8 +43,10 @@ import {
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   adminListCustomDomainsQuery,
+  listPluginRepositoryMigrations,
   organizationQuery,
   organizationsListQuery,
+  pluginRepositoryMigrationInventoryKey,
 } from "@/lib/adminQueries";
 import { ADMIN_NAV } from "@/lib/adminNav";
 import {
@@ -480,6 +483,13 @@ export function CommandPalette(): JSX.Element {
                 </CommandGroup>
               )}
 
+              {open && searching && query !== "" && (
+                <PluginRepositoryMigrationResults
+                  term={trimmed}
+                  onSelect={() => changeOpen(false)}
+                />
+              )}
+
               {recordPages.length > 0 && org && (
                 <CommandGroup heading={org.name}>
                   {recordPages.map(({ to, label, icon: Icon }) => (
@@ -520,5 +530,76 @@ export function CommandPalette(): JSX.Element {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function PluginRepositoryMigrationResults({
+  term,
+  onSelect,
+}: {
+  term: string;
+  onSelect: () => void;
+}): JSX.Element | null {
+  const navigate = useNavigate();
+  const inventory = useQuery({
+    queryKey: [...pluginRepositoryMigrationInventoryKey, "search"],
+    queryFn: async ({ signal }) => {
+      const pages = [];
+      const seen = new Set<string>();
+      let after: string | undefined;
+      do {
+        signal.throwIfAborted();
+        const page = await listPluginRepositoryMigrations(after, signal);
+        pages.push({ after, items: page.items });
+        after = page.nextCursor;
+        if (after && seen.has(after))
+          throw new Error("Repeated inventory cursor");
+        if (after) seen.add(after);
+      } while (after);
+      return pages;
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
+  const results = (inventory.data ?? [])
+    .flatMap(({ after, items }) =>
+      items
+        .filter((item) =>
+          matches(term, `${item.repoOwner}/${item.repoName} ${item.projectId}`),
+        )
+        .map((item) => ({ after, item })),
+    )
+    .slice(0, RESULT_LIMIT);
+  if (!inventory.isError && results.length === 0) return null;
+  return (
+    <CommandGroup heading="Plugin repositories">
+      {inventory.isError ? (
+        <p className="text-muted-foreground px-2 py-3 text-sm">
+          Could not search plugin repositories.
+        </p>
+      ) : (
+        results.map(({ after, item }) => (
+          <CommandItem
+            key={item.projectId}
+            value={`plugin-repository:${item.projectId}`}
+            onSelect={() => {
+              onSelect();
+              void navigate({
+                to: "/plugin-repository-migrations",
+                search: { after, project: item.projectId },
+              });
+            }}
+          >
+            <GitForkIcon />
+            <span className="truncate">
+              {item.repoOwner}/{item.repoName}
+            </span>
+            <span className="text-muted-foreground ml-auto truncate pl-2 text-xs">
+              {item.projectId}
+            </span>
+          </CommandItem>
+        ))
+      )}
+    </CommandGroup>
   );
 }

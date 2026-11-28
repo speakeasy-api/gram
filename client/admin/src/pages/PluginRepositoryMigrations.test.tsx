@@ -47,7 +47,7 @@ const fetch = vi.fn(async (request: Request) => {
       return Response.json({ items });
     case "/admin/plugin-repository-migrations/apply": {
       expect(request.method).toBe("POST");
-      const body = (await request.json()) as {
+      const body = (await request.clone().json()) as {
         entries: typeof entries;
         dry_run: boolean;
       };
@@ -163,6 +163,21 @@ describe("plugin repository migrations", () => {
       "Import 1–50 records at a time.",
     );
     expect(requestsFor("apply")).toHaveLength(1);
+  });
+
+  it("rejects duplicate repository IDs before previewing", async () => {
+    await open();
+    await enterBatch(
+      JSON.stringify([
+        entries[0],
+        { ...entries[1], repository_id: entries[0]?.repository_id },
+      ]),
+    );
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "Record 2: Duplicate GitHub repository ID.",
+    );
+    expect(requestsFor("apply")).toHaveLength(0);
   });
 
   it("uses the exact unresolved project ID for manual verification", async () => {

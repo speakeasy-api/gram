@@ -23,6 +23,7 @@ type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   listCustomDomains: vi.fn(),
+  listPluginRepositoryMigrations: vi.fn(),
   getSession: vi.fn(),
   listUsers: vi
     .fn()
@@ -56,6 +57,7 @@ vi.mock("@/lib/adminQueries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/adminQueries")>();
   return {
     ...actual,
+    listPluginRepositoryMigrations: mocks.listPluginRepositoryMigrations,
     adminListCustomDomainsQuery: (request = {}) =>
       queryOptions({
         queryKey: ["customDomains", request],
@@ -179,6 +181,8 @@ async function renderWithSubmitCaptured(): Promise<void> {
 beforeEach(() => {
   mocks.listCustomDomains.mockReset();
   mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
+  mocks.listPluginRepositoryMigrations.mockReset();
+  mocks.listPluginRepositoryMigrations.mockResolvedValue({ items: [] });
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
@@ -792,5 +796,85 @@ describe("custom domain search", () => {
         name: new RegExp(`^${ORG.name}`),
       }),
     ).toBeTruthy();
+  });
+});
+
+describe("plugin repository migration search", () => {
+  const first = "00000000-0000-4000-8000-000000000001";
+  const second = "00000000-0000-4000-8000-000000000002";
+  const repository = {
+    projectId: second,
+    organizationId: "org_fixture",
+    repoOwner: "fixture",
+    repoName: "legacy-connector",
+    bound: false,
+  };
+
+  it("looks up a later page by name or project ID and focuses its inventory row", async () => {
+    mocks.listPluginRepositoryMigrations.mockImplementation(
+      async (after?: string) =>
+        after === first
+          ? { items: [repository] }
+          : { items: [], nextCursor: first },
+    );
+    await renderWithSubmitCaptured();
+    expect(mocks.listPluginRepositoryMigrations).not.toHaveBeenCalled();
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    expect(mocks.listPluginRepositoryMigrations).not.toHaveBeenCalled();
+    typeAndDebounce("LEGACY-CONNECTOR");
+    await within(palette()).findByRole("option", {
+      name: /fixture\/legacy-connector/,
+    });
+    expect(
+      mocks.listPluginRepositoryMigrations.mock.calls.map(([after]) => after),
+    ).toEqual([undefined, first]);
+    typeAndDebounce(second);
+    fireEvent.click(
+      await within(palette()).findByRole("option", {
+        name: /fixture\/legacy-connector/,
+      }),
+    );
+    await waitFor(() =>
+      expect(router?.state.location.pathname).toBe(
+        "/plugin-repository-migrations",
+      ),
+    );
+    expect(router?.state.location.search).toEqual({
+      after: first,
+      project: second,
+    });
+    const row = await screen.findByRole("row", { name: /legacy-connector/ });
+    expect(row).toHaveProperty("tabIndex", -1);
+    expect(document.activeElement).toBe(row);
+    expect(
+      within(row).getByRole("button", { name: `Resolve project ${second}` }),
+    ).toBeTruthy();
+  });
+
+  it("hides inaccessible repository results without breaking other search results", async () => {
+    mocks.listPluginRepositoryMigrations
+      .mockResolvedValueOnce({
+        items: [{ ...repository, repoName: ORG.name }],
+        nextCursor: first,
+      })
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Forbidden"), { statusCode: 403 }),
+      );
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    typeAndDebounce(ORG.name);
+    await within(palette()).findByText("Could not search plugin repositories.");
+    expect(
+      await within(palette()).findByRole("option", {
+        name: new RegExp(`^${ORG.name}`),
+      }),
+    ).toBeTruthy();
+    expect(
+      within(palette()).queryByRole("option", {
+        name: new RegExp(`fixture/${ORG.name}`),
+      }),
+    ).toBeNull();
+    expect(mocks.listPluginRepositoryMigrations).toHaveBeenCalledTimes(2);
   });
 });

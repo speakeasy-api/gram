@@ -1019,15 +1019,16 @@ func (q *Queries) GetPluginPublishDestination(ctx context.Context, projectID uui
 }
 
 const getPluginRepositoryBinding = `-- name: GetPluginRepositoryBinding :one
-SELECT project_id, repository_id, repo_owner, repo_name, installation_id, created_at, updated_at
+SELECT id, project_id, repository_id, repo_owner, repo_name, installation_id, created_at, updated_at
 FROM plugin_repository_bindings
-WHERE project_id = $1
+WHERE project_id = $1::uuid
 `
 
 func (q *Queries) GetPluginRepositoryBinding(ctx context.Context, projectID uuid.UUID) (PluginRepositoryBinding, error) {
 	row := q.db.QueryRow(ctx, getPluginRepositoryBinding, projectID)
 	var i PluginRepositoryBinding
 	err := row.Scan(
+		&i.ID,
 		&i.ProjectID,
 		&i.RepositoryID,
 		&i.RepoOwner,
@@ -1389,7 +1390,7 @@ func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeli
 
 const insertPluginRepositoryBinding = `-- name: InsertPluginRepositoryBinding :exec
 INSERT INTO plugin_repository_bindings (project_id, repository_id, repo_owner, repo_name, installation_id)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1::uuid, $2, $3, $4, $5)
 `
 
 type InsertPluginRepositoryBindingParams struct {

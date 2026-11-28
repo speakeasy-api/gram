@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -76,7 +78,7 @@ func (s *Service) ListPluginRepositoryMigrations(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin repository migrations").LogError(ctx, s.logger)
 	}
-	result := &gen.AdminPluginRepositoryMigrationList{Items: make([]*gen.AdminPluginRepositoryMigration, 0, min(len(rows), pluginRepositoryMigrationPageSize))}
+	result := &gen.AdminPluginRepositoryMigrationList{NextCursor: nil, Items: make([]*gen.AdminPluginRepositoryMigration, 0, min(len(rows), pluginRepositoryMigrationPageSize))}
 	if len(rows) > pluginRepositoryMigrationPageSize {
 		rows = rows[:pluginRepositoryMigrationPageSize]
 		cursor := rows[len(rows)-1].ProjectID.String()
@@ -98,10 +100,31 @@ func (s *Service) ApplyPluginRepositoryMigrations(ctx context.Context, payload *
 	if len(payload.Entries) == 0 || len(payload.Entries) > pluginRepositoryMigrationBatchSize {
 		return nil, oops.E(oops.CodeBadRequest, nil, "provide between 1 and 50 repository attestations")
 	}
+	// Reject ambiguous batches before verifying or writing any entry. Compare
+	// canonical IDs so case and leading zeroes cannot hide duplicates.
+	projects := make(map[uuid.UUID]struct{}, len(payload.Entries))
+	repositories := make(map[int64]struct{}, len(payload.Entries))
+	for _, entry := range payload.Entries {
+		if entry == nil {
+			continue
+		}
+		if id, err := parsePluginRepositoryProjectID(entry.ProjectID); err == nil {
+			if _, duplicate := projects[id]; duplicate {
+				return nil, oops.E(oops.CodeBadRequest, nil, "a project ID appears more than once")
+			}
+			projects[id] = struct{}{}
+		}
+		if id, err := parsePluginRepositoryID(entry.RepositoryID); err == nil {
+			if _, duplicate := repositories[id]; duplicate {
+				return nil, oops.E(oops.CodeBadRequest, nil, "a repository ID appears more than once")
+			}
+			repositories[id] = struct{}{}
+		}
+	}
 	result := &gen.AdminPluginRepositoryMigrationApplyResult{Items: make([]*gen.AdminPluginRepositoryMigrationOutcome, 0, len(payload.Entries))}
 	for _, entry := range payload.Entries {
 		if entry == nil {
-			result.Items = append(result.Items, &gen.AdminPluginRepositoryMigrationOutcome{Status: "conflict", Message: "An attestation is required."})
+			result.Items = append(result.Items, &gen.AdminPluginRepositoryMigrationOutcome{ProjectID: "", Status: "conflict", Message: "An attestation is required."})
 			continue
 		}
 		// Each row has its own timeout and transaction, so a failed row cannot
@@ -200,7 +223,7 @@ func (s *Service) applyPluginRepositoryMigration(ctx context.Context, entry *gen
 		RepoName: name, InstallationID: config.InstallationID,
 	}
 	if err := bindings.InsertPluginRepositoryBinding(ctx, binding); err != nil {
-		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.UniqueViolation {
 			return "conflict", "This project or repository ID was bound by another operation."
 		}
 		return s.pluginRepositoryMigrationUnavailable(ctx, err)
@@ -215,7 +238,7 @@ func (s *Service) applyPluginRepositoryMigration(ctx context.Context, entry *gen
 }
 
 func (s *Service) pluginRepositoryMigrationUnavailable(ctx context.Context, err error) (string, string) {
-	s.logger.ErrorContext(ctx, "plugin repository migration database operation failed", "error", err)
+	s.logger.ErrorContext(ctx, "plugin repository migration database operation failed", attr.SlogError(err))
 	return "unavailable", "The database operation did not confirm a result. Check the current binding before retrying."
 }
 
@@ -227,11 +250,14 @@ func rollbackPluginRepositoryMigration(ctx context.Context, tx pgx.Tx) {
 
 func logPluginRepositoryMigration(ctx context.Context, tx pgx.Tx, organizationID string, binding pluginsrepo.InsertPluginRepositoryBindingParams, evidence string, recovery bool) error {
 	actor, displayName, _ := adminActor(ctx)
-	return audit.NewLogger().LogPluginRepositoryBinding(ctx, tx, audit.LogPluginRepositoryBindingEvent{
+	if err := audit.NewLogger().LogPluginRepositoryBinding(ctx, tx, audit.LogPluginRepositoryBindingEvent{
 		OrganizationID: organizationID, ProjectID: binding.ProjectID, Actor: actor, ActorDisplayName: displayName,
 		RepositoryID: strconv.FormatInt(binding.RepositoryID, 10), InstallationID: strconv.FormatInt(binding.InstallationID, 10),
 		RepositoryOwner: binding.RepoOwner, RepositoryName: binding.RepoName, Evidence: evidence, Reprovisioned: recovery,
-	})
+	}); err != nil {
+		return fmt.Errorf("record repository binding audit: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) ReprovisionPluginRepository(ctx context.Context, payload *gen.ReprovisionPluginRepositoryPayload) (*gen.AdminPluginRepositoryReprovisionResult, error) {

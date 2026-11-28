@@ -100,7 +100,7 @@ func newFakeRepo(t *testing.T, n int, holdUntilFull bool) *fakeRepo {
 		privateKey: nil,
 		httpClient: &http.Client{Transport: transport},
 		mu:         sync.Mutex{},
-		tokens:     map[int64]cachedToken{1: {token: "test-token", expiresAt: time.Now().Add(time.Hour)}},
+		tokens:     map[installationTokenKey]cachedToken{{installationID: 1, repositoryID: 0}: {token: "test-token", expiresAt: time.Now().Add(time.Hour)}},
 	}
 	return repo
 }

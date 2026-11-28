@@ -1,3 +1,8 @@
+import { adminApplyPluginRepositoryMigrations } from "@gram/admin-client/funcs/adminApplyPluginRepositoryMigrations";
+import { adminReprovisionPluginRepository } from "@gram/admin-client/funcs/adminReprovisionPluginRepository";
+import type { AdminPluginRepositoryMigrationOutcome } from "@gram/admin-client/models/components/adminpluginrepositorymigrationoutcome";
+import type { AdminPluginRepositoryReprovisionResult } from "@gram/admin-client/models/components/adminpluginrepositoryreprovisionresult";
+import type { AdminPluginRepositoryMigrationEntry } from "@gram/admin-client/models/components/adminpluginrepositorymigrationentry";
 import {
   redirecting,
   redirectingClient as sharedRedirectingClient,
@@ -1419,5 +1424,36 @@ export function finalizeOrganizationEncryption(request: {
         acknowledgedUnreadableValues: request.acknowledgedUnreadableValues,
       },
     }),
+  );
+}
+
+export async function applyPluginRepositoryMigrations(
+  entries: AdminPluginRepositoryMigrationEntry[],
+  dryRun: boolean,
+): Promise<AdminPluginRepositoryMigrationOutcome[]> {
+  const { items } = await redirecting(
+    unwrapAsync(
+      adminApplyPluginRepositoryMigrations(
+        redirectingClient,
+        { entries, dryRun },
+        { retries: { strategy: "none" } },
+      ),
+    ),
+  );
+  return items;
+}
+
+export function reprovisionPluginRepository(
+  projectId: string,
+  reason: string,
+): Promise<AdminPluginRepositoryReprovisionResult> {
+  return redirecting(
+    unwrapAsync(
+      adminReprovisionPluginRepository(
+        redirectingClient,
+        { projectId, reason },
+        { retries: { strategy: "none" } },
+      ),
+    ),
   );
 }

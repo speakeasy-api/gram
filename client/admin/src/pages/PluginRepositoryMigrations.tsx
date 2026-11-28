@@ -1,4 +1,5 @@
 import { useState, type JSX } from "react";
+import { getRouteApi } from "@tanstack/react-router";
 import {
   keepPreviousData,
   useMutation,
@@ -21,12 +22,15 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { statusCode } from "@/lib/adminAuth";
+import {
+  listPluginRepositoryMigrations,
+  pluginRepositoryMigrationInventoryKey as inventoryKey,
+} from "@/lib/adminQueries";
 import { errorMessage } from "@/lib/gramAdminApi";
 import {
   applyPluginRepositoryMigrations,
-  listPluginRepositoryMigrations,
   reprovisionPluginRepository,
-} from "@/lib/pluginRepositoryMigrationsApi";
+} from "@/lib/gramAdminClient";
 import {
   MAX_REPOSITORY_EVIDENCE_LENGTH,
   MAX_REPOSITORY_MIGRATION_ENTRIES,
@@ -37,11 +41,32 @@ import {
   type RepositoryEvidence,
 } from "@/lib/pluginRepositoryEvidence";
 
-const inventoryKey = ["plugin-repository-migrations"] as const;
+const route = getRouteApi("/plugin-repository-migrations");
 
-export function PluginRepositoryMigrationsPage(): JSX.Element {
+export function PluginRepositoryMigrationsRoute(): JSX.Element {
+  const { after, project } = route.useSearch();
+  return (
+    <PluginRepositoryMigrationsPage
+      key={`${after ?? ""}:${project ?? ""}`}
+      initialAfter={after}
+      focusedProjectId={project}
+    />
+  );
+}
+
+function focusInventoryRow(row: HTMLTableRowElement | null) {
+  row?.focus();
+}
+
+export function PluginRepositoryMigrationsPage({
+  initialAfter,
+  focusedProjectId,
+}: {
+  initialAfter?: string | undefined;
+  focusedProjectId?: string | undefined;
+}): JSX.Element {
   const [writeDenied, setWriteDenied] = useState(false);
-  const [pages, setPages] = useState<(string | undefined)[]>([undefined]);
+  const [pages, setPages] = useState<(string | undefined)[]>([initialAfter]);
   const [selectedProject, setSelectedProject] =
     useState<AdminPluginRepositoryMigration>();
   const inventory = useQuery({
@@ -84,6 +109,11 @@ export function PluginRepositoryMigrationsPage(): JSX.Element {
       )}
       {!inventory.data && inventory.isError && !denied && (
         <div className="flex gap-2">
+          {pages[0] && (
+            <Button variant="outline" onClick={() => setPages([undefined])}>
+              First page
+            </Button>
+          )}
           {pages.length > 1 && (
             <Button
               variant="outline"
@@ -141,7 +171,22 @@ export function PluginRepositoryMigrationsPage(): JSX.Element {
                 </TableHeader>
                 <TableBody>
                   {inventory.data.items.map((item) => (
-                    <TableRow key={item.projectId}>
+                    <TableRow
+                      key={item.projectId}
+                      tabIndex={
+                        item.projectId === focusedProjectId ? -1 : undefined
+                      }
+                      ref={
+                        item.projectId === focusedProjectId
+                          ? focusInventoryRow
+                          : undefined
+                      }
+                      data-state={
+                        item.projectId === focusedProjectId
+                          ? "selected"
+                          : undefined
+                      }
+                    >
                       <TableCell className="font-mono text-xs">
                         {item.projectId}
                       </TableCell>
@@ -181,9 +226,20 @@ export function PluginRepositoryMigrationsPage(): JSX.Element {
               </Table>
             </div>
             <div className="flex items-center justify-end gap-2">
-              <span className="text-muted-foreground mr-2 text-sm">
-                Page {pages.length}
-              </span>
+              {pages[0] ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={inventory.isPlaceholderData}
+                  onClick={() => setPages([undefined])}
+                >
+                  First page
+                </Button>
+              ) : (
+                <span className="text-muted-foreground mr-2 text-sm">
+                  Page {pages.length}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"

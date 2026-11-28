@@ -21,7 +21,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -213,7 +212,7 @@ func TestMarketplaceProxyRequiresVerifiedRepositoryBinding(t *testing.T) {
 					requests = append(requests, "verify")
 					require.Equal(t, "token scoped-token", req.Header.Get("Authorization"))
 					status = http.StatusOK
-					payload, err := json.Marshal(map[string]any{"id": tt.githubRepositoryID, "full_name": conn.RepoOwner + "/" + conn.RepoName, "private": true})
+					payload, err := json.Marshal(map[string]any{"id": tt.githubRepositoryID, "full_name": conn.RepoOwner + "/" + conn.RepoName, "private": true, "visibility": "private"})
 					require.NoError(t, err)
 					body = string(payload)
 				case "github.com/" + conn.RepoOwner + "/" + conn.RepoName + ".git/info/refs":
@@ -229,7 +228,7 @@ func TestMarketplaceProxyRequiresVerifiedRepositoryBinding(t *testing.T) {
 				}
 				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
 			})}
-			github, err := ghclient.NewClient(1, privateKey, httpClient, noop.NewTracerProvider())
+			github, err := ghclient.NewClient(1, privateKey, httpClient, testenv.NewTracerProvider(t))
 			require.NoError(t, err)
 			logger := testenv.NewLogger(t)
 			server := marketplace.NewServer(marketplace.NewDBResolver(logger, db, github), httpClient, logger)
