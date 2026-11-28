@@ -150,6 +150,7 @@ updates:
     directories:
       - "/server"
       - "/agents/runtime-image"
+      - "/agents/ate-runtime"
       - "/client/dashboard"
       - "/otel-collector"
       - "/pystreams"
