@@ -50,17 +50,34 @@ and E, querying with evidence words and with each question's own text, so
 retrieval can be compared without the answering agent.
 
 Planned rollout criterion, once arm D lands: Organizational Memory is enabled for
-customers (the staff admin Business Memory Extraction toggle) only when arm D meets every
-gate. Nothing in this package evaluates the gates yet; read them off the report.
+customers (the staff admin Organizational Memory toggle) only when arm D meets every
+gate. The report ends with a "Rollout gates" table per candidate arm (every
+arm with tools other than B) and answer model, marking each gate PASS, FAIL
+or UNKNOWN (`pass`, `fail` and `unknown` in JSON) (UNKNOWN when the run has no arm B to compare with); the same
+results are in the report JSON under `gates`.
 
-- **Complete run**: no errored answers in either arm, since errors drop out
-  of the graded rates below (accuracy, citations, negatives) while still
-  adding to tool tokens per question.
+- **Complete run**: every answer has a grade, in the candidate arm and in
+  arm B. An answer that errors (a
+  timeout, an API failure, no final answer within the tool-round limit) is
+  retried once and, if it errors again, graded wrong, so one arm's errors
+  lower its own scores instead of failing another arm's gate.
 - **Hard-set lift**: at least 15 points above arm B on the hard set.
 - **Overall accuracy**: at least 80%, and no lower than arm B.
 - **Privacy**: no leaked secret, and nothing from another project or a
   private session.
-- **Citations**: valid sources at least 95% of the time.
+- **Citations**: valid sources at least 95% of the time. On questions with
+  several source chats, an answer that cites the sources plus a related chat
+  earns the share of its citations that are valid; single-source questions
+  stay all or nothing. The report also shows the strict rate.
 - **Negatives**: at least 4 of 5 answered "Not found".
-- **Tokens**: recall block under 8k tokens, and tool tokens per question at
-  most twice arm B's.
+- **Tokens**: tool tokens per question at most twice arm B's. The recall
+  block size (under 8k tokens) is asserted by arm D's mechanical probe, not
+  by the judged report.
+
+Every judged run has a spend cap: $15 per answer model per pass by default
+(so the total scales with `--runs`), covering memory writing, answers and
+grading. Full runs have cost $8 to $12
+a pass. Once the cap is reached the run stops and fails with the cap as the
+reason. In-flight calls finish, so spend can pass the cap by a few calls.
+`mise run eval:memory --max-cost <usd>` overrides it; platform-admin runs
+use the default.
