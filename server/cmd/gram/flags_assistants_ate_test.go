@@ -291,10 +291,20 @@ func TestATECredentialProviderAndServerAudienceNormalization(t *testing.T) {
 func TestWorkerToleratesATECredProviderServiceAccountEnv(t *testing.T) {
 	t.Setenv("GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT", "ate-cred@proj.iam.gserviceaccount.com")
 
-	var gotSA string
 	workerCmd := newWorkerCommand()
+	var found *cli.StringFlag
+	for _, flag := range workerCmd.Flags {
+		if sf, ok := flag.(*cli.StringFlag); ok && sf.Name == "assistant-ate-cred-provider-service-account" {
+			found = sf
+			break
+		}
+	}
+	require.NotNil(t, found, "worker command must register assistant-ate-cred-provider-service-account")
+	require.Contains(t, found.EnvVars, "GRAM_ASSISTANT_ATE_CRED_PROVIDER_SERVICE_ACCOUNT")
+
+	var gotSA string
 	app := &cli.App{
-		Flags: workerCmd.Flags,
+		Flags: assistantRuntimeFlags(),
 		Action: func(c *cli.Context) error {
 			gotSA = c.String("assistant-ate-cred-provider-service-account")
 			return nil
