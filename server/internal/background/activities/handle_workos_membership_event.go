@@ -15,8 +15,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -70,11 +72,11 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		return none, fmt.Errorf("get user by workos id %q: %w", payload.UserID, err)
 	}
 
-	lastEventID, rowUpdatedAt, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
+	existing, err := getMembershipRelationshipCursor(ctx, orgrepo.New(dbtx), org.ID, gramUserID, payload.ID)
 	if err != nil {
 		return none, err
 	}
-	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, payload.UpdatedAt) {
+	if !ShouldProcessEvent(existing.lastEventID, existing.updatedAt, event.ID, payload.UpdatedAt) {
 		return none, nil
 	}
 
@@ -95,8 +97,28 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 		})
 	}
 
+	created := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipCreated
+	enforce := firstMembershipEvent(existing, created, time.Now())
+	if enforce {
+		if err := orgcap.LockUser(ctx, dbtx, payload.UserID); err != nil {
+			return none, fmt.Errorf("lock organization cap for membership %q: %w", payload.ID, err)
+		}
+	}
 	if err := upsertOrganizationMembership(ctx, dbtx, org.ID, gramUserID, event, payload); err != nil {
 		return none, err
+	}
+	if enforce {
+		capped, err := orgcap.Enforce(ctx, dbtx, audit.NewLogger(), orgcap.NewMembership{
+			OrganizationID: org.ID,
+			UserID:         gramUserID,
+			WorkOSUserID:   payload.UserID,
+		})
+		if err != nil {
+			return none, fmt.Errorf("enforce mirrored organization cap for membership %q: %w", payload.ID, err)
+		}
+		if capped {
+			logger.WarnContext(ctx, "disabled mirrored organization over the per-user cap", attr.SlogOrganizationID(org.ID))
+		}
 	}
 	// Membership changes alter which emails resolve in the identity map.
 	none.refreshIdentityMap = true
@@ -137,7 +159,34 @@ func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organization
 	return nil
 }
 
-func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (*string, *time.Time, error) {
+// recentMembershipWindow is how long after login writes a membership row,
+// before any event reached it, that row still counts as new. Event processing
+// normally follows within a minute.
+const recentMembershipWindow = 24 * time.Hour
+
+type membershipRelationship struct {
+	known       bool
+	lastEventID *string
+	updatedAt   *time.Time
+	createdAt   time.Time
+}
+
+// firstMembershipEvent reports whether this event is the first to record the
+// membership, so the organization limit applies to it. A row written at login
+// carries no event cursor; for a created event soon after, login only got
+// there before the event did.
+func firstMembershipEvent(existing membershipRelationship, created bool, now time.Time) bool {
+	if !created {
+		return false
+	}
+	if !existing.known {
+		return true
+	}
+	return existing.lastEventID == nil && now.Sub(existing.createdAt) < recentMembershipWindow
+}
+
+func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries, organizationID, gramUserID, workosMembershipID string) (membershipRelationship, error) {
+	var none membershipRelationship
 	existing, err := repo.GetRelationshipByMembershipID(ctx, conv.ToPGText(workosMembershipID))
 	if errors.Is(err, pgx.ErrNoRows) && gramUserID != "" {
 		existing, err = repo.GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
@@ -147,21 +196,20 @@ func getMembershipRelationshipCursor(ctx context.Context, repo *orgrepo.Queries,
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, nil
+		return none, nil
 	case err != nil:
-		return nil, nil, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
+		return none, fmt.Errorf("get organization membership %q: %w", workosMembershipID, err)
 	}
 
-	var lastEventID *string
+	found := membershipRelationship{known: true, lastEventID: nil, updatedAt: nil, createdAt: existing.CreatedAt.Time}
 	if existing.WorkosLastEventID.Valid {
-		lastEventID = &existing.WorkosLastEventID.String
+		found.lastEventID = &existing.WorkosLastEventID.String
 	}
-	var rowUpdatedAt *time.Time
 	if existing.WorkosUpdatedAt.Valid {
-		rowUpdatedAt = &existing.WorkosUpdatedAt.Time
+		found.updatedAt = &existing.WorkosUpdatedAt.Time
 	}
 
-	return lastEventID, rowUpdatedAt, nil
+	return found, nil
 }
 
 func decodeWorkOSMembershipPayload(event events.Event) (workosMembershipEventPayload, error) {

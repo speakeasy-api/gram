@@ -50,3 +50,19 @@ FROM hooks_rollout_pins p
 LEFT JOIN organization_metadata o ON o.id = p.organization_id
 ORDER BY p.seq DESC
 LIMIT @max_rows;
+
+-- name: LockHooksRolloutStages :exec
+-- Serializes stage changes so the scheduled advance and a staff pause can't
+-- both build on the same current stage.
+SELECT pg_advisory_xact_lock(hashtextextended('hooks-rollout-stages', 0));
+
+-- name: GetCurrentHooksRolloutStage :one
+SELECT *
+FROM hooks_rollout_stages
+ORDER BY seq DESC
+LIMIT 1;
+
+-- name: InsertHooksRolloutStage :one
+INSERT INTO hooks_rollout_stages (version, percent, state, reason, set_by)
+VALUES (@version, @percent, @state, sqlc.narg(reason), @set_by)
+RETURNING *;

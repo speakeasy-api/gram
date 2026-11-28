@@ -127,6 +127,7 @@ async function $do(
     "q": payload?.q,
     "sort": payload?.sort,
     "trial_states": payload?.trial_states,
+    "whitelisted": payload?.whitelisted,
   });
 
   const headers = new Headers(compactMap({

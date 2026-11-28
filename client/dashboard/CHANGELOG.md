@@ -1,5 +1,19 @@
 # dashboard
 
+## 0.158.0
+
+### Minor Changes
+
+- 62aff2b: The Project Assistant now knows what the user was just doing in the dashboard. The dashboard keeps a short log of the pages the user opened, the result of each action they took, the errors it showed them, and repeated failures of the same action. When the user opens the docked assistant, the new `assistants.inferIntent` endpoint reads that log with a small model and returns the user's likely goal and blocker, a one-line opener, and up to three prompts written for that task. The dock shows them above its usual suggestions. Each message to the assistant also carries the log and the inferred goal in its `<dashboard_context>` block, so a question like "how can I see if this worked?" is answered about the action the user just took instead of with a clarifying question. The log stays in the browser and goes only to Speakeasy's server, it names API calls but never their arguments, and the endpoint stores nothing. The dashboard side is behind the `assistant-activity-context` feature flag. Chat titles and summaries now skip a leading `<dashboard_context>` block.
+- 4907847: The project homepage now has widgets for more product areas: **MCP servers** (servers waiting for review, gateway sign-ins, plugins), **Risk** (findings, policies, unreviewed servers), **Devices and cost** (device agent coverage, budgets), and **Skills and assistants** (most used skills, suggested skill edits, assistants). The Project Assistant stays pinned as you scroll, and the slot under it crossfades to the widget for the section you are reading. A fade with a down arrow shows there is more below.
+
+### Patch Changes
+
+- 2dc93ed: Setup instructions the dashboard generates now name the Speakeasy host they were generated on when a client's default host would not reach it, for example on another region's deployment. This covers the device agent `managed.json`, macOS configuration profile, Intune package and cloud environment script (`_control_plane_url`), the `speakeasy-hooks install` commands (`--server-url`), and the CLI instructions (a `speakeasy auth --api-url` step). On such a host, personal device agent sign-in now warns that it reaches only the agent's default host and points to `managed.json`, and the CI push instructions mention `SPEAKEASY_AI_API_URL`. Instructions generated on the US hosts are unchanged.
+- fd1559f: Disambiguate MCP servers that share a display name by showing their slug in the guardrail scope picker, and add a `Project Overview` page heading to the terminal project homepage.
+- ea3ec63: Manage MCP access for Kit assistants from their overview. Kit connects to the Project Gateway as its single MCP endpoint for both project servers and built-in toolsets, so server grants take effect without restarting the runtime, and the MCP servers panel shows when another rule allows or blocks access.
+- 3148949: The project homepage shows each **Needs attention** problem in full, and every widget row asks the Project Assistant instead of opening a page. Asking from several widgets continues one conversation, and a new question interrupts a running reply. The terminal lists your five most recent chats, any widget can be expanded, and the **Spend** line now follows the same week-over-week change as its percentage.
+
 ## 0.157.1
 
 ### Patch Changes

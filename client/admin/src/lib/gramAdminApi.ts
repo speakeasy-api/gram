@@ -376,6 +376,8 @@ export type ListOrganizationsParams = {
   account_types?: string[];
   trial_states?: string[];
   disabled_status?: "all" | "active" | "disabled";
+  /** Text rather than boolean: omitUnset drops false, which is a real filter. */
+  whitelisted?: "true" | "false";
   /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
   min_members?: number | string;
   /** Nonnegative int64. Unsafe numeric values are rejected before sending. */

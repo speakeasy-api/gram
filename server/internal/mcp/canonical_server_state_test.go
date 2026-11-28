@@ -113,7 +113,7 @@ func TestRetiredToolsetSlug_NotFoundOnEverySurface(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {
 		for _, target := range []string{slug, unknown} {
 			_, err := serveRuntimeMethod(t, ctx, ti, method, target, "", map[string]string{"Accept": "text/event-stream"})
-			requireOopsCode(t, err, oops.CodeMethodNotAllowed)
+			requireOopsCode(t, err, oops.CodeNotFound)
 		}
 	}
 }
