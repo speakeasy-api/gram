@@ -51,6 +51,7 @@ const CREATED: AdminOrganization = {
   slug: "placeholder-new",
   account_type: "free",
   whitelisted: false,
+  internal: false,
   member_count: 0,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",

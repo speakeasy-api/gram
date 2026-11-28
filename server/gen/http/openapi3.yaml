@@ -5990,7 +5990,7 @@ paths:
             tags:
                 - admin
             summary: updateOrganization admin
-            description: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.
+            description: Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.
             operationId: adminUpdateOrganization
             requestBody:
                 required: true
@@ -7043,6 +7043,17 @@ paths:
                   schema:
                     description: 'Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.'
                     type: boolean
+                - allowEmptyValue: true
+                  description: 'Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.'
+                  in: query
+                  name: internal_status
+                  schema:
+                    description: 'Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.'
+                    enum:
+                        - all
+                        - internal
+                        - external
+                    type: string
                 - allowEmptyValue: true
                   description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
                   in: query
@@ -105347,6 +105358,10 @@ components:
                 id:
                     type: string
                     description: The ID of the organization
+                internal:
+                    type: boolean
+                    description: 'Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.'
+                    default: false
                 member_count:
                     type: integer
                     description: Number of active members in the organization.
@@ -146177,6 +146192,9 @@ components:
                 id:
                     type: string
                     description: Organization ID.
+                internal:
+                    type: boolean
+                    description: New internal flag. Cannot be combined with account_type or whitelisted.
                 whitelisted:
                     type: boolean
                     description: New whitelisted flag.

@@ -14,6 +14,7 @@ type organizationListBounds struct {
 	minMembers, maxMembers    pgtype.Int8
 	createdAtGte, createdAtLt pgtype.Timestamptz
 	disabledStatus            string
+	internalStatus            string
 }
 
 func listOrganizationsBounds(p *gen.ListOrganizationsPayload) (organizationListBounds, error) {
@@ -70,6 +71,15 @@ func listOrganizationsBounds(p *gen.ListOrganizationsPayload) (organizationListB
 	case "all", "active", "disabled":
 	default:
 		return bounds, oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
+	}
+	bounds.internalStatus = "all"
+	if p.InternalStatus != nil {
+		bounds.internalStatus = *p.InternalStatus
+	}
+	switch bounds.internalStatus {
+	case "all", "internal", "external":
+	default:
+		return bounds, oops.E(oops.CodeInvalid, nil, "internal_status must be all, internal, or external")
 	}
 	return bounds, nil
 }

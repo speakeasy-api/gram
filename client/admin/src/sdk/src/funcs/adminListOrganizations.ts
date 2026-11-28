@@ -120,6 +120,7 @@ async function $do(
     "cursor": payload?.cursor,
     "direction": payload?.direction,
     "disabled_status": payload?.disabled_status,
+    "internal_status": payload?.internal_status,
     "limit": payload?.limit,
     "max_members": payload?.max_members,
     "min_members": payload?.min_members,

@@ -15,6 +15,7 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
   DisabledStatus,
+  InternalStatus,
 } from "../models/operations/adminlistorganizations.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -82,6 +83,7 @@ export function buildAdminListOrganizationsQuery(
       trialStates: request?.trialStates,
       disabledStatus: request?.disabledStatus,
       whitelisted: request?.whitelisted,
+      internalStatus: request?.internalStatus,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
       createdFrom: request?.createdFrom,
@@ -133,6 +135,7 @@ export function buildAdminListOrganizationsInfiniteQuery(
       trialStates: request?.trialStates,
       disabledStatus: request?.disabledStatus,
       whitelisted: request?.whitelisted,
+      internalStatus: request?.internalStatus,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
       createdFrom: request?.createdFrom,
@@ -181,6 +184,7 @@ export function queryKeyAdminListOrganizations(
     trialStates?: Array<string> | undefined;
     disabledStatus?: DisabledStatus | undefined;
     whitelisted?: boolean | undefined;
+    internalStatus?: InternalStatus | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
     createdFrom?: string | undefined;
@@ -212,6 +216,7 @@ export function queryKeyAdminListOrganizationsInfinite(
     trialStates?: Array<string> | undefined;
     disabledStatus?: DisabledStatus | undefined;
     whitelisted?: boolean | undefined;
+    internalStatus?: InternalStatus | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
     createdFrom?: string | undefined;

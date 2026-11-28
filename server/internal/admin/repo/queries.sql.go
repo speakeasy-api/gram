@@ -288,6 +288,11 @@ filtered AS (
             OR ($8::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND ($9::boolean IS NULL OR om.whitelisted = $9::boolean)
+        AND (
+            $10::text = 'all'
+            OR ($10::text = 'internal' AND om.internal)
+            OR ($10::text = 'external' AND NOT om.internal)
+        )
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
@@ -303,6 +308,7 @@ type AdminCountOrganizationsParams struct {
 	CreatedAtLt    pgtype.Timestamptz
 	DisabledStatus string
 	Whitelisted    pgtype.Bool
+	InternalStatus string
 }
 
 // The count cannot ride on the page query. That query carries the cursor
@@ -327,6 +333,7 @@ func (q *Queries) AdminCountOrganizations(ctx context.Context, arg AdminCountOrg
 		arg.CreatedAtLt,
 		arg.DisabledStatus,
 		arg.Whitelisted,
+		arg.InternalStatus,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -769,6 +776,7 @@ SELECT
     bm.stripe_customer_id,
     bm.stripe_subscription_id,
     om.whitelisted,
+    om.internal,
     om.disabled_at,
     -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
@@ -816,6 +824,7 @@ type AdminGetOrganizationRow struct {
 	StripeCustomerID     pgtype.Text
 	StripeSubscriptionID pgtype.Text
 	Whitelisted          bool
+	Internal             bool
 	DisabledAt           pgtype.Timestamptz
 	TrialState           string
 	TrialTier            pgtype.Text
@@ -850,6 +859,7 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.StripeCustomerID,
 		&i.StripeSubscriptionID,
 		&i.Whitelisted,
+		&i.Internal,
 		&i.DisabledAt,
 		&i.TrialState,
 		&i.TrialTier,
@@ -2514,6 +2524,7 @@ filtered AS (
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
         om.whitelisted,
+        om.internal,
         om.disabled_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
@@ -2569,23 +2580,28 @@ filtered AS (
             OR ($9::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND ($10::boolean IS NULL OR om.whitelisted = $10::boolean)
+        AND (
+            $11::text = 'all'
+            OR ($11::text = 'internal' AND om.internal)
+            OR ($11::text = 'external' AND NOT om.internal)
+        )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
         -- deleted or unknown anchor exhausts the walk rather than restarting it.
         AND (
-            $11::text IS NULL
+            $12::text IS NULL
             OR EXISTS (
                 SELECT 1 FROM organization_metadata anchor
-                WHERE anchor.id = $11::text
+                WHERE anchor.id = $12::text
                   AND (om.created_at < anchor.created_at
                        OR (om.created_at = anchor.created_at AND om.id > anchor.id))
             )
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
-WHERE coalesce(cardinality($12::text[]), 0) = 0 OR trial_state = ANY($12::text[])
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, internal, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+WHERE coalesce(cardinality($13::text[]), 0) = 0 OR trial_state = ANY($13::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
     CASE WHEN $1::text = 'name' AND $2::text = 'desc' THEN name END DESC NULLS LAST,
@@ -2605,12 +2621,12 @@ ORDER BY
     CASE WHEN $1::text = 'trial_ends_at' AND $2::text = 'desc' THEN trial_ends_at END DESC NULLS LAST,
     -- Without this tiebreaker rows that tie on the sort key can swap between calls, which drops or repeats rows across a page boundary.
     id ASC
-LIMIT $14::int
-OFFSET $13::bigint
+LIMIT $15::int
+OFFSET $14::bigint
 )
 SELECT
     id, name, slug, account_type, workos_id, stripe_customer_id,
-    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    stripe_subscription_id, whitelisted, internal, disabled_at, trial_state,
     trial_ends_at, created_at, updated_at,
     coalesce(member_count, (
         SELECT count(*)
@@ -2651,6 +2667,7 @@ type AdminListOrganizationsParams struct {
 	CreatedAtLt    pgtype.Timestamptz
 	DisabledStatus string
 	Whitelisted    pgtype.Bool
+	InternalStatus string
 	AfterID        pgtype.Text
 	TrialStates    []string
 	PageOffset     int64
@@ -2666,6 +2683,7 @@ type AdminListOrganizationsRow struct {
 	StripeCustomerID     pgtype.Text
 	StripeSubscriptionID pgtype.Text
 	Whitelisted          bool
+	Internal             bool
 	DisabledAt           pgtype.Timestamptz
 	TrialState           string
 	TrialEndsAt          pgtype.Timestamptz
@@ -2697,6 +2715,7 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 		arg.CreatedAtLt,
 		arg.DisabledStatus,
 		arg.Whitelisted,
+		arg.InternalStatus,
 		arg.AfterID,
 		arg.TrialStates,
 		arg.PageOffset,
@@ -2718,6 +2737,7 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.StripeCustomerID,
 			&i.StripeSubscriptionID,
 			&i.Whitelisted,
+			&i.Internal,
 			&i.DisabledAt,
 			&i.TrialState,
 			&i.TrialEndsAt,
@@ -3701,6 +3721,29 @@ func (q *Queries) AdminSetOrganizationAdoptionDashboardURL(ctx context.Context, 
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const adminSetOrganizationInternal = `-- name: AdminSetOrganizationInternal :one
+UPDATE organization_metadata
+SET
+    internal = $1::boolean,
+    updated_at = clock_timestamp()
+WHERE id = $2::text
+RETURNING slug
+`
+
+type AdminSetOrganizationInternalParams struct {
+	Internal bool
+	ID       string
+}
+
+// Keyed on id alone, like every other admin write. Returns the slug because
+// the PostHog organization group is keyed by it.
+func (q *Queries) AdminSetOrganizationInternal(ctx context.Context, arg AdminSetOrganizationInternalParams) (string, error) {
+	row := q.db.QueryRow(ctx, adminSetOrganizationInternal, arg.Internal, arg.ID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
 }
 
 const adminSetStripeCustomer = `-- name: AdminSetStripeCustomer :one

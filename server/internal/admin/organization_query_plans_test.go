@@ -89,7 +89,7 @@ func TestOrganizationQueryPlans(t *testing.T) {
 					if status == "" {
 						status = "all"
 					}
-					p := repo.AdminListOrganizationsParams{DisabledStatus: status, PageLimit: 2, PageOffset: tc.offset, AfterID: tc.cursor, SortBy: tc.sort, SortDir: "asc"}
+					p := repo.AdminListOrganizationsParams{DisabledStatus: status, InternalStatus: "all", PageLimit: 2, PageOffset: tc.offset, AfterID: tc.cursor, SortBy: tc.sort, SortDir: "asc"}
 					if tc.desc {
 						p.SortDir = "desc"
 					}
@@ -119,7 +119,7 @@ func TestOrganizationQueryPlans(t *testing.T) {
 			}
 			for _, bounded := range []bool{false, true} {
 				t.Run(fmt.Sprintf("count bounded=%t", bounded), func(t *testing.T) {
-					p := repo.AdminCountOrganizationsParams{DisabledStatus: "all"}
+					p := repo.AdminCountOrganizationsParams{DisabledStatus: "all", InternalStatus: "all"}
 					expected := int64(24)
 					scans := 0
 					if bounded {

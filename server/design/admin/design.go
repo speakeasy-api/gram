@@ -80,6 +80,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Format(FormatURI)
 	})
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
+	// Defaulted rather than required. The admin dashboard ships separately from
+	// the server and validates responses, so a required field would make it
+	// reject every organization a not-yet-upgraded server returns.
+	Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.", func() { Default(false) })
 	Attribute("disabled_at", String, func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
@@ -655,7 +659,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("updateOrganization", func() {
-		Description("Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.")
+		Description("Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -666,6 +670,7 @@ var _ = Service("admin", func() {
 				Enum(accountTypes...)
 			})
 			Attribute("whitelisted", Boolean, "New whitelisted flag.")
+			Attribute("internal", Boolean, "New internal flag. Cannot be combined with account_type or whitelisted.")
 		})
 
 		Result(AdminOrganization)
@@ -925,6 +930,7 @@ var _ = Service("admin", func() {
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_status", String, "Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.", func() { Enum("all", "active", "disabled") })
 			Attribute("whitelisted", Boolean, "Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.")
+			Attribute("internal_status", String, "Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.", func() { Enum("all", "internal", "external") })
 			Attribute("min_members", Int64, "Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.", func() { Minimum(0) })
 			Attribute("max_members", Int64, "Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.", func() { Minimum(0) })
 			Attribute("created_from", String, "Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.")
@@ -947,6 +953,7 @@ var _ = Service("admin", func() {
 			Param("trial_states")
 			Param("disabled_status")
 			Param("whitelisted")
+			Param("internal_status")
 			Param("min_members")
 			Param("max_members")
 			Param("created_from")

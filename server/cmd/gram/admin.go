@@ -549,6 +549,7 @@ func newAdminCommand() *cli.Command {
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
+			adminService.SetOrganizationGroupIdentifier(posthogClient)
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {
 				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())

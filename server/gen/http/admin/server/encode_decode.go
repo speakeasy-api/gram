@@ -4663,6 +4663,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 			trialStates       []string
 			disabledStatus    *string
 			whitelisted       *bool
+			internalStatus    *string
 			minMembers        *int64
 			maxMembers        *int64
 			createdFrom       *string
@@ -4703,6 +4704,15 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("whitelisted", whitelistedRaw, "boolean"))
 				}
 				whitelisted = &v
+			}
+		}
+		internalStatusRaw := qp.Get("internal_status")
+		if internalStatusRaw != "" {
+			internalStatus = &internalStatusRaw
+		}
+		if internalStatus != nil {
+			if !(*internalStatus == "all" || *internalStatus == "internal" || *internalStatus == "external") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("internal_status", *internalStatus, []any{"all", "internal", "external"}))
 			}
 		}
 		{
@@ -4784,7 +4794,7 @@ func DecodeListOrganizationsRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStatus, whitelisted, minMembers, maxMembers, createdFrom, createdTo, cursor, limit, sort, direction, page, adminSessionToken)
+		payload = NewListOrganizationsPayload(q, accountType, accountTypes, trialStates, disabledStatus, whitelisted, internalStatus, minMembers, maxMembers, createdFrom, createdTo, cursor, limit, sort, direction, page, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -30704,6 +30714,7 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		StripeCustomerDashboardURL:     v.StripeCustomerDashboardURL,
 		StripeSubscriptionDashboardURL: v.StripeSubscriptionDashboardURL,
 		Whitelisted:                    v.Whitelisted,
+		Internal:                       v.Internal,
 		DisabledAt:                     v.DisabledAt,
 		TrialState:                     v.TrialState,
 		TrialTier:                      v.TrialTier,
@@ -30715,6 +30726,12 @@ func marshalAdminAdminOrganizationToAdminOrganizationResponseBody(v *admin.Admin
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      v.CreatedAt,
 		UpdatedAt:                      v.UpdatedAt,
+	}
+	{
+		var zero bool
+		if res.Internal == zero {
+			res.Internal = false
+		}
 	}
 
 	return res

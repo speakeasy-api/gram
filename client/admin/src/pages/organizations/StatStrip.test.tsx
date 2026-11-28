@@ -65,6 +65,7 @@ const ORGS: AdminOrganization[] = [
     slug: "placeholder-one",
     account_type: "pro",
     whitelisted: false,
+    internal: false,
     trial_state: "ending_soon",
     trial_ends_at: "2026-05-06T00:00:00Z",
     member_count: 3,

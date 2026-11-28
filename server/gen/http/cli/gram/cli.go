@@ -4718,6 +4718,7 @@ func ParseEndpoint(
 		adminListOrganizationsTrialStatesFlag       = adminListOrganizationsFlags.String("trial-states", "", "")
 		adminListOrganizationsDisabledStatusFlag    = adminListOrganizationsFlags.String("disabled-status", "", "")
 		adminListOrganizationsWhitelistedFlag       = adminListOrganizationsFlags.String("whitelisted", "", "")
+		adminListOrganizationsInternalStatusFlag    = adminListOrganizationsFlags.String("internal-status", "", "")
 		adminListOrganizationsMinMembersFlag        = adminListOrganizationsFlags.String("min-members", "", "")
 		adminListOrganizationsMaxMembersFlag        = adminListOrganizationsFlags.String("max-members", "", "")
 		adminListOrganizationsCreatedFromFlag       = adminListOrganizationsFlags.String("created-from", "", "")
@@ -13686,7 +13687,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildListUserOrganizationsPayload(*adminListUserOrganizationsUserIDFlag, *adminListUserOrganizationsPageFlag, *adminListUserOrganizationsLimitFlag, *adminListUserOrganizationsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
-				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsWhitelistedFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsWhitelistedFlag, *adminListOrganizationsInternalStatusFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
 			case "extend-trial":
 				endpoint = c.ExtendTrial()
 				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
@@ -33932,7 +33933,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    trigger-organization-chat-analysis: TriggerOrganizationChatAnalysis implements triggerOrganizationChatAnalysis.`)
 	fmt.Fprintln(os.Stderr, `    open-organization-in-dashboard: OpenOrganizationInDashboard implements openOrganizationInDashboard.`)
 	fmt.Fprintln(os.Stderr, `    get-project: Returns full admin details for a project by id or slug, including aggregated counts of child resources.`)
-	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `    update-organization: Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.`)
 	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
@@ -34304,7 +34305,7 @@ func adminUpdateOrganizationUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Updates admin-managed fields on an organization. At least one of account_type or whitelisted must be supplied.`)
+	fmt.Fprintln(os.Stderr, `Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -34312,7 +34313,7 @@ func adminUpdateOrganizationUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-organization --body '{\n      \"account_type\": \"pro\",\n      \"id\": \"abc123\",\n      \"internal\": false,\n      \"whitelisted\": false\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminBulkUpdateAccountTypeUsage() {
@@ -34536,6 +34537,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprint(os.Stderr, " -trial-states JSON")
 	fmt.Fprint(os.Stderr, " -disabled-status STRING")
 	fmt.Fprint(os.Stderr, " -whitelisted BOOL")
+	fmt.Fprint(os.Stderr, " -internal-status STRING")
 	fmt.Fprint(os.Stderr, " -min-members INT64")
 	fmt.Fprint(os.Stderr, " -max-members INT64")
 	fmt.Fprint(os.Stderr, " -created-from STRING")
@@ -34559,6 +34561,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    -trial-states JSON: `)
 	fmt.Fprintln(os.Stderr, `    -disabled-status STRING: `)
 	fmt.Fprintln(os.Stderr, `    -whitelisted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -internal-status STRING: `)
 	fmt.Fprintln(os.Stderr, `    -min-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -max-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -created-from STRING: `)
@@ -34572,7 +34575,7 @@ func adminListOrganizationsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --whitelisted false --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --whitelisted false --internal-status \"internal\" --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
 }
 
 func adminExtendTrialUsage() {

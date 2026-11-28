@@ -49,6 +49,8 @@ type UpdateOrganizationRequestBody struct {
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// New whitelisted flag.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// New internal flag. Cannot be combined with account_type or whitelisted.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 }
 
 // BulkUpdateAccountTypeRequestBody is the type of the "admin" service
@@ -1101,6 +1103,10 @@ type UpdateOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1170,6 +1176,10 @@ type DisableOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1228,6 +1238,10 @@ type EnableOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1286,6 +1300,10 @@ type GetOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1403,6 +1421,10 @@ type ExtendTrialResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1461,6 +1483,10 @@ type CreateOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1519,6 +1545,10 @@ type RearmTrialResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1634,6 +1664,10 @@ type SetStripeCustomerResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -1692,6 +1726,10 @@ type SetAdoptionDashboardURLResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -2209,6 +2247,10 @@ type StartTrialResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -2267,6 +2309,10 @@ type ChangeTrialEndDateResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -2981,6 +3027,10 @@ type SetStripeSubscriptionResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -31427,6 +31477,10 @@ type AdminOrganizationResponseBody struct {
 	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
 	// Whether the organization is whitelisted for full access.
 	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal *bool `form:"internal,omitempty" json:"internal,omitempty" xml:"internal,omitempty"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
@@ -33465,6 +33519,7 @@ func NewUpdateOrganizationRequestBody(p *admin.UpdateOrganizationPayload) *Updat
 		ID:          p.ID,
 		AccountType: p.AccountType,
 		Whitelisted: p.Whitelisted,
+		Internal:    p.Internal,
 	}
 	return body
 }
@@ -36258,6 +36313,12 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -36605,6 +36666,12 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -36786,6 +36853,12 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -36966,6 +37039,12 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -38325,6 +38404,12 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -38506,6 +38591,12 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -38686,6 +38777,12 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -40048,6 +40145,12 @@ func NewSetStripeCustomerAdminOrganizationOK(body *SetStripeCustomerResponseBody
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -40243,6 +40346,12 @@ func NewSetAdoptionDashboardURLAdminOrganizationOK(body *SetAdoptionDashboardURL
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -43736,6 +43845,12 @@ func NewStartTrialAdminOrganizationOK(body *StartTrialResponseBody) *admin.Admin
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
 	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
+	}
 
 	return v
 }
@@ -43916,6 +44031,12 @@ func NewChangeTrialEndDateAdminOrganizationOK(body *ChangeTrialEndDateResponseBo
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v
@@ -51539,6 +51660,12 @@ func NewSetStripeSubscriptionAdminOrganizationOK(body *SetStripeSubscriptionResp
 		CreationSource:                 body.CreationSource,
 		CreatedAt:                      *body.CreatedAt,
 		UpdatedAt:                      *body.UpdatedAt,
+	}
+	if body.Internal != nil {
+		v.Internal = *body.Internal
+	}
+	if body.Internal == nil {
+		v.Internal = false
 	}
 
 	return v

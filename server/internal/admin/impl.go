@@ -113,6 +113,10 @@ type Service struct {
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
 
+	// organizationGroups mirrors the internal label to PostHog. Nil leaves it
+	// unmirrored.
+	organizationGroups OrganizationGroupIdentifier
+
 	// staffOrg is the deployment's Speakeasy staff organization, whose
 	// OpenRouter keys bypass the tier credit limits.
 	staffOrg staff.Organization
@@ -302,7 +306,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{organizationGroups: nil, orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracerProvider:             tracerProvider,
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
@@ -641,13 +645,16 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 }
 
 // Goa's optional string query decoder treats present-but-empty values as absent,
-// before enum validation. Keep that distinction for this status parameter only;
+// before enum validation. Keep that distinction for the status parameters only;
 // omission is unrestricted, but an explicit empty value is not a valid status.
 func (s *Service) rejectEmptyOrganizationStatus(next http.Handler) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		query := r.URL.Query()
 		if query.Has("disabled_status") && query.Get("disabled_status") == "" {
 			return oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
+		}
+		if query.Has("internal_status") && query.Get("internal_status") == "" {
+			return oops.E(oops.CodeInvalid, nil, "internal_status must be all, internal, or external")
 		}
 		next.ServeHTTP(w, r)
 		return nil
@@ -1041,6 +1048,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
 		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
+		InternalStatus: bounds.internalStatus,
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -1064,6 +1072,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
 		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
+		InternalStatus: bounds.internalStatus,
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -1308,8 +1317,21 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (
 }
 
 func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrganizationPayload) (*gen.AdminOrganization, error) {
-	if payload.AccountType == nil && payload.Whitelisted == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type or whitelisted must be supplied")
+	if payload.AccountType == nil && payload.Whitelisted == nil && payload.Internal == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one of account_type, whitelisted or internal must be supplied")
+	}
+	if payload.Internal != nil {
+		// Sent alone so a write is never half-applied: the label has its own
+		// statement, outside the account type and whitelist transaction.
+		if payload.AccountType != nil || payload.Whitelisted != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "internal cannot be combined with account_type or whitelisted")
+		}
+		slug, err := s.setOrganizationInternal(ctx, payload.ID, *payload.Internal)
+		if err != nil {
+			return nil, err
+		}
+		s.mirrorOrganizationInternal(ctx, payload.ID, slug, *payload.Internal)
+		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after internal change")
 	}
 	if payload.AccountType == nil {
 		tx, err := s.db.Begin(ctx)
@@ -2149,6 +2171,7 @@ func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) 
 		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
 		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
 		Whitelisted:                    row.Whitelisted,
+		Internal:                       row.Internal,
 		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
 		TrialState:                     &row.TrialState,
 		TrialTier:                      conv.FromPGText[string](row.TrialTier),
@@ -2176,6 +2199,7 @@ func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *
 		StripeCustomerDashboardURL:     s.stripeCustomerDashboardURL(row.StripeCustomerID),
 		StripeSubscriptionDashboardURL: s.stripeSubscriptionDashboardURL(row.StripeSubscriptionID),
 		Whitelisted:                    row.Whitelisted,
+		Internal:                       row.Internal,
 		DisabledAt:                     pgTimestampPtr(row.DisabledAt),
 		TrialState:                     &row.TrialState,
 		TrialTier:                      nil,

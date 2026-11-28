@@ -54,6 +54,10 @@ export type AdminOrganization = {
    */
   id: string;
   /**
+   * Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.
+   */
+  internal: boolean;
+  /**
    * Number of active members in the organization.
    */
   memberCount: number;
@@ -140,6 +144,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     id: z.string(),
+    internal: z._default(z.boolean(), false),
     member_count: z.int(),
     name: z.string(),
     slug: z.string(),

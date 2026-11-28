@@ -61,6 +61,7 @@ const ORG: AdminOrganization = {
   slug: "test-org",
   account_type: "enterprise",
   whitelisted: true,
+  internal: false,
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 3,

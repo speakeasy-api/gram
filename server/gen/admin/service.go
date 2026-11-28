@@ -46,7 +46,8 @@ type Service interface {
 	// counts of child resources.
 	GetProject(context.Context, *GetProjectPayload) (res *AdminProjectDetail, err error)
 	// Updates admin-managed fields on an organization. At least one of
-	// account_type or whitelisted must be supplied.
+	// account_type, whitelisted or internal must be supplied. internal must be
+	// sent on its own.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
 	// Sets one account type on many organizations in a single statement. An ID
 	// that matches no organization is reported back rather than failing the batch,
@@ -1912,6 +1913,10 @@ type AdminOrganization struct {
 	StripeSubscriptionDashboardURL *string
 	// Whether the organization is whitelisted for full access.
 	Whitelisted bool
+	// Whether staff have marked this organization as internal: owned by Speakeasy
+	// employees for testing or dogfooding. A label for analytics; it grants
+	// nothing.
+	Internal bool
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string
 	// Lifecycle state of the organization's enterprise trial.
@@ -4071,6 +4076,9 @@ type ListOrganizationsPayload struct {
 	// organizations that are not whitelisted. Omitted matches both. Applies even
 	// to exact ID matches.
 	Whitelisted *bool
+	// Internal label: all (default), internal (marked internal by staff), or
+	// external (not marked). Applies even to exact ID matches.
+	InternalStatus *string
 	// Inclusive minimum active member count, from 0 through 9223372036854775807.
 	// The generated TypeScript SDK accepts bigint. The handwritten admin client
 	// accepts safe integers or decimal strings; use decimal strings above
@@ -4984,6 +4992,8 @@ type UpdateOrganizationPayload struct {
 	AccountType *string
 	// New whitelisted flag.
 	Whitelisted *bool
+	// New internal flag. Cannot be combined with account_type or whitelisted.
+	Internal *bool
 }
 
 // UpdateSignupOfferPayload is the payload type of the admin service

@@ -33,6 +33,7 @@ const ORG: AdminOrganization = {
   account_type: "pro",
   workos_id: "org_workos_placeholder_identifier",
   whitelisted: true,
+  internal: false,
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 3,

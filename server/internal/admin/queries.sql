@@ -155,6 +155,7 @@ filtered AS (
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
         om.whitelisted,
+        om.internal,
         om.disabled_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
@@ -210,6 +211,11 @@ filtered AS (
             OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND (sqlc.narg('whitelisted')::boolean IS NULL OR om.whitelisted = sqlc.narg('whitelisted')::boolean)
+        AND (
+            sqlc.arg('internal_status')::text = 'all'
+            OR (sqlc.arg('internal_status')::text = 'internal' AND om.internal)
+            OR (sqlc.arg('internal_status')::text = 'external' AND NOT om.internal)
+        )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
@@ -259,7 +265,7 @@ OFFSET sqlc.arg('page_offset')::bigint
 -- MATERIALIZED keeps display-only membership access after LIMIT and OFFSET.
 SELECT
     id, name, slug, account_type, workos_id, stripe_customer_id,
-    stripe_subscription_id, whitelisted, disabled_at, trial_state,
+    stripe_subscription_id, whitelisted, internal, disabled_at, trial_state,
     trial_ends_at, created_at, updated_at,
     coalesce(member_count, (
         SELECT count(*)
@@ -351,6 +357,11 @@ filtered AS (
             OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND (sqlc.narg('whitelisted')::boolean IS NULL OR om.whitelisted = sqlc.narg('whitelisted')::boolean)
+        AND (
+            sqlc.arg('internal_status')::text = 'all'
+            OR (sqlc.arg('internal_status')::text = 'internal' AND om.internal)
+            OR (sqlc.arg('internal_status')::text = 'external' AND NOT om.internal)
+        )
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality(sqlc.arg('trial_states')::text[]), 0) = 0 OR trial_state = ANY(sqlc.arg('trial_states')::text[]);
@@ -602,6 +613,7 @@ SELECT
     bm.stripe_customer_id,
     bm.stripe_subscription_id,
     om.whitelisted,
+    om.internal,
     om.disabled_at,
     -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
@@ -642,6 +654,16 @@ SET
     updated_at = clock_timestamp()
 WHERE id = sqlc.arg('id')::text
 RETURNING id;
+
+-- name: AdminSetOrganizationInternal :one
+-- Keyed on id alone, like every other admin write. Returns the slug because
+-- the PostHog organization group is keyed by it.
+UPDATE organization_metadata
+SET
+    internal = sqlc.arg('internal')::boolean,
+    updated_at = clock_timestamp()
+WHERE id = sqlc.arg('id')::text
+RETURNING slug;
 
 -- name: AdminAcquireStripeSubscriptionLock :exec
 -- Serializes assignments of the same Stripe subscription across organizations.

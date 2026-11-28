@@ -5282,6 +5282,9 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.Whitelisted != nil {
 			values.Add("whitelisted", fmt.Sprintf("%v", *p.Whitelisted))
 		}
+		if p.InternalStatus != nil {
+			values.Add("internal_status", *p.InternalStatus)
+		}
 		if p.MinMembers != nil {
 			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
 		}
@@ -34272,6 +34275,12 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 		CreationSource:                 v.CreationSource,
 		CreatedAt:                      *v.CreatedAt,
 		UpdatedAt:                      *v.UpdatedAt,
+	}
+	if v.Internal != nil {
+		res.Internal = *v.Internal
+	}
+	if v.Internal == nil {
+		res.Internal = false
 	}
 
 	return res

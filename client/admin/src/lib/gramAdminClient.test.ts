@@ -349,6 +349,7 @@ describe("organization writes through the generated client", () => {
     slug: "placeholder-one",
     account_type: "enterprise",
     whitelisted: false,
+    internal: true,
     trial_state: "running",
     trial_ends_at: "2026-05-06T00:00:00.000Z",
     member_count: 1,
@@ -365,6 +366,7 @@ describe("organization writes through the generated client", () => {
     stripe_customer_id: undefined,
     stripe_subscription_id: undefined,
     whitelisted: WIRE.whitelisted,
+    internal: WIRE.internal,
     disabled_at: undefined,
     trial_state: "running",
     trial_ends_at: WIRE.trial_ends_at,
@@ -401,6 +403,27 @@ describe("organization writes through the generated client", () => {
       body: (await request.json()) as unknown,
     };
   }
+
+  it("accepts a write answered by a server that predates the internal label", async () => {
+    // The admin dashboard and the server ship as separate images. During a
+    // rollout, or after a server-only rollback, a write can be answered by a
+    // server that does not send `internal` yet. The write already happened, so
+    // reporting it as failed invites a retry that applies it twice.
+    const { internal: _omitted, ...older } = WIRE;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(older), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(
+      boundary.extendTrial({ id: WIRE.id, days: 7 }),
+    ).resolves.toEqual({ ...RECORD, internal: false });
+  });
 
   it("posts the id to the disable path", async () => {
     const fetch = stubFetch();
@@ -667,6 +690,7 @@ describe("organizationFromSdk", () => {
         stripeSubscriptionDashboardUrl:
           "https://dashboard.stripe.com/test/subscriptions/sub_placeholder",
         whitelisted: true,
+        internal: true,
         disabledAt: new Date("2026-02-01T00:00:00Z"),
         trialState: "converted",
         trialEndsAt: new Date("2026-05-06T00:00:00Z"),
@@ -693,6 +717,7 @@ describe("organizationFromSdk", () => {
       stripe_subscription_dashboard_url:
         "https://dashboard.stripe.com/test/subscriptions/sub_placeholder",
       whitelisted: true,
+      internal: true,
       disabled_at: "2026-02-01T00:00:00.000Z",
       trial_state: "converted",
       trial_ends_at: "2026-05-06T00:00:00.000Z",
@@ -716,6 +741,7 @@ describe("organizationFromSdk", () => {
       slug: "placeholder-two",
       accountType: "free",
       whitelisted: false,
+      internal: false,
       memberCount: 0,
       createdAt: new Date("2026-01-02T00:00:00Z"),
       updatedAt: new Date("2026-01-07T00:00:00Z"),

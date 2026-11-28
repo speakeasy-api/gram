@@ -17,6 +17,7 @@ const ORG: AdminOrganization = {
   slug: "placeholder-one",
   account_type: "pro",
   whitelisted: true,
+  internal: false,
   member_count: 3,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-07T00:00:00Z",
