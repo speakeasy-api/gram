@@ -154,12 +154,51 @@ func TestAuthenticator_GoogleIDTokenChecksAndLocalRules(t *testing.T) {
 			header: "Bearer tok", wantErr: true,
 		},
 		{
-			name: "wrong audience rejected",
+			name: "wrong audience host rejected",
 			cfg: atecred.AuthenticatorConfig{
 				Environment: "prod", ExpectedAudience: aud, ServiceAccount: sa,
 				Validator: stubIDTokenValidator{validate: func(_ context.Context, _, _ string) (*idtoken.Payload, error) {
 					return &idtoken.Payload{
-						Issuer: "https://accounts.google.com", Audience: "https://other.example.com",
+						Issuer: "https://accounts.google.com", Audience: "https://other.speakeasy.com" + atecred.MintEndpointPath,
+						Claims: map[string]any{"email": sa, "email_verified": true},
+					}, nil
+				}},
+			},
+			header: "Bearer tok", wantErr: true,
+		},
+		{
+			name: "wrong audience path on same host rejected",
+			cfg: atecred.AuthenticatorConfig{
+				Environment: "prod", ExpectedAudience: aud, ServiceAccount: sa,
+				Validator: stubIDTokenValidator{validate: func(_ context.Context, _, _ string) (*idtoken.Payload, error) {
+					return &idtoken.Payload{
+						Issuer: "https://accounts.google.com", Audience: "https://api.speakeasy.com/internal/assistants/ate/other",
+						Claims: map[string]any{"email": sa, "email_verified": true},
+					}, nil
+				}},
+			},
+			header: "Bearer tok", wantErr: true,
+		},
+		{
+			name: "root-only audience without mint path rejected",
+			cfg: atecred.AuthenticatorConfig{
+				Environment: "prod", ExpectedAudience: aud, ServiceAccount: sa,
+				Validator: stubIDTokenValidator{validate: func(_ context.Context, _, _ string) (*idtoken.Payload, error) {
+					return &idtoken.Payload{
+						Issuer: "https://accounts.google.com", Audience: "https://api.speakeasy.com",
+						Claims: map[string]any{"email": sa, "email_verified": true},
+					}, nil
+				}},
+			},
+			header: "Bearer tok", wantErr: true,
+		},
+		{
+			name: "trailing-slash audience path rejected",
+			cfg: atecred.AuthenticatorConfig{
+				Environment: "prod", ExpectedAudience: aud, ServiceAccount: sa,
+				Validator: stubIDTokenValidator{validate: func(_ context.Context, _, _ string) (*idtoken.Payload, error) {
+					return &idtoken.Payload{
+						Issuer: "https://accounts.google.com", Audience: aud + "/",
 						Claims: map[string]any{"email": sa, "email_verified": true},
 					}, nil
 				}},
@@ -531,9 +570,90 @@ func signClientCert(t *testing.T, caKey *ecdsa.PrivateKey, caCert *x509.Certific
 
 func TestMintEndpointURL(t *testing.T) {
 	t.Parallel()
-	u, err := url.Parse("https://api.dev.speakeasy.com/extra?x=1")
+	want := fmt.Sprintf("https://api.dev.speakeasy.com%s", atecred.MintEndpointPath)
+	for _, raw := range []string{
+		"https://api.dev.speakeasy.com",
+		"https://api.dev.speakeasy.com/",
+		"https://api.dev.speakeasy.com///",
+		"https://api.dev.speakeasy.com/extra?x=1",
+	} {
+		u, err := url.Parse(raw)
+		require.NoError(t, err, raw)
+		got, err := atecred.MintEndpointURL(u)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, bad := range []*url.URL{
+		nil,
+		{Scheme: "ftp", Host: "api.dev.speakeasy.com"},
+		{Scheme: "https", Host: ""},
+	} {
+		_, err := atecred.MintEndpointURL(bad)
+		require.Error(t, err)
+	}
+}
+
+func TestMintHandler_AudienceNormalizationAndHostPathRefusal(t *testing.T) {
+	t.Parallel()
+
+	const sa = "ate-cred-provider@speakeasy-prod.iam.gserviceaccount.com"
+
+	serverBase, err := url.Parse("https://api.speakeasy.com/")
 	require.NoError(t, err)
-	got, err := atecred.MintEndpointURL(u)
+	providerBase, err := url.Parse("https://api.speakeasy.com")
 	require.NoError(t, err)
-	require.Equal(t, fmt.Sprintf("https://api.dev.speakeasy.com%s", atecred.MintEndpointPath), got)
+
+	serverAud, err := atecred.MintEndpointURL(serverBase)
+	require.NoError(t, err)
+	providerAud, err := atecred.MintEndpointURL(providerBase)
+	require.NoError(t, err)
+	require.Equal(t, serverAud, providerAud)
+
+	// Simulate Google's idtoken.Validator verifying the token's aud claim against
+	// the expected audience passed by the server.
+	tokenAudiences := map[string]string{
+		"tok-matching":       providerAud,
+		"tok-different-host": "https://other.speakeasy.com" + atecred.MintEndpointPath,
+		"tok-different-path": "https://api.speakeasy.com/internal/other",
+		"tok-root-only":      "https://api.speakeasy.com",
+	}
+	auth := atecred.NewAuthenticator(atecred.AuthenticatorConfig{
+		Environment:      "prod",
+		ExpectedAudience: serverAud,
+		ServiceAccount:   sa,
+		Validator: stubIDTokenValidator{validate: func(_ context.Context, rawToken, expectedAud string) (*idtoken.Payload, error) {
+			tokAud, ok := tokenAudiences[rawToken]
+			if !ok {
+				return nil, fmt.Errorf("unknown token")
+			}
+			if tokAud != expectedAud {
+				return nil, fmt.Errorf("idtoken: audience provided does not match aud claim in the JWT")
+			}
+			return &idtoken.Payload{
+				Issuer:   "https://accounts.google.com",
+				Audience: tokAud,
+				Claims:   map[string]any{"email": sa, "email_verified": true},
+			}, nil
+		}},
+	})
+	handler := atecred.NewMintHandler(testenv.NewLogger(t), auth, fakeMinter{
+		fn: func(_ context.Context, atespace, actorName, actorUID string) (string, time.Time, error) {
+			return "minted-" + atespace + "-" + actorName + "-" + actorUID, time.Now().Add(5 * time.Minute), nil
+		},
+	})
+
+	call := func(tok string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, atecred.MintEndpointPath, bytes.NewBufferString(
+			`{"atespace":"prod-assistants","actor_name":"spk-kit-1","actor_uid":"uid-1"}`,
+		))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	require.Equal(t, http.StatusOK, call("tok-matching").Code)
+	require.Equal(t, http.StatusUnauthorized, call("tok-different-host").Code)
+	require.Equal(t, http.StatusUnauthorized, call("tok-different-path").Code)
+	require.Equal(t, http.StatusUnauthorized, call("tok-root-only").Code)
 }
