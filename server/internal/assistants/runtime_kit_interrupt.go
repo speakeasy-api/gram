@@ -40,11 +40,15 @@ func (p *KitRuntimeProtocol) requestKitInterrupt(ctx context.Context, r assistan
 }
 
 func (p *KitRuntimeProtocol) kitInterruptPending(ctx context.Context, r assistantRuntimeRecord, req runTurnRequest) (bool, error) {
-	if req.EventID == uuid.Nil || req.EventAttempt <= 0 {
+	return p.kitInterruptPendingForEvent(ctx, r, req.EventID, req.EventAttempt)
+}
+
+func (p *KitRuntimeProtocol) kitInterruptPendingForEvent(ctx context.Context, r assistantRuntimeRecord, eventID uuid.UUID, attempt int) (bool, error) {
+	if eventID == uuid.Nil || attempt <= 0 {
 		return false, nil
 	}
 	pending, err := assistantrepo.New(p.config.Core.db).KitInterruptPending(ctx, assistantrepo.KitInterruptPendingParams{
-		ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: req.EventID, Attempt: int64(req.EventAttempt),
+		ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: eventID, Attempt: int64(attempt),
 	})
 	if err != nil {
 		return false, fmt.Errorf("read Kit interrupt request: %w", err)
@@ -53,18 +57,22 @@ func (p *KitRuntimeProtocol) kitInterruptPending(ctx context.Context, r assistan
 }
 
 func (p *KitRuntimeProtocol) acknowledgeKitInterrupt(ctx context.Context, r assistantRuntimeRecord, req runTurnRequest, outcome string) error {
-	if req.EventID == uuid.Nil || req.EventAttempt <= 0 {
+	return p.acknowledgeKitInterruptForEvent(ctx, r, req.EventID, req.EventAttempt, outcome)
+}
+
+func (p *KitRuntimeProtocol) acknowledgeKitInterruptForEvent(ctx context.Context, r assistantRuntimeRecord, eventID uuid.UUID, attempt int, outcome string) error {
+	if eventID == uuid.Nil || attempt <= 0 {
 		return nil
 	}
 	queries := assistantrepo.New(p.config.Core.db)
 	count, err := queries.AcknowledgeKitInterrupt(ctx, assistantrepo.AcknowledgeKitInterruptParams{
-		ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: req.EventID, Attempt: int64(req.EventAttempt), Outcome: outcome,
+		ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: eventID, Attempt: int64(attempt), Outcome: outcome,
 	})
 	if err != nil {
 		return fmt.Errorf("acknowledge Kit interruption: %w", err)
 	}
 	if count == 0 {
-		pending, err := queries.HasPendingKitInterruptRequest(ctx, assistantrepo.HasPendingKitInterruptRequestParams{ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: req.EventID, Attempt: int64(req.EventAttempt)})
+		pending, err := queries.HasPendingKitInterruptRequest(ctx, assistantrepo.HasPendingKitInterruptRequestParams{ProjectID: r.ProjectID, RuntimeID: r.ID, EventID: eventID, Attempt: int64(attempt)})
 		if err != nil {
 			return fmt.Errorf("verify Kit interruption acknowledgment: %w", err)
 		}

@@ -52,13 +52,13 @@ func TestKitProtocolPromptDeliveryCapability(t *testing.T) {
 		name, raw, mode string
 		want            bool
 	}{
-		{"queue and steer", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliveryQueue, true},
-		{"queue only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliveryQueue, true},
-		{"steer only", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{}}}}}}`, kitPromptDeliveryQueue, false},
-		{"absent delivery", `{"capabilities":{"_meta":{"kit/session/status":{}}}}`, kitPromptDeliveryQueue, false},
-		{"null mode", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":null}}}}}`, kitPromptDeliveryQueue, false},
-		{"wrong type", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":true}}}}}`, kitPromptDeliveryQueue, false},
-		{"invalid", `{`, kitPromptDeliveryQueue, false},
+		{"steer with another mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{},"queue":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"steer only", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":{}}}}}}`, kitPromptDeliverySteer, true},
+		{"other mode only", `{"capabilities":{"session":{"prompt":{"delivery":{"queue":{}}}}}}`, kitPromptDeliverySteer, false},
+		{"absent delivery", `{"capabilities":{"_meta":{"kit/session/status":{}}}}`, kitPromptDeliverySteer, false},
+		{"null mode", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":null}}}}}`, kitPromptDeliverySteer, false},
+		{"wrong type", `{"capabilities":{"session":{"prompt":{"delivery":{"steer":true}}}}}`, kitPromptDeliverySteer, false},
+		{"invalid", `{`, kitPromptDeliverySteer, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -423,8 +423,8 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				var delivery, idempotencyKey string
 				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
 				_ = json.Unmarshal(msg.Params["idempotencyKey"], &idempotencyKey)
-				if delivery != kitPromptDeliveryQueue {
-					t.Errorf("expected queue delivery mode, got %q", delivery)
+				if delivery != kitPromptDeliverySteer {
+					t.Errorf("expected steer delivery mode, got %q", delivery)
 				}
 				expectedKey := eventID.String()
 				if prompts > 0 {
@@ -744,7 +744,7 @@ func TestKitProtocolPromptDeliveryRetryDeduplicates(t *testing.T) {
 				var delivery, idempotencyKey string
 				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
 				_ = json.Unmarshal(msg.Params["idempotencyKey"], &idempotencyKey)
-				if delivery != kitPromptDeliveryQueue || idempotencyKey != eventID.String() {
+				if delivery != kitPromptDeliverySteer || idempotencyKey != eventID.String() {
 					t.Errorf("unexpected prompt delivery=%q key=%q", delivery, idempotencyKey)
 				}
 				mu.Lock()
@@ -1011,8 +1011,8 @@ func TestKitProtocolInterruptRunningTurnAndSettle(t *testing.T) {
 			case "session/prompt":
 				var delivery string
 				_ = json.Unmarshal(msg.Params["delivery"], &delivery)
-				if delivery != kitPromptDeliveryQueue {
-					t.Errorf("expected queue delivery mode, got %q", delivery)
+				if delivery != kitPromptDeliverySteer {
+					t.Errorf("expected steer delivery mode, got %q", delivery)
 				}
 				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"user_message","messageId":"u1","content":[{"type":"text","text":"work"}]}}}` + "\n\n"
 				ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"cancel-session","update":{"sessionUpdate":"state_update","state":"running"}}}` + "\n\n"
