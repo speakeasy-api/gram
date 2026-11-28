@@ -7037,6 +7037,13 @@ paths:
                         - disabled
                     type: string
                 - allowEmptyValue: true
+                  description: 'Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.'
+                  in: query
+                  name: whitelisted
+                  schema:
+                    description: 'Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.'
+                    type: boolean
+                - allowEmptyValue: true
                   description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
                   in: query
                   name: min_members
@@ -10165,6 +10172,152 @@ paths:
             x-speakeasy-name-override: runRunnerKeyOrganizationBackfill
             x-speakeasy-react-hook:
                 name: AdminRunRunnerKeyOrganizationBackfill
+    /admin/selfServe:
+        get:
+            tags:
+                - admin
+            summary: getSelfServeStatus admin
+            description: Report whether self-serve signup is disabled across the platform.
+            operationId: adminGetSelfServeStatus
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSelfServeStatus'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/selfServe.set:
+        post:
+            tags:
+                - admin
+            summary: setSelfServeDisabled admin
+            description: Turn self-serve signup off or on across the platform. Existing organizations are unaffected.
+            operationId: adminSetSelfServeDisabled
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSelfServeDisabledRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSelfServeStatus'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/session.get:
         get:
             tags:
@@ -21675,6 +21828,96 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Agent
+    /rpc/agents.getRuntimeGateway:
+        get:
+            description: Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.
+            operationId: getAgentRuntimeGateway
+            parameters:
+                - allowEmptyValue: true
+                  description: First-class agent identifier
+                  in: query
+                  name: agent_id
+                  required: true
+                  schema:
+                    description: First-class agent identifier
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AgentRuntimeGateway'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getRuntimeGateway agents
+            tags:
+                - agents
+            x-speakeasy-name-override: getRuntimeGateway
+            x-speakeasy-react-hook:
+                name: AgentRuntimeGateway
     /rpc/agents.list:
         get:
             operationId: listAgents
@@ -106546,6 +106789,21 @@ components:
                 - marketplace_tokens
                 - runner_key_organizations
                 - organizations
+        AdminSelfServeStatus:
+            type: object
+            properties:
+                disabled:
+                    type: boolean
+                    description: When true, no self-serve path can create an organization or arm a self-serve trial.
+                updated_at:
+                    type: string
+                    description: When the switch last changed. Absent if it was never changed.
+                    format: date-time
+                updated_by:
+                    type: string
+                    description: Email of the staff member who last changed the switch. Absent if it was never changed.
+            required:
+                - disabled
         AdminSession:
             type: object
             properties:
@@ -108048,6 +108306,29 @@ components:
             required:
                 - id
                 - name
+        AgentRuntimeGateway:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: Whether the agent runtime may use its bound project's gateway.
+                unavailable_reason:
+                    type: string
+                    description: Why runtime setup is unavailable. Set only when not available.
+                    enum:
+                        - project_assignment_required
+                        - machine_access_disabled
+                        - no_organization_issuer
+                        - multiple_organization_issuers
+                        - custom_domain_only
+                        - organization_disabled
+                        - turned_off
+                url:
+                    type: string
+                    description: The bound project's gateway MCP URL. Set only when available.
+            description: The project gateway an agent runtime must call, resolved from the agent's bound project under agent credential-management authorization.
+            required:
+                - available
         AgentServerConnection:
             type: object
             properties:
@@ -138517,6 +138798,13 @@ components:
                 - provider
                 - schedule
                 - enabled
+        SetSelfServeDisabledRequestBody:
+            type: object
+            properties:
+                disabled:
+                    type: boolean
+            required:
+                - disabled
         SetServerScopePinRequestBody:
             type: object
             properties:

@@ -26,7 +26,7 @@ import {
   type AdminOrganization,
   type ListOrganizationsParams,
 } from "@/lib/gramAdminApi";
-import { statusParams } from "@/lib/organizationFilters";
+import { statusParams, whitelistParams } from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
 
 import { BulkAccountType } from "./BulkAccountType";
@@ -129,6 +129,7 @@ export function OrganizationsList(): JSX.Element {
     account_types: search.type,
     trial_states: search.trial,
     ...statusParams(search),
+    ...whitelistParams(search),
     created_from: search.createdFrom,
     created_to: search.createdTo,
     min_members: search.minMembers,

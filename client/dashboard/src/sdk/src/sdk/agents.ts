@@ -9,6 +9,7 @@ import { agentsCreatePolicyGrant } from "../funcs/agentsCreatePolicyGrant.js";
 import { agentsDelete } from "../funcs/agentsDelete.js";
 import { agentsDeletePolicyGrant } from "../funcs/agentsDeletePolicyGrant.js";
 import { agentsGet } from "../funcs/agentsGet.js";
+import { agentsGetRuntimeGateway } from "../funcs/agentsGetRuntimeGateway.js";
 import { agentsList } from "../funcs/agentsList.js";
 import { agentsListConnectionBlocks } from "../funcs/agentsListConnectionBlocks.js";
 import { agentsListDelegableGrants } from "../funcs/agentsListDelegableGrants.js";
@@ -27,6 +28,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AgentConnectionBlock } from "../models/components/agentconnectionblock.js";
 import { AgentPolicyGrant } from "../models/components/agentpolicygrant.js";
 import { AgentPolicyGrantForm } from "../models/components/agentpolicygrantform.js";
+import { AgentRuntimeGateway } from "../models/components/agentruntimegateway.js";
 import { CheckAgentPolicyGrantsResult } from "../models/components/checkagentpolicygrantsresult.js";
 import { ManagedAgent } from "../models/components/managedagent.js";
 import {
@@ -57,6 +59,10 @@ import {
   GetAgentRequest,
   GetAgentSecurity,
 } from "../models/operations/getagent.js";
+import {
+  GetAgentRuntimeGatewayRequest,
+  GetAgentRuntimeGatewaySecurity,
+} from "../models/operations/getagentruntimegateway.js";
 import {
   ListAgentConnectionBlocksRequest,
   ListAgentConnectionBlocksResponse,
@@ -231,6 +237,25 @@ export class Agents extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ManagedAgent> {
     return unwrapAsync(agentsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRuntimeGateway agents
+   *
+   * @remarks
+   * Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.
+   */
+  async getRuntimeGateway(
+    request: GetAgentRuntimeGatewayRequest,
+    security?: GetAgentRuntimeGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AgentRuntimeGateway> {
+    return unwrapAsync(agentsGetRuntimeGateway(
       this,
       request,
       security,

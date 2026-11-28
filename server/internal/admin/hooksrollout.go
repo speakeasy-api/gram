@@ -205,7 +205,7 @@ func (s *Service) organizationHooksRolloutResult(ctx context.Context, organizati
 		result.Eligible = new(true)
 		return result, nil
 	}
-	if pin, source := pins.Effective(); pin != nil {
+	if pin, source := pins.Effective(organizationID); pin != nil {
 		result.Source = gen.AdminHooksRolloutSource(source)
 		result.EffectiveVersion = new(pin.Version)
 		result.Eligible = new(pin.Version >= current)

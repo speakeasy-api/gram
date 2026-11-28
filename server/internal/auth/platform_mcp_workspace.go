@@ -15,15 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
-
-// ErrUserHasOrganization refuses a Platform MCP workspace for a user who
-// already belongs to an organization. Only a user with no organization may
-// create one from the OAuth flow.
-var ErrUserHasOrganization = errors.New("user already belongs to an organization")
 
 // ErrUserHasPendingInvitation refuses a Platform MCP workspace for a user who
 // has a live invitation to an existing organization. Such a user joins that
@@ -190,12 +186,8 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 		}
 	}()
 
-	existing, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
-	if err != nil {
-		return empty, fmt.Errorf("list user organizations: %w", err)
-	}
-	if len(existing) > 0 {
-		return empty, ErrUserHasOrganization
+	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
+		return empty, fmt.Errorf("check organization cap: %w", err)
 	}
 	invitations, err := s.orgRepo.ListPendingInvitationsForEmail(ctx, conv.NormalizeEmail(actorEmail))
 	if err != nil {

@@ -326,7 +326,7 @@ func handleToolsCall(
 		}
 	}
 
-	userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	savedConfig, userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -355,24 +355,26 @@ func handleToolsCall(
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
 
 	toolCallEnv := toolconfig.ToolCallEnv{
-		UserConfig: userConfig,
-		SystemEnv:  systemConfig,
-		GramEmail:  gramEmail,
-		GramChatID: payload.chatID,
-		MCPClient:  clientIdentity,
+		SystemEnv:   systemConfig,
+		SavedConfig: savedConfig,
+		UserConfig:  userConfig,
+		GramEmail:   gramEmail,
+		GramChatID:  payload.chatID,
+		MCPClient:   clientIdentity,
 		Credentials: &toolconfig.CredentialReport{
-			Sent:            nil,
-			GrantFailure:    "",
-			CallerVariables: nil,
-			ServerVariable:  "",
-			Challenges:      nil,
+			Sent:           nil,
+			GrantFailure:   "",
+			ServerVariable: "",
+			Challenges:     nil,
 		},
 	}
 
-	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, payload.projectID, toolsetID)
+	settings, err := loadVariableSettings(ctx, mcpMetadataRepo, payload.projectID, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
+	filterOmittedEnvVars(toolCallEnv, settings)
+	filterRequestVariables(ctx, logger, toolCallEnv, settings, credentialSources, plan.Kind == gateway.ToolKindFunction)
 
 	descriptor := plan.Descriptor
 
@@ -781,11 +783,6 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return none
 	}
 	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
-		if !credential.System && slices.ContainsFunc(report.CallerVariables, func(variable string) bool {
-			return strings.EqualFold(variable, credential.Variable)
-		}) {
-			return credentialSourceCaller
-		}
 		if source, ok := sources[strings.ToLower(credential.Variable)]; ok && !credential.System {
 			return source
 		}
@@ -892,10 +889,15 @@ func resolveUserConfiguration(
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
+) (*toolconfig.CaseInsensitiveEnv, *toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
+	savedConfig := toolconfig.NewCaseInsensitiveEnv()
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
 	sources := make(map[string]credentialSource)
-	set := func(key, value string, source credentialSource) {
+	setSaved := func(key, value string, source credentialSource) {
+		savedConfig.Set(key, value)
+		sources[strings.ToLower(key)] = source
+	}
+	setUser := func(key, value string, source credentialSource) {
 		userConfig.Set(key, value)
 		sources[strings.ToLower(key)] = source
 	}
@@ -906,45 +908,59 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
+			return nil, nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
-			set(k, v, credentialSourceSaved)
+			setSaved(k, v, credentialSourceSaved)
 		}
 	}
 
 	for k, v := range payload.mcpEnvVariables {
-		set(k, v, credentialSourceCaller)
+		setUser(k, v, credentialSourceCaller)
 	}
 
-	// Process OAuth tokens for HTTP tools
+	// Process OAuth tokens for HTTP tools; resolved tokens take precedence over request headers.
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
 				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
-						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							set(envVar, token.Token, token.source())
+						if !strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							continue
 						}
+						// A token the request itself carried is a per-request value, like a header.
+						if token.presented {
+							setUser(envVar, token.Token, token.source())
+							continue
+						}
+						setSaved(envVar, token.Token, token.source())
+						userConfig.Delete(envVar)
 					}
 				}
 			}
 		}
 	}
 
-	// Process OAuth tokens for Function tools
+	// Process OAuth tokens for Function tools; resolved tokens take precedence over request headers.
 	if plan != nil && plan.Kind == gateway.ToolKindFunction && plan.Function.AuthInput != nil {
 		for _, token := range payload.oauthTokenInputs {
-			if plan.Function.AuthInput.Type == "oauth2" {
-				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+			if plan.Function.AuthInput.Type != "oauth2" {
+				continue
 			}
+			// A token the request itself carried is a per-request value, like a header.
+			if token.presented {
+				userConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+				continue
+			}
+			savedConfig.Set(plan.Function.AuthInput.Variable, token.Token)
+			userConfig.Delete(plan.Function.AuthInput.Variable)
 		}
 	}
 
-	return userConfig, sources, nil
+	return savedConfig, userConfig, sources, nil
 }
 
 // source says whose sign-in the token is.
@@ -1157,60 +1173,113 @@ type toolCallResult struct {
 	IsError           bool              `json:"isError,omitzero"`
 }
 
-// filterOmittedEnvVars filters environment variables based on MCP metadata configuration.
-// It removes variables from SystemEnv and UserConfig that are not meant to be sourced from those locations.
-func filterOmittedEnvVars(
+// variableSettings is a server's per-variable provider settings.
+type variableSettings struct {
+	// providedBy maps a lowercased variable name to who provides it: "system", "user" or "none".
+	providedBy map[string]string
+
+	// complete says the settings list every variable the server sources: one
+	// they do not list is sourced from nowhere. False for a server set up
+	// before these settings, whose unlisted variables keep their own layers.
+	complete bool
+}
+
+// loadVariableSettings reads a toolset-backed server's per-variable provider settings.
+func loadVariableSettings(
 	ctx context.Context,
-	env toolconfig.ToolCallEnv,
 	repo *mcpmetadata_repo.Queries,
 	projectID uuid.UUID,
 	toolsetID uuid.UUID,
-) error {
+) (variableSettings, error) {
+	settings := variableSettings{providedBy: map[string]string{}, complete: false}
+
 	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID, ToolsetBackend: true})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
+			return settings, nil
 		}
-		return fmt.Errorf("get metadata for toolset: %w", err)
+		return settings, fmt.Errorf("get metadata for toolset: %w", err)
 	}
 
 	mcpMeta, err := mcpmetadata.ToMCPMetadata(ctx, repo, rawMetadata)
 	if err != nil {
-		return fmt.Errorf("convert to mcp metadata: %w", err)
+		return settings, fmt.Errorf("convert to mcp metadata: %w", err)
 	}
 
-	// Fallback behavior for backwards compatibility
-	if mcpMeta.DefaultEnvironmentID == nil {
-		return nil
-	}
-
-	systemKeysToRetain := make(map[string]bool)
-	userKeysToRetain := make(map[string]bool)
 	for _, config := range mcpMeta.EnvironmentConfigs {
-		switch config.ProvidedBy {
-		case "system":
-			systemKeysToRetain[strings.ToLower(config.VariableName)] = true
-		case "user":
-			userKeysToRetain[strings.ToLower(config.VariableName)] = true
-		}
+		settings.providedBy[strings.ToLower(config.VariableName)] = config.ProvidedBy
+	}
+	// Fallback behavior for backwards compatibility
+	settings.complete = mcpMeta.DefaultEnvironmentID != nil
+
+	return settings, nil
+}
+
+// filterOmittedEnvVars filters environment variables based on MCP metadata configuration.
+// It removes variables from SystemEnv, SavedConfig and UserConfig that are not meant to be sourced from those locations.
+func filterOmittedEnvVars(env toolconfig.ToolCallEnv, settings variableSettings) {
+	if !settings.complete {
+		return
 	}
 
 	// Delete environment variables that are not meant to be sourced from the given location
 	// E.G. if a variable is set to "system" it should not be sourced from the user config
 	// Removes anything not explicitly listed as a system or user variable
 	for _, key := range env.SystemEnv.Keys() {
-		if !systemKeysToRetain[key] {
+		if settings.providedBy[key] != "system" {
 			env.SystemEnv.Delete(key)
 		}
 	}
+	for _, key := range env.SavedConfig.Keys() {
+		if settings.providedBy[key] != "user" {
+			env.SavedConfig.Delete(key)
+		}
+	}
 	for _, key := range env.UserConfig.Keys() {
-		if !userKeysToRetain[key] {
+		if settings.providedBy[key] != "user" {
 			env.UserConfig.Delete(key)
 		}
 	}
+}
 
-	return nil
+// filterRequestVariables removes request-header variables the server does not
+// take from a request. It applies on every server, with or without complete
+// settings:
+//
+//   - a variable set to "system" or "none" is never taken from a header;
+//   - for a function call, a header does not replace a value that system
+//     environment or saved configuration sets, unless the variable is set to
+//     "user". A function reads its variables however its code chooses, so its
+//     configured values stay together.
+//
+// sources says which UserConfig values are headers; a token the request
+// presented is not one.
+func filterRequestVariables(
+	ctx context.Context,
+	logger *slog.Logger,
+	env toolconfig.ToolCallEnv,
+	settings variableSettings,
+	sources map[string]credentialSource,
+	functionCall bool,
+) {
+	for _, key := range env.UserConfig.Keys() {
+		if sources[key] != credentialSourceCaller {
+			continue
+		}
+		switch settings.providedBy[key] {
+		case "user":
+			continue
+		case "system", "none":
+			logger.WarnContext(ctx, "request variable not used: the server does not take it from a request", attr.SlogEnvVarName(key))
+			env.UserConfig.Delete(key)
+		default:
+			if functionCall && env.ConfiguredGet(key) != "" {
+				logger.WarnContext(ctx, "request variable not used: the function's configured value applies", attr.SlogEnvVarName(key))
+				env.UserConfig.Delete(key)
+			}
+		}
+	}
 }
 
 // toolInputRejection extracts the proxy's input refusal from its error body.

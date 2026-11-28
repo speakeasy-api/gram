@@ -965,6 +965,7 @@ func newStreamsCommand() *cli.Command {
 					logger,
 					meterProvider,
 					metricPub,
+					replicaDB,
 				))
 				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
 					logger,
