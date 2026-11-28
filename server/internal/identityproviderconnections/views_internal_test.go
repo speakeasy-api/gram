@@ -105,6 +105,5 @@ func TestAccessDescription_ReplacesTheInstructionOnceObserved(t *testing.T) {
 	require.Equal(t, accessInstruction, accessDescription(new(false)))
 	require.Equal(t, "Speakeasy can read your apps", accessDescription(new(true)))
 	require.Contains(t, accessInstruction, "multi-factor authentication")
-	require.Contains(t, RequiredOktaAdminRoles, "Application Administrator (org-wide)")
-	require.Contains(t, RequiredOktaAdminRoles, "Read-only Administrator")
+	require.Equal(t, []string{"Application Administrator (org-wide)"}, RequiredOktaAdminRoles)
 }
