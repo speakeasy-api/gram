@@ -7,8 +7,8 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Only the dashboard chat load (`chat.load`) can read through shadows, and only
-for projects that capture shadows; messages without a shadow fall back to
+**Only the dashboard chat load (`chat.load`) and hook reconciliation can read
+through shadows, and only for projects that capture shadows; messages without a shadow fall back to
 plaintext. Every other reader still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
@@ -131,6 +131,25 @@ fails the page. Plaintext is never served in place of an existing shadow.
 While plaintext is kept, a shadow that does not match its plaintext row is
 counted under the `stale` read outcome, and a prod Datadog monitor pages on
 any occurrence. That check goes away with the plaintext.
+
+Hook ingest (`/rpc/hooks.ingest`) uses the same capture allowlist when it matches a
+prompt attachment to its prompt by text hash, the one hook path that reads
+stored message bodies. Only a request whose attachments carry a prompt hash, in
+a chat that has user prompts, reads shadows. It opens the chat's prompts newest
+first, up to 16 per `LoadMany` call, and stops once every hash has matched. An
+attachment usually names a recent prompt, so a request makes one call, whatever
+the session length. An attachment whose hash matches no prompt makes the
+request open every prompt in the chat, in pages. The shadows are opened before
+the AHP attachment transaction begins, so a request never holds two pooled
+connections or decrypts under the per-chat lock. For other projects the
+allowlist check is an in-memory lookup and adds no query. A stale or
+unauthentic shadow fails the read: the error is logged and counted as `stale`,
+and that request's hashed attachments are stored without a prompt match rather
+than matched against plaintext. Attachments without a hash still go to the
+latest prompt. Any other read failure, such as a database or key provider
+error, fails the attachment write like any other failure on that path. Hook writes that skip a message already stored, and the Claude
+transcript upload, compare external message IDs rather than bodies, so they
+read no body.
 
 Messages whose body exceeds the inline limit keep it in a raw content asset.
 The shadow covers only the inline columns, so `chat.load` still reads those

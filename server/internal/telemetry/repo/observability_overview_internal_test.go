@@ -38,8 +38,7 @@ func TestToolCallSummariesCanServe_ClassifiesEveryScopeField(t *testing.T) {
 	}
 
 	typ := reflect.TypeFor[GetOverviewSummaryParams]()
-	for i := range typ.NumField() {
-		field := typ.Field(i)
+	for field := range typ.Fields() {
 		_, isSupported := supported[field.Name]
 		_, isUnsupported := unsupported[field.Name]
 		require.NotEqual(t, isSupported, isUnsupported, "classify GetOverviewSummaryParams.%s as supported or unsupported by mcp_tool_call_summaries", field.Name)

@@ -2845,6 +2845,15 @@ SET url = @url, display_name = @display_name, enabled = @enabled,
     deleted_at = sqlc.narg('deleted_at')
 WHERE id = @id;
 
+-- name: TryAcquireChatPromptCorrelationLockFixture :one
+-- Test-only non-blocking probe of the production per-chat prompt correlation
+-- lock key. Run it outside a transaction: the transaction-level lock it takes
+-- when the key is free is released when the statement ends.
+SELECT pg_try_advisory_xact_lock(hashtextextended(
+  'chat-prompt-correlation:' || (@project_id::uuid)::text || ':' || (@chat_id::uuid)::text,
+  0
+))::boolean AS acquired;
+
 -- name: SetOrganizationServingStateFixture :exec
 -- Sets the two flags that decide whether an organization's MCP servers are
 -- served at all.

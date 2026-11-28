@@ -9002,6 +9002,28 @@ func (q *Queries) TransferAttachmentToReplacementOwnerFixture(ctx context.Contex
 	return result.RowsAffected(), nil
 }
 
+const tryAcquireChatPromptCorrelationLockFixture = `-- name: TryAcquireChatPromptCorrelationLockFixture :one
+SELECT pg_try_advisory_xact_lock(hashtextextended(
+  'chat-prompt-correlation:' || ($1::uuid)::text || ':' || ($2::uuid)::text,
+  0
+))::boolean AS acquired
+`
+
+type TryAcquireChatPromptCorrelationLockFixtureParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+// Test-only non-blocking probe of the production per-chat prompt correlation
+// lock key. Run it outside a transaction: the transaction-level lock it takes
+// when the key is free is released when the statement ends.
+func (q *Queries) TryAcquireChatPromptCorrelationLockFixture(ctx context.Context, arg TryAcquireChatPromptCorrelationLockFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireChatPromptCorrelationLockFixture, arg.ProjectID, arg.ChatID)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
+}
+
 const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
 SELECT pg_try_advisory_lock(
     hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
