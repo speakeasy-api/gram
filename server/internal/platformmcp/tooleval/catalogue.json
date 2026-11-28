@@ -881,6 +881,28 @@
       }
     },
     {
+      "name": "list_workload_identities",
+      "description": "List the trusted workload issuers and admitted subjects visible in one exact project context, including organization-tier and selected project-tier policy, subject match mode, wildcard activity, and assigned agent. Requires workload:read. Returns configuration only, never assertions, access tokens, private keys, or other credentials.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_slug": {
+            "type": "string",
+            "description": "the project's slug, as list_projects returns it; it establishes organization context and includes that project's policy tier"
+          }
+        },
+        "required": ["project_slug"],
+        "additionalProperties": false
+      },
+      "read_only": true,
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      }
+    },
+    {
       "name": "get_workload_assertion_reuse",
       "description": "Read replay protection for one exact organization-tier workload issuer. Requires workload:read. The exact project establishes organization context, not policy scope. Returns safe configuration only, never assertions, tokens, keys, or admissions.",
       "input_schema": {
