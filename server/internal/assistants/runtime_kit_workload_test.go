@@ -55,23 +55,21 @@ func TestKitWorkloadSubjectGeneration(t *testing.T) {
 	t.Parallel()
 	r := assistantRuntimeRecord{ID: uuid.New()}
 	c := KitLocalCompositionConfig{
-		Environment: "production",
-		ateIdentity: &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
+		Environment:     "production",
+		WorkloadSubject: "local-exact-subject",
 	}
+	_, _, err := kitWorkloadSubject(r, c, "gateway-one")
+	require.Error(t, err, "non-local environment must fail closed for local workload provisioning")
+	c.Environment = "local"
 	subject, sa, err := kitWorkloadSubject(r, c, "gateway-one")
-	require.NoError(t, err)
-	require.Equal(t, "actor/prod-space/actor-one", subject)
-	require.Empty(t, sa)
-	_, _, err = kitWorkloadSubject(r, c, "")
-	require.Error(t, err)
-	c.ateIdentity = nil
-	_, _, err = kitWorkloadSubject(r, c, "gateway-one")
-	require.Error(t, err, "non-local environment without ATE identity must fail closed")
-	c.Environment, c.WorkloadSubject = "local", "local-exact-subject"
-	subject, sa, err = kitWorkloadSubject(r, c, "gateway-one")
 	require.NoError(t, err)
 	require.Equal(t, c.WorkloadSubject, subject)
 	require.Empty(t, sa)
+	_, _, err = kitWorkloadSubject(r, c, "")
+	require.Error(t, err)
+	c.WorkloadSubject = ""
+	_, _, err = kitWorkloadSubject(r, c, "gateway-one")
+	require.Error(t, err)
 }
 
 func TestKitWorkloadInferenceRequiresBothPolicies(t *testing.T) {
@@ -157,12 +155,12 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
 	c := KitLocalCompositionConfig{
-		Environment:            "production",
-		WorkloadIssuerURL:      "https://ate-issuer.example.com",
-		WorkloadJWKSURL:        "https://ate-issuer.example.com/jwks",
+		Environment:            "local",
+		WorkloadIssuerURL:      "https://local-issuer.example.com",
+		WorkloadJWKSURL:        "https://local-issuer.example.com/jwks",
 		WorkloadIssuerBaseURL:  "https://auth.example.com",
+		WorkloadSubject:        "local-subject-one",
 		MCPUserSessionIssuerID: issuer,
-		ateIdentity:            &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-one"},
 	}
 	return core, db, r, resolved, c, grant.ID
 }
@@ -183,9 +181,9 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.NotEmpty(t, baseline, "canonical root admission exists before runtime provisioning")
 	first, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
-	require.Empty(t, first.Audience, "ATE egress-injected workload omits token-exchange broker audience")
+	require.NotEmpty(t, first.Audience)
 	c2 := c
-	c2.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	c2.WorkloadSubject = "local-subject-two"
 	second, err := core.provisionKitWorkload(t.Context(), r, c2, identity, "generation-two")
 	require.NoError(t, err)
 	require.Equal(t, first.IssuerID, second.IssuerID)
@@ -290,7 +288,6 @@ func TestKitWorkloadDBClosesLegacySecurityAdmit(t *testing.T) {
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	c.ateIdentity = nil
 	c.Environment, c.WorkloadSubject = "local", "local-generation-one"
 	first, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
@@ -427,7 +424,7 @@ func TestKitWorkloadDBDifferentAssistantsShareIssuerNotSubjects(t *testing.T) {
 	first, err := core.provisionKitWorkload(t.Context(), firstRuntime, config, firstIdentity, "shared-generation")
 	require.NoError(t, err)
 	secondConfig := config
-	secondConfig.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	secondConfig.WorkloadSubject = "local-subject-two"
 	second, err := core.provisionKitWorkload(t.Context(), secondRuntime, secondConfig, secondIdentity, "shared-generation")
 	require.NoError(t, err)
 	require.Equal(t, first.IssuerID, second.IssuerID)
@@ -443,7 +440,6 @@ func TestKitWorkloadDBDifferentAssistantsShareIssuerNotSubjects(t *testing.T) {
 		require.Equal(t, binding.Identity.AgentID, assignments[0].AgentID)
 	}
 
-	config.ateIdentity = nil
 	config.Environment, config.WorkloadSubject = "local", "local-first-assistant-generation"
 	local, err := core.provisionKitWorkload(t.Context(), firstRuntime, config, firstIdentity, "local-generation-one")
 	require.NoError(t, err)
@@ -490,7 +486,6 @@ func TestKitWorkloadDBConcurrentCrossProjectLocalSubject(t *testing.T) {
 	secondIdentity := resolved
 	require.NotEqual(t, firstIdentity.AgentID, secondIdentity.AgentID)
 	secondRuntime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
-	config.ateIdentity = nil
 	config.Environment, config.WorkloadSubject = "local", "cross-project-shared-subject"
 	type result struct {
 		binding *KitWorkloadBinding
@@ -610,7 +605,7 @@ func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
 	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.ErrorContains(t, err, "cannot be reused", "deleted admissions under a deleted issuer still fence old assertions")
 	c2 := c
-	c2.ateIdentity = &kitATEWorkloadIdentity{Atespace: "prod-space", ActorName: "actor-two"}
+	c2.WorkloadSubject = "local-subject-two"
 	second, err := core.provisionKitWorkload(t.Context(), r, c2, identity, "generation-two")
 	require.NoError(t, err)
 	require.NotEqual(t, first.IssuerID, second.IssuerID)
