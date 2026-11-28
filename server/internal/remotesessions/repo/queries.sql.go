@@ -351,6 +351,8 @@ WITH due AS (
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > $1::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > $1::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > $1::timestamptz)
     AND COALESCE(s.last_validated_at, s.created_at) <= $2::timestamptz
     AND (s.last_refresh_attempt_at IS NULL OR s.last_refresh_attempt_at <= $3::timestamptz)
     AND lower(split_part(i.issuer, '/', 3)) <> ALL(COALESCE($4::text[], '{}'::text[]))
@@ -575,6 +577,8 @@ WITH due AS (
     AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $1::timestamptz)
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $1::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > $1::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > $1::timestamptz)
     AND s.updated_at <= $2::timestamptz
     AND (
       s.last_refresh_attempt_at IS NULL
@@ -3538,11 +3542,14 @@ func (q *Queries) ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx contex
 }
 
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, access_expires_at, refresh_token_encrypted, refresh_token_org_encrypted, authorized_at, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
-FROM remote_sessions
-WHERE subject_urn = $1
-  AND remote_session_client_id = $2
-  AND deleted IS FALSE
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_token_org_encrypted, s.authorized_at, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND s.deleted IS FALSE
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp())
 `
 
 type GetActiveRemoteSessionParams struct {
@@ -3550,9 +3557,10 @@ type GetActiveRemoteSessionParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
-// Look up the active remote_session for a (subject, client) binding.
-// Single-row exact lookup; uniqueness enforced by the partial unique
-// index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
+// Look up a remote_session that remains inside the client's independent
+// inactivity and maximum-duration windows. Legacy NULL settings do not expire
+// a session. Single-row exact lookup; uniqueness is enforced by the partial
+// unique index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
 func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getActiveRemoteSession, arg.SubjectUrn, arg.RemoteSessionClientID)
 	var i RemoteSession
@@ -3603,6 +3611,8 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp())
 `
 
 type GetActiveRemoteSessionInTenantParams struct {
@@ -3802,6 +3812,8 @@ WHERE s.id = $1
   AND s.refresh_expires_at IS NULL
   AND (s.access_expires_at IS NULL OR s.access_expires_at > $2::timestamptz)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $2::timestamptz)
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > $2::timestamptz)
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > $2::timestamptz)
   AND COALESCE(s.last_validated_at, s.created_at) <= $3::timestamptz
   AND EXISTS (
     SELECT 1
@@ -4125,6 +4137,8 @@ WHERE s.id = $3
   AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $2::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $2::timestamptz)
+  AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > $2::timestamptz)
+  AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > $2::timestamptz)
   AND s.updated_at <= $4::timestamptz
 `
 
@@ -6844,6 +6858,8 @@ WITH bound AS (
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > $5::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $5::timestamptz)
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > $5::timestamptz)
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > $5::timestamptz)
     AND c.deleted IS FALSE
     AND (usi.project_id IS NULL OR p.id IS NOT NULL)
     AND COALESCE(p.organization_id, usi.organization_id) = ANY($6::text[])
@@ -7479,6 +7495,8 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp())
 `
 
 type GetTenantUserRemoteSessionParams struct {
@@ -7550,6 +7568,8 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > clock_timestamp())
+ AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > clock_timestamp())
 `
 
 type GetTenantUserRemoteSessionForClientParams struct {
@@ -12305,9 +12325,13 @@ SELECT
   s.refresh_token_org_encrypted,
   ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
-    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now()))::boolean AS can_refresh,
   (CASE
     WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+      AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now())
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
@@ -12518,9 +12542,13 @@ SELECT
   s.refresh_token_org_encrypted,
   ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
-    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())
+    AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+    AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now()))::boolean AS can_refresh,
   (CASE
     WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (c.session_inactivity_timeout IS NULL OR COALESCE(s.last_used_at, s.authorized_at, s.created_at) + c.session_inactivity_timeout > now())
+      AND (c.session_maximum_duration IS NULL OR COALESCE(s.authorized_at, s.created_at) + c.session_maximum_duration > now())
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
@@ -16564,6 +16592,30 @@ func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg S
 	return i, err
 }
 
+const setRemoteSessionClientLifetimeFixture = `-- name: SetRemoteSessionClientLifetimeFixture :exec
+UPDATE remote_session_clients
+SET session_inactivity_timeout = $1,
+    session_maximum_duration = $2
+WHERE id = $3 AND project_id = $4
+`
+
+type SetRemoteSessionClientLifetimeFixtureParams struct {
+	SessionInactivityTimeout pgtype.Interval
+	SessionMaximumDuration   pgtype.Interval
+	ID                       uuid.UUID
+	ProjectID                uuid.NullUUID
+}
+
+func (q *Queries) SetRemoteSessionClientLifetimeFixture(ctx context.Context, arg SetRemoteSessionClientLifetimeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionClientLifetimeFixture,
+		arg.SessionInactivityTimeout,
+		arg.SessionMaximumDuration,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const setRemoteSessionIssuerMetadataTracking = `-- name: SetRemoteSessionIssuerMetadataTracking :exec
 UPDATE remote_session_issuers
 SET
@@ -16643,6 +16695,33 @@ func (q *Queries) SetRemoteSessionIssuerURLFixture(ctx context.Context, arg SetR
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionLifetimeFixture = `-- name: SetRemoteSessionLifetimeFixture :exec
+UPDATE remote_sessions AS s
+SET authorized_at = $1,
+    last_used_at = $2
+FROM remote_session_clients AS c
+WHERE s.id = $3
+  AND c.id = s.remote_session_client_id
+  AND c.project_id = $4
+`
+
+type SetRemoteSessionLifetimeFixtureParams struct {
+	AuthorizedAt pgtype.Timestamptz
+	LastUsedAt   pgtype.Timestamptz
+	ID           uuid.UUID
+	ProjectID    uuid.NullUUID
+}
+
+func (q *Queries) SetRemoteSessionLifetimeFixture(ctx context.Context, arg SetRemoteSessionLifetimeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionLifetimeFixture,
+		arg.AuthorizedAt,
+		arg.LastUsedAt,
+		arg.ID,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const setRemoteSessionRefreshExpiresAtIfUnknown = `-- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows
@@ -19376,6 +19455,7 @@ INSERT INTO remote_sessions (
     user_session_issuer_id,
     remote_session_client_id,
     organization_id,
+    authorized_at,
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
@@ -19401,6 +19481,7 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = $3
     ),
+    clock_timestamp(),
     $4::text,
     $5,
     $6,
@@ -19421,6 +19502,8 @@ DO UPDATE SET
     -- Same client, so the same organization; this fills rows written before
     -- the column existed.
     organization_id = EXCLUDED.organization_id,
+    authorized_at = EXCLUDED.authorized_at,
+    last_used_at = NULL,
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
@@ -19537,6 +19620,7 @@ INSERT INTO remote_sessions (
     user_session_issuer_id,
     remote_session_client_id,
     organization_id,
+    authorized_at,
     access_expires_at,
     authorization_expires_at,
     refresh_expires_at,
@@ -19560,6 +19644,7 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = $3
     ),
+    clock_timestamp(),
     $4,
     $5,
     $6,
@@ -19578,6 +19663,8 @@ DO UPDATE SET
     -- Same client, so the same organization; this fills rows written before
     -- the column existed.
     organization_id = EXCLUDED.organization_id,
+    authorized_at = EXCLUDED.authorized_at,
+    last_used_at = NULL,
     access_expires_at = EXCLUDED.access_expires_at,
     authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
