@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -39,7 +40,7 @@ func AuthorizationChallengesURL(siteURL *url.URL, organizationSlug string) strin
 		return ""
 	}
 
-	return siteURL.JoinPath(organizationSlug, "access", "challenges").String()
+	return dashboardlinks.AccessChallenges(organizationSlug).URL(siteURL)
 }
 
 // RequestAccessURLParams holds optional parameters for building a request access URL.
@@ -59,20 +60,7 @@ func RequestAccessURL(siteURL *url.URL, organizationSlug string, params RequestA
 		return ""
 	}
 
-	u := siteURL.JoinPath(organizationSlug, "request-access")
-	q := u.Query()
-	if params.Scope != "" {
-		q.Set("scope", params.Scope)
-	}
-	if params.ResourceID != "" {
-		q.Set("resource_id", params.ResourceID)
-	}
-	if params.ResourceName != "" {
-		q.Set("resource_name", params.ResourceName)
-	}
-	u.RawQuery = q.Encode()
-
-	return u.String()
+	return dashboardlinks.RequestAccess(organizationSlug, params.Scope, params.ResourceID, params.ResourceName).URL(siteURL)
 }
 
 // IsServerPermissionDenied reports a denial from ServerPermissionDenied.

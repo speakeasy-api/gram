@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
@@ -144,7 +145,7 @@ func (r *PostgresReader) ListOrganizationEvents(ctx context.Context, principal P
 		Window:       window,
 		Events:       events,
 		More:         more,
-		EventFeedURL: r.eventFeed.dashboardURL.JoinPath(organization.Slug, "data", "event-feed").String(),
+		EventFeedURL: dashboardlinks.EventFeed(organization.Slug).URL(r.eventFeed.dashboardURL),
 	}, nil
 }
 

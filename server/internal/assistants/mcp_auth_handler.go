@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -356,7 +357,7 @@ func (s *Service) mcpAuthRecovery(ctx context.Context, projectID, assistantID, t
 		return nil
 	}
 	recovery := &oauthui.RecoveryLink{
-		URL:   s.core.siteURL.JoinPath("@self", "projects", "default", "assistants").String(),
+		URL:   dashboardlinks.Assistants(dashboardlinks.SelfOrganization, dashboardlinks.DefaultProject).URL(s.core.siteURL),
 		Label: "Open assistants",
 	}
 	if projectID == uuid.Nil || assistantID == uuid.Nil || threadID == uuid.Nil {
@@ -385,13 +386,12 @@ func (s *Service) mcpAuthRecovery(ctx context.Context, projectID, assistantID, t
 	if assistant.ProjectID != projectID {
 		return recovery
 	}
-	destination := s.core.siteURL.JoinPath(assistant.OrganizationSlug, "projects", assistant.ProjectSlug, "assistants", assistantID.String())
+	orgSlug, projectSlug := assistant.OrganizationSlug, assistant.ProjectSlug
 	recovery.Label = "Open assistant"
+	var destination dashboardlinks.Link
 	switch thread.SourceKind {
 	case sourceKindSetup:
-		query := destination.Query()
-		query.Set("threadId", thread.ChatID.String())
-		destination.RawQuery = query.Encode()
+		destination = dashboardlinks.AssistantThread(orgSlug, projectSlug, assistantID.String(), thread.ChatID.String())
 		recovery.Label = "Return to conversation"
 	case sourceKindDashboard:
 		// The chat route serves only the project's managed assistant.
@@ -399,16 +399,15 @@ func (s *Service) mcpAuthRecovery(ctx context.Context, projectID, assistantID, t
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			s.logger.WarnContext(ctx, "load managed assistant recovery destination", attr.SlogError(err))
 		}
+		destination = dashboardlinks.Assistant(orgSlug, projectSlug, assistantID.String())
 		if err == nil && managed.ID == assistantID {
-			destination = s.core.siteURL.JoinPath(assistant.OrganizationSlug, "projects", assistant.ProjectSlug, "chat", thread.ChatID.String())
+			destination = dashboardlinks.Chat(orgSlug, projectSlug, thread.ChatID.String())
 			recovery.Label = "Return to conversation"
 		}
 	default:
-		query := destination.Query()
-		query.Set("tab", "sessions")
-		destination.RawQuery = query.Encode()
+		destination = dashboardlinks.AssistantSessions(orgSlug, projectSlug, assistantID.String())
 	}
-	recovery.URL = destination.String()
+	recovery.URL = destination.URL(s.core.siteURL)
 	return recovery
 }
 

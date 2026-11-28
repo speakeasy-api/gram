@@ -15,7 +15,7 @@
  * alphanumerics and dashes) and is legal unescaped in a path.
  */
 
-const PORTABLE_PATH_PREFIX = "/@self";
+export const PORTABLE_PATH_PREFIX = "/@self";
 
 export function isPortablePath(pathname: string): boolean {
   return (

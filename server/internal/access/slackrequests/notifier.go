@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"slices"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
@@ -453,7 +453,5 @@ func (c *Cards) dashboardURL(ctx context.Context, request repo.AccessRequest) (s
 	if siteURL == nil {
 		return "", nil
 	}
-	link := siteURL.JoinPath(org.Slug, "access", "roles")
-	link.RawQuery = url.Values{"grant_user": {request.RequesterUserID}, "scope": {request.Scope}, "request": {request.ID.String()}}.Encode()
-	return link.String(), nil
+	return dashboardlinks.AccessGrant(org.Slug, request.RequesterUserID, request.Scope, "", "", request.ID.String()).URL(siteURL), nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -185,15 +186,16 @@ func approvals(ctx context.Context, queries *repo.Queries, organizationID, userI
 	}
 	out := make([]HomeApproval, 0, len(rows))
 	for _, row := range rows {
-		query := url.Values{"tab": {"tool-approvals"}, "request": {row.ID.String()}}
 		out = append(out, HomeApproval{
 			ID:            row.ID.String(),
 			ProjectID:     row.ProjectID.String(),
 			PolicyName:    row.PolicyName,
 			ToolName:      row.ToolName,
 			RequesterName: homeRequesterName(row.RequesterName, row.RequesterUrn),
-			URL:           links.project(row.ProjectSlug, query, "risk-policies"),
-			CanDecide:     !row.RequesterUserID.Valid || row.RequesterUserID.String != userID,
+			URL: links.project(row.ProjectSlug, func(organizationSlug, projectSlug string) dashboardlinks.Link {
+				return dashboardlinks.ToolApprovalRequest(organizationSlug, projectSlug, row.ID.String())
+			}),
+			CanDecide: !row.RequesterUserID.Valid || row.RequesterUserID.String != userID,
 		})
 	}
 	// A pending request on a disabled policy still counts: the viewer can
@@ -240,7 +242,7 @@ func mcpRequests(ctx context.Context, queries *repo.Queries, organizationID stri
 		out = append(out, HomeMCPRequest{
 			Name:        row.TargetRaw,
 			ProjectName: row.ProjectName,
-			URL:         links.project(row.ProjectSlug, url.Values{"tab": {"mcp-approvals"}}, "risk-policies"),
+			URL:         links.project(row.ProjectSlug, dashboardlinks.MCPApprovals),
 		})
 	}
 	return out, nil
@@ -261,7 +263,7 @@ func riskFindings(ctx context.Context, queries *repo.Queries, organizationID str
 			PolicyName:  row.PolicyName,
 			Severity:    homeFindingSeverity(row.PolicyLive.Bool, row.PolicyScore, row.Source, row.RuleID),
 			ProjectName: row.ProjectName,
-			URL:         links.project(row.ProjectSlug, nil, "risk-events"),
+			URL:         links.project(row.ProjectSlug, dashboardlinks.RiskEvents),
 			CreatedAt:   row.CreatedAt.Time,
 		})
 	}
@@ -341,8 +343,10 @@ func servers(ctx context.Context, queries *repo.Queries, organizationID string, 
 		out = append(out, HomeServer{
 			Name:        row.Name,
 			ProjectName: row.ProjectName,
-			URL:         links.project(row.ProjectSlug, nil, "mcp", mcpservers.DashboardRouteParam(row.Slug, row.ID)),
-			LogoURL:     logoURL,
+			URL: links.project(row.ProjectSlug, func(organizationSlug, projectSlug string) dashboardlinks.Link {
+				return dashboardlinks.MCPServer(organizationSlug, projectSlug, mcpservers.DashboardRouteParam(row.Slug, row.ID))
+			}),
+			LogoURL: logoURL,
 		})
 	}
 	return out, nil
@@ -354,15 +358,11 @@ type homeLinks struct {
 	orgSlug string
 }
 
-func (l homeLinks) project(projectSlug string, query url.Values, segments ...string) string {
+func (l homeLinks) project(projectSlug string, page func(organizationSlug, projectSlug string) dashboardlinks.Link) string {
 	if l.base == nil || l.orgSlug == "" || projectSlug == "" {
 		return ""
 	}
-	link := l.base.JoinPath(append([]string{l.orgSlug, "projects", projectSlug}, segments...)...)
-	if len(query) > 0 {
-		link.RawQuery = query.Encode()
-	}
-	return link.String()
+	return page(l.orgSlug, projectSlug).URL(l.base)
 }
 
 func parseDashboardURL(raw string) *url.URL {

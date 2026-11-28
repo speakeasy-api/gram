@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -1864,21 +1865,10 @@ func (s *Service) accessLinkURL(link accessLink) string {
 	if siteURL == nil {
 		return ""
 	}
-	accessURL := siteURL.JoinPath(link.OrgSlug, "access", link.Tab)
-	q := url.Values{}
-	q.Set("grant_user", link.RequesterUserID)
-	q.Set("scope", link.Scope)
-	if link.RequestID != "" {
-		q.Set("request", link.RequestID)
+	if link.Tab == accessLinkTabRequests {
+		return dashboardlinks.AccessRequestDecision(link.OrgSlug, link.RequesterUserID, link.Scope, link.ResourceID, link.ProjectID, link.RequestID).URL(siteURL)
 	}
-	if link.ResourceID != "" {
-		q.Set("resource_id", link.ResourceID)
-	}
-	if link.ProjectID != "" {
-		q.Set("project_id", link.ProjectID)
-	}
-	accessURL.RawQuery = q.Encode()
-	return accessURL.String()
+	return dashboardlinks.AccessGrant(link.OrgSlug, link.RequesterUserID, link.Scope, link.ResourceID, link.ProjectID, link.RequestID).URL(siteURL)
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user
