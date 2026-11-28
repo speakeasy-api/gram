@@ -52,6 +52,7 @@ func TestAuthorizeSessionRefusesNonWhitelistedOrganization(t *testing.T) {
 	require.NoError(t, err)
 	_, err = instance.authorizer.Authorize(goaCtx(t.Context(), "access", "listRoles"), session.SessionID, sessionScheme)
 	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	// Access returns on the next request once staff whitelist the organization.
 	setWhitelisted(t, ctx, instance, orgID, true)
