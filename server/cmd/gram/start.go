@@ -1744,6 +1744,12 @@ func newStartCommand() *cli.Command {
 				trialEmailNotifier,
 			)
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
+			authService.WithOrgCreationLimiter(ratelimit.New(
+				ratelimit.NewRedisStore(redisClient),
+				auth.OrgCreationLimitName,
+				auth.OrgCreationRate,
+				ratelimit.WithMetrics(meterProvider),
+			))
 			auth.Attach(mux, authService)
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may

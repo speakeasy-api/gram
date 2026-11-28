@@ -54,6 +54,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
@@ -117,6 +118,9 @@ const (
 	// authErrSelfServeDisabled tells a new user that staff turned self-serve
 	// signup off, so no organization was created for them.
 	authErrSelfServeDisabled authErr = "self_serve_disabled"
+	// authErrOrgCreationRateLimited tells a user they hit the per-user
+	// organization creation rate limit and should try again later.
+	authErrOrgCreationRateLimited authErr = "org_creation_rate_limited"
 )
 
 type AuthConfigurations struct {
@@ -171,6 +175,7 @@ type Service struct {
 	transferManager      *authsessions.TransferManager
 	tokens               signins.TokenRevoker
 	deliverer            *signins.Deliverer
+	orgCreationLimiter   *ratelimit.Limiter
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -236,6 +241,7 @@ func NewService(
 		transferManager:      authsessions.NewTransferManager(nonceStore),
 		tokens:               nil,
 		deliverer:            signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
+		orgCreationLimiter:   nil,
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -345,7 +351,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		if intent != nil && intent.PartnerCode != "" {
 			return s.redirectPartnerSignupError(ctx, payload, code, err, intent)
 		}
-		if code == authErrSelfServeDisabled {
+		if code == authErrSelfServeDisabled || code == authErrOrgCreationRateLimited {
 			logger.WarnContext(ctx, "signin refused", attr.SlogError(err), attr.SlogReason(string(code)))
 		} else {
 			logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
@@ -556,6 +562,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			if errors.Is(err, ErrSelfServeDisabled) {
 				return s.redirectPartnerSignupError(ctx, payload, authErrSelfServeDisabled, err, intent)
 			}
+			if errors.Is(err, ErrOrgCreationRateLimited) {
+				return s.redirectPartnerSignupError(ctx, payload, authErrOrgCreationRateLimited, err, intent)
+			}
 			if err != nil {
 				return s.redirectPartnerSignupError(ctx, payload, authErrInit, err, intent)
 			}
@@ -587,6 +596,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session, authenticatedAt)
 			if errors.Is(err, ErrSelfServeDisabled) {
 				return redirectWithError(authErrSelfServeDisabled, err)
+			}
+			if errors.Is(err, ErrOrgCreationRateLimited) {
+				return redirectWithError(authErrOrgCreationRateLimited, err)
 			}
 			if err != nil {
 				return redirectWithError(authErrInit, err)
@@ -1497,6 +1509,9 @@ func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName strin
 	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
 		return empty, fmt.Errorf("check organization cap: %w", err)
 	}
+	if err := s.allowOrgCreation(ctx, userID, opts.CreationSource); err != nil {
+		return empty, err
+	}
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
 	if err != nil {
 		return empty, err
@@ -1562,6 +1577,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	if err != nil {
 		if errors.Is(err, ErrSelfServeDisabled) {
 			return oops.E(oops.CodeForbidden, err, selfServeDisabledMessage)
+		}
+		if errors.Is(err, ErrOrgCreationRateLimited) {
+			return oops.E(oops.CodeRateLimitExceeded, err, orgCreationRateLimitedMessage)
 		}
 		if errors.Is(err, orgcap.ErrUserHasOrganization) {
 			return oops.E(oops.CodeConflict, err, "user already has an organization").LogWarn(ctx, s.logger)
@@ -1748,7 +1766,7 @@ func (s *Service) persistProvisionedOrganization(
 // /register — making that split persist would mean storing the flow origin on
 // the session, which is not worth it for this path.
 func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, code authErr, err error) (*gen.CallbackResult, error) {
-	if code == authErrSelfServeDisabled {
+	if code == authErrSelfServeDisabled || code == authErrOrgCreationRateLimited {
 		s.logger.WarnContext(ctx, "signup refused", attr.SlogError(err), attr.SlogReason(string(code)))
 	} else {
 		s.logger.ErrorContext(ctx, "signup failed", attr.SlogError(err), attr.SlogReason(string(code)))

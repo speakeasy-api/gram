@@ -1148,6 +1148,24 @@ type LogoutEverywhereGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RegisterRateLimitExceededResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "rate_limit_exceeded" error.
+type RegisterRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RegisterUnauthorizedResponseBody is the type of the "auth" service
 // "register" endpoint HTTP response body for the "unauthorized" error.
 type RegisterUnauthorizedResponseBody struct {
@@ -2840,6 +2858,21 @@ func NewLogoutEverywhereUnexpected(body *LogoutEverywhereUnexpectedResponseBody)
 // NewLogoutEverywhereGatewayError builds a auth service logoutEverywhere
 // endpoint gateway_error error.
 func NewLogoutEverywhereGatewayError(body *LogoutEverywhereGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterRateLimitExceeded builds a auth service register endpoint
+// rate_limit_exceeded error.
+func NewRegisterRateLimitExceeded(body *RegisterRateLimitExceededResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4977,6 +5010,30 @@ func ValidateLogoutEverywhereUnexpectedResponseBody(body *LogoutEverywhereUnexpe
 // ValidateLogoutEverywhereGatewayErrorResponseBody runs the validations
 // defined on logoutEverywhere_gateway_error_response_body
 func ValidateLogoutEverywhereGatewayErrorResponseBody(body *LogoutEverywhereGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterRateLimitExceededResponseBody runs the validations defined
+// on register_rate_limit_exceeded_response_body
+func ValidateRegisterRateLimitExceededResponseBody(body *RegisterRateLimitExceededResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

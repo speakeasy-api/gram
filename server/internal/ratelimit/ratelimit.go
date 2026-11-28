@@ -24,6 +24,11 @@ type Rate struct {
 	Burst    int
 }
 
+// PerHour is a Rate of n tokens per hour with a burst of n.
+func PerHour(n int) Rate {
+	return Rate{Tokens: n, Interval: time.Hour, Burst: n}
+}
+
 // PerMinute is a Rate of n tokens per minute with a burst of n.
 func PerMinute(n int) Rate {
 	return Rate{Tokens: n, Interval: time.Minute, Burst: n}
