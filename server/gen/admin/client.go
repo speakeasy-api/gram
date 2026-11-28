@@ -17,295 +17,299 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                                   goa.Endpoint
-	CallbackEndpoint                                goa.Endpoint
-	LogoutEndpoint                                  goa.Endpoint
-	GetSessionEndpoint                              goa.Endpoint
-	GetOrganizationFeaturesEndpoint                 goa.Endpoint
-	SetOrganizationFeatureEndpoint                  goa.Endpoint
-	GetOrganizationChatAnalysisSettingsEndpoint     goa.Endpoint
-	SetOrganizationChatAnalysisSettingsEndpoint     goa.Endpoint
-	TriggerOrganizationChatAnalysisEndpoint         goa.Endpoint
-	OpenOrganizationInDashboardEndpoint             goa.Endpoint
-	GetProjectEndpoint                              goa.Endpoint
-	UpdateOrganizationEndpoint                      goa.Endpoint
-	BulkUpdateAccountTypeEndpoint                   goa.Endpoint
-	DisableOrganizationEndpoint                     goa.Endpoint
-	EnableOrganizationEndpoint                      goa.Endpoint
-	GetOrganizationEndpoint                         goa.Endpoint
-	ListOrganizationMembersEndpoint                 goa.Endpoint
-	ListOrganizationProjectsEndpoint                goa.Endpoint
-	ListProjectMcpServersEndpoint                   goa.Endpoint
-	ListOrganizationActivityEndpoint                goa.Endpoint
-	ListUsersEndpoint                               goa.Endpoint
-	ListUserOrganizationsEndpoint                   goa.Endpoint
-	ListOrganizationsEndpoint                       goa.Endpoint
-	ExtendTrialEndpoint                             goa.Endpoint
-	CreateOrganizationEndpoint                      goa.Endpoint
-	RearmTrialEndpoint                              goa.Endpoint
-	GetOrganizationStatsEndpoint                    goa.Endpoint
-	RepairInferenceKeyEndpoint                      goa.Endpoint
-	GetInferenceKeysEndpoint                        goa.Endpoint
-	SetInferenceKeyMonthlyLimitEndpoint             goa.Endpoint
-	GetInferenceSpendHistoryEndpoint                goa.Endpoint
-	GetPaygBillingSummaryEndpoint                   goa.Endpoint
-	GetStripeCustomerEndpoint                       goa.Endpoint
-	SetStripeCustomerEndpoint                       goa.Endpoint
-	SetAdoptionDashboardURLEndpoint                 goa.Endpoint
-	GetStripeSubscriptionEndpoint                   goa.Endpoint
-	CancelStripeSubscriptionEndpoint                goa.Endpoint
-	ResumeStripeSubscriptionEndpoint                goa.Endpoint
-	MarkEnterpriseTrialConvertedEndpoint            goa.Endpoint
-	CreateGlobalIssuerEndpoint                      goa.Endpoint
-	GetGlobalIssuerDuplicatePreflightEndpoint       goa.Endpoint
-	ListGlobalIssuersEndpoint                       goa.Endpoint
-	GetGlobalIssuerEndpoint                         goa.Endpoint
-	UpdateGlobalIssuerEndpoint                      goa.Endpoint
-	DeleteGlobalIssuerEndpoint                      goa.Endpoint
-	FetchGlobalIssuerMetadataEndpoint               goa.Endpoint
-	RefreshGlobalIssuerMetadataEndpoint             goa.Endpoint
-	ListGlobalIssuerConvergenceCandidatesEndpoint   goa.Endpoint
-	GetGlobalIssuerMigratePreflightEndpoint         goa.Endpoint
-	MigrateToGlobalIssuerEndpoint                   goa.Endpoint
-	UploadPlatformImageEndpoint                     goa.Endpoint
-	ServeImageEndpoint                              goa.Endpoint
-	StartTrialEndpoint                              goa.Endpoint
-	ChangeTrialEndDateEndpoint                      goa.Endpoint
-	GetMeterUsageEndpoint                           goa.Endpoint
-	GetSpendBreakdownEndpoint                       goa.Endpoint
-	GetSupportMatrixEndpoint                        goa.Endpoint
-	UpdateSupportMatrixEndpoint                     goa.Endpoint
-	GetSupportCoverageEndpoint                      goa.Endpoint
-	DescribeMcpServerHealthEndpoint                 goa.Endpoint
-	SetMcpServerScopePinEndpoint                    goa.Endpoint
-	GetMcpServerToolCallsEndpoint                   goa.Endpoint
-	GetHookClientsEndpoint                          goa.Endpoint
-	GetOrganizationHookFleetEndpoint                goa.Endpoint
-	ListRegistryPromotionCandidatesEndpoint         goa.Endpoint
-	GetRegistryPromotionCandidateEndpoint           goa.Endpoint
-	PromoteRegistryCandidateEndpoint                goa.Endpoint
-	CurateRegistryPromotionCandidateEndpoint        goa.Endpoint
-	RetryRegistryPromotionDocsEndpoint              goa.Endpoint
-	GetRegistryOktaCandidatesEndpoint               goa.Endpoint
-	ListRegistryOktaUnmappedEndpoint                goa.Endpoint
-	ListRegistryEntriesEndpoint                     goa.Endpoint
-	GetRegistryEntryEndpoint                        goa.Endpoint
-	CreateRegistryEntryEndpoint                     goa.Endpoint
-	SaveRegistryEntryEndpoint                       goa.Endpoint
-	SetRegistryEntryPublishedEndpoint               goa.Endpoint
-	ListOnboardingStepsEndpoint                     goa.Endpoint
-	GetOnboardingStackOptionsEndpoint               goa.Endpoint
-	GetOrganizationOnboardingStackEndpoint          goa.Endpoint
-	SetOrganizationOnboardingStackEndpoint          goa.Endpoint
-	ListOnboardingUseCasesEndpoint                  goa.Endpoint
-	CreateOnboardingUseCaseEndpoint                 goa.Endpoint
-	UpdateOnboardingUseCaseEndpoint                 goa.Endpoint
-	DeleteOnboardingUseCaseEndpoint                 goa.Endpoint
-	ListOnboardingPlaybooksEndpoint                 goa.Endpoint
-	CreateOnboardingPlaybookEndpoint                goa.Endpoint
-	UpdateOnboardingPlaybookEndpoint                goa.Endpoint
-	DeleteOnboardingPlaybookEndpoint                goa.Endpoint
-	CloneOnboardingPlaybookEndpoint                 goa.Endpoint
-	GetOrganizationOnboardingPlaybookEndpoint       goa.Endpoint
-	AssignOrganizationOnboardingPlaybookEndpoint    goa.Endpoint
-	ListSignupOffersEndpoint                        goa.Endpoint
-	CreateSignupOfferEndpoint                       goa.Endpoint
-	UpdateSignupOfferEndpoint                       goa.Endpoint
-	GetSelfServeStatusEndpoint                      goa.Endpoint
-	SetSelfServeDisabledEndpoint                    goa.Endpoint
-	ListPlatformMcpFeedbackEndpoint                 goa.Endpoint
-	GetStripeSubscriptionCandidateEndpoint          goa.Endpoint
-	SetStripeSubscriptionEndpoint                   goa.Endpoint
-	ListCustomerUsageEndpoint                       goa.Endpoint
-	ListUpstreamOAuthMigrationOrganizationsEndpoint goa.Endpoint
-	GetUpstreamOAuthMigrationStatusEndpoint         goa.Endpoint
-	RunUpstreamOAuthMigrationEndpoint               goa.Endpoint
-	EnableUpstreamAuthEnforcementEndpoint           goa.Endpoint
-	DisableUpstreamAuthEnforcementEndpoint          goa.Endpoint
-	BackfillMcpAuthGrantsEndpoint                   goa.Endpoint
-	BackfillMcpConnectGrantsEndpoint                goa.Endpoint
-	GetSecretBackfillsEndpoint                      goa.Endpoint
-	RunMarketplaceTokenBackfillEndpoint             goa.Endpoint
-	RunRunnerKeyOrganizationBackfillEndpoint        goa.Endpoint
-	GetProjectRedeployPreviewEndpoint               goa.Endpoint
-	RedeployProjectEndpoint                         goa.Endpoint
-	ListCustomDomainsEndpoint                       goa.Endpoint
-	ListPlatformExternalCredentialsEndpoint         goa.Endpoint
-	GetGcpIamPlatformCredentialEndpoint             goa.Endpoint
-	CreateGcpIamPlatformCredentialEndpoint          goa.Endpoint
-	UpdateGcpIamPlatformCredentialEndpoint          goa.Endpoint
-	VerifyGcpIamPlatformCredentialEndpoint          goa.Endpoint
-	DeleteGcpIamPlatformCredentialEndpoint          goa.Endpoint
-	GetMemoryEvalOptionsEndpoint                    goa.Endpoint
-	ListMemoryEvalRunsEndpoint                      goa.Endpoint
-	GetMemoryEvalRunEndpoint                        goa.Endpoint
-	StartMemoryEvalRunEndpoint                      goa.Endpoint
-	ListAssistantOrganizationsEndpoint              goa.Endpoint
-	RepairOrganizationAssistantAgentNamesEndpoint   goa.Endpoint
-	ListOrganizationAssistantsEndpoint              goa.Endpoint
-	MigrateOrganizationAssistantIdentitiesEndpoint  goa.Endpoint
-	MigrateOrganizationAssistantsToKitEndpoint      goa.Endpoint
-	GetHooksRolloutEndpoint                         goa.Endpoint
-	GetHooksReleaseProgressEndpoint                 goa.Endpoint
-	SetHooksRolloutDefaultEndpoint                  goa.Endpoint
-	GetOrganizationHooksRolloutEndpoint             goa.Endpoint
-	SetOrganizationHooksRolloutEndpoint             goa.Endpoint
-	ClearOrganizationHooksRolloutEndpoint           goa.Endpoint
-	ListTailscaleOAuthMigrationEndpoint             goa.Endpoint
-	RunTailscaleOAuthMigrationStepEndpoint          goa.Endpoint
-	GetOrganizationEncryptionEndpoint               goa.Endpoint
-	ListOrganizationEncryptionTransitionsEndpoint   goa.Endpoint
-	EnrollOrganizationEncryptionEndpoint            goa.Endpoint
-	RollbackOrganizationEncryptionEndpoint          goa.Endpoint
-	RunOrganizationEncryptionEndpoint               goa.Endpoint
-	FinalizeOrganizationEncryptionEndpoint          goa.Endpoint
+	LoginEndpoint                                      goa.Endpoint
+	CallbackEndpoint                                   goa.Endpoint
+	LogoutEndpoint                                     goa.Endpoint
+	GetSessionEndpoint                                 goa.Endpoint
+	GetOrganizationFeaturesEndpoint                    goa.Endpoint
+	SetOrganizationFeatureEndpoint                     goa.Endpoint
+	GetOrganizationChatAnalysisSettingsEndpoint        goa.Endpoint
+	SetOrganizationChatAnalysisSettingsEndpoint        goa.Endpoint
+	TriggerOrganizationChatAnalysisEndpoint            goa.Endpoint
+	OpenOrganizationInDashboardEndpoint                goa.Endpoint
+	GetProjectEndpoint                                 goa.Endpoint
+	UpdateOrganizationEndpoint                         goa.Endpoint
+	BulkUpdateAccountTypeEndpoint                      goa.Endpoint
+	DisableOrganizationEndpoint                        goa.Endpoint
+	EnableOrganizationEndpoint                         goa.Endpoint
+	GetOrganizationEndpoint                            goa.Endpoint
+	ListOrganizationMembersEndpoint                    goa.Endpoint
+	ListOrganizationProjectsEndpoint                   goa.Endpoint
+	ListProjectMcpServersEndpoint                      goa.Endpoint
+	ListOrganizationActivityEndpoint                   goa.Endpoint
+	ListUsersEndpoint                                  goa.Endpoint
+	ListUserOrganizationsEndpoint                      goa.Endpoint
+	ListOrganizationsEndpoint                          goa.Endpoint
+	ExtendTrialEndpoint                                goa.Endpoint
+	CreateOrganizationEndpoint                         goa.Endpoint
+	RearmTrialEndpoint                                 goa.Endpoint
+	GetOrganizationStatsEndpoint                       goa.Endpoint
+	RepairInferenceKeyEndpoint                         goa.Endpoint
+	GetInferenceKeysEndpoint                           goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint                goa.Endpoint
+	GetInferenceSpendHistoryEndpoint                   goa.Endpoint
+	GetPaygBillingSummaryEndpoint                      goa.Endpoint
+	GetStripeCustomerEndpoint                          goa.Endpoint
+	SetStripeCustomerEndpoint                          goa.Endpoint
+	SetAdoptionDashboardURLEndpoint                    goa.Endpoint
+	GetStripeSubscriptionEndpoint                      goa.Endpoint
+	CancelStripeSubscriptionEndpoint                   goa.Endpoint
+	ResumeStripeSubscriptionEndpoint                   goa.Endpoint
+	MarkEnterpriseTrialConvertedEndpoint               goa.Endpoint
+	CreateGlobalIssuerEndpoint                         goa.Endpoint
+	GetGlobalIssuerDuplicatePreflightEndpoint          goa.Endpoint
+	ListGlobalIssuersEndpoint                          goa.Endpoint
+	GetGlobalIssuerEndpoint                            goa.Endpoint
+	UpdateGlobalIssuerEndpoint                         goa.Endpoint
+	DeleteGlobalIssuerEndpoint                         goa.Endpoint
+	FetchGlobalIssuerMetadataEndpoint                  goa.Endpoint
+	RefreshGlobalIssuerMetadataEndpoint                goa.Endpoint
+	ListGlobalIssuerConvergenceCandidatesEndpoint      goa.Endpoint
+	GetGlobalIssuerMigratePreflightEndpoint            goa.Endpoint
+	MigrateToGlobalIssuerEndpoint                      goa.Endpoint
+	UploadPlatformImageEndpoint                        goa.Endpoint
+	ServeImageEndpoint                                 goa.Endpoint
+	StartTrialEndpoint                                 goa.Endpoint
+	ChangeTrialEndDateEndpoint                         goa.Endpoint
+	GetMeterUsageEndpoint                              goa.Endpoint
+	GetSpendBreakdownEndpoint                          goa.Endpoint
+	GetSupportMatrixEndpoint                           goa.Endpoint
+	UpdateSupportMatrixEndpoint                        goa.Endpoint
+	GetSupportCoverageEndpoint                         goa.Endpoint
+	DescribeMcpServerHealthEndpoint                    goa.Endpoint
+	SetMcpServerScopePinEndpoint                       goa.Endpoint
+	GetMcpServerToolCallsEndpoint                      goa.Endpoint
+	GetHookClientsEndpoint                             goa.Endpoint
+	GetOrganizationHookFleetEndpoint                   goa.Endpoint
+	ListRegistryPromotionCandidatesEndpoint            goa.Endpoint
+	GetRegistryPromotionCandidateEndpoint              goa.Endpoint
+	PromoteRegistryCandidateEndpoint                   goa.Endpoint
+	CurateRegistryPromotionCandidateEndpoint           goa.Endpoint
+	RetryRegistryPromotionDocsEndpoint                 goa.Endpoint
+	GetRegistryOktaCandidatesEndpoint                  goa.Endpoint
+	ListRegistryOktaUnmappedEndpoint                   goa.Endpoint
+	ListRegistryEntriesEndpoint                        goa.Endpoint
+	GetRegistryEntryEndpoint                           goa.Endpoint
+	CreateRegistryEntryEndpoint                        goa.Endpoint
+	SaveRegistryEntryEndpoint                          goa.Endpoint
+	SetRegistryEntryPublishedEndpoint                  goa.Endpoint
+	ListOnboardingStepsEndpoint                        goa.Endpoint
+	GetOnboardingStackOptionsEndpoint                  goa.Endpoint
+	GetOrganizationOnboardingStackEndpoint             goa.Endpoint
+	SetOrganizationOnboardingStackEndpoint             goa.Endpoint
+	ListOnboardingUseCasesEndpoint                     goa.Endpoint
+	CreateOnboardingUseCaseEndpoint                    goa.Endpoint
+	UpdateOnboardingUseCaseEndpoint                    goa.Endpoint
+	DeleteOnboardingUseCaseEndpoint                    goa.Endpoint
+	ListOnboardingPlaybooksEndpoint                    goa.Endpoint
+	CreateOnboardingPlaybookEndpoint                   goa.Endpoint
+	UpdateOnboardingPlaybookEndpoint                   goa.Endpoint
+	DeleteOnboardingPlaybookEndpoint                   goa.Endpoint
+	CloneOnboardingPlaybookEndpoint                    goa.Endpoint
+	GetOrganizationOnboardingPlaybookEndpoint          goa.Endpoint
+	AssignOrganizationOnboardingPlaybookEndpoint       goa.Endpoint
+	ListSignupOffersEndpoint                           goa.Endpoint
+	CreateSignupOfferEndpoint                          goa.Endpoint
+	UpdateSignupOfferEndpoint                          goa.Endpoint
+	GetSelfServeStatusEndpoint                         goa.Endpoint
+	SetSelfServeDisabledEndpoint                       goa.Endpoint
+	ListPlatformMcpFeedbackEndpoint                    goa.Endpoint
+	GetStripeSubscriptionCandidateEndpoint             goa.Endpoint
+	SetStripeSubscriptionEndpoint                      goa.Endpoint
+	ListCustomerUsageEndpoint                          goa.Endpoint
+	ListUpstreamOAuthMigrationOrganizationsEndpoint    goa.Endpoint
+	GetUpstreamOAuthMigrationStatusEndpoint            goa.Endpoint
+	RunUpstreamOAuthMigrationEndpoint                  goa.Endpoint
+	EnableUpstreamAuthEnforcementEndpoint              goa.Endpoint
+	DisableUpstreamAuthEnforcementEndpoint             goa.Endpoint
+	BackfillMcpAuthGrantsEndpoint                      goa.Endpoint
+	BackfillMcpConnectGrantsEndpoint                   goa.Endpoint
+	GetSecretBackfillsEndpoint                         goa.Endpoint
+	RunMarketplaceTokenBackfillEndpoint                goa.Endpoint
+	RunRunnerKeyOrganizationBackfillEndpoint           goa.Endpoint
+	GetProjectRedeployPreviewEndpoint                  goa.Endpoint
+	RedeployProjectEndpoint                            goa.Endpoint
+	ListCustomDomainsEndpoint                          goa.Endpoint
+	ListPlatformExternalCredentialsEndpoint            goa.Endpoint
+	GetGcpIamPlatformCredentialEndpoint                goa.Endpoint
+	CreateGcpIamPlatformCredentialEndpoint             goa.Endpoint
+	UpdateGcpIamPlatformCredentialEndpoint             goa.Endpoint
+	VerifyGcpIamPlatformCredentialEndpoint             goa.Endpoint
+	DeleteGcpIamPlatformCredentialEndpoint             goa.Endpoint
+	GetMemoryEvalOptionsEndpoint                       goa.Endpoint
+	ListMemoryEvalRunsEndpoint                         goa.Endpoint
+	GetMemoryEvalRunEndpoint                           goa.Endpoint
+	StartMemoryEvalRunEndpoint                         goa.Endpoint
+	ListAssistantOrganizationsEndpoint                 goa.Endpoint
+	RepairOrganizationAssistantAgentNamesEndpoint      goa.Endpoint
+	BackfillOrganizationAssistantBuiltinGrantsEndpoint goa.Endpoint
+	MigrateOrganizationAssistantSlackEndpoint          goa.Endpoint
+	ListOrganizationAssistantsEndpoint                 goa.Endpoint
+	MigrateOrganizationAssistantIdentitiesEndpoint     goa.Endpoint
+	MigrateOrganizationAssistantsToKitEndpoint         goa.Endpoint
+	GetHooksRolloutEndpoint                            goa.Endpoint
+	GetHooksReleaseProgressEndpoint                    goa.Endpoint
+	SetHooksRolloutDefaultEndpoint                     goa.Endpoint
+	GetOrganizationHooksRolloutEndpoint                goa.Endpoint
+	SetOrganizationHooksRolloutEndpoint                goa.Endpoint
+	ClearOrganizationHooksRolloutEndpoint              goa.Endpoint
+	ListTailscaleOAuthMigrationEndpoint                goa.Endpoint
+	RunTailscaleOAuthMigrationStepEndpoint             goa.Endpoint
+	GetOrganizationEncryptionEndpoint                  goa.Endpoint
+	ListOrganizationEncryptionTransitionsEndpoint      goa.Endpoint
+	EnrollOrganizationEncryptionEndpoint               goa.Endpoint
+	RollbackOrganizationEncryptionEndpoint             goa.Endpoint
+	RunOrganizationEncryptionEndpoint                  goa.Endpoint
+	FinalizeOrganizationEncryptionEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, getOrganizationHookFleet, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getSelfServeStatus, setSelfServeDisabled, listPlatformMcpFeedback, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getSecretBackfills, runMarketplaceTokenBackfill, runRunnerKeyOrganizationBackfill, getProjectRedeployPreview, redeployProject, listCustomDomains, listPlatformExternalCredentials, getGcpIamPlatformCredential, createGcpIamPlatformCredential, updateGcpIamPlatformCredential, verifyGcpIamPlatformCredential, deleteGcpIamPlatformCredential, getMemoryEvalOptions, listMemoryEvalRuns, getMemoryEvalRun, startMemoryEvalRun, listAssistantOrganizations, repairOrganizationAssistantAgentNames, listOrganizationAssistants, migrateOrganizationAssistantIdentities, migrateOrganizationAssistantsToKit, getHooksRollout, getHooksReleaseProgress, setHooksRolloutDefault, getOrganizationHooksRollout, setOrganizationHooksRollout, clearOrganizationHooksRollout, listTailscaleOAuthMigration, runTailscaleOAuthMigrationStep, getOrganizationEncryption, listOrganizationEncryptionTransitions, enrollOrganizationEncryption, rollbackOrganizationEncryption, runOrganizationEncryption, finalizeOrganizationEncryption goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listUsers, listUserOrganizations, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, repairInferenceKey, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, setAdoptionDashboardURL, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, describeMcpServerHealth, setMcpServerScopePin, getMcpServerToolCalls, getHookClients, getOrganizationHookFleet, listRegistryPromotionCandidates, getRegistryPromotionCandidate, promoteRegistryCandidate, curateRegistryPromotionCandidate, retryRegistryPromotionDocs, getRegistryOktaCandidates, listRegistryOktaUnmapped, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished, listOnboardingSteps, getOnboardingStackOptions, getOrganizationOnboardingStack, setOrganizationOnboardingStack, listOnboardingUseCases, createOnboardingUseCase, updateOnboardingUseCase, deleteOnboardingUseCase, listOnboardingPlaybooks, createOnboardingPlaybook, updateOnboardingPlaybook, deleteOnboardingPlaybook, cloneOnboardingPlaybook, getOrganizationOnboardingPlaybook, assignOrganizationOnboardingPlaybook, listSignupOffers, createSignupOffer, updateSignupOffer, getSelfServeStatus, setSelfServeDisabled, listPlatformMcpFeedback, getStripeSubscriptionCandidate, setStripeSubscription, listCustomerUsage, listUpstreamOAuthMigrationOrganizations, getUpstreamOAuthMigrationStatus, runUpstreamOAuthMigration, enableUpstreamAuthEnforcement, disableUpstreamAuthEnforcement, backfillMcpAuthGrants, backfillMcpConnectGrants, getSecretBackfills, runMarketplaceTokenBackfill, runRunnerKeyOrganizationBackfill, getProjectRedeployPreview, redeployProject, listCustomDomains, listPlatformExternalCredentials, getGcpIamPlatformCredential, createGcpIamPlatformCredential, updateGcpIamPlatformCredential, verifyGcpIamPlatformCredential, deleteGcpIamPlatformCredential, getMemoryEvalOptions, listMemoryEvalRuns, getMemoryEvalRun, startMemoryEvalRun, listAssistantOrganizations, repairOrganizationAssistantAgentNames, backfillOrganizationAssistantBuiltinGrants, migrateOrganizationAssistantSlack, listOrganizationAssistants, migrateOrganizationAssistantIdentities, migrateOrganizationAssistantsToKit, getHooksRollout, getHooksReleaseProgress, setHooksRolloutDefault, getOrganizationHooksRollout, setOrganizationHooksRollout, clearOrganizationHooksRollout, listTailscaleOAuthMigration, runTailscaleOAuthMigrationStep, getOrganizationEncryption, listOrganizationEncryptionTransitions, enrollOrganizationEncryption, rollbackOrganizationEncryption, runOrganizationEncryption, finalizeOrganizationEncryption goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                                   login,
-		CallbackEndpoint:                                callback,
-		LogoutEndpoint:                                  logout,
-		GetSessionEndpoint:                              getSession,
-		GetOrganizationFeaturesEndpoint:                 getOrganizationFeatures,
-		SetOrganizationFeatureEndpoint:                  setOrganizationFeature,
-		GetOrganizationChatAnalysisSettingsEndpoint:     getOrganizationChatAnalysisSettings,
-		SetOrganizationChatAnalysisSettingsEndpoint:     setOrganizationChatAnalysisSettings,
-		TriggerOrganizationChatAnalysisEndpoint:         triggerOrganizationChatAnalysis,
-		OpenOrganizationInDashboardEndpoint:             openOrganizationInDashboard,
-		GetProjectEndpoint:                              getProject,
-		UpdateOrganizationEndpoint:                      updateOrganization,
-		BulkUpdateAccountTypeEndpoint:                   bulkUpdateAccountType,
-		DisableOrganizationEndpoint:                     disableOrganization,
-		EnableOrganizationEndpoint:                      enableOrganization,
-		GetOrganizationEndpoint:                         getOrganization,
-		ListOrganizationMembersEndpoint:                 listOrganizationMembers,
-		ListOrganizationProjectsEndpoint:                listOrganizationProjects,
-		ListProjectMcpServersEndpoint:                   listProjectMcpServers,
-		ListOrganizationActivityEndpoint:                listOrganizationActivity,
-		ListUsersEndpoint:                               listUsers,
-		ListUserOrganizationsEndpoint:                   listUserOrganizations,
-		ListOrganizationsEndpoint:                       listOrganizations,
-		ExtendTrialEndpoint:                             extendTrial,
-		CreateOrganizationEndpoint:                      createOrganization,
-		RearmTrialEndpoint:                              rearmTrial,
-		GetOrganizationStatsEndpoint:                    getOrganizationStats,
-		RepairInferenceKeyEndpoint:                      repairInferenceKey,
-		GetInferenceKeysEndpoint:                        getInferenceKeys,
-		SetInferenceKeyMonthlyLimitEndpoint:             setInferenceKeyMonthlyLimit,
-		GetInferenceSpendHistoryEndpoint:                getInferenceSpendHistory,
-		GetPaygBillingSummaryEndpoint:                   getPaygBillingSummary,
-		GetStripeCustomerEndpoint:                       getStripeCustomer,
-		SetStripeCustomerEndpoint:                       setStripeCustomer,
-		SetAdoptionDashboardURLEndpoint:                 setAdoptionDashboardURL,
-		GetStripeSubscriptionEndpoint:                   getStripeSubscription,
-		CancelStripeSubscriptionEndpoint:                cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint:                resumeStripeSubscription,
-		MarkEnterpriseTrialConvertedEndpoint:            markEnterpriseTrialConverted,
-		CreateGlobalIssuerEndpoint:                      createGlobalIssuer,
-		GetGlobalIssuerDuplicatePreflightEndpoint:       getGlobalIssuerDuplicatePreflight,
-		ListGlobalIssuersEndpoint:                       listGlobalIssuers,
-		GetGlobalIssuerEndpoint:                         getGlobalIssuer,
-		UpdateGlobalIssuerEndpoint:                      updateGlobalIssuer,
-		DeleteGlobalIssuerEndpoint:                      deleteGlobalIssuer,
-		FetchGlobalIssuerMetadataEndpoint:               fetchGlobalIssuerMetadata,
-		RefreshGlobalIssuerMetadataEndpoint:             refreshGlobalIssuerMetadata,
-		ListGlobalIssuerConvergenceCandidatesEndpoint:   listGlobalIssuerConvergenceCandidates,
-		GetGlobalIssuerMigratePreflightEndpoint:         getGlobalIssuerMigratePreflight,
-		MigrateToGlobalIssuerEndpoint:                   migrateToGlobalIssuer,
-		UploadPlatformImageEndpoint:                     uploadPlatformImage,
-		ServeImageEndpoint:                              serveImage,
-		StartTrialEndpoint:                              startTrial,
-		ChangeTrialEndDateEndpoint:                      changeTrialEndDate,
-		GetMeterUsageEndpoint:                           getMeterUsage,
-		GetSpendBreakdownEndpoint:                       getSpendBreakdown,
-		GetSupportMatrixEndpoint:                        getSupportMatrix,
-		UpdateSupportMatrixEndpoint:                     updateSupportMatrix,
-		GetSupportCoverageEndpoint:                      getSupportCoverage,
-		DescribeMcpServerHealthEndpoint:                 describeMcpServerHealth,
-		SetMcpServerScopePinEndpoint:                    setMcpServerScopePin,
-		GetMcpServerToolCallsEndpoint:                   getMcpServerToolCalls,
-		GetHookClientsEndpoint:                          getHookClients,
-		GetOrganizationHookFleetEndpoint:                getOrganizationHookFleet,
-		ListRegistryPromotionCandidatesEndpoint:         listRegistryPromotionCandidates,
-		GetRegistryPromotionCandidateEndpoint:           getRegistryPromotionCandidate,
-		PromoteRegistryCandidateEndpoint:                promoteRegistryCandidate,
-		CurateRegistryPromotionCandidateEndpoint:        curateRegistryPromotionCandidate,
-		RetryRegistryPromotionDocsEndpoint:              retryRegistryPromotionDocs,
-		GetRegistryOktaCandidatesEndpoint:               getRegistryOktaCandidates,
-		ListRegistryOktaUnmappedEndpoint:                listRegistryOktaUnmapped,
-		ListRegistryEntriesEndpoint:                     listRegistryEntries,
-		GetRegistryEntryEndpoint:                        getRegistryEntry,
-		CreateRegistryEntryEndpoint:                     createRegistryEntry,
-		SaveRegistryEntryEndpoint:                       saveRegistryEntry,
-		SetRegistryEntryPublishedEndpoint:               setRegistryEntryPublished,
-		ListOnboardingStepsEndpoint:                     listOnboardingSteps,
-		GetOnboardingStackOptionsEndpoint:               getOnboardingStackOptions,
-		GetOrganizationOnboardingStackEndpoint:          getOrganizationOnboardingStack,
-		SetOrganizationOnboardingStackEndpoint:          setOrganizationOnboardingStack,
-		ListOnboardingUseCasesEndpoint:                  listOnboardingUseCases,
-		CreateOnboardingUseCaseEndpoint:                 createOnboardingUseCase,
-		UpdateOnboardingUseCaseEndpoint:                 updateOnboardingUseCase,
-		DeleteOnboardingUseCaseEndpoint:                 deleteOnboardingUseCase,
-		ListOnboardingPlaybooksEndpoint:                 listOnboardingPlaybooks,
-		CreateOnboardingPlaybookEndpoint:                createOnboardingPlaybook,
-		UpdateOnboardingPlaybookEndpoint:                updateOnboardingPlaybook,
-		DeleteOnboardingPlaybookEndpoint:                deleteOnboardingPlaybook,
-		CloneOnboardingPlaybookEndpoint:                 cloneOnboardingPlaybook,
-		GetOrganizationOnboardingPlaybookEndpoint:       getOrganizationOnboardingPlaybook,
-		AssignOrganizationOnboardingPlaybookEndpoint:    assignOrganizationOnboardingPlaybook,
-		ListSignupOffersEndpoint:                        listSignupOffers,
-		CreateSignupOfferEndpoint:                       createSignupOffer,
-		UpdateSignupOfferEndpoint:                       updateSignupOffer,
-		GetSelfServeStatusEndpoint:                      getSelfServeStatus,
-		SetSelfServeDisabledEndpoint:                    setSelfServeDisabled,
-		ListPlatformMcpFeedbackEndpoint:                 listPlatformMcpFeedback,
-		GetStripeSubscriptionCandidateEndpoint:          getStripeSubscriptionCandidate,
-		SetStripeSubscriptionEndpoint:                   setStripeSubscription,
-		ListCustomerUsageEndpoint:                       listCustomerUsage,
-		ListUpstreamOAuthMigrationOrganizationsEndpoint: listUpstreamOAuthMigrationOrganizations,
-		GetUpstreamOAuthMigrationStatusEndpoint:         getUpstreamOAuthMigrationStatus,
-		RunUpstreamOAuthMigrationEndpoint:               runUpstreamOAuthMigration,
-		EnableUpstreamAuthEnforcementEndpoint:           enableUpstreamAuthEnforcement,
-		DisableUpstreamAuthEnforcementEndpoint:          disableUpstreamAuthEnforcement,
-		BackfillMcpAuthGrantsEndpoint:                   backfillMcpAuthGrants,
-		BackfillMcpConnectGrantsEndpoint:                backfillMcpConnectGrants,
-		GetSecretBackfillsEndpoint:                      getSecretBackfills,
-		RunMarketplaceTokenBackfillEndpoint:             runMarketplaceTokenBackfill,
-		RunRunnerKeyOrganizationBackfillEndpoint:        runRunnerKeyOrganizationBackfill,
-		GetProjectRedeployPreviewEndpoint:               getProjectRedeployPreview,
-		RedeployProjectEndpoint:                         redeployProject,
-		ListCustomDomainsEndpoint:                       listCustomDomains,
-		ListPlatformExternalCredentialsEndpoint:         listPlatformExternalCredentials,
-		GetGcpIamPlatformCredentialEndpoint:             getGcpIamPlatformCredential,
-		CreateGcpIamPlatformCredentialEndpoint:          createGcpIamPlatformCredential,
-		UpdateGcpIamPlatformCredentialEndpoint:          updateGcpIamPlatformCredential,
-		VerifyGcpIamPlatformCredentialEndpoint:          verifyGcpIamPlatformCredential,
-		DeleteGcpIamPlatformCredentialEndpoint:          deleteGcpIamPlatformCredential,
-		GetMemoryEvalOptionsEndpoint:                    getMemoryEvalOptions,
-		ListMemoryEvalRunsEndpoint:                      listMemoryEvalRuns,
-		GetMemoryEvalRunEndpoint:                        getMemoryEvalRun,
-		StartMemoryEvalRunEndpoint:                      startMemoryEvalRun,
-		ListAssistantOrganizationsEndpoint:              listAssistantOrganizations,
-		RepairOrganizationAssistantAgentNamesEndpoint:   repairOrganizationAssistantAgentNames,
-		ListOrganizationAssistantsEndpoint:              listOrganizationAssistants,
-		MigrateOrganizationAssistantIdentitiesEndpoint:  migrateOrganizationAssistantIdentities,
-		MigrateOrganizationAssistantsToKitEndpoint:      migrateOrganizationAssistantsToKit,
-		GetHooksRolloutEndpoint:                         getHooksRollout,
-		GetHooksReleaseProgressEndpoint:                 getHooksReleaseProgress,
-		SetHooksRolloutDefaultEndpoint:                  setHooksRolloutDefault,
-		GetOrganizationHooksRolloutEndpoint:             getOrganizationHooksRollout,
-		SetOrganizationHooksRolloutEndpoint:             setOrganizationHooksRollout,
-		ClearOrganizationHooksRolloutEndpoint:           clearOrganizationHooksRollout,
-		ListTailscaleOAuthMigrationEndpoint:             listTailscaleOAuthMigration,
-		RunTailscaleOAuthMigrationStepEndpoint:          runTailscaleOAuthMigrationStep,
-		GetOrganizationEncryptionEndpoint:               getOrganizationEncryption,
-		ListOrganizationEncryptionTransitionsEndpoint:   listOrganizationEncryptionTransitions,
-		EnrollOrganizationEncryptionEndpoint:            enrollOrganizationEncryption,
-		RollbackOrganizationEncryptionEndpoint:          rollbackOrganizationEncryption,
-		RunOrganizationEncryptionEndpoint:               runOrganizationEncryption,
-		FinalizeOrganizationEncryptionEndpoint:          finalizeOrganizationEncryption,
+		LoginEndpoint:                                      login,
+		CallbackEndpoint:                                   callback,
+		LogoutEndpoint:                                     logout,
+		GetSessionEndpoint:                                 getSession,
+		GetOrganizationFeaturesEndpoint:                    getOrganizationFeatures,
+		SetOrganizationFeatureEndpoint:                     setOrganizationFeature,
+		GetOrganizationChatAnalysisSettingsEndpoint:        getOrganizationChatAnalysisSettings,
+		SetOrganizationChatAnalysisSettingsEndpoint:        setOrganizationChatAnalysisSettings,
+		TriggerOrganizationChatAnalysisEndpoint:            triggerOrganizationChatAnalysis,
+		OpenOrganizationInDashboardEndpoint:                openOrganizationInDashboard,
+		GetProjectEndpoint:                                 getProject,
+		UpdateOrganizationEndpoint:                         updateOrganization,
+		BulkUpdateAccountTypeEndpoint:                      bulkUpdateAccountType,
+		DisableOrganizationEndpoint:                        disableOrganization,
+		EnableOrganizationEndpoint:                         enableOrganization,
+		GetOrganizationEndpoint:                            getOrganization,
+		ListOrganizationMembersEndpoint:                    listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:                   listOrganizationProjects,
+		ListProjectMcpServersEndpoint:                      listProjectMcpServers,
+		ListOrganizationActivityEndpoint:                   listOrganizationActivity,
+		ListUsersEndpoint:                                  listUsers,
+		ListUserOrganizationsEndpoint:                      listUserOrganizations,
+		ListOrganizationsEndpoint:                          listOrganizations,
+		ExtendTrialEndpoint:                                extendTrial,
+		CreateOrganizationEndpoint:                         createOrganization,
+		RearmTrialEndpoint:                                 rearmTrial,
+		GetOrganizationStatsEndpoint:                       getOrganizationStats,
+		RepairInferenceKeyEndpoint:                         repairInferenceKey,
+		GetInferenceKeysEndpoint:                           getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint:                setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:                   getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:                      getPaygBillingSummary,
+		GetStripeCustomerEndpoint:                          getStripeCustomer,
+		SetStripeCustomerEndpoint:                          setStripeCustomer,
+		SetAdoptionDashboardURLEndpoint:                    setAdoptionDashboardURL,
+		GetStripeSubscriptionEndpoint:                      getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:                   cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:                   resumeStripeSubscription,
+		MarkEnterpriseTrialConvertedEndpoint:               markEnterpriseTrialConverted,
+		CreateGlobalIssuerEndpoint:                         createGlobalIssuer,
+		GetGlobalIssuerDuplicatePreflightEndpoint:          getGlobalIssuerDuplicatePreflight,
+		ListGlobalIssuersEndpoint:                          listGlobalIssuers,
+		GetGlobalIssuerEndpoint:                            getGlobalIssuer,
+		UpdateGlobalIssuerEndpoint:                         updateGlobalIssuer,
+		DeleteGlobalIssuerEndpoint:                         deleteGlobalIssuer,
+		FetchGlobalIssuerMetadataEndpoint:                  fetchGlobalIssuerMetadata,
+		RefreshGlobalIssuerMetadataEndpoint:                refreshGlobalIssuerMetadata,
+		ListGlobalIssuerConvergenceCandidatesEndpoint:      listGlobalIssuerConvergenceCandidates,
+		GetGlobalIssuerMigratePreflightEndpoint:            getGlobalIssuerMigratePreflight,
+		MigrateToGlobalIssuerEndpoint:                      migrateToGlobalIssuer,
+		UploadPlatformImageEndpoint:                        uploadPlatformImage,
+		ServeImageEndpoint:                                 serveImage,
+		StartTrialEndpoint:                                 startTrial,
+		ChangeTrialEndDateEndpoint:                         changeTrialEndDate,
+		GetMeterUsageEndpoint:                              getMeterUsage,
+		GetSpendBreakdownEndpoint:                          getSpendBreakdown,
+		GetSupportMatrixEndpoint:                           getSupportMatrix,
+		UpdateSupportMatrixEndpoint:                        updateSupportMatrix,
+		GetSupportCoverageEndpoint:                         getSupportCoverage,
+		DescribeMcpServerHealthEndpoint:                    describeMcpServerHealth,
+		SetMcpServerScopePinEndpoint:                       setMcpServerScopePin,
+		GetMcpServerToolCallsEndpoint:                      getMcpServerToolCalls,
+		GetHookClientsEndpoint:                             getHookClients,
+		GetOrganizationHookFleetEndpoint:                   getOrganizationHookFleet,
+		ListRegistryPromotionCandidatesEndpoint:            listRegistryPromotionCandidates,
+		GetRegistryPromotionCandidateEndpoint:              getRegistryPromotionCandidate,
+		PromoteRegistryCandidateEndpoint:                   promoteRegistryCandidate,
+		CurateRegistryPromotionCandidateEndpoint:           curateRegistryPromotionCandidate,
+		RetryRegistryPromotionDocsEndpoint:                 retryRegistryPromotionDocs,
+		GetRegistryOktaCandidatesEndpoint:                  getRegistryOktaCandidates,
+		ListRegistryOktaUnmappedEndpoint:                   listRegistryOktaUnmapped,
+		ListRegistryEntriesEndpoint:                        listRegistryEntries,
+		GetRegistryEntryEndpoint:                           getRegistryEntry,
+		CreateRegistryEntryEndpoint:                        createRegistryEntry,
+		SaveRegistryEntryEndpoint:                          saveRegistryEntry,
+		SetRegistryEntryPublishedEndpoint:                  setRegistryEntryPublished,
+		ListOnboardingStepsEndpoint:                        listOnboardingSteps,
+		GetOnboardingStackOptionsEndpoint:                  getOnboardingStackOptions,
+		GetOrganizationOnboardingStackEndpoint:             getOrganizationOnboardingStack,
+		SetOrganizationOnboardingStackEndpoint:             setOrganizationOnboardingStack,
+		ListOnboardingUseCasesEndpoint:                     listOnboardingUseCases,
+		CreateOnboardingUseCaseEndpoint:                    createOnboardingUseCase,
+		UpdateOnboardingUseCaseEndpoint:                    updateOnboardingUseCase,
+		DeleteOnboardingUseCaseEndpoint:                    deleteOnboardingUseCase,
+		ListOnboardingPlaybooksEndpoint:                    listOnboardingPlaybooks,
+		CreateOnboardingPlaybookEndpoint:                   createOnboardingPlaybook,
+		UpdateOnboardingPlaybookEndpoint:                   updateOnboardingPlaybook,
+		DeleteOnboardingPlaybookEndpoint:                   deleteOnboardingPlaybook,
+		CloneOnboardingPlaybookEndpoint:                    cloneOnboardingPlaybook,
+		GetOrganizationOnboardingPlaybookEndpoint:          getOrganizationOnboardingPlaybook,
+		AssignOrganizationOnboardingPlaybookEndpoint:       assignOrganizationOnboardingPlaybook,
+		ListSignupOffersEndpoint:                           listSignupOffers,
+		CreateSignupOfferEndpoint:                          createSignupOffer,
+		UpdateSignupOfferEndpoint:                          updateSignupOffer,
+		GetSelfServeStatusEndpoint:                         getSelfServeStatus,
+		SetSelfServeDisabledEndpoint:                       setSelfServeDisabled,
+		ListPlatformMcpFeedbackEndpoint:                    listPlatformMcpFeedback,
+		GetStripeSubscriptionCandidateEndpoint:             getStripeSubscriptionCandidate,
+		SetStripeSubscriptionEndpoint:                      setStripeSubscription,
+		ListCustomerUsageEndpoint:                          listCustomerUsage,
+		ListUpstreamOAuthMigrationOrganizationsEndpoint:    listUpstreamOAuthMigrationOrganizations,
+		GetUpstreamOAuthMigrationStatusEndpoint:            getUpstreamOAuthMigrationStatus,
+		RunUpstreamOAuthMigrationEndpoint:                  runUpstreamOAuthMigration,
+		EnableUpstreamAuthEnforcementEndpoint:              enableUpstreamAuthEnforcement,
+		DisableUpstreamAuthEnforcementEndpoint:             disableUpstreamAuthEnforcement,
+		BackfillMcpAuthGrantsEndpoint:                      backfillMcpAuthGrants,
+		BackfillMcpConnectGrantsEndpoint:                   backfillMcpConnectGrants,
+		GetSecretBackfillsEndpoint:                         getSecretBackfills,
+		RunMarketplaceTokenBackfillEndpoint:                runMarketplaceTokenBackfill,
+		RunRunnerKeyOrganizationBackfillEndpoint:           runRunnerKeyOrganizationBackfill,
+		GetProjectRedeployPreviewEndpoint:                  getProjectRedeployPreview,
+		RedeployProjectEndpoint:                            redeployProject,
+		ListCustomDomainsEndpoint:                          listCustomDomains,
+		ListPlatformExternalCredentialsEndpoint:            listPlatformExternalCredentials,
+		GetGcpIamPlatformCredentialEndpoint:                getGcpIamPlatformCredential,
+		CreateGcpIamPlatformCredentialEndpoint:             createGcpIamPlatformCredential,
+		UpdateGcpIamPlatformCredentialEndpoint:             updateGcpIamPlatformCredential,
+		VerifyGcpIamPlatformCredentialEndpoint:             verifyGcpIamPlatformCredential,
+		DeleteGcpIamPlatformCredentialEndpoint:             deleteGcpIamPlatformCredential,
+		GetMemoryEvalOptionsEndpoint:                       getMemoryEvalOptions,
+		ListMemoryEvalRunsEndpoint:                         listMemoryEvalRuns,
+		GetMemoryEvalRunEndpoint:                           getMemoryEvalRun,
+		StartMemoryEvalRunEndpoint:                         startMemoryEvalRun,
+		ListAssistantOrganizationsEndpoint:                 listAssistantOrganizations,
+		RepairOrganizationAssistantAgentNamesEndpoint:      repairOrganizationAssistantAgentNames,
+		BackfillOrganizationAssistantBuiltinGrantsEndpoint: backfillOrganizationAssistantBuiltinGrants,
+		MigrateOrganizationAssistantSlackEndpoint:          migrateOrganizationAssistantSlack,
+		ListOrganizationAssistantsEndpoint:                 listOrganizationAssistants,
+		MigrateOrganizationAssistantIdentitiesEndpoint:     migrateOrganizationAssistantIdentities,
+		MigrateOrganizationAssistantsToKitEndpoint:         migrateOrganizationAssistantsToKit,
+		GetHooksRolloutEndpoint:                            getHooksRollout,
+		GetHooksReleaseProgressEndpoint:                    getHooksReleaseProgress,
+		SetHooksRolloutDefaultEndpoint:                     setHooksRolloutDefault,
+		GetOrganizationHooksRolloutEndpoint:                getOrganizationHooksRollout,
+		SetOrganizationHooksRolloutEndpoint:                setOrganizationHooksRollout,
+		ClearOrganizationHooksRolloutEndpoint:              clearOrganizationHooksRollout,
+		ListTailscaleOAuthMigrationEndpoint:                listTailscaleOAuthMigration,
+		RunTailscaleOAuthMigrationStepEndpoint:             runTailscaleOAuthMigrationStep,
+		GetOrganizationEncryptionEndpoint:                  getOrganizationEncryption,
+		ListOrganizationEncryptionTransitionsEndpoint:      listOrganizationEncryptionTransitions,
+		EnrollOrganizationEncryptionEndpoint:               enrollOrganizationEncryption,
+		RollbackOrganizationEncryptionEndpoint:             rollbackOrganizationEncryption,
+		RunOrganizationEncryptionEndpoint:                  runOrganizationEncryption,
+		FinalizeOrganizationEncryptionEndpoint:             finalizeOrganizationEncryption,
 	}
 }
 
@@ -3188,6 +3192,53 @@ func (c *Client) RepairOrganizationAssistantAgentNames(ctx context.Context, p *R
 		return
 	}
 	return ires.(*AdminAssistantAgentNameRepairRun), nil
+}
+
+// BackfillOrganizationAssistantBuiltinGrants calls the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+// BackfillOrganizationAssistantBuiltinGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BackfillOrganizationAssistantBuiltinGrants(ctx context.Context, p *BackfillOrganizationAssistantBuiltinGrantsPayload) (res *AdminAssistantBuiltinGrantBackfillRun, err error) {
+	var ires any
+	ires, err = c.BackfillOrganizationAssistantBuiltinGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminAssistantBuiltinGrantBackfillRun), nil
+}
+
+// MigrateOrganizationAssistantSlack calls the
+// "migrateOrganizationAssistantSlack" endpoint of the "admin" service.
+// MigrateOrganizationAssistantSlack may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateOrganizationAssistantSlack(ctx context.Context, p *MigrateOrganizationAssistantSlackPayload) (res *AdminAssistantSlackMigrationRun, err error) {
+	var ires any
+	ires, err = c.MigrateOrganizationAssistantSlackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminAssistantSlackMigrationRun), nil
 }
 
 // ListOrganizationAssistants calls the "listOrganizationAssistants" endpoint

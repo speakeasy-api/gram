@@ -20,149 +20,151 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts                                  []*MountPoint
-	Login                                   http.Handler
-	Callback                                http.Handler
-	Logout                                  http.Handler
-	GetSession                              http.Handler
-	GetOrganizationFeatures                 http.Handler
-	SetOrganizationFeature                  http.Handler
-	GetOrganizationChatAnalysisSettings     http.Handler
-	SetOrganizationChatAnalysisSettings     http.Handler
-	TriggerOrganizationChatAnalysis         http.Handler
-	OpenOrganizationInDashboard             http.Handler
-	GetProject                              http.Handler
-	UpdateOrganization                      http.Handler
-	BulkUpdateAccountType                   http.Handler
-	DisableOrganization                     http.Handler
-	EnableOrganization                      http.Handler
-	GetOrganization                         http.Handler
-	ListOrganizationMembers                 http.Handler
-	ListOrganizationProjects                http.Handler
-	ListProjectMcpServers                   http.Handler
-	ListOrganizationActivity                http.Handler
-	ListUsers                               http.Handler
-	ListUserOrganizations                   http.Handler
-	ListOrganizations                       http.Handler
-	ExtendTrial                             http.Handler
-	CreateOrganization                      http.Handler
-	RearmTrial                              http.Handler
-	GetOrganizationStats                    http.Handler
-	RepairInferenceKey                      http.Handler
-	GetInferenceKeys                        http.Handler
-	SetInferenceKeyMonthlyLimit             http.Handler
-	GetInferenceSpendHistory                http.Handler
-	GetPaygBillingSummary                   http.Handler
-	GetStripeCustomer                       http.Handler
-	SetStripeCustomer                       http.Handler
-	SetAdoptionDashboardURL                 http.Handler
-	GetStripeSubscription                   http.Handler
-	CancelStripeSubscription                http.Handler
-	ResumeStripeSubscription                http.Handler
-	MarkEnterpriseTrialConverted            http.Handler
-	CreateGlobalIssuer                      http.Handler
-	GetGlobalIssuerDuplicatePreflight       http.Handler
-	ListGlobalIssuers                       http.Handler
-	GetGlobalIssuer                         http.Handler
-	UpdateGlobalIssuer                      http.Handler
-	DeleteGlobalIssuer                      http.Handler
-	FetchGlobalIssuerMetadata               http.Handler
-	RefreshGlobalIssuerMetadata             http.Handler
-	ListGlobalIssuerConvergenceCandidates   http.Handler
-	GetGlobalIssuerMigratePreflight         http.Handler
-	MigrateToGlobalIssuer                   http.Handler
-	UploadPlatformImage                     http.Handler
-	ServeImage                              http.Handler
-	StartTrial                              http.Handler
-	ChangeTrialEndDate                      http.Handler
-	GetMeterUsage                           http.Handler
-	GetSpendBreakdown                       http.Handler
-	GetSupportMatrix                        http.Handler
-	UpdateSupportMatrix                     http.Handler
-	GetSupportCoverage                      http.Handler
-	DescribeMcpServerHealth                 http.Handler
-	SetMcpServerScopePin                    http.Handler
-	GetMcpServerToolCalls                   http.Handler
-	GetHookClients                          http.Handler
-	GetOrganizationHookFleet                http.Handler
-	ListRegistryPromotionCandidates         http.Handler
-	GetRegistryPromotionCandidate           http.Handler
-	PromoteRegistryCandidate                http.Handler
-	CurateRegistryPromotionCandidate        http.Handler
-	RetryRegistryPromotionDocs              http.Handler
-	GetRegistryOktaCandidates               http.Handler
-	ListRegistryOktaUnmapped                http.Handler
-	ListRegistryEntries                     http.Handler
-	GetRegistryEntry                        http.Handler
-	CreateRegistryEntry                     http.Handler
-	SaveRegistryEntry                       http.Handler
-	SetRegistryEntryPublished               http.Handler
-	ListOnboardingSteps                     http.Handler
-	GetOnboardingStackOptions               http.Handler
-	GetOrganizationOnboardingStack          http.Handler
-	SetOrganizationOnboardingStack          http.Handler
-	ListOnboardingUseCases                  http.Handler
-	CreateOnboardingUseCase                 http.Handler
-	UpdateOnboardingUseCase                 http.Handler
-	DeleteOnboardingUseCase                 http.Handler
-	ListOnboardingPlaybooks                 http.Handler
-	CreateOnboardingPlaybook                http.Handler
-	UpdateOnboardingPlaybook                http.Handler
-	DeleteOnboardingPlaybook                http.Handler
-	CloneOnboardingPlaybook                 http.Handler
-	GetOrganizationOnboardingPlaybook       http.Handler
-	AssignOrganizationOnboardingPlaybook    http.Handler
-	ListSignupOffers                        http.Handler
-	CreateSignupOffer                       http.Handler
-	UpdateSignupOffer                       http.Handler
-	GetSelfServeStatus                      http.Handler
-	SetSelfServeDisabled                    http.Handler
-	ListPlatformMcpFeedback                 http.Handler
-	GetStripeSubscriptionCandidate          http.Handler
-	SetStripeSubscription                   http.Handler
-	ListCustomerUsage                       http.Handler
-	ListUpstreamOAuthMigrationOrganizations http.Handler
-	GetUpstreamOAuthMigrationStatus         http.Handler
-	RunUpstreamOAuthMigration               http.Handler
-	EnableUpstreamAuthEnforcement           http.Handler
-	DisableUpstreamAuthEnforcement          http.Handler
-	BackfillMcpAuthGrants                   http.Handler
-	BackfillMcpConnectGrants                http.Handler
-	GetSecretBackfills                      http.Handler
-	RunMarketplaceTokenBackfill             http.Handler
-	RunRunnerKeyOrganizationBackfill        http.Handler
-	GetProjectRedeployPreview               http.Handler
-	RedeployProject                         http.Handler
-	ListCustomDomains                       http.Handler
-	ListPlatformExternalCredentials         http.Handler
-	GetGcpIamPlatformCredential             http.Handler
-	CreateGcpIamPlatformCredential          http.Handler
-	UpdateGcpIamPlatformCredential          http.Handler
-	VerifyGcpIamPlatformCredential          http.Handler
-	DeleteGcpIamPlatformCredential          http.Handler
-	GetMemoryEvalOptions                    http.Handler
-	ListMemoryEvalRuns                      http.Handler
-	GetMemoryEvalRun                        http.Handler
-	StartMemoryEvalRun                      http.Handler
-	ListAssistantOrganizations              http.Handler
-	RepairOrganizationAssistantAgentNames   http.Handler
-	ListOrganizationAssistants              http.Handler
-	MigrateOrganizationAssistantIdentities  http.Handler
-	MigrateOrganizationAssistantsToKit      http.Handler
-	GetHooksRollout                         http.Handler
-	GetHooksReleaseProgress                 http.Handler
-	SetHooksRolloutDefault                  http.Handler
-	GetOrganizationHooksRollout             http.Handler
-	SetOrganizationHooksRollout             http.Handler
-	ClearOrganizationHooksRollout           http.Handler
-	ListTailscaleOAuthMigration             http.Handler
-	RunTailscaleOAuthMigrationStep          http.Handler
-	GetOrganizationEncryption               http.Handler
-	ListOrganizationEncryptionTransitions   http.Handler
-	EnrollOrganizationEncryption            http.Handler
-	RollbackOrganizationEncryption          http.Handler
-	RunOrganizationEncryption               http.Handler
-	FinalizeOrganizationEncryption          http.Handler
+	Mounts                                     []*MountPoint
+	Login                                      http.Handler
+	Callback                                   http.Handler
+	Logout                                     http.Handler
+	GetSession                                 http.Handler
+	GetOrganizationFeatures                    http.Handler
+	SetOrganizationFeature                     http.Handler
+	GetOrganizationChatAnalysisSettings        http.Handler
+	SetOrganizationChatAnalysisSettings        http.Handler
+	TriggerOrganizationChatAnalysis            http.Handler
+	OpenOrganizationInDashboard                http.Handler
+	GetProject                                 http.Handler
+	UpdateOrganization                         http.Handler
+	BulkUpdateAccountType                      http.Handler
+	DisableOrganization                        http.Handler
+	EnableOrganization                         http.Handler
+	GetOrganization                            http.Handler
+	ListOrganizationMembers                    http.Handler
+	ListOrganizationProjects                   http.Handler
+	ListProjectMcpServers                      http.Handler
+	ListOrganizationActivity                   http.Handler
+	ListUsers                                  http.Handler
+	ListUserOrganizations                      http.Handler
+	ListOrganizations                          http.Handler
+	ExtendTrial                                http.Handler
+	CreateOrganization                         http.Handler
+	RearmTrial                                 http.Handler
+	GetOrganizationStats                       http.Handler
+	RepairInferenceKey                         http.Handler
+	GetInferenceKeys                           http.Handler
+	SetInferenceKeyMonthlyLimit                http.Handler
+	GetInferenceSpendHistory                   http.Handler
+	GetPaygBillingSummary                      http.Handler
+	GetStripeCustomer                          http.Handler
+	SetStripeCustomer                          http.Handler
+	SetAdoptionDashboardURL                    http.Handler
+	GetStripeSubscription                      http.Handler
+	CancelStripeSubscription                   http.Handler
+	ResumeStripeSubscription                   http.Handler
+	MarkEnterpriseTrialConverted               http.Handler
+	CreateGlobalIssuer                         http.Handler
+	GetGlobalIssuerDuplicatePreflight          http.Handler
+	ListGlobalIssuers                          http.Handler
+	GetGlobalIssuer                            http.Handler
+	UpdateGlobalIssuer                         http.Handler
+	DeleteGlobalIssuer                         http.Handler
+	FetchGlobalIssuerMetadata                  http.Handler
+	RefreshGlobalIssuerMetadata                http.Handler
+	ListGlobalIssuerConvergenceCandidates      http.Handler
+	GetGlobalIssuerMigratePreflight            http.Handler
+	MigrateToGlobalIssuer                      http.Handler
+	UploadPlatformImage                        http.Handler
+	ServeImage                                 http.Handler
+	StartTrial                                 http.Handler
+	ChangeTrialEndDate                         http.Handler
+	GetMeterUsage                              http.Handler
+	GetSpendBreakdown                          http.Handler
+	GetSupportMatrix                           http.Handler
+	UpdateSupportMatrix                        http.Handler
+	GetSupportCoverage                         http.Handler
+	DescribeMcpServerHealth                    http.Handler
+	SetMcpServerScopePin                       http.Handler
+	GetMcpServerToolCalls                      http.Handler
+	GetHookClients                             http.Handler
+	GetOrganizationHookFleet                   http.Handler
+	ListRegistryPromotionCandidates            http.Handler
+	GetRegistryPromotionCandidate              http.Handler
+	PromoteRegistryCandidate                   http.Handler
+	CurateRegistryPromotionCandidate           http.Handler
+	RetryRegistryPromotionDocs                 http.Handler
+	GetRegistryOktaCandidates                  http.Handler
+	ListRegistryOktaUnmapped                   http.Handler
+	ListRegistryEntries                        http.Handler
+	GetRegistryEntry                           http.Handler
+	CreateRegistryEntry                        http.Handler
+	SaveRegistryEntry                          http.Handler
+	SetRegistryEntryPublished                  http.Handler
+	ListOnboardingSteps                        http.Handler
+	GetOnboardingStackOptions                  http.Handler
+	GetOrganizationOnboardingStack             http.Handler
+	SetOrganizationOnboardingStack             http.Handler
+	ListOnboardingUseCases                     http.Handler
+	CreateOnboardingUseCase                    http.Handler
+	UpdateOnboardingUseCase                    http.Handler
+	DeleteOnboardingUseCase                    http.Handler
+	ListOnboardingPlaybooks                    http.Handler
+	CreateOnboardingPlaybook                   http.Handler
+	UpdateOnboardingPlaybook                   http.Handler
+	DeleteOnboardingPlaybook                   http.Handler
+	CloneOnboardingPlaybook                    http.Handler
+	GetOrganizationOnboardingPlaybook          http.Handler
+	AssignOrganizationOnboardingPlaybook       http.Handler
+	ListSignupOffers                           http.Handler
+	CreateSignupOffer                          http.Handler
+	UpdateSignupOffer                          http.Handler
+	GetSelfServeStatus                         http.Handler
+	SetSelfServeDisabled                       http.Handler
+	ListPlatformMcpFeedback                    http.Handler
+	GetStripeSubscriptionCandidate             http.Handler
+	SetStripeSubscription                      http.Handler
+	ListCustomerUsage                          http.Handler
+	ListUpstreamOAuthMigrationOrganizations    http.Handler
+	GetUpstreamOAuthMigrationStatus            http.Handler
+	RunUpstreamOAuthMigration                  http.Handler
+	EnableUpstreamAuthEnforcement              http.Handler
+	DisableUpstreamAuthEnforcement             http.Handler
+	BackfillMcpAuthGrants                      http.Handler
+	BackfillMcpConnectGrants                   http.Handler
+	GetSecretBackfills                         http.Handler
+	RunMarketplaceTokenBackfill                http.Handler
+	RunRunnerKeyOrganizationBackfill           http.Handler
+	GetProjectRedeployPreview                  http.Handler
+	RedeployProject                            http.Handler
+	ListCustomDomains                          http.Handler
+	ListPlatformExternalCredentials            http.Handler
+	GetGcpIamPlatformCredential                http.Handler
+	CreateGcpIamPlatformCredential             http.Handler
+	UpdateGcpIamPlatformCredential             http.Handler
+	VerifyGcpIamPlatformCredential             http.Handler
+	DeleteGcpIamPlatformCredential             http.Handler
+	GetMemoryEvalOptions                       http.Handler
+	ListMemoryEvalRuns                         http.Handler
+	GetMemoryEvalRun                           http.Handler
+	StartMemoryEvalRun                         http.Handler
+	ListAssistantOrganizations                 http.Handler
+	RepairOrganizationAssistantAgentNames      http.Handler
+	BackfillOrganizationAssistantBuiltinGrants http.Handler
+	MigrateOrganizationAssistantSlack          http.Handler
+	ListOrganizationAssistants                 http.Handler
+	MigrateOrganizationAssistantIdentities     http.Handler
+	MigrateOrganizationAssistantsToKit         http.Handler
+	GetHooksRollout                            http.Handler
+	GetHooksReleaseProgress                    http.Handler
+	SetHooksRolloutDefault                     http.Handler
+	GetOrganizationHooksRollout                http.Handler
+	SetOrganizationHooksRollout                http.Handler
+	ClearOrganizationHooksRollout              http.Handler
+	ListTailscaleOAuthMigration                http.Handler
+	RunTailscaleOAuthMigrationStep             http.Handler
+	GetOrganizationEncryption                  http.Handler
+	ListOrganizationEncryptionTransitions      http.Handler
+	EnrollOrganizationEncryption               http.Handler
+	RollbackOrganizationEncryption             http.Handler
+	RunOrganizationEncryption                  http.Handler
+	FinalizeOrganizationEncryption             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -317,6 +319,8 @@ func New(
 			{"StartMemoryEvalRun", "POST", "/admin/memoryEval.start"},
 			{"ListAssistantOrganizations", "GET", "/admin/assistants.organizations"},
 			{"RepairOrganizationAssistantAgentNames", "POST", "/admin/organization.repairAssistantAgentNames"},
+			{"BackfillOrganizationAssistantBuiltinGrants", "POST", "/admin/organization.backfillAssistantBuiltinGrants"},
+			{"MigrateOrganizationAssistantSlack", "POST", "/admin/organization.migrateAssistantSlack"},
 			{"ListOrganizationAssistants", "GET", "/admin/organization.assistants"},
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
@@ -335,148 +339,150 @@ func New(
 			{"RunOrganizationEncryption", "POST", "/admin/organizationEncryption.run"},
 			{"FinalizeOrganizationEncryption", "POST", "/admin/organizationEncryption.finalize"},
 		},
-		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Logout:                                  NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		GetSession:                              NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationFeatures:                 NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationFeature:                  NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
-		TriggerOrganizationChatAnalysis:         NewTriggerOrganizationChatAnalysisHandler(e.TriggerOrganizationChatAnalysis, mux, decoder, encoder, errhandler, formatter),
-		OpenOrganizationInDashboard:             NewOpenOrganizationInDashboardHandler(e.OpenOrganizationInDashboard, mux, decoder, encoder, errhandler, formatter),
-		GetProject:                              NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		UpdateOrganization:                      NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
-		BulkUpdateAccountType:                   NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
-		DisableOrganization:                     NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
-		EnableOrganization:                      NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
-		GetOrganization:                         NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationMembers:                 NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationProjects:                NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
-		ListProjectMcpServers:                   NewListProjectMcpServersHandler(e.ListProjectMcpServers, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationActivity:                NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
-		ListUsers:                               NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
-		ListUserOrganizations:                   NewListUserOrganizationsHandler(e.ListUserOrganizations, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizations:                       NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
-		ExtendTrial:                             NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
-		CreateOrganization:                      NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
-		RearmTrial:                              NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationStats:                    NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
-		RepairInferenceKey:                      NewRepairInferenceKeyHandler(e.RepairInferenceKey, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceKeys:                        NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
-		SetInferenceKeyMonthlyLimit:             NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceSpendHistory:                NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
-		GetPaygBillingSummary:                   NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
-		GetStripeCustomer:                       NewGetStripeCustomerHandler(e.GetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
-		SetStripeCustomer:                       NewSetStripeCustomerHandler(e.SetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
-		SetAdoptionDashboardURL:                 NewSetAdoptionDashboardURLHandler(e.SetAdoptionDashboardURL, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscription:                   NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		CancelStripeSubscription:                NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ResumeStripeSubscription:                NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		MarkEnterpriseTrialConverted:            NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
-		CreateGlobalIssuer:                      NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalIssuerDuplicatePreflight:       NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalIssuers:                       NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalIssuer:                         NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateGlobalIssuer:                      NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteGlobalIssuer:                      NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		FetchGlobalIssuerMetadata:               NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
-		RefreshGlobalIssuerMetadata:             NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
-		ListGlobalIssuerConvergenceCandidates:   NewListGlobalIssuerConvergenceCandidatesHandler(e.ListGlobalIssuerConvergenceCandidates, mux, decoder, encoder, errhandler, formatter),
-		GetGlobalIssuerMigratePreflight:         NewGetGlobalIssuerMigratePreflightHandler(e.GetGlobalIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
-		MigrateToGlobalIssuer:                   NewMigrateToGlobalIssuerHandler(e.MigrateToGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
-		UploadPlatformImage:                     NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
-		ServeImage:                              NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
-		StartTrial:                              NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
-		ChangeTrialEndDate:                      NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
-		GetMeterUsage:                           NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
-		GetSpendBreakdown:                       NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
-		GetSupportMatrix:                        NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
-		UpdateSupportMatrix:                     NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
-		GetSupportCoverage:                      NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
-		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
-		SetMcpServerScopePin:                    NewSetMcpServerScopePinHandler(e.SetMcpServerScopePin, mux, decoder, encoder, errhandler, formatter),
-		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
-		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationHookFleet:                NewGetOrganizationHookFleetHandler(e.GetOrganizationHookFleet, mux, decoder, encoder, errhandler, formatter),
-		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
-		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
-		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
-		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateHandler(e.CurateRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
-		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsHandler(e.RetryRegistryPromotionDocs, mux, decoder, encoder, errhandler, formatter),
-		GetRegistryOktaCandidates:               NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
-		ListRegistryOktaUnmapped:                NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
-		ListRegistryEntries:                     NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
-		GetRegistryEntry:                        NewGetRegistryEntryHandler(e.GetRegistryEntry, mux, decoder, encoder, errhandler, formatter),
-		CreateRegistryEntry:                     NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
-		SaveRegistryEntry:                       NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
-		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
-		ListOnboardingSteps:                     NewListOnboardingStepsHandler(e.ListOnboardingSteps, mux, decoder, encoder, errhandler, formatter),
-		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsHandler(e.GetOnboardingStackOptions, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackHandler(e.GetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationOnboardingStack:          NewSetOrganizationOnboardingStackHandler(e.SetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
-		ListOnboardingUseCases:                  NewListOnboardingUseCasesHandler(e.ListOnboardingUseCases, mux, decoder, encoder, errhandler, formatter),
-		CreateOnboardingUseCase:                 NewCreateOnboardingUseCaseHandler(e.CreateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
-		UpdateOnboardingUseCase:                 NewUpdateOnboardingUseCaseHandler(e.UpdateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
-		DeleteOnboardingUseCase:                 NewDeleteOnboardingUseCaseHandler(e.DeleteOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
-		ListOnboardingPlaybooks:                 NewListOnboardingPlaybooksHandler(e.ListOnboardingPlaybooks, mux, decoder, encoder, errhandler, formatter),
-		CreateOnboardingPlaybook:                NewCreateOnboardingPlaybookHandler(e.CreateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		UpdateOnboardingPlaybook:                NewUpdateOnboardingPlaybookHandler(e.UpdateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		DeleteOnboardingPlaybook:                NewDeleteOnboardingPlaybookHandler(e.DeleteOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		CloneOnboardingPlaybook:                 NewCloneOnboardingPlaybookHandler(e.CloneOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationOnboardingPlaybook:       NewGetOrganizationOnboardingPlaybookHandler(e.GetOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		AssignOrganizationOnboardingPlaybook:    NewAssignOrganizationOnboardingPlaybookHandler(e.AssignOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
-		ListSignupOffers:                        NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
-		CreateSignupOffer:                       NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
-		UpdateSignupOffer:                       NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
-		GetSelfServeStatus:                      NewGetSelfServeStatusHandler(e.GetSelfServeStatus, mux, decoder, encoder, errhandler, formatter),
-		SetSelfServeDisabled:                    NewSetSelfServeDisabledHandler(e.SetSelfServeDisabled, mux, decoder, encoder, errhandler, formatter),
-		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackHandler(e.ListPlatformMcpFeedback, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
-		SetStripeSubscription:                   NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ListCustomerUsage:                       NewListCustomerUsageHandler(e.ListCustomerUsage, mux, decoder, encoder, errhandler, formatter),
-		ListUpstreamOAuthMigrationOrganizations: NewListUpstreamOAuthMigrationOrganizationsHandler(e.ListUpstreamOAuthMigrationOrganizations, mux, decoder, encoder, errhandler, formatter),
-		GetUpstreamOAuthMigrationStatus:         NewGetUpstreamOAuthMigrationStatusHandler(e.GetUpstreamOAuthMigrationStatus, mux, decoder, encoder, errhandler, formatter),
-		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationHandler(e.RunUpstreamOAuthMigration, mux, decoder, encoder, errhandler, formatter),
-		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
-		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
-		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
-		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
-		GetSecretBackfills:                      NewGetSecretBackfillsHandler(e.GetSecretBackfills, mux, decoder, encoder, errhandler, formatter),
-		RunMarketplaceTokenBackfill:             NewRunMarketplaceTokenBackfillHandler(e.RunMarketplaceTokenBackfill, mux, decoder, encoder, errhandler, formatter),
-		RunRunnerKeyOrganizationBackfill:        NewRunRunnerKeyOrganizationBackfillHandler(e.RunRunnerKeyOrganizationBackfill, mux, decoder, encoder, errhandler, formatter),
-		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
-		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
-		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
-		ListPlatformExternalCredentials:         NewListPlatformExternalCredentialsHandler(e.ListPlatformExternalCredentials, mux, decoder, encoder, errhandler, formatter),
-		GetGcpIamPlatformCredential:             NewGetGcpIamPlatformCredentialHandler(e.GetGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
-		CreateGcpIamPlatformCredential:          NewCreateGcpIamPlatformCredentialHandler(e.CreateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
-		UpdateGcpIamPlatformCredential:          NewUpdateGcpIamPlatformCredentialHandler(e.UpdateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
-		VerifyGcpIamPlatformCredential:          NewVerifyGcpIamPlatformCredentialHandler(e.VerifyGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
-		DeleteGcpIamPlatformCredential:          NewDeleteGcpIamPlatformCredentialHandler(e.DeleteGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
-		GetMemoryEvalOptions:                    NewGetMemoryEvalOptionsHandler(e.GetMemoryEvalOptions, mux, decoder, encoder, errhandler, formatter),
-		ListMemoryEvalRuns:                      NewListMemoryEvalRunsHandler(e.ListMemoryEvalRuns, mux, decoder, encoder, errhandler, formatter),
-		GetMemoryEvalRun:                        NewGetMemoryEvalRunHandler(e.GetMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
-		StartMemoryEvalRun:                      NewStartMemoryEvalRunHandler(e.StartMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
-		ListAssistantOrganizations:              NewListAssistantOrganizationsHandler(e.ListAssistantOrganizations, mux, decoder, encoder, errhandler, formatter),
-		RepairOrganizationAssistantAgentNames:   NewRepairOrganizationAssistantAgentNamesHandler(e.RepairOrganizationAssistantAgentNames, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationAssistants:              NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
-		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
-		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
-		GetHooksRollout:                         NewGetHooksRolloutHandler(e.GetHooksRollout, mux, decoder, encoder, errhandler, formatter),
-		GetHooksReleaseProgress:                 NewGetHooksReleaseProgressHandler(e.GetHooksReleaseProgress, mux, decoder, encoder, errhandler, formatter),
-		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultHandler(e.SetHooksRolloutDefault, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
-		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutHandler(e.ClearOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
-		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationHandler(e.ListTailscaleOAuthMigration, mux, decoder, encoder, errhandler, formatter),
-		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepHandler(e.RunTailscaleOAuthMigrationStep, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationEncryption:               NewGetOrganizationEncryptionHandler(e.GetOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationEncryptionTransitions:   NewListOrganizationEncryptionTransitionsHandler(e.ListOrganizationEncryptionTransitions, mux, decoder, encoder, errhandler, formatter),
-		EnrollOrganizationEncryption:            NewEnrollOrganizationEncryptionHandler(e.EnrollOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
-		RollbackOrganizationEncryption:          NewRollbackOrganizationEncryptionHandler(e.RollbackOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
-		RunOrganizationEncryption:               NewRunOrganizationEncryptionHandler(e.RunOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
-		FinalizeOrganizationEncryption:          NewFinalizeOrganizationEncryptionHandler(e.FinalizeOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		Login:                                      NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:                                   NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:                                     NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetSession:                                 NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationFeatures:                    NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationFeature:                     NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationChatAnalysisSettings:        NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationChatAnalysisSettings:        NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
+		TriggerOrganizationChatAnalysis:            NewTriggerOrganizationChatAnalysisHandler(e.TriggerOrganizationChatAnalysis, mux, decoder, encoder, errhandler, formatter),
+		OpenOrganizationInDashboard:                NewOpenOrganizationInDashboardHandler(e.OpenOrganizationInDashboard, mux, decoder, encoder, errhandler, formatter),
+		GetProject:                                 NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateOrganization:                         NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
+		BulkUpdateAccountType:                      NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
+		DisableOrganization:                        NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
+		EnableOrganization:                         NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
+		GetOrganization:                            NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationMembers:                    NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationProjects:                   NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListProjectMcpServers:                      NewListProjectMcpServersHandler(e.ListProjectMcpServers, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationActivity:                   NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
+		ListUsers:                                  NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
+		ListUserOrganizations:                      NewListUserOrganizationsHandler(e.ListUserOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizations:                          NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ExtendTrial:                                NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
+		CreateOrganization:                         NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
+		RearmTrial:                                 NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationStats:                       NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		RepairInferenceKey:                         NewRepairInferenceKeyHandler(e.RepairInferenceKey, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceKeys:                           NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
+		SetInferenceKeyMonthlyLimit:                NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:                   NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:                      NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetStripeCustomer:                          NewGetStripeCustomerHandler(e.GetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
+		SetStripeCustomer:                          NewSetStripeCustomerHandler(e.SetStripeCustomer, mux, decoder, encoder, errhandler, formatter),
+		SetAdoptionDashboardURL:                    NewSetAdoptionDashboardURLHandler(e.SetAdoptionDashboardURL, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:                      NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:                   NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:                   NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		MarkEnterpriseTrialConverted:               NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		CreateGlobalIssuer:                         NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerDuplicatePreflight:          NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuers:                          NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuer:                            NewGetGlobalIssuerHandler(e.GetGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateGlobalIssuer:                         NewUpdateGlobalIssuerHandler(e.UpdateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteGlobalIssuer:                         NewDeleteGlobalIssuerHandler(e.DeleteGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchGlobalIssuerMetadata:                  NewFetchGlobalIssuerMetadataHandler(e.FetchGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshGlobalIssuerMetadata:                NewRefreshGlobalIssuerMetadataHandler(e.RefreshGlobalIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		ListGlobalIssuerConvergenceCandidates:      NewListGlobalIssuerConvergenceCandidatesHandler(e.ListGlobalIssuerConvergenceCandidates, mux, decoder, encoder, errhandler, formatter),
+		GetGlobalIssuerMigratePreflight:            NewGetGlobalIssuerMigratePreflightHandler(e.GetGlobalIssuerMigratePreflight, mux, decoder, encoder, errhandler, formatter),
+		MigrateToGlobalIssuer:                      NewMigrateToGlobalIssuerHandler(e.MigrateToGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
+		UploadPlatformImage:                        NewUploadPlatformImageHandler(e.UploadPlatformImage, mux, decoder, encoder, errhandler, formatter),
+		ServeImage:                                 NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
+		StartTrial:                                 NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
+		ChangeTrialEndDate:                         NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
+		GetMeterUsage:                              NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSpendBreakdown:                          NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
+		GetSupportMatrix:                           NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		UpdateSupportMatrix:                        NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		GetSupportCoverage:                         NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
+		DescribeMcpServerHealth:                    NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
+		SetMcpServerScopePin:                       NewSetMcpServerScopePinHandler(e.SetMcpServerScopePin, mux, decoder, encoder, errhandler, formatter),
+		GetMcpServerToolCalls:                      NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
+		GetHookClients:                             NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHookFleet:                   NewGetOrganizationHookFleetHandler(e.GetOrganizationHookFleet, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryPromotionCandidates:            NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryPromotionCandidate:              NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
+		PromoteRegistryCandidate:                   NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
+		CurateRegistryPromotionCandidate:           NewCurateRegistryPromotionCandidateHandler(e.CurateRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
+		RetryRegistryPromotionDocs:                 NewRetryRegistryPromotionDocsHandler(e.RetryRegistryPromotionDocs, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryOktaCandidates:                  NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryOktaUnmapped:                   NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryEntries:                        NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryEntry:                           NewGetRegistryEntryHandler(e.GetRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		CreateRegistryEntry:                        NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SaveRegistryEntry:                          NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SetRegistryEntryPublished:                  NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingSteps:                        NewListOnboardingStepsHandler(e.ListOnboardingSteps, mux, decoder, encoder, errhandler, formatter),
+		GetOnboardingStackOptions:                  NewGetOnboardingStackOptionsHandler(e.GetOnboardingStackOptions, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationOnboardingStack:             NewGetOrganizationOnboardingStackHandler(e.GetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationOnboardingStack:             NewSetOrganizationOnboardingStackHandler(e.SetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingUseCases:                     NewListOnboardingUseCasesHandler(e.ListOnboardingUseCases, mux, decoder, encoder, errhandler, formatter),
+		CreateOnboardingUseCase:                    NewCreateOnboardingUseCaseHandler(e.CreateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		UpdateOnboardingUseCase:                    NewUpdateOnboardingUseCaseHandler(e.UpdateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		DeleteOnboardingUseCase:                    NewDeleteOnboardingUseCaseHandler(e.DeleteOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingPlaybooks:                    NewListOnboardingPlaybooksHandler(e.ListOnboardingPlaybooks, mux, decoder, encoder, errhandler, formatter),
+		CreateOnboardingPlaybook:                   NewCreateOnboardingPlaybookHandler(e.CreateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		UpdateOnboardingPlaybook:                   NewUpdateOnboardingPlaybookHandler(e.UpdateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		DeleteOnboardingPlaybook:                   NewDeleteOnboardingPlaybookHandler(e.DeleteOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		CloneOnboardingPlaybook:                    NewCloneOnboardingPlaybookHandler(e.CloneOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationOnboardingPlaybook:          NewGetOrganizationOnboardingPlaybookHandler(e.GetOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		AssignOrganizationOnboardingPlaybook:       NewAssignOrganizationOnboardingPlaybookHandler(e.AssignOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		ListSignupOffers:                           NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
+		CreateSignupOffer:                          NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		UpdateSignupOffer:                          NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		GetSelfServeStatus:                         NewGetSelfServeStatusHandler(e.GetSelfServeStatus, mux, decoder, encoder, errhandler, formatter),
+		SetSelfServeDisabled:                       NewSetSelfServeDisabledHandler(e.SetSelfServeDisabled, mux, decoder, encoder, errhandler, formatter),
+		ListPlatformMcpFeedback:                    NewListPlatformMcpFeedbackHandler(e.ListPlatformMcpFeedback, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscriptionCandidate:             NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
+		SetStripeSubscription:                      NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ListCustomerUsage:                          NewListCustomerUsageHandler(e.ListCustomerUsage, mux, decoder, encoder, errhandler, formatter),
+		ListUpstreamOAuthMigrationOrganizations:    NewListUpstreamOAuthMigrationOrganizationsHandler(e.ListUpstreamOAuthMigrationOrganizations, mux, decoder, encoder, errhandler, formatter),
+		GetUpstreamOAuthMigrationStatus:            NewGetUpstreamOAuthMigrationStatusHandler(e.GetUpstreamOAuthMigrationStatus, mux, decoder, encoder, errhandler, formatter),
+		RunUpstreamOAuthMigration:                  NewRunUpstreamOAuthMigrationHandler(e.RunUpstreamOAuthMigration, mux, decoder, encoder, errhandler, formatter),
+		EnableUpstreamAuthEnforcement:              NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
+		DisableUpstreamAuthEnforcement:             NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
+		BackfillMcpAuthGrants:                      NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
+		BackfillMcpConnectGrants:                   NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
+		GetSecretBackfills:                         NewGetSecretBackfillsHandler(e.GetSecretBackfills, mux, decoder, encoder, errhandler, formatter),
+		RunMarketplaceTokenBackfill:                NewRunMarketplaceTokenBackfillHandler(e.RunMarketplaceTokenBackfill, mux, decoder, encoder, errhandler, formatter),
+		RunRunnerKeyOrganizationBackfill:           NewRunRunnerKeyOrganizationBackfillHandler(e.RunRunnerKeyOrganizationBackfill, mux, decoder, encoder, errhandler, formatter),
+		GetProjectRedeployPreview:                  NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
+		RedeployProject:                            NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
+		ListCustomDomains:                          NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
+		ListPlatformExternalCredentials:            NewListPlatformExternalCredentialsHandler(e.ListPlatformExternalCredentials, mux, decoder, encoder, errhandler, formatter),
+		GetGcpIamPlatformCredential:                NewGetGcpIamPlatformCredentialHandler(e.GetGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		CreateGcpIamPlatformCredential:             NewCreateGcpIamPlatformCredentialHandler(e.CreateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		UpdateGcpIamPlatformCredential:             NewUpdateGcpIamPlatformCredentialHandler(e.UpdateGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		VerifyGcpIamPlatformCredential:             NewVerifyGcpIamPlatformCredentialHandler(e.VerifyGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		DeleteGcpIamPlatformCredential:             NewDeleteGcpIamPlatformCredentialHandler(e.DeleteGcpIamPlatformCredential, mux, decoder, encoder, errhandler, formatter),
+		GetMemoryEvalOptions:                       NewGetMemoryEvalOptionsHandler(e.GetMemoryEvalOptions, mux, decoder, encoder, errhandler, formatter),
+		ListMemoryEvalRuns:                         NewListMemoryEvalRunsHandler(e.ListMemoryEvalRuns, mux, decoder, encoder, errhandler, formatter),
+		GetMemoryEvalRun:                           NewGetMemoryEvalRunHandler(e.GetMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
+		StartMemoryEvalRun:                         NewStartMemoryEvalRunHandler(e.StartMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
+		ListAssistantOrganizations:                 NewListAssistantOrganizationsHandler(e.ListAssistantOrganizations, mux, decoder, encoder, errhandler, formatter),
+		RepairOrganizationAssistantAgentNames:      NewRepairOrganizationAssistantAgentNamesHandler(e.RepairOrganizationAssistantAgentNames, mux, decoder, encoder, errhandler, formatter),
+		BackfillOrganizationAssistantBuiltinGrants: NewBackfillOrganizationAssistantBuiltinGrantsHandler(e.BackfillOrganizationAssistantBuiltinGrants, mux, decoder, encoder, errhandler, formatter),
+		MigrateOrganizationAssistantSlack:          NewMigrateOrganizationAssistantSlackHandler(e.MigrateOrganizationAssistantSlack, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationAssistants:                 NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
+		MigrateOrganizationAssistantIdentities:     NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
+		MigrateOrganizationAssistantsToKit:         NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
+		GetHooksRollout:                            NewGetHooksRolloutHandler(e.GetHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		GetHooksReleaseProgress:                    NewGetHooksReleaseProgressHandler(e.GetHooksReleaseProgress, mux, decoder, encoder, errhandler, formatter),
+		SetHooksRolloutDefault:                     NewSetHooksRolloutDefaultHandler(e.SetHooksRolloutDefault, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHooksRollout:                NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationHooksRollout:                NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		ClearOrganizationHooksRollout:              NewClearOrganizationHooksRolloutHandler(e.ClearOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		ListTailscaleOAuthMigration:                NewListTailscaleOAuthMigrationHandler(e.ListTailscaleOAuthMigration, mux, decoder, encoder, errhandler, formatter),
+		RunTailscaleOAuthMigrationStep:             NewRunTailscaleOAuthMigrationStepHandler(e.RunTailscaleOAuthMigrationStep, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationEncryption:                  NewGetOrganizationEncryptionHandler(e.GetOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationEncryptionTransitions:      NewListOrganizationEncryptionTransitionsHandler(e.ListOrganizationEncryptionTransitions, mux, decoder, encoder, errhandler, formatter),
+		EnrollOrganizationEncryption:               NewEnrollOrganizationEncryptionHandler(e.EnrollOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		RollbackOrganizationEncryption:             NewRollbackOrganizationEncryptionHandler(e.RollbackOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		RunOrganizationEncryption:                  NewRunOrganizationEncryptionHandler(e.RunOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		FinalizeOrganizationEncryption:             NewFinalizeOrganizationEncryptionHandler(e.FinalizeOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -610,6 +616,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.StartMemoryEvalRun = m(s.StartMemoryEvalRun)
 	s.ListAssistantOrganizations = m(s.ListAssistantOrganizations)
 	s.RepairOrganizationAssistantAgentNames = m(s.RepairOrganizationAssistantAgentNames)
+	s.BackfillOrganizationAssistantBuiltinGrants = m(s.BackfillOrganizationAssistantBuiltinGrants)
+	s.MigrateOrganizationAssistantSlack = m(s.MigrateOrganizationAssistantSlack)
 	s.ListOrganizationAssistants = m(s.ListOrganizationAssistants)
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
@@ -759,6 +767,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStartMemoryEvalRunHandler(mux, h.StartMemoryEvalRun)
 	MountListAssistantOrganizationsHandler(mux, h.ListAssistantOrganizations)
 	MountRepairOrganizationAssistantAgentNamesHandler(mux, h.RepairOrganizationAssistantAgentNames)
+	MountBackfillOrganizationAssistantBuiltinGrantsHandler(mux, h.BackfillOrganizationAssistantBuiltinGrants)
+	MountMigrateOrganizationAssistantSlackHandler(mux, h.MigrateOrganizationAssistantSlack)
 	MountListOrganizationAssistantsHandler(mux, h.ListOrganizationAssistants)
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
@@ -7482,6 +7492,115 @@ func NewRepairOrganizationAssistantAgentNamesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "repairOrganizationAssistantAgentNames")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountBackfillOrganizationAssistantBuiltinGrantsHandler configures the mux to
+// serve the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint.
+func MountBackfillOrganizationAssistantBuiltinGrantsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.backfillAssistantBuiltinGrants", f)
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsHandler creates a HTTP handler
+// which loads the HTTP request and calls the "admin" service
+// "backfillOrganizationAssistantBuiltinGrants" endpoint.
+func NewBackfillOrganizationAssistantBuiltinGrantsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBackfillOrganizationAssistantBuiltinGrantsRequest(mux, decoder)
+		encodeResponse = EncodeBackfillOrganizationAssistantBuiltinGrantsResponse(encoder)
+		encodeError    = EncodeBackfillOrganizationAssistantBuiltinGrantsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "backfillOrganizationAssistantBuiltinGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMigrateOrganizationAssistantSlackHandler configures the mux to serve
+// the "admin" service "migrateOrganizationAssistantSlack" endpoint.
+func MountMigrateOrganizationAssistantSlackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.migrateAssistantSlack", f)
+}
+
+// NewMigrateOrganizationAssistantSlackHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "migrateOrganizationAssistantSlack" endpoint.
+func NewMigrateOrganizationAssistantSlackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMigrateOrganizationAssistantSlackRequest(mux, decoder)
+		encodeResponse = EncodeMigrateOrganizationAssistantSlackResponse(encoder)
+		encodeError    = EncodeMigrateOrganizationAssistantSlackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "migrateOrganizationAssistantSlack")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

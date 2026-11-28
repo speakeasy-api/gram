@@ -5279,6 +5279,9 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.DisabledStatus != nil {
 			values.Add("disabled_status", *p.DisabledStatus)
 		}
+		if p.Whitelisted != nil {
+			values.Add("whitelisted", fmt.Sprintf("%v", *p.Whitelisted))
+		}
 		if p.MinMembers != nil {
 			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
 		}
@@ -29970,6 +29973,496 @@ func DecodeRepairOrganizationAssistantAgentNamesResponse(decoder func(*http.Resp
 	}
 }
 
+// BuildBackfillOrganizationAssistantBuiltinGrantsRequest instantiates a HTTP
+// request object with method and path set to call the "admin" service
+// "backfillOrganizationAssistantBuiltinGrants" endpoint
+func (c *Client) BuildBackfillOrganizationAssistantBuiltinGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BackfillOrganizationAssistantBuiltinGrantsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "backfillOrganizationAssistantBuiltinGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBackfillOrganizationAssistantBuiltinGrantsRequest returns an encoder
+// for requests sent to the admin backfillOrganizationAssistantBuiltinGrants
+// server.
+func EncodeBackfillOrganizationAssistantBuiltinGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BackfillOrganizationAssistantBuiltinGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "backfillOrganizationAssistantBuiltinGrants", "*admin.BackfillOrganizationAssistantBuiltinGrantsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewBackfillOrganizationAssistantBuiltinGrantsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBackfillOrganizationAssistantBuiltinGrantsResponse returns a decoder
+// for responses returned by the admin
+// backfillOrganizationAssistantBuiltinGrants endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeBackfillOrganizationAssistantBuiltinGrantsResponse may return the
+// following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBackfillOrganizationAssistantBuiltinGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			res := NewBackfillOrganizationAssistantBuiltinGrantsAdminAssistantBuiltinGrantBackfillRunOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+				}
+				err = ValidateBackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+				}
+				return nil, NewBackfillOrganizationAssistantBuiltinGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+				}
+				err = ValidateBackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+				}
+				return nil, NewBackfillOrganizationAssistantBuiltinGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "backfillOrganizationAssistantBuiltinGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			err = ValidateBackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "backfillOrganizationAssistantBuiltinGrants", err)
+			}
+			return nil, NewBackfillOrganizationAssistantBuiltinGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "backfillOrganizationAssistantBuiltinGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateOrganizationAssistantSlackRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "migrateOrganizationAssistantSlack" endpoint
+func (c *Client) BuildMigrateOrganizationAssistantSlackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateOrganizationAssistantSlackAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "migrateOrganizationAssistantSlack", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateOrganizationAssistantSlackRequest returns an encoder for
+// requests sent to the admin migrateOrganizationAssistantSlack server.
+func EncodeMigrateOrganizationAssistantSlackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MigrateOrganizationAssistantSlackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "migrateOrganizationAssistantSlack", "*admin.MigrateOrganizationAssistantSlackPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMigrateOrganizationAssistantSlackRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "migrateOrganizationAssistantSlack", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateOrganizationAssistantSlackResponse returns a decoder for
+// responses returned by the admin migrateOrganizationAssistantSlack endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeMigrateOrganizationAssistantSlackResponse may return the following
+// errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateOrganizationAssistantSlackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateOrganizationAssistantSlackResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			res := NewMigrateOrganizationAssistantSlackAdminAssistantSlackMigrationRunOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body MigrateOrganizationAssistantSlackUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body MigrateOrganizationAssistantSlackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateOrganizationAssistantSlackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateOrganizationAssistantSlackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateOrganizationAssistantSlackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateOrganizationAssistantSlackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateOrganizationAssistantSlackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateOrganizationAssistantSlackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+				}
+				err = ValidateMigrateOrganizationAssistantSlackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+				}
+				return nil, NewMigrateOrganizationAssistantSlackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateOrganizationAssistantSlackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+				}
+				err = ValidateMigrateOrganizationAssistantSlackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+				}
+				return nil, NewMigrateOrganizationAssistantSlackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantSlack", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateOrganizationAssistantSlackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			err = ValidateMigrateOrganizationAssistantSlackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "migrateOrganizationAssistantSlack", err)
+			}
+			return nil, NewMigrateOrganizationAssistantSlackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "migrateOrganizationAssistantSlack", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListOrganizationAssistantsRequest instantiates a HTTP request object
 // with method and path set to call the "admin" service
 // "listOrganizationAssistants" endpoint
@@ -36310,6 +36803,39 @@ func unmarshalAdminAssistantAgentNameRepairResultResponseBodyToAdminAdminAssista
 		ProjectID:   *v.ProjectID,
 		Name:        *v.Name,
 		Outcome:     *v.Outcome,
+	}
+
+	return res
+}
+
+// unmarshalAdminAssistantBuiltinGrantBackfillResultResponseBodyToAdminAdminAssistantBuiltinGrantBackfillResult
+// builds a value of type *admin.AdminAssistantBuiltinGrantBackfillResult from
+// a value of type *AdminAssistantBuiltinGrantBackfillResultResponseBody.
+func unmarshalAdminAssistantBuiltinGrantBackfillResultResponseBodyToAdminAdminAssistantBuiltinGrantBackfillResult(v *AdminAssistantBuiltinGrantBackfillResultResponseBody) *admin.AdminAssistantBuiltinGrantBackfillResult {
+	res := &admin.AdminAssistantBuiltinGrantBackfillResult{
+		AssistantID: *v.AssistantID,
+		ProjectID:   *v.ProjectID,
+		Name:        *v.Name,
+		Outcome:     *v.Outcome,
+		GrantsAdded: *v.GrantsAdded,
+	}
+
+	return res
+}
+
+// unmarshalAdminAssistantSlackMigrationResultResponseBodyToAdminAdminAssistantSlackMigrationResult
+// builds a value of type *admin.AdminAssistantSlackMigrationResult from a
+// value of type *AdminAssistantSlackMigrationResultResponseBody.
+func unmarshalAdminAssistantSlackMigrationResultResponseBodyToAdminAdminAssistantSlackMigrationResult(v *AdminAssistantSlackMigrationResultResponseBody) *admin.AdminAssistantSlackMigrationResult {
+	res := &admin.AdminAssistantSlackMigrationResult{
+		AssistantID:       *v.AssistantID,
+		ProjectID:         *v.ProjectID,
+		Name:              *v.Name,
+		Outcome:           *v.Outcome,
+		AuthClientID:      v.AuthClientID,
+		TriggersRepointed: *v.TriggersRepointed,
+		ToolsetsDetached:  *v.ToolsetsDetached,
+		ToolsetsDeleted:   *v.ToolsetsDeleted,
 	}
 
 	return res

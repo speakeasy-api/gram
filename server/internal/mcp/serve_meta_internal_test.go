@@ -10,15 +10,61 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestRecordMetaGatewayAttribution_RecordsWorkloadAgentAndProject(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	issuerID := uuid.New()
+	workload := urn.NewWorkloadPrincipal(issuerID, "system:serviceaccount:billing:worker")
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	ctx := contextvalues.WithWorkloadAgent(
+		contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-1"}, workload),
+		agent,
+	)
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := provider.Tracer("test").Start(ctx, "gateway request")
+
+	recordMetaGatewayAttribution(ctx, projectID)
+	span.End()
+
+	require.Len(t, recorder.Ended(), 1)
+	got := map[string]string{}
+	for _, kv := range recorder.Ended()[0].Attributes() {
+		got[string(kv.Key)] = kv.Value.AsString()
+	}
+	require.Equal(t, projectID.String(), got[string(attr.ProjectIDKey)])
+	require.Equal(t, string(urn.PrincipalTypeAgent), got[string(attr.AuthorizationActorTypeKey)])
+	require.Equal(t, agent.ID, got[string(attr.AuthorizationActorIDKey)])
+	require.Equal(t, issuerID.String(), got[string(attr.WorkloadIssuerIDKey)])
+	require.Equal(t, "system:serviceaccount:billing:worker", got[string(attr.WorkloadSubjectKey)])
+}
+
+func TestRecordMetaGatewayAttribution_LeavesProjectlessGatewayUnstamped(t *testing.T) {
+	t.Parallel()
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := provider.Tracer("test").Start(t.Context(), "projectless gateway request")
+	recordMetaGatewayAttribution(ctx, uuid.Nil)
+	span.End()
+
+	require.Empty(t, recorder.Ended()[0].Attributes())
+}
 
 func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 	t.Parallel()

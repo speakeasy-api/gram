@@ -8690,6 +8690,8 @@ type TriggerInstance struct {
 	// @access: confidential
 	EnvironmentID uuid.NullUUID
 	// @access: confidential
+	AuthClientID uuid.NullUUID
+	// @access: confidential
 	TargetKind string
 	// @access: confidential
 	TargetRef string
@@ -9009,6 +9011,9 @@ type User struct {
 	WorkosDeletedAt pgtype.Timestamptz
 	// @access: confidential
 	DeletedAt pgtype.Timestamptz
+	// When staff blocked this user from the platform. A set value rejects every request the user makes or authorizes.
+	// @access: confidential
+	BlacklistedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

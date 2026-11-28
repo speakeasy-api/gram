@@ -28,6 +28,9 @@ var errMemberToolsetDenied = errors.New("member toolset connect denied")
 // supported so they can connect it. A member whose private toolset the caller
 // may not connect to returns errMemberToolsetDenied.
 func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
+	if member.backend == metaMemberBackendPlatform {
+		return true, false, nil
+	}
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
@@ -113,6 +116,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		securityKeys:          nil,
 		Token:                 "gateway-oauth-capability",
 		shared:                false,
+		presented:             false,
 	}}
 	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	return satisfied, satisfied, err

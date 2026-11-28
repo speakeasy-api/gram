@@ -46,11 +46,12 @@ func (k gatewayCallerKind) String() string {
 // ceiling contains only the immutable policy of the credential itself; live
 // principal and owner policies remain separate and are rechecked per request.
 type gatewayCaller struct {
-	kind         gatewayCallerKind
-	principal    urn.Principal
-	owner        string
-	ceiling      []authz.Grant
-	projectScope *uuid.UUID
+	kind                gatewayCallerKind
+	principal           urn.Principal
+	owner               string
+	ceiling             []authz.Grant
+	projectScope        *uuid.UUID
+	principalCredential bool
 }
 
 func emptyGatewayCaller() gatewayCaller {
@@ -59,11 +60,12 @@ func emptyGatewayCaller() gatewayCaller {
 
 func newGatewayCaller(kind gatewayCallerKind) gatewayCaller {
 	return gatewayCaller{
-		kind:         kind,
-		principal:    urn.Principal{Type: "", ID: ""},
-		owner:        "",
-		ceiling:      nil,
-		projectScope: nil,
+		kind:                kind,
+		principal:           urn.Principal{Type: "", ID: ""},
+		owner:               "",
+		ceiling:             nil,
+		projectScope:        nil,
+		principalCredential: false,
 	}
 }
 
@@ -142,7 +144,7 @@ func (s *Service) admitGatewayCaller(
 		}
 		return ctx, nil, WriteAuthenticateChallenge(w, authentication.protectedResourceURL, "credential cannot enter this gateway")
 	}
-	if caller.kind == gatewayCallerWorkload {
+	if caller.kind == gatewayCallerWorkload && !caller.principalCredential {
 		authedCtx = authz.WithoutCredentialCeiling(authedCtx)
 	}
 
@@ -259,6 +261,12 @@ func gatewayCallerFromContext(ctx context.Context, subject urn.SessionSubject) (
 		return gatewayCaller{}, fmt.Errorf("admitted %s caller has no credential ceiling", subject.Kind)
 	}
 	caller.ceiling = ceiling
+	if credential, ok := principalcredential.FromContext(ctx); ok {
+		caller.principalCredential = true
+		projectID := credential.Credential.ProjectID
+		caller.projectScope = &projectID
+		return caller, nil
+	}
 	projectScope, err := gatewayCallerProjectScope(ceiling)
 	if err != nil {
 		return gatewayCaller{}, err

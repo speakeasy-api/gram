@@ -2472,6 +2472,15 @@ VALUES (
     'backfill'
 );
 
+-- name: SoftDeleteAuthClientFixture :exec
+UPDATE mcp_auth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: HardDeleteAuthClientFixture :exec
+DELETE FROM mcp_auth_clients
+WHERE id = @id AND organization_id = @organization_id;
+
 -- name: SetWorkloadIssuerWildcardAdmissionForTest :execrows
 -- Test-only fixture for an issuer policy change while admission waits on its lock.
 UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission
@@ -2834,4 +2843,12 @@ VALUES (@id, @ai_product_id, @url, @display_name, @enabled, @is_pattern);
 UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,
     deleted_at = sqlc.narg('deleted_at')
+WHERE id = @id;
+
+-- name: SetOrganizationServingStateFixture :exec
+-- Sets the two flags that decide whether an organization's MCP servers are
+-- served at all.
+UPDATE organization_metadata
+SET whitelisted = @whitelisted,
+    disabled_at = CASE WHEN @disabled::boolean THEN clock_timestamp() ELSE NULL END
 WHERE id = @id;

@@ -4302,6 +4302,37 @@ func (q *Queries) GetUnexpiredPlatformMCPOperationReceipt(ctx context.Context, a
 	return i, err
 }
 
+const hasActiveMembershipInEnabledOrganization = `-- name: HasActiveMembershipInEnabledOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM users
+  JOIN organization_user_relationships
+    ON organization_user_relationships.user_id = users.id
+  JOIN organization_metadata
+    ON organization_metadata.id = organization_user_relationships.organization_id
+  WHERE users.id = $1
+    AND users.deleted_at IS NULL
+    AND organization_user_relationships.organization_id = $2
+    AND organization_user_relationships.deleted_at IS NULL
+    AND organization_metadata.disabled_at IS NULL
+) AS exists
+`
+
+type HasActiveMembershipInEnabledOrganizationParams struct {
+	UserID         string
+	OrganizationID string
+}
+
+// Returns whether the user is an active member of an organization that has
+// not been disabled. Platform MCP runs this on every request so disabling an
+// organization cuts off connections that are already open.
+func (q *Queries) HasActiveMembershipInEnabledOrganization(ctx context.Context, arg HasActiveMembershipInEnabledOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveMembershipInEnabledOrganization, arg.UserID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasAttachedPlatformMCPOnboardingDistributionForProject = `-- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
 SELECT EXISTS (
     SELECT 1

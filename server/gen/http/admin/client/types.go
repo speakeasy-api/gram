@@ -754,6 +754,21 @@ type RepairOrganizationAssistantAgentNamesRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
+// BackfillOrganizationAssistantBuiltinGrantsRequestBody is the type of the
+// "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint HTTP
+// request body.
+type BackfillOrganizationAssistantBuiltinGrantsRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
+// MigrateOrganizationAssistantSlackRequestBody is the type of the "admin"
+// service "migrateOrganizationAssistantSlack" endpoint HTTP request body.
+type MigrateOrganizationAssistantSlackRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
 // MigrateOrganizationAssistantIdentitiesRequestBody is the type of the "admin"
 // service "migrateOrganizationAssistantIdentities" endpoint HTTP request body.
 type MigrateOrganizationAssistantIdentitiesRequestBody struct {
@@ -3493,6 +3508,43 @@ type RepairOrganizationAssistantAgentNamesResponseBody struct {
 	Conflicts      *int64                                             `form:"conflicts,omitempty" json:"conflicts,omitempty" xml:"conflicts,omitempty"`
 	Failed         *int64                                             `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
 	Results        []*AdminAssistantAgentNameRepairResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsResponseBody is the type of the
+// "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint HTTP
+// response body.
+type BackfillOrganizationAssistantBuiltinGrantsResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Assistants whose agents received one or more built-in Connect grants.
+	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
+	// Assistants whose agents already held all required permanent built-in Connect
+	// grants.
+	AlreadyGranted *int64 `form:"already_granted,omitempty" json:"already_granted,omitempty" xml:"already_granted,omitempty"`
+	// Assistants whose backfill failed. Running again retries them.
+	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
+	// One result per live agent-backed assistant.
+	Results []*AdminAssistantBuiltinGrantBackfillResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackResponseBody is the type of the "admin"
+// service "migrateOrganizationAssistantSlack" endpoint HTTP response body.
+type MigrateOrganizationAssistantSlackResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Assistants migrated in this run.
+	Migrated *int64 `form:"migrated,omitempty" json:"migrated,omitempty" xml:"migrated,omitempty"`
+	// Assistants already using the built-in assistant-slack toolset and slack_app
+	// auth client.
+	AlreadyMigrated *int64 `form:"already_migrated,omitempty" json:"already_migrated,omitempty" xml:"already_migrated,omitempty"`
+	// Assistants without any Slack toolset or trigger.
+	NoSlack *int64 `form:"no_slack,omitempty" json:"no_slack,omitempty" xml:"no_slack,omitempty"`
+	// Assistants with Slack configured that lack a live dedicated agent.
+	NeedsIdentity *int64 `form:"needs_identity,omitempty" json:"needs_identity,omitempty" xml:"needs_identity,omitempty"`
+	// Assistants whose migration failed. Running again retries them.
+	Failed *int64 `form:"failed,omitempty" json:"failed,omitempty" xml:"failed,omitempty"`
+	// One result per live assistant.
+	Results []*AdminAssistantSlackMigrationResultResponseBody `form:"results,omitempty" json:"results,omitempty" xml:"results,omitempty"`
 }
 
 // ListOrganizationAssistantsResponseBody is the type of the "admin" service
@@ -27849,6 +27901,405 @@ type RepairOrganizationAssistantAgentNamesGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody is the
+// type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "unauthorized" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "forbidden" error.
+type BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "bad_request" error.
+type BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "not_found" error.
+type BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "conflict" error.
+type BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody is
+// the type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "unsupported_media" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody is the type of
+// the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "invalid" error.
+type BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody is
+// the type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "invariant_violation" error.
+type BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody is the type
+// of the "admin" service "backfillOrganizationAssistantBuiltinGrants" endpoint
+// HTTP response body for the "unexpected" error.
+type BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody is the
+// type of the "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint HTTP response body for the "gateway_error" error.
+type BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackUnavailableResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unavailable" error.
+type MigrateOrganizationAssistantSlackUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackUnauthorizedResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unauthorized" error.
+type MigrateOrganizationAssistantSlackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackForbiddenResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "forbidden" error.
+type MigrateOrganizationAssistantSlackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackBadRequestResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "bad_request" error.
+type MigrateOrganizationAssistantSlackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackNotFoundResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "not_found" error.
+type MigrateOrganizationAssistantSlackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackConflictResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "conflict" error.
+type MigrateOrganizationAssistantSlackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody is the type of
+// the "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP
+// response body for the "unsupported_media" error.
+type MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackInvalidResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "invalid" error.
+type MigrateOrganizationAssistantSlackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackInvariantViolationResponseBody is the type
+// of the "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP
+// response body for the "invariant_violation" error.
+type MigrateOrganizationAssistantSlackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackUnexpectedResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "unexpected" error.
+type MigrateOrganizationAssistantSlackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MigrateOrganizationAssistantSlackGatewayErrorResponseBody is the type of the
+// "admin" service "migrateOrganizationAssistantSlack" endpoint HTTP response
+// body for the "gateway_error" error.
+type MigrateOrganizationAssistantSlackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListOrganizationAssistantsUnauthorizedResponseBody is the type of the
 // "admin" service "listOrganizationAssistants" endpoint HTTP response body for
 // the "unauthorized" error.
@@ -33029,6 +33480,51 @@ type AdminAssistantAgentNameRepairResultResponseBody struct {
 	Outcome     *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
 }
 
+// AdminAssistantBuiltinGrantBackfillResultResponseBody is used to define
+// fields on response body types.
+type AdminAssistantBuiltinGrantBackfillResultResponseBody struct {
+	// The assistant ID.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The assistant's project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The assistant name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// granted when the run added one or more missing built-in Connect grants,
+	// already_granted when every built-in Connect grant was already present
+	// permanently, and failed when writing failed.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// How many built-in Connect grants were written or promoted to permanent for
+	// this assistant.
+	GrantsAdded *int64 `form:"grants_added,omitempty" json:"grants_added,omitempty" xml:"grants_added,omitempty"`
+}
+
+// AdminAssistantSlackMigrationResultResponseBody is used to define fields on
+// response body types.
+type AdminAssistantSlackMigrationResultResponseBody struct {
+	// The assistant ID.
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The assistant's project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The assistant name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// migrated when Slack credentials, grants, triggers, or toolsets were updated;
+	// already_migrated when Slack was already using a slack_app auth client and
+	// built-in grants; no_slack when the assistant has no Slack setup;
+	// needs_identity when the assistant has Slack configured but no live dedicated
+	// agent; failed when migrating this assistant failed.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// The slack_app auth client created or reused for this assistant.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+	// Legacy environment-backed Slack triggers repointed to the slack_app auth
+	// client.
+	TriggersRepointed *int64 `form:"triggers_repointed,omitempty" json:"triggers_repointed,omitempty" xml:"triggers_repointed,omitempty"`
+	// Per-assistant Slack-only toolsets detached from this assistant.
+	ToolsetsDetached *int64 `form:"toolsets_detached,omitempty" json:"toolsets_detached,omitempty" xml:"toolsets_detached,omitempty"`
+	// Detached per-assistant Slack-only toolsets soft-deleted because nothing else
+	// referenced them.
+	ToolsetsDeleted *int64 `form:"toolsets_deleted,omitempty" json:"toolsets_deleted,omitempty" xml:"toolsets_deleted,omitempty"`
+}
+
 // AdminOrganizationAssistantResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationAssistantResponseBody struct {
@@ -34194,6 +34690,26 @@ func NewStartMemoryEvalRunRequestBody(p *admin.StartMemoryEvalRunPayload) *Start
 // endpoint of the "admin" service.
 func NewRepairOrganizationAssistantAgentNamesRequestBody(p *admin.RepairOrganizationAssistantAgentNamesPayload) *RepairOrganizationAssistantAgentNamesRequestBody {
 	body := &RepairOrganizationAssistantAgentNamesRequestBody{
+		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsRequestBody builds the HTTP
+// request body from the payload of the
+// "backfillOrganizationAssistantBuiltinGrants" endpoint of the "admin" service.
+func NewBackfillOrganizationAssistantBuiltinGrantsRequestBody(p *admin.BackfillOrganizationAssistantBuiltinGrantsPayload) *BackfillOrganizationAssistantBuiltinGrantsRequestBody {
+	body := &BackfillOrganizationAssistantBuiltinGrantsRequestBody{
+		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewMigrateOrganizationAssistantSlackRequestBody builds the HTTP request body
+// from the payload of the "migrateOrganizationAssistantSlack" endpoint of the
+// "admin" service.
+func NewMigrateOrganizationAssistantSlackRequestBody(p *admin.MigrateOrganizationAssistantSlackPayload) *MigrateOrganizationAssistantSlackRequestBody {
+	body := &MigrateOrganizationAssistantSlackRequestBody{
 		OrganizationID: p.OrganizationID,
 	}
 	return body
@@ -56449,6 +56965,372 @@ func NewRepairOrganizationAssistantAgentNamesGatewayError(body *RepairOrganizati
 	return v
 }
 
+// NewBackfillOrganizationAssistantBuiltinGrantsAdminAssistantBuiltinGrantBackfillRunOK
+// builds a "admin" service "backfillOrganizationAssistantBuiltinGrants"
+// endpoint result from a HTTP "OK" response.
+func NewBackfillOrganizationAssistantBuiltinGrantsAdminAssistantBuiltinGrantBackfillRunOK(body *BackfillOrganizationAssistantBuiltinGrantsResponseBody) *admin.AdminAssistantBuiltinGrantBackfillRun {
+	v := &admin.AdminAssistantBuiltinGrantBackfillRun{
+		OrganizationID: *body.OrganizationID,
+		Granted:        *body.Granted,
+		AlreadyGranted: *body.AlreadyGranted,
+		Failed:         *body.Failed,
+	}
+	v.Results = make([]*admin.AdminAssistantBuiltinGrantBackfillResult, len(body.Results))
+	for i, val := range body.Results {
+		if val == nil {
+			v.Results[i] = nil
+			continue
+		}
+		v.Results[i] = unmarshalAdminAssistantBuiltinGrantBackfillResultResponseBodyToAdminAdminAssistantBuiltinGrantBackfillResult(val)
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnauthorized builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint unauthorized
+// error.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnauthorized(body *BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsForbidden builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint forbidden error.
+func NewBackfillOrganizationAssistantBuiltinGrantsForbidden(body *BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsBadRequest builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint bad_request
+// error.
+func NewBackfillOrganizationAssistantBuiltinGrantsBadRequest(body *BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsNotFound builds a admin service
+// backfillOrganizationAssistantBuiltinGrants endpoint not_found error.
+func NewBackfillOrganizationAssistantBuiltinGrantsNotFound(body *BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsConflict builds a admin service
+// backfillOrganizationAssistantBuiltinGrants endpoint conflict error.
+func NewBackfillOrganizationAssistantBuiltinGrantsConflict(body *BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnsupportedMedia builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint
+// unsupported_media error.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnsupportedMedia(body *BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsInvalid builds a admin service
+// backfillOrganizationAssistantBuiltinGrants endpoint invalid error.
+func NewBackfillOrganizationAssistantBuiltinGrantsInvalid(body *BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsInvariantViolation builds a
+// admin service backfillOrganizationAssistantBuiltinGrants endpoint
+// invariant_violation error.
+func NewBackfillOrganizationAssistantBuiltinGrantsInvariantViolation(body *BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsUnexpected builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint unexpected error.
+func NewBackfillOrganizationAssistantBuiltinGrantsUnexpected(body *BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillOrganizationAssistantBuiltinGrantsGatewayError builds a admin
+// service backfillOrganizationAssistantBuiltinGrants endpoint gateway_error
+// error.
+func NewBackfillOrganizationAssistantBuiltinGrantsGatewayError(body *BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackAdminAssistantSlackMigrationRunOK builds
+// a "admin" service "migrateOrganizationAssistantSlack" endpoint result from a
+// HTTP "OK" response.
+func NewMigrateOrganizationAssistantSlackAdminAssistantSlackMigrationRunOK(body *MigrateOrganizationAssistantSlackResponseBody) *admin.AdminAssistantSlackMigrationRun {
+	v := &admin.AdminAssistantSlackMigrationRun{
+		OrganizationID:  *body.OrganizationID,
+		Migrated:        *body.Migrated,
+		AlreadyMigrated: *body.AlreadyMigrated,
+		NoSlack:         *body.NoSlack,
+		NeedsIdentity:   *body.NeedsIdentity,
+		Failed:          *body.Failed,
+	}
+	v.Results = make([]*admin.AdminAssistantSlackMigrationResult, len(body.Results))
+	for i, val := range body.Results {
+		if val == nil {
+			v.Results[i] = nil
+			continue
+		}
+		v.Results[i] = unmarshalAdminAssistantSlackMigrationResultResponseBodyToAdminAdminAssistantSlackMigrationResult(val)
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackUnavailable builds a admin service
+// migrateOrganizationAssistantSlack endpoint unavailable error.
+func NewMigrateOrganizationAssistantSlackUnavailable(body *MigrateOrganizationAssistantSlackUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackUnauthorized builds a admin service
+// migrateOrganizationAssistantSlack endpoint unauthorized error.
+func NewMigrateOrganizationAssistantSlackUnauthorized(body *MigrateOrganizationAssistantSlackUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackForbidden builds a admin service
+// migrateOrganizationAssistantSlack endpoint forbidden error.
+func NewMigrateOrganizationAssistantSlackForbidden(body *MigrateOrganizationAssistantSlackForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackBadRequest builds a admin service
+// migrateOrganizationAssistantSlack endpoint bad_request error.
+func NewMigrateOrganizationAssistantSlackBadRequest(body *MigrateOrganizationAssistantSlackBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackNotFound builds a admin service
+// migrateOrganizationAssistantSlack endpoint not_found error.
+func NewMigrateOrganizationAssistantSlackNotFound(body *MigrateOrganizationAssistantSlackNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackConflict builds a admin service
+// migrateOrganizationAssistantSlack endpoint conflict error.
+func NewMigrateOrganizationAssistantSlackConflict(body *MigrateOrganizationAssistantSlackConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackUnsupportedMedia builds a admin service
+// migrateOrganizationAssistantSlack endpoint unsupported_media error.
+func NewMigrateOrganizationAssistantSlackUnsupportedMedia(body *MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackInvalid builds a admin service
+// migrateOrganizationAssistantSlack endpoint invalid error.
+func NewMigrateOrganizationAssistantSlackInvalid(body *MigrateOrganizationAssistantSlackInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackInvariantViolation builds a admin
+// service migrateOrganizationAssistantSlack endpoint invariant_violation error.
+func NewMigrateOrganizationAssistantSlackInvariantViolation(body *MigrateOrganizationAssistantSlackInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackUnexpected builds a admin service
+// migrateOrganizationAssistantSlack endpoint unexpected error.
+func NewMigrateOrganizationAssistantSlackUnexpected(body *MigrateOrganizationAssistantSlackUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMigrateOrganizationAssistantSlackGatewayError builds a admin service
+// migrateOrganizationAssistantSlack endpoint gateway_error error.
+func NewMigrateOrganizationAssistantSlackGatewayError(body *MigrateOrganizationAssistantSlackGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListOrganizationAssistantsAdminOrganizationAssistantsOK builds a "admin"
 // service "listOrganizationAssistants" endpoint result from a HTTP "OK"
 // response.
@@ -63420,6 +64302,68 @@ func ValidateRepairOrganizationAssistantAgentNamesResponseBody(body *RepairOrgan
 	for _, e := range body.Results {
 		if e != nil {
 			if err2 := ValidateAdminAssistantAgentNameRepairResultResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsResponseBody runs the
+// validations defined on BackfillOrganizationAssistantBuiltinGrantsResponseBody
+func ValidateBackfillOrganizationAssistantBuiltinGrantsResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Granted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted", "body"))
+	}
+	if body.AlreadyGranted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("already_granted", "body"))
+	}
+	if body.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if body.Results == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("results", "body"))
+	}
+	for _, e := range body.Results {
+		if e != nil {
+			if err2 := ValidateAdminAssistantBuiltinGrantBackfillResultResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackResponseBody runs the validations
+// defined on MigrateOrganizationAssistantSlackResponseBody
+func ValidateMigrateOrganizationAssistantSlackResponseBody(body *MigrateOrganizationAssistantSlackResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Migrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("migrated", "body"))
+	}
+	if body.AlreadyMigrated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("already_migrated", "body"))
+	}
+	if body.NoSlack == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("no_slack", "body"))
+	}
+	if body.NeedsIdentity == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("needs_identity", "body"))
+	}
+	if body.Failed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("failed", "body"))
+	}
+	if body.Results == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("results", "body"))
+	}
+	for _, e := range body.Results {
+		if e != nil {
+			if err2 := ValidateAdminAssistantSlackMigrationResultResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -95087,6 +96031,531 @@ func ValidateRepairOrganizationAssistantAgentNamesGatewayErrorResponseBody(body 
 	return
 }
 
+// ValidateBackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_unauthorized_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody runs
+// the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_forbidden_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_bad_request_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody runs
+// the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_not_found_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsConflictResponseBody runs
+// the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_conflict_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsConflictResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_unsupported_media_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody runs
+// the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_invalid_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_invariant_violation_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_unexpected_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody
+// runs the validations defined on
+// backfillOrganizationAssistantBuiltinGrants_gateway_error_response_body
+func ValidateBackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody(body *BackfillOrganizationAssistantBuiltinGrantsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackUnavailableResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_unavailable_response_body
+func ValidateMigrateOrganizationAssistantSlackUnavailableResponseBody(body *MigrateOrganizationAssistantSlackUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackUnauthorizedResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_unauthorized_response_body
+func ValidateMigrateOrganizationAssistantSlackUnauthorizedResponseBody(body *MigrateOrganizationAssistantSlackUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackForbiddenResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_forbidden_response_body
+func ValidateMigrateOrganizationAssistantSlackForbiddenResponseBody(body *MigrateOrganizationAssistantSlackForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackBadRequestResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_bad_request_response_body
+func ValidateMigrateOrganizationAssistantSlackBadRequestResponseBody(body *MigrateOrganizationAssistantSlackBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackNotFoundResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_not_found_response_body
+func ValidateMigrateOrganizationAssistantSlackNotFoundResponseBody(body *MigrateOrganizationAssistantSlackNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackConflictResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_conflict_response_body
+func ValidateMigrateOrganizationAssistantSlackConflictResponseBody(body *MigrateOrganizationAssistantSlackConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackUnsupportedMediaResponseBody runs
+// the validations defined on
+// migrateOrganizationAssistantSlack_unsupported_media_response_body
+func ValidateMigrateOrganizationAssistantSlackUnsupportedMediaResponseBody(body *MigrateOrganizationAssistantSlackUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackInvalidResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_invalid_response_body
+func ValidateMigrateOrganizationAssistantSlackInvalidResponseBody(body *MigrateOrganizationAssistantSlackInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackInvariantViolationResponseBody runs
+// the validations defined on
+// migrateOrganizationAssistantSlack_invariant_violation_response_body
+func ValidateMigrateOrganizationAssistantSlackInvariantViolationResponseBody(body *MigrateOrganizationAssistantSlackInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackUnexpectedResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_unexpected_response_body
+func ValidateMigrateOrganizationAssistantSlackUnexpectedResponseBody(body *MigrateOrganizationAssistantSlackUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMigrateOrganizationAssistantSlackGatewayErrorResponseBody runs the
+// validations defined on
+// migrateOrganizationAssistantSlack_gateway_error_response_body
+func ValidateMigrateOrganizationAssistantSlackGatewayErrorResponseBody(body *MigrateOrganizationAssistantSlackGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListOrganizationAssistantsUnauthorizedResponseBody runs the
 // validations defined on listOrganizationAssistants_unauthorized_response_body
 func ValidateListOrganizationAssistantsUnauthorizedResponseBody(body *ListOrganizationAssistantsUnauthorizedResponseBody) (err error) {
@@ -102365,6 +103834,79 @@ func ValidateAdminAssistantAgentNameRepairResultResponseBody(body *AdminAssistan
 		if !(*body.Outcome == "repaired" || *body.Outcome == "conflict" || *body.Outcome == "failed") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"repaired", "conflict", "failed"}))
 		}
+	}
+	return
+}
+
+// ValidateAdminAssistantBuiltinGrantBackfillResultResponseBody runs the
+// validations defined on AdminAssistantBuiltinGrantBackfillResultResponseBody
+func ValidateAdminAssistantBuiltinGrantBackfillResultResponseBody(body *AdminAssistantBuiltinGrantBackfillResultResponseBody) (err error) {
+	if body.AssistantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.GrantsAdded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("grants_added", "body"))
+	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "granted" || *body.Outcome == "already_granted" || *body.Outcome == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"granted", "already_granted", "failed"}))
+		}
+	}
+	return
+}
+
+// ValidateAdminAssistantSlackMigrationResultResponseBody runs the validations
+// defined on AdminAssistantSlackMigrationResultResponseBody
+func ValidateAdminAssistantSlackMigrationResultResponseBody(body *AdminAssistantSlackMigrationResultResponseBody) (err error) {
+	if body.AssistantID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.TriggersRepointed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("triggers_repointed", "body"))
+	}
+	if body.ToolsetsDetached == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets_detached", "body"))
+	}
+	if body.ToolsetsDeleted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets_deleted", "body"))
+	}
+	if body.AssistantID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "migrated" || *body.Outcome == "already_migrated" || *body.Outcome == "no_slack" || *body.Outcome == "needs_identity" || *body.Outcome == "failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"migrated", "already_migrated", "no_slack", "needs_identity", "failed"}))
+		}
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
 	}
 	return
 }

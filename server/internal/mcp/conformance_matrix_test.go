@@ -670,21 +670,3 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 		assignsSessions: false,
 	})
 }
-
-func TestConformanceMatrix_AgentGateway(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fixture := seedAgentGateway(t, ctx, ti)
-
-	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service.Service, nil)
-
-	runConformanceMatrix(t, conformanceTarget{
-		router:          router,
-		path:            "/agent-mcp/" + fixture.agent.ID.String(),
-		authorization:   "Bearer " + fixture.token,
-		supported:       mcpversions.SupportedMetaServer(),
-		assignsSessions: true,
-	})
-}

@@ -24,8 +24,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -56,17 +59,11 @@ type metaGateContext struct {
 	// fromRequest is what the request says about its client, for connection rows.
 	fromRequest mcpconnectionattempts.Option
 	projectID   uuid.UUID
-	// metaServerID is a stored meta_mcp_servers row for an operator-built
-	// gateway, and a synthetic per-agent id (agentgateway.GatewayID) for an
-	// agent gateway. Treat it as a telemetry grouping key, never as
-	// something to read a row back by.
+	// metaServerID is the stored meta_mcp_servers row for an operator-built
+	// gateway.
 	metaServerID uuid.UUID
-	// agentID is the machine caller's effective agent. On the legacy agent
-	// gateway it also identifies the source of derived membership.
+	// agentID is the machine caller's effective agent.
 	agentID uuid.UUID
-	// agentMembership selects the legacy agent gateway's derived members.
-	// Machine callers on stored gateways keep the operator's member rows.
-	agentMembership bool
 	// organizationGateway is set only when this request is an organization
 	// gateway, which derives its members from the signed-in user's access
 	// across the organization instead of stored membership rows.
@@ -87,7 +84,7 @@ type metaGateContext struct {
 	userSessionIssuerID uuid.UUID
 	// connectRoot is the gateway's root URL, under which each member has a
 	// connect page a signed-in person opens to connect it. Empty when nobody
-	// signs in to the gateway in a browser: ungated and agent gateways.
+	// signs in to the gateway in a browser, such as ungated gateways.
 	connectRoot string
 	// chainUpstream acquires a member credential at consent or live dispatch.
 	// Cached discovery leaves it unset.
@@ -146,10 +143,6 @@ type metaGateContext struct {
 // value is a stored gateway, whose members are its meta_mcp_server_members
 // rows.
 type metaMembership struct {
-	// agentID is set for an agent gateway: its members are what the agent's
-	// delegated policy reaches.
-	agentID uuid.UUID
-
 	// organization is set for an organization gateway: its members are what
 	// the signed-in user can reach across the organization.
 	organization bool
@@ -158,7 +151,7 @@ type metaMembership struct {
 // derived reports whether members come from the caller's access rather than
 // from stored membership rows.
 func (m metaMembership) derived() bool {
-	return m.agentID != uuid.Nil || m.organization
+	return m.organization
 }
 
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
@@ -238,6 +231,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err != nil {
 		return err
 	}
+	recordMetaGatewayAttribution(ctx, gate.projectID)
 	r = r.WithContext(ctx)
 	if prepared.empty() {
 		return nil
@@ -266,7 +260,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
 		endpoint := *mcpEndpoint
 		refresh := metaCodeGateRefresher(func(callbackCtx context.Context, current *metamcprepo.MetaMcpServer) (context.Context, *metaGateContext, error) {
-			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
+			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{organization: false}, nil, admission)
 		})
 		if membership.organization {
 			// The organization gateway has no stored rows to re-read: reloading
@@ -700,7 +694,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
 	if memberFailure != nil {
 		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
-		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.logMessage
 	}
 	s.telemLogger.Log(ctx, params)
 }
@@ -833,6 +827,24 @@ type metaGateAdmission struct {
 	resolution      mcpversions.Resolution
 }
 
+// recordMetaGatewayAttribution stamps the admitted caller and project on the
+// request span. Initialize requests are the durable session observation, while
+// later requests keep tool-call spans attributable to the same caller. A
+// projectless gateway has no project to stamp and is deliberately left alone.
+func recordMetaGatewayAttribution(ctx context.Context, projectID uuid.UUID) {
+	if projectID == uuid.Nil {
+		return
+	}
+
+	attrs := []attribute.KeyValue{attr.ProjectIDKey.String(projectID.String())}
+	for key, value := range contextvalues.ActorTelemetryAttributes(ctx) {
+		if value != "" {
+			attrs = append(attrs, attribute.Key(key).String(value))
+		}
+	}
+	trace.SpanFromContext(ctx).SetAttributes(attrs...)
+}
+
 // membership says where the members come from. resolvedEndpoint is the
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
@@ -845,16 +857,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	var gateCaller gatewayCaller
-	gateAgentID := membership.agentID
+	gateAgentID := uuid.Nil
 	switch {
 	case !metaServer.UserSessionIssuerID.Valid:
-		// Ungated stored gateways still pass through the shared network
-		// boundary. Agent gateways already applied the same organization rule
-		// after authenticating the path-bound key.
-		if membership.agentID == uuid.Nil {
-			if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
-				return ctx, nil, err
-			}
+		// Ungated stored gateways still pass through the shared network boundary.
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return ctx, nil, err
 		}
 	case membership.organization:
 		// Members span projects, so credentials resolve per member project
@@ -918,10 +926,16 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			logger.WarnContext(ctx, "build gateway connect url", attr.SlogError(err))
 		} else {
 			connectURL = root + "/connect/first-party"
-			if membership.agentID == uuid.Nil {
-				connectRoot = root
-			}
+			connectRoot = root
 		}
+	}
+	chatID := request.chatID
+	if boundChatID, ok := assistanttokens.RuntimeChatID(ctx); ok {
+		bound := boundChatID.String()
+		if chatID != "" && chatID != bound {
+			return ctx, nil, oops.E(oops.CodeForbidden, nil, "chat ID does not match bound thread")
+		}
+		chatID = bound
 	}
 	gate := &metaGateContext{
 		caller:           gateCaller,
@@ -932,7 +946,6 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		metaServerID:     metaServer.ID,
 		// Machine callers use their effective agent's upstream credentials.
 		agentID:             gateAgentID,
-		agentMembership:     membership.agentID != uuid.Nil,
 		organizationGateway: membership.organization,
 		organizationID:      metaServer.OrganizationID,
 		tokens:              nil,
@@ -954,7 +967,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           request.sessionID,
-		chatID:              request.chatID,
+		chatID:              chatID,
 		userID:              "",
 		externalUserID:      "",
 		apiKeyID:            "",
@@ -971,11 +984,6 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
 			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
 		}
-	}
-	// An agent gateway serves its delegated members progressively; the
-	// organization gateway follows the connection's choice.
-	if membership.agentID != uuid.Nil {
-		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —

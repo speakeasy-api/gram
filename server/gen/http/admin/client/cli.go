@@ -693,7 +693,7 @@ func BuildListUserOrganizationsPayload(adminListUserOrganizationsUserID string, 
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsWhitelisted string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -734,6 +734,17 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			}
 			if err != nil {
 				return nil, err
+			}
+		}
+	}
+	var whitelisted *bool
+	{
+		if adminListOrganizationsWhitelisted != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListOrganizationsWhitelisted)
+			whitelisted = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for whitelisted, must be BOOL")
 			}
 		}
 	}
@@ -835,6 +846,7 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.AccountTypes = accountTypes
 	v.TrialStates = trialStates
 	v.DisabledStatus = disabledStatus
+	v.Whitelisted = whitelisted
 	v.MinMembers = minMembers
 	v.MaxMembers = maxMembers
 	v.CreatedFrom = createdFrom
@@ -4158,6 +4170,57 @@ func BuildRepairOrganizationAssistantAgentNamesPayload(adminRepairOrganizationAs
 		}
 	}
 	v := &admin.RepairOrganizationAssistantAgentNamesPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBackfillOrganizationAssistantBuiltinGrantsPayload builds the payload
+// for the admin backfillOrganizationAssistantBuiltinGrants endpoint from CLI
+// flags.
+func BuildBackfillOrganizationAssistantBuiltinGrantsPayload(adminBackfillOrganizationAssistantBuiltinGrantsBody string, adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken string) (*admin.BackfillOrganizationAssistantBuiltinGrantsPayload, error) {
+	var err error
+	var body BackfillOrganizationAssistantBuiltinGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBackfillOrganizationAssistantBuiltinGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillOrganizationAssistantBuiltinGrantsPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMigrateOrganizationAssistantSlackPayload builds the payload for the
+// admin migrateOrganizationAssistantSlack endpoint from CLI flags.
+func BuildMigrateOrganizationAssistantSlackPayload(adminMigrateOrganizationAssistantSlackBody string, adminMigrateOrganizationAssistantSlackAdminSessionToken string) (*admin.MigrateOrganizationAssistantSlackPayload, error) {
+	var err error
+	var body MigrateOrganizationAssistantSlackRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMigrateOrganizationAssistantSlackBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMigrateOrganizationAssistantSlackAdminSessionToken != "" {
+			adminSessionToken = &adminMigrateOrganizationAssistantSlackAdminSessionToken
+		}
+	}
+	v := &admin.MigrateOrganizationAssistantSlackPayload{
 		OrganizationID: body.OrganizationID,
 	}
 	v.AdminSessionToken = adminSessionToken

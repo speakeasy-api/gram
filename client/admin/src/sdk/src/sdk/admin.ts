@@ -5,6 +5,7 @@
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
+import { adminBackfillOrganizationAssistantBuiltinGrants } from "../funcs/adminBackfillOrganizationAssistantBuiltinGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -99,6 +100,7 @@ import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateOrganizationAssistantIdentities } from "../funcs/adminMigrateOrganizationAssistantIdentities.js";
+import { adminMigrateOrganizationAssistantSlack } from "../funcs/adminMigrateOrganizationAssistantSlack.js";
 import { adminMigrateOrganizationAssistantsToKit } from "../funcs/adminMigrateOrganizationAssistantsToKit.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
@@ -143,9 +145,11 @@ import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { adminVerifyGcpIamPlatformCredential } from "../funcs/adminVerifyGcpIamPlatformCredential.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminAssistantAgentNameRepairRun } from "../models/components/adminassistantagentnamerepairrun.js";
+import { AdminAssistantBuiltinGrantBackfillRun } from "../models/components/adminassistantbuiltingrantbackfillrun.js";
 import { AdminAssistantIdentityMigrationRun } from "../models/components/adminassistantidentitymigrationrun.js";
 import { AdminAssistantKitMigrationRun } from "../models/components/adminassistantkitmigrationrun.js";
 import { AdminAssistantOrganizations } from "../models/components/adminassistantorganizations.js";
+import { AdminAssistantSlackMigrationRun } from "../models/components/adminassistantslackmigrationrun.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
@@ -216,6 +220,7 @@ import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstre
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
+import { BackfillOrganizationAssistantBuiltinGrantsRequestBody } from "../models/components/backfillorganizationassistantbuiltingrantsrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -249,6 +254,7 @@ import { ListSignupOffersResponseBody } from "../models/components/listsignupoff
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
 import { MigrateOrganizationAssistantIdentitiesRequestBody } from "../models/components/migrateorganizationassistantidentitiesrequestbody.js";
+import { MigrateOrganizationAssistantSlackRequestBody } from "../models/components/migrateorganizationassistantslackrequestbody.js";
 import { MigrateOrganizationAssistantsToKitRequestBody } from "../models/components/migrateorganizationassistantstokitrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
@@ -932,6 +938,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * backfillOrganizationAssistantBuiltinGrants admin
+   *
+   * @remarks
+   * Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.
+   */
+  async backfillOrganizationAssistantBuiltinGrants(
+    request: BackfillOrganizationAssistantBuiltinGrantsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantBuiltinGrantBackfillRun> {
+    return unwrapAsync(adminBackfillOrganizationAssistantBuiltinGrants(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * cancelStripeSubscription admin
    *
    * @remarks
@@ -1182,6 +1205,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminAssistantIdentityMigrationRun> {
     return unwrapAsync(adminMigrateOrganizationAssistantIdentities(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * migrateOrganizationAssistantSlack admin
+   *
+   * @remarks
+   * Migrates every live assistant with legacy per-assistant Slack toolsets or environment-backed Slack triggers in one organization to the built-in assistant-slack toolset backed by a slack_app typed auth client. Creates or reuses an encrypted slack_app auth client, grants the assistant's agent mcp:connect on assistant-slack and mcp:auth on the client, repoints Slack triggers to the client, and detaches (and soft-deletes if unreferenced) Slack-only per-assistant toolsets without deleting environments. Idempotent, so it is safe to run again.
+   */
+  async migrateOrganizationAssistantSlack(
+    request: MigrateOrganizationAssistantSlackRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminAssistantSlackMigrationRun> {
+    return unwrapAsync(adminMigrateOrganizationAssistantSlack(
       this,
       request,
       options,

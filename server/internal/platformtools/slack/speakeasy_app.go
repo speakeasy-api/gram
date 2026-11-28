@@ -66,6 +66,7 @@ func (t *speakeasyAppTool) Call(ctx context.Context, env toolconfig.ToolCallEnv,
 	systemEnv := toolconfig.NewCaseInsensitiveEnv()
 	systemEnv.Set(slackBotTokenEnvVar, token)
 	env.SystemEnv = systemEnv
+	env.SavedConfig = toolconfig.NewCaseInsensitiveEnv()
 	env.UserConfig = toolconfig.NewCaseInsensitiveEnv()
 	// call, not Call: the advice Call gives about the server's environment
 	// does not apply to the app's token.

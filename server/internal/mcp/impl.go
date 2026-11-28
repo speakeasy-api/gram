@@ -253,10 +253,7 @@ type Service struct {
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	// accountSwitchCache marks consent challenges an account switch spent.
 	accountSwitchCache cache.TypedCacheObject[accountSwitchMarker]
-	// Short-lived install codes. Holds a live agent key, so it is
-	// cache-only and never written to the database.
-	agentInstallCache cache.TypedCacheObject[agentInstallCode]
-	remoteLoginCache  cache.TypedCacheObject[remotesessions.RemoteLoginState]
+	remoteLoginCache   cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	// remoteLoginHopCache holds the single-use stops of the remote login
 	// browser hop onto a remote client's different callback host.
 	remoteLoginHopCache cache.TypedCacheObject[remoteLoginHop]
@@ -374,6 +371,11 @@ type oauthTokenInputs struct {
 
 	// shared marks a credential the server holds for the organization, not the caller.
 	shared bool
+
+	// presented marks a token that arrived on the request itself, as its
+	// Authorization header, which makes it a per-request value. Every other
+	// token is resolved by the server and is saved configuration.
+	presented bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -407,6 +409,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
 			shared:                entry.CredentialOwner == remotesessions.CredentialOwnerSelf,
+			presented:             false,
 		})
 	}
 	return dst, nil
@@ -732,11 +735,6 @@ func NewService(aiCatalog *aivendors.Store,
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		agentInstallCache: cache.NewTypedObjectCache[agentInstallCode](
-			logger.With(attr.SlogCacheNamespace("agent_install")),
-			cacheImpl,
-			cache.SuffixNone,
-		),
 		remoteLoginCache:        cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		remoteLoginHopCache:     cache.NewTypedObjectCache[remoteLoginHop](logger.With(attr.SlogCacheNamespace("remote_login_hop")), cacheImpl, cache.SuffixNone),
 		connectionRecoveryCache: cache.NewTypedObjectCache[connectionRecovery](logger.With(attr.SlogCacheNamespace("connection_recovery")), cacheImpl, cache.SuffixNone),
@@ -915,23 +913,6 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 
-	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceAgentMCP) {
-		var handler http.Handler
-		// Only these three ids are declared for this surface; anything else is
-		// a routing table change that must come with its handler.
-		switch route.ID { //nolint:exhaustive // the surface declares only these routes
-		case netingress.RouteRuntime:
-			handler = oops.MCPErrHandle(service.logger, service.ServeAgentGateway)
-		case netingress.RouteInstall:
-			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallCode)
-		case netingress.RouteInstallScript:
-			handler = oops.ErrHandle(service.logger, service.HandleAgentInstallScript)
-		}
-		if handler == nil {
-			panic(fmt.Sprintf("private agent MCP route %s %s has no handler", route.Method, route.Path))
-		}
-		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
-	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -958,13 +939,6 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/mcp-registry-auth", oops.ErrHandle(service.logger, service.HandleMCPRegistryAuth).ServeHTTP)
-	// Agents live outside Speakeasy and reach it on the public host, so the gateway
-	// mounts here as well as on the private listener. Its own key is the
-	// credential, so being publicly routable is not being publicly readable.
-	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", AgentInstallCodeRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallCode).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", AgentInstallScriptRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallScript).ServeHTTP)
-
 	// Gateway prefix rewrites append a slash to custom-domain root requests.
 	// Mount both runtime paths directly so POST bodies never depend on redirects.
 	for _, route := range []struct {
@@ -1331,7 +1305,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{organization: false}, nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, resolved.FeedbackToolEnabled, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
@@ -1473,6 +1447,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
 					shared:                false,
+					presented:             true,
 				})
 			}
 		case !cfg.isPublic:

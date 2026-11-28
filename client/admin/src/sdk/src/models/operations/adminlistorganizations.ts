@@ -48,6 +48,10 @@ export type AdminListOrganizationsRequest = {
    */
   disabledStatus?: DisabledStatus | undefined;
   /**
+   * Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.
+   */
+  whitelisted?: boolean | undefined;
+  /**
    * Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
    */
   minMembers?: bigint | undefined;
@@ -101,6 +105,7 @@ export type AdminListOrganizationsRequest$Outbound = {
   account_types?: Array<string> | undefined;
   trial_states?: Array<string> | undefined;
   disabled_status?: string | undefined;
+  whitelisted?: boolean | undefined;
   min_members?: string | undefined;
   max_members?: string | undefined;
   created_from?: string | undefined;
@@ -123,6 +128,7 @@ export const AdminListOrganizationsRequest$outboundSchema: z.ZodMiniType<
     accountTypes: z.optional(z.array(z.string())),
     trialStates: z.optional(z.array(z.string())),
     disabledStatus: z.optional(DisabledStatus$outboundSchema),
+    whitelisted: z.optional(z.boolean()),
     minMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
     maxMembers: z.optional(z.pipe(z.bigint(), z.transform(v => `${v}`))),
     createdFrom: z.optional(z.string()),

@@ -642,6 +642,10 @@ func TestRecordAgentGatewayRequest(t *testing.T) {
 	m := NewMetrics(meter, testenv.NewLogger(t))
 	m.RecordAgentGatewayRequest(t.Context(), "org_test", "00000000-0000-0000-0000-000000000001")
 	got := collectMetric(t, reader, InstrumentMCPAgentGatewayRequest)
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok)
+	require.Len(t, sum.DataPoints, 1)
+	require.EqualValues(t, 1, sum.DataPoints[0].Value)
 	metricdatatest.AssertHasAttributes(t, got,
 		attr.OrganizationID("org_test"),
 		attr.AgentID("00000000-0000-0000-0000-000000000001"),

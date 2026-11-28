@@ -1,23 +1,20 @@
 package assistants
 
 import (
+	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"strings"
-
-	"encoding/json"
-	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
@@ -25,7 +22,6 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	core, db, r, identity, config, _ := kitWorkloadDBFixture(t)
 	core.encryptionClient = testenv.NewEncryptionClient(t)
 	config.Origin = core.serverURL
-	config.PersistedMCP = true
 	// Two additional roots, alongside the normally provisioned dashboard root.
 	for i := range 2 {
 		tx := testenv.BeginTx(t, t.Context(), db)
@@ -42,28 +38,15 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Active, event.State)
 
-	var selected uuid.UUID
-	for _, slug := range []string{"default-env", "selected-env"} {
-		env, err := environmentsrepo.New(db).CreateEnvironment(t.Context(), environmentsrepo.CreateEnvironmentParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: slug, Slug: slug})
-		require.NoError(t, err)
-		if slug == "selected-env" {
-			selected = env.ID
-		}
-	}
-	hosted, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Tools", Slug: "tools", DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true}})
-	require.NoError(t, err)
-	createCanonicalWrapper(t, db, hosted, "tools-endpoint", "private")
 	q := assistantrepo.New(db)
-	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: hosted.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
-	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID, EnvironmentID: uuid.NullUUID{UUID: selected, Valid: true}}})
-	require.NoError(t, err)
 	require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, RuntimeVersion: 3}))
-	chat := uuid.New()
-	require.NoError(t, q.UpsertAssistantChat(t.Context(), assistantrepo.UpsertAssistantChatParams{ChatID: chat, ProjectID: r.ProjectID, OrganizationID: identity.OrganizationID}))
-	thread, err := q.UpsertAssistantThread(t.Context(), assistantrepo.UpsertAssistantThreadParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID, CorrelationID: uuid.NewString(), ChatID: chat, SourceKind: sourceKindSlack, SourceRefJson: []byte("{}")})
+	chatID := uuid.New()
+	require.NoError(t, q.UpsertAssistantChat(t.Context(), assistantrepo.UpsertAssistantChatParams{ChatID: chatID, ProjectID: r.ProjectID, OrganizationID: identity.OrganizationID}))
+	thread, err := q.UpsertAssistantThread(t.Context(), assistantrepo.UpsertAssistantThreadParams{AssistantID: r.AssistantID, ProjectID: r.ProjectID, CorrelationID: uuid.NewString(), ChatID: chatID, SourceKind: sourceKindSlack, SourceRefJson: []byte("{}")})
 	require.NoError(t, err)
 	require.NoError(t, q.CreateAssistantRuntime(t.Context(), assistantrepo.CreateAssistantRuntimeParams{ID: r.ID, AssistantThreadID: thread, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Backend: runtimeBackendGKE, BackendMetadataJson: []byte("{}"), State: "starting", UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}))
 	require.NoError(t, q.SetKitRuntimeMetadataFixture(t.Context(), assistantrepo.SetKitRuntimeMetadataFixtureParams{ProjectID: r.ProjectID, RuntimeID: r.ID, RuntimeVersion: 3, Metadata: []byte("{}")}))
+
 	bootstrap := func() KitLocalBootstrap {
 		t.Helper()
 		tx := testenv.BeginTx(t, t.Context(), db)
@@ -74,45 +57,37 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		r.LifecycleTx = nil
 		require.Equal(t, identity, b.Workload.Identity)
 		require.NotEmpty(t, b.Workload.ServiceAccount)
-		// Built-ins exchange for their own resource and request explicit thread
-		// targets when no automatic context is available.
+		require.True(t, b.Workload.MCPProjectGateway)
+
 		var document struct {
 			Servers map[string]struct {
-				URL  string `json:"url"`
-				Auth struct {
+				Type    string            `json:"type"`
+				URL     string            `json:"url"`
+				Headers map[string]string `json:"headers"`
+				Auth    struct {
+					Type       string            `json:"type"`
 					Resource   string            `json:"resource"`
+					Scope      string            `json:"scope"`
 					Extensions map[string]string `json:"extensions"`
 				} `json:"auth"`
 			} `json:"mcpServers"`
 		}
 		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
-		builtin, ok := document.Servers["builtin-assistants"]
+		require.Len(t, document.Servers, 1, "Kit bootstrap must configure only the single project-gateway MCP entry")
+		gw, ok := document.Servers[kitProjectGatewayServerName]
 		require.True(t, ok)
-		require.Equal(t, "https://api.example/platform/mcp/assistants", builtin.URL)
-		require.Equal(t, builtin.URL, builtin.Auth.Resource)
-		require.Equal(t, map[string]string{"project_id": r.ProjectID.String()}, builtin.Auth.Extensions)
-		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
+		require.Equal(t, "streamable-http", gw.Type)
+		require.Equal(t, "https://api.example/mcp/gateway/identity-tests/projects/kit-workload-trust", gw.URL)
+		require.Equal(t, gw.URL, gw.Auth.Resource)
+		require.Equal(t, "workload_identity", gw.Auth.Type)
+		require.Equal(t, "mcp:connect", gw.Auth.Scope)
+		require.Empty(t, gw.Auth.Extensions)
+		require.Empty(t, gw.Headers)
+		require.Contains(t, string(b.AgentsMD), "`project-gateway`")
 		return b
 	}
-	assertEnvironment := func(b KitLocalBootstrap, expected string) {
-		t.Helper()
-		var document struct {
-			Servers map[string]struct {
-				Headers map[string]string `json:"headers"`
-			} `json:"mcpServers"`
-		}
-		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
-		found := false
-		for name, server := range document.Servers {
-			if strings.HasPrefix(name, "attached-") {
-				require.Equal(t, expected, server.Headers["Gram-Environment"])
-				found = true
-			}
-		}
-		require.True(t, found)
-	}
+
 	first := bootstrap()
-	assertEnvironment(first, "selected-env")
 
 	// Withdrawing a root revokes that event, not the assistant's runtime identity.
 	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
@@ -128,29 +103,18 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 	require.True(t, withdrawn)
 	require.ErrorIs(t, core.identities.Validate(t.Context(), db, *event.Identity), assistantidentity.ErrInvalidIdentity)
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
+
 	second := bootstrap()
-	assertEnvironment(second, "selected-env")
 	require.NotEqual(t, first.Workload.Subject, second.Workload.Subject)
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, first.Workload)))
 	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity))
-	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
-	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: hosted.ID}})
-	require.NoError(t, err)
-	assertEnvironment(bootstrap(), "default-env")
-	plain, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, Name: "Plain tools", Slug: "plain-tools"})
-	require.NoError(t, err)
-	createCanonicalWrapper(t, db, plain, "plain-tools-endpoint", "private")
-	require.NoError(t, q.SetAttachedMCPServerIssuerForTest(t.Context(), assistantrepo.SetAttachedMCPServerIssuerForTestParams{ID: plain.ID, ProjectID: r.ProjectID, UserSessionIssuerID: uuid.NullUUID{UUID: config.MCPUserSessionIssuerID, Valid: true}}))
-	require.NoError(t, q.ClearAssistantMcpServersForServers(t.Context(), assistantrepo.ClearAssistantMcpServersForServersParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID, McpServerIds: []uuid.UUID{hosted.ID}}))
-	_, err = q.AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{AssistantID: r.AssistantID, ProjectID: r.ProjectID, McpServerID: plain.ID}})
-	require.NoError(t, err)
-	assertEnvironment(bootstrap(), "")
+
 	// Replacement selecting the same agent is still a different authority.
 	iq := identityrepo.New(db)
 	require.NoError(t, iq.TombstoneAssistantBinding(t.Context(), identityrepo.TombstoneAssistantBindingParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID}))
 	_, err = iq.CreateAssistantBinding(t.Context(), identityrepo.CreateAssistantBindingParams{OrganizationID: identity.OrganizationID, ProjectID: r.ProjectID, AssistantID: r.AssistantID, AgentID: identity.AgentID})
 	require.NoError(t, err)
-	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, identity), assistantidentity.ErrInvalidIdentity)
-	_, err = core.provisionKitWorkload(t.Context(), r, config, identity, "stale-binding")
+	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, second.Workload.Identity), assistantidentity.ErrInvalidIdentity)
+	_, err = core.provisionKitWorkload(t.Context(), r, config, second.Workload.Identity, "stale-binding")
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }

@@ -224,6 +224,17 @@ type GetResponseBody struct {
 	UpdatedAt              string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetRuntimeGatewayResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body.
+type GetRuntimeGatewayResponseBody struct {
+	// Whether the agent runtime may use its bound project's gateway.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// The bound project's gateway MCP URL. Set only when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Why runtime setup is unavailable. Set only when not available.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+}
+
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
 // HTTP response body.
 type RenameResponseBody struct {
@@ -1320,6 +1331,190 @@ type GetUnexpectedResponseBody struct {
 // GetGatewayErrorResponseBody is the type of the "agents" service "get"
 // endpoint HTTP response body for the "gateway_error" error.
 type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayUnauthorizedResponseBody is the type of the "agents"
+// service "getRuntimeGateway" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetRuntimeGatewayUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayForbiddenResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "forbidden" error.
+type GetRuntimeGatewayForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayBadRequestResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "bad_request" error.
+type GetRuntimeGatewayBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayNotFoundResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "not_found" error.
+type GetRuntimeGatewayNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayConflictResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "conflict" error.
+type GetRuntimeGatewayConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayUnsupportedMediaResponseBody is the type of the "agents"
+// service "getRuntimeGateway" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetRuntimeGatewayUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayInvalidResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "invalid" error.
+type GetRuntimeGatewayInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayInvariantViolationResponseBody is the type of the "agents"
+// service "getRuntimeGateway" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetRuntimeGatewayInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayUnexpectedResponseBody is the type of the "agents" service
+// "getRuntimeGateway" endpoint HTTP response body for the "unexpected" error.
+type GetRuntimeGatewayUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetRuntimeGatewayGatewayErrorResponseBody is the type of the "agents"
+// service "getRuntimeGateway" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetRuntimeGatewayGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4591,6 +4786,17 @@ func NewGetResponseBody(res *agents.ManagedAgent) *GetResponseBody {
 	return body
 }
 
+// NewGetRuntimeGatewayResponseBody builds the HTTP response body from the
+// result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayResponseBody(res *agents.AgentRuntimeGateway) *GetRuntimeGatewayResponseBody {
+	body := &GetRuntimeGatewayResponseBody{
+		Available:         res.Available,
+		URL:               res.URL,
+		UnavailableReason: res.UnavailableReason,
+	}
+	return body
+}
+
 // NewRenameResponseBody builds the HTTP response body from the result of the
 // "rename" endpoint of the "agents" service.
 func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
@@ -5537,6 +5743,148 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 // of the "get" endpoint of the "agents" service.
 func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
 	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayUnauthorizedResponseBody(res *goa.ServiceError) *GetRuntimeGatewayUnauthorizedResponseBody {
+	body := &GetRuntimeGatewayUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayForbiddenResponseBody builds the HTTP response body from
+// the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayForbiddenResponseBody(res *goa.ServiceError) *GetRuntimeGatewayForbiddenResponseBody {
+	body := &GetRuntimeGatewayForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayBadRequestResponseBody builds the HTTP response body
+// from the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayBadRequestResponseBody(res *goa.ServiceError) *GetRuntimeGatewayBadRequestResponseBody {
+	body := &GetRuntimeGatewayBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayNotFoundResponseBody builds the HTTP response body from
+// the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayNotFoundResponseBody(res *goa.ServiceError) *GetRuntimeGatewayNotFoundResponseBody {
+	body := &GetRuntimeGatewayNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayConflictResponseBody builds the HTTP response body from
+// the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayConflictResponseBody(res *goa.ServiceError) *GetRuntimeGatewayConflictResponseBody {
+	body := &GetRuntimeGatewayConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getRuntimeGateway" endpoint of the "agents"
+// service.
+func NewGetRuntimeGatewayUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRuntimeGatewayUnsupportedMediaResponseBody {
+	body := &GetRuntimeGatewayUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayInvalidResponseBody builds the HTTP response body from
+// the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayInvalidResponseBody(res *goa.ServiceError) *GetRuntimeGatewayInvalidResponseBody {
+	body := &GetRuntimeGatewayInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getRuntimeGateway" endpoint of the "agents"
+// service.
+func NewGetRuntimeGatewayInvariantViolationResponseBody(res *goa.ServiceError) *GetRuntimeGatewayInvariantViolationResponseBody {
+	body := &GetRuntimeGatewayInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayUnexpectedResponseBody(res *goa.ServiceError) *GetRuntimeGatewayUnexpectedResponseBody {
+	body := &GetRuntimeGatewayUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetRuntimeGatewayGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getRuntimeGateway" endpoint of the "agents" service.
+func NewGetRuntimeGatewayGatewayErrorResponseBody(res *goa.ServiceError) *GetRuntimeGatewayGatewayErrorResponseBody {
+	body := &GetRuntimeGatewayGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -7907,6 +8255,16 @@ func NewGetPayload(id string, sessionToken *string) *agents.GetPayload {
 	return v
 }
 
+// NewGetRuntimeGatewayPayload builds a agents service getRuntimeGateway
+// endpoint payload.
+func NewGetRuntimeGatewayPayload(agentID string, sessionToken *string) *agents.GetRuntimeGatewayPayload {
+	v := &agents.GetRuntimeGatewayPayload{}
+	v.AgentID = agentID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewRenamePayload builds a agents service rename endpoint payload.
 func NewRenamePayload(body *RenameRequestBody, sessionToken *string) *agents.RenamePayload {
 	v := &agents.RenamePayload{
@@ -8443,8 +8801,8 @@ func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelector
 		}
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "slack_app" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -8473,8 +8831,8 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 		}
 	}
 	if body.ClientType != nil {
-		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "*"}))
+		if !(*body.ClientType == "remote_session" || *body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "slack_app" || *body.ClientType == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"remote_session", "service_account", "static_credential", "pass_through", "ema", "slack_app", "*"}))
 		}
 	}
 	if body.Disposition != nil {

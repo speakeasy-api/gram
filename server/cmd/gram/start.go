@@ -1200,6 +1200,8 @@ func newStartCommand() *cli.Command {
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			slackAppCredentials := authclients.NewSlackAppCredentialStore(db, authzEngine, encryptionClient)
+			triggerApp.SetSlackAppAuthClientLoader(slackAppCredentials)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -1341,14 +1343,16 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsCore.SetTurnStream(turnStream)
-			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL, orgHosts); err != nil {
 				return err
 			}
 			assistantsCore.SetAssetStorage(assetStorage)
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetSpeakeasySlackTokens(speakeasySlackDirectory)
+			assistantsCore.SetSlackAppCredentials(slackAppCredentials)
 			assistantsCore.SetFeatureProvider(featureFlags)
+			assistantsCore.SetProjectGatewayEvaluator(mcpService)
 			assistantsCore.SetSiteURL(siteURL)
 			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
@@ -1627,7 +1631,7 @@ func newStartCommand() *cli.Command {
 				WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, clientSecrets, upstreamTokens, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
-			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
+			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker).WithRuntimeGateway(featureFlags, orgHosts))
 			assistants.Attach(mux, assistantsSvc)
 			assistantmemories.Attach(mux, assistantmemories.NewService(
 				logger,
@@ -2303,6 +2307,7 @@ func newStartCommand() *cli.Command {
 				PlatformMCPReadTools:         assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 				PlatformMCPReadActingContext: assistant_platform_mcp_adapter.ActingContext(platformMCPAssistant.Authorizer),
 				SpeakeasySlackTools:          platformtoolsruntime.SpeakeasySlackTools(guardianPolicy.PooledClient(), triggerApp, speakeasySlackDirectory),
+				AssistantSlackTools:          platformtoolsruntime.AssistantSlackTools(guardianPolicy.PooledClient(), triggerApp, encryptionClient, serverURL, slackAppCredentials),
 			}))
 
 			// Requests get their own base context so the shutdown deadline can

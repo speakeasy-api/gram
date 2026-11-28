@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -60,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 const dispositionAssistants = "assistants"
@@ -453,6 +455,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SkipMembershipSync: supportOrgID != "",
 		Attribution:        attribution,
 	})
+	if errors.Is(err, identity.ErrUserBlocked) {
+		// The generic login failure, so the page does not reveal the block.
+		userblock.LogRefusal(ctx, s.logger, "dashboard_login", idpUser.Sub)
+		return redirectWithError(authErrInit, err)
+	}
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
@@ -1487,6 +1494,9 @@ func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName strin
 	if s.selfServeDisabled(ctx) {
 		return empty, ErrSelfServeDisabled
 	}
+	if err := orgcap.RequireRoomForOrganization(ctx, s.db, userID, ""); err != nil {
+		return empty, fmt.Errorf("check organization cap: %w", err)
+	}
 	promotionCodeID, err := s.resolvePartnerSignup(ctx, opts.PartnerCode)
 	if err != nil {
 		return empty, err
@@ -1552,6 +1562,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	if err != nil {
 		if errors.Is(err, ErrSelfServeDisabled) {
 			return oops.E(oops.CodeForbidden, err, selfServeDisabledMessage)
+		}
+		if errors.Is(err, orgcap.ErrUserHasOrganization) {
+			return oops.E(oops.CodeConflict, err, "user already has an organization").LogWarn(ctx, s.logger)
 		}
 		if oops.IsClientFault(err) {
 			return err
@@ -1649,6 +1662,18 @@ func (s *Service) persistProvisionedOrganization(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	queries := orgRepo.New(tx)
+	// The membership sync locks on the identity-provider user ID, so lock on the
+	// same key when there is one.
+	lockKey := provisionedOrg.WorkOSUserID
+	if lockKey == "" {
+		lockKey = userID
+	}
+	if err := orgcap.LockUser(ctx, tx, lockKey); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("lock organization provisioning: %w", err)
+	}
+	if err := orgcap.RequireRoomForOrganization(ctx, tx, userID, provisionedOrg.GramOrganizationID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("recheck organization cap: %w", err)
+	}
 	if opts.StripePromotionCodeID != "" {
 		// The existing create-only primitive rejects a row already inserted by
 		// identity sync (or a concurrent signup). Attribution never adopts an org.

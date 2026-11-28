@@ -16,7 +16,7 @@ use agentkit_mcp::{
     McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
     McpTransportBinding, StreamableHttpTransportConfig,
 };
-use agentkit_tools_core::CatalogReader;
+use agentkit_tools_core::{CatalogReader, ToolName, ToolSource, ToolSpec};
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -27,7 +27,7 @@ use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpSessionClient, TokenRegistry};
 use crate::telemetry::mcp_trace_decorator;
-use crate::wire::McpServer;
+use crate::wire::{McpServer, RunnerContent, is_gateway_mode};
 
 const MCP_CMD_CAPACITY: usize = 32;
 
@@ -153,6 +153,78 @@ impl KnownTools {
     }
 }
 
+/// Shared state tracking whether the thread is currently in single Project
+/// Gateway mode and caching the gateway's direct tool specs (under bare names
+/// such as `list_servers`, `execute_tool`, etc.) mapped back to their
+/// namespaced `CatalogReader` keys.
+#[derive(Clone, Default)]
+pub struct GatewayModeState(Arc<RwLock<GatewayModeInner>>);
+
+#[derive(Default)]
+struct GatewayModeInner {
+    active: bool,
+    server_id: Option<String>,
+    /// Pairs of (bare_spec, namespaced_tool_name).
+    tools: Vec<(ToolSpec, ToolName)>,
+}
+
+impl GatewayModeState {
+    pub fn from_servers(servers: &[McpServer]) -> Self {
+        let state = Self::default();
+        state.set_mode(servers);
+        state
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.0.read().unwrap_or_else(PoisonError::into_inner).active
+    }
+
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        let inner = self.0.read().unwrap_or_else(PoisonError::into_inner);
+        if !inner.active {
+            return Vec::new();
+        }
+        inner.tools.iter().map(|(spec, _)| spec.clone()).collect()
+    }
+
+    /// Resolves a bare gateway tool name (e.g. `execute_tool`) to its
+    /// namespaced `CatalogReader` name and bare `ToolSpec`.
+    pub fn resolve_bare(&self, name: &str) -> Option<(ToolSpec, ToolName)> {
+        let inner = self.0.read().unwrap_or_else(PoisonError::into_inner);
+        if !inner.active {
+            return None;
+        }
+        inner
+            .tools
+            .iter()
+            .find(|(spec, _)| spec.name.0 == name)
+            .cloned()
+    }
+
+    fn set_mode(&self, servers: &[McpServer]) {
+        let mut inner = self.0.write().unwrap_or_else(PoisonError::into_inner);
+        let active = is_gateway_mode(servers);
+        let server_id = active.then(|| servers[0].id.clone());
+        if inner.active != active || inner.server_id != server_id {
+            inner.tools.clear();
+        }
+        inner.active = active;
+        inner.server_id = server_id;
+    }
+
+    fn set_tools(&self, server_id: &str, tools: Vec<(ToolSpec, ToolName)>) {
+        let mut inner = self.0.write().unwrap_or_else(PoisonError::into_inner);
+        if inner.active && inner.server_id.as_deref() == Some(server_id) {
+            inner.tools = tools;
+        }
+    }
+
+    fn clear_tools(&self) {
+        let mut inner = self.0.write().unwrap_or_else(PoisonError::into_inner);
+        inner.tools.clear();
+    }
+}
+
 /// Registers the bootstrap server set (without connecting — thread
 /// bootstrap, and therefore first-token latency, is never gated on MCP
 /// handshakes) and spawns the actor task.
@@ -162,26 +234,40 @@ pub fn spawn_mcp_actor(
     thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
-) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
+    inbox_tx: UnboundedSender<RunnerContent>,
+) -> Result<
+    (
+        mpsc::Sender<McpCmd>,
+        CatalogReader,
+        KnownTools,
+        GatewayModeState,
+    ),
+    RunnerError,
+> {
     // Each tool call carries its own trace context to the server.
     let mut manager = McpServerManager::new().with_request_decorator(mcp_trace_decorator());
     let catalog = manager.source();
     let mut configured = BTreeMap::new();
+    let mut instruction_slots = BTreeMap::new();
     let token = tokens.current()?;
 
     for server in servers {
-        let config = build_mcp_server_config(server, &http_client, &token)?;
+        let (config, slot) = build_mcp_server_config(server, &http_client, &token)?;
         manager.register_server_with_options(
             config,
             McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
         );
         configured.insert(server.id.clone(), server.clone());
+        if let Some(slot) = slot {
+            instruction_slots.insert(server.id.clone(), slot);
+        }
     }
 
+    let gateway_mode = GatewayModeState::from_servers(servers);
     let (cmd_tx, cmd_rx) = mpsc::channel(MCP_CMD_CAPACITY);
     let actor = McpActor {
         manager,
+        catalog: catalog.clone(),
         gram_client,
         http_client,
         thread_id: thread_id.to_string(),
@@ -190,21 +276,28 @@ pub fn spawn_mcp_actor(
         auth_pending: BTreeMap::new(),
         last_errors: BTreeMap::new(),
         last_reconnects: BTreeMap::new(),
+        announced_configured: configured.clone(),
         configured,
         known_tools: KnownTools::default(),
+        gateway_mode: gateway_mode.clone(),
+        instruction_slots,
+        last_gateway_instructions: None,
     };
     let known_tools = actor.known_tools.clone();
     tokio::spawn(actor.run(cmd_rx));
-    Ok((cmd_tx, catalog, known_tools))
+    Ok((cmd_tx, catalog, known_tools, gateway_mode))
 }
+
+type InstructionsSlot = Arc<RwLock<Option<String>>>;
 
 struct McpActor {
     manager: McpServerManager,
+    catalog: CatalogReader,
     gram_client: GramBootstrapClient,
     http_client: reqwest::Client,
     thread_id: String,
     tokens: TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
+    inbox_tx: UnboundedSender<RunnerContent>,
     // Servers whose last connect demanded authorization, mapped to the auth
     // flow (None while flow creation itself is failing). Retried on
     // every EnsureConnected so a completed authorization is picked up
@@ -217,9 +310,18 @@ struct McpActor {
     last_reconnects: BTreeMap<String, Instant>,
     // The assistant's current configuration (latest reconcile's desired
     // set). Drives EnsureConnected's pending diff and gates ReconnectTool
-    // so a detached server cannot be resurrected.
+    // so a detached server cannot be resurrected. Always stays in sync with
+    // `manager` transports and `tokens`.
     configured: BTreeMap<String, McpServer>,
+    // The configuration last announced to the model (bootstrap set or last
+    // successful reconcile). Diffed on reconcile completion so a failed
+    // gateway handshake never drops a pending notice or drifts `configured`
+    // out of sync with `manager` / `tokens`.
+    announced_configured: BTreeMap<String, McpServer>,
     known_tools: KnownTools,
+    gateway_mode: GatewayModeState,
+    instruction_slots: BTreeMap<String, InstructionsSlot>,
+    last_gateway_instructions: Option<String>,
 }
 
 impl McpActor {
@@ -315,6 +417,18 @@ impl McpActor {
         self.server_statuses()
     }
 
+    fn is_gateway_server(&self, id: &str) -> bool {
+        self.configured.get(id).is_some_and(|s| s.is_gateway)
+    }
+
+    fn read_gateway_instructions(&self, id: &str) -> Option<String> {
+        self.instruction_slots
+            .get(id)?
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
     /// Connects one configured, unconnected server, recording an auth flow or
     /// transient failure for its status. Auth-pending servers fail fast, so
     /// they retry unconditionally; hard failures wait out the cooldown so
@@ -332,6 +446,19 @@ impl McpActor {
                 self.last_errors.remove(id);
             }
             Err(failure) if failure.auth_required => {
+                if self.is_gateway_server(id) {
+                    // Never attempt a per-server OAuth auth flow against the
+                    // Project Gateway URL.
+                    self.last_errors.insert(
+                        id.to_string(),
+                        (
+                            "Project Gateway rejected this turn's credential (401 Unauthorized)"
+                                .to_string(),
+                            Instant::now(),
+                        ),
+                    );
+                    return;
+                }
                 self.last_errors.remove(id);
                 self.ensure_auth_flow(id).await;
             }
@@ -458,6 +585,12 @@ impl McpActor {
                 Ok(())
             }
             Err(failure) if failure.auth_required => {
+                if self.is_gateway_server(&id) {
+                    let message = "Project Gateway rejected this turn's credential (401 Unauthorized); retrying on the next turn will re-evaluate gateway eligibility".to_string();
+                    self.last_errors
+                        .insert(id.clone(), (message.clone(), Instant::now()));
+                    return Err(message);
+                }
                 self.ensure_auth_flow(&id).await;
                 match self.auth_pending.get(&id) {
                     Some(Some(flow)) => Err(format!(
@@ -486,8 +619,10 @@ impl McpActor {
         desired: Vec<McpServer>,
         token: String,
     ) -> Result<(), RunnerError> {
+        let now_gateway = is_gateway_mode(&desired);
+        let gateway_server_id = now_gateway.then(|| desired[0].id.clone());
         let desired_map: BTreeMap<String, McpServer> =
-            desired.into_iter().map(|s| (s.id.clone(), s)).collect();
+            desired.iter().cloned().map(|s| (s.id.clone(), s)).collect();
 
         // Build every changed configuration before mutating credentials, live
         // sessions, or the desired set. An invalid replacement must not leave
@@ -496,16 +631,12 @@ impl McpActor {
         // credential re-registers every server.
         let rotating = self.tokens.current()? != token;
         let mut prepared = Vec::new();
-        let mut attached = Vec::new();
         for (id, server) in &desired_map {
             let is_new = !self.configured.contains_key(id);
             let changed = self.configured.get(id).is_some_and(|prev| prev != server);
-            if is_new {
-                attached.push(id.clone());
-            }
             if is_new || changed || rotating {
-                let config = build_mcp_server_config(server, &self.http_client, &token)?;
-                prepared.push((id.clone(), config, changed));
+                let (config, slot) = build_mcp_server_config(server, &self.http_client, &token)?;
+                prepared.push((id.clone(), config, slot, changed));
             }
         }
         if rotating {
@@ -528,11 +659,16 @@ impl McpActor {
             self.last_reconnects.clear();
             self.tokens.rotate(token)?;
         }
-        for (id, config, changed) in prepared {
+        for (id, config, slot, changed) in prepared {
             self.manager.register_server_with_options(
                 config,
                 McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
             );
+            if let Some(slot) = slot {
+                self.instruction_slots.insert(id.clone(), slot);
+            } else {
+                self.instruction_slots.remove(&id);
+            }
             if changed {
                 // Config drift: drop the live connection and stale auth,
                 // error, and reconnect-debounce state so the next
@@ -559,27 +695,95 @@ impl McpActor {
             self.auth_pending.remove(id);
             self.last_errors.remove(id);
             self.last_reconnects.remove(id);
+            self.instruction_slots.remove(id);
             if self.is_connected(id) {
                 self.drop_connection(id, "detach").await;
             }
         }
 
         self.configured = desired_map;
+        self.gateway_mode.set_mode(&desired);
+        if !now_gateway {
+            self.last_gateway_instructions = None;
+        }
 
-        if attached.is_empty() && detached.is_empty() {
-            return Ok(());
+        let mut gateway_instructions_notice = None;
+        if let Some(gw_id) = gateway_server_id {
+            if !self.is_connected(&gw_id) {
+                match self.connect_one(&gw_id, "gateway_turn").await {
+                    Ok(()) => {
+                        self.auth_pending.remove(&gw_id);
+                        self.last_errors.remove(&gw_id);
+                    }
+                    Err(failure) if failure.auth_required => {
+                        self.gateway_mode.clear_tools();
+                        return Err(RunnerError::Loop(
+                            "Project Gateway rejected this turn's credential (401 Unauthorized); \
+                             retrying on the next turn will re-evaluate gateway eligibility"
+                                .into(),
+                        ));
+                    }
+                    Err(failure) => {
+                        self.gateway_mode.clear_tools();
+                        return Err(RunnerError::Loop(format!(
+                            "Project Gateway is unreachable: {}",
+                            failure.message
+                        )));
+                    }
+                }
+            }
+            if let Some(instructions) = self.read_gateway_instructions(&gw_id)
+                && self.last_gateway_instructions.as_deref() != Some(instructions.as_str())
+            {
+                self.last_gateway_instructions = Some(instructions.clone());
+                gateway_instructions_notice = Some(format!(
+                    "<project-gateway-instructions>\n{instructions}\n</project-gateway-instructions>"
+                ));
+            }
         }
-        let mut notice =
-            String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
-        if !attached.is_empty() {
-            notice.push_str(&format!("Attached: {}\n", attached.join(", ")));
+
+        let announced_servers: Vec<McpServer> =
+            self.announced_configured.values().cloned().collect();
+        let was_announced_gateway = is_gateway_mode(&announced_servers);
+        let announced_attached: Vec<String> = self
+            .configured
+            .keys()
+            .filter(|id| !self.announced_configured.contains_key(*id))
+            .cloned()
+            .collect();
+        let announced_detached: Vec<String> = self
+            .announced_configured
+            .keys()
+            .filter(|id| !self.configured.contains_key(*id))
+            .cloned()
+            .collect();
+        let mode_flipped = was_announced_gateway != now_gateway;
+        if !announced_attached.is_empty() || !announced_detached.is_empty() || mode_flipped {
+            let mut notice =
+                String::from("<message-context>\nEventType: assistant_mcp_servers_updated\n");
+            if !announced_attached.is_empty() {
+                notice.push_str(&format!("Attached: {}\n", announced_attached.join(", ")));
+            }
+            if !announced_detached.is_empty() {
+                notice.push_str(&format!("Detached: {}\n", announced_detached.join(", ")));
+            }
+            if now_gateway {
+                notice.push_str(
+                    "MCP delivery is now via the Project Gateway. Use list_servers, describe_server, \
+                     describe_tools, execute_read_only_tool, execute_tool, and connection_status directly \
+                     (tool_search is not available in Project Gateway mode).\n</message-context>",
+                );
+            } else {
+                notice.push_str(
+                    "Use tool_search to discover tools on attached servers.\n</message-context>",
+                );
+            }
+            self.send_notice(notice);
         }
-        if !detached.is_empty() {
-            notice.push_str(&format!("Detached: {}\n", detached.join(", ")));
+        self.announced_configured = self.configured.clone();
+        if let Some(instructions_notice) = gateway_instructions_notice {
+            self.send_notice(instructions_notice);
         }
-        notice
-            .push_str("Use tool_search to discover tools on attached servers.\n</message-context>");
-        self.send_notice(notice);
         Ok(())
     }
 
@@ -693,15 +897,28 @@ impl McpActor {
         );
         match result {
             Ok(handle) => {
-                let tools: BTreeSet<String> = handle
-                    .snapshot()
-                    .tools
-                    .iter()
-                    .map(|tool| handle.namespace().apply(&server_uid, tool.name.as_ref()))
-                    .collect();
+                let is_gateway = self.is_gateway_server(id);
+                let mut tools = BTreeSet::new();
+                let mut gateway_specs = Vec::new();
+                for tool in &handle.snapshot().tools {
+                    let bare_name = tool.name.as_ref();
+                    let namespaced = handle.namespace().apply(&server_uid, bare_name);
+                    if is_gateway {
+                        let ns_tool_name = ToolName::from(namespaced.as_str());
+                        if let Some(registered) = self.catalog.get(&ns_tool_name) {
+                            let mut bare_spec = registered.spec().clone();
+                            bare_spec.name = ToolName::from(bare_name);
+                            gateway_specs.push((bare_spec, ns_tool_name));
+                        }
+                    }
+                    tools.insert(namespaced);
+                }
                 span.record("mcp.tools.count", tools.len());
                 tracing::info!(server_id = %server_uid, tools = tools.len(), "mcp connect ok");
                 self.known_tools.record(id, tools);
+                if is_gateway {
+                    self.gateway_mode.set_tools(id, gateway_specs);
+                }
                 Ok(())
             }
             Err(e) => {
@@ -721,7 +938,7 @@ impl McpActor {
     }
 
     fn send_notice(&self, notice: String) {
-        if self.inbox_tx.send(notice).is_err() {
+        if self.inbox_tx.send(RunnerContent::Text(notice)).is_err() {
             tracing::warn!("drop mcp notice: thread inbox closed");
         }
     }
@@ -794,22 +1011,26 @@ fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
     token: &str,
-) -> Result<McpServerConfig, RunnerError> {
+) -> Result<(McpServerConfig, Option<InstructionsSlot>), RunnerError> {
     let server_headers = validated_server_headers(server)?;
-    let mcp_http = Arc::new(McpSessionClient::new(
-        http_client.clone(),
-        token.to_string(),
-        server_headers,
-    ));
-    let transport = StreamableHttpTransportConfig::new(&server.url).with_http_client(mcp_http);
-    Ok(McpServerConfig::new(
-        &server.id,
-        McpTransportBinding::StreamableHttp(transport),
+    let slot = server
+        .is_gateway
+        .then(|| Arc::new(RwLock::new(None::<String>)));
+    let mut mcp_http =
+        McpSessionClient::new(http_client.clone(), token.to_string(), server_headers);
+    if let Some(slot) = &slot {
+        mcp_http = mcp_http.with_instructions_slot(Arc::clone(slot));
+    }
+    let transport =
+        StreamableHttpTransportConfig::new(&server.url).with_http_client(Arc::new(mcp_http));
+    Ok((
+        McpServerConfig::new(&server.id, McpTransportBinding::StreamableHttp(transport)),
+        slot,
     ))
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -874,8 +1095,9 @@ mod tests {
             id: "same-id".into(),
             url: format!("http://{addr}/old"),
             headers: BTreeMap::new(),
+            is_gateway: false,
         };
-        let (cmd, _catalog, _known) = spawn_mcp_actor(
+        let (cmd, _catalog, _known, _gw) = spawn_mcp_actor(
             GramBootstrapClient::new(
                 format!("http://{addr}"),
                 crate::http_layer::build_bootstrap_client(client.clone()),
@@ -998,8 +1220,11 @@ mod tests {
         let tokens = TokenRegistry::new("opaque-a");
         let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel();
         let http_client = reqwest::Client::new();
+        let manager = McpServerManager::new();
+        let catalog = manager.source();
         let mut actor = McpActor {
-            manager: McpServerManager::new(),
+            manager,
+            catalog,
             gram_client: GramBootstrapClient::new(
                 "http://127.0.0.1".into(),
                 crate::http_layer::build_bootstrap_client(http_client.clone()),
@@ -1009,10 +1234,14 @@ mod tests {
             tokens: tokens.clone(),
             inbox_tx,
             configured: BTreeMap::new(),
+            announced_configured: BTreeMap::new(),
             auth_pending: BTreeMap::from([("server".into(), None)]),
             last_errors: BTreeMap::from([("server".into(), ("old error".into(), Instant::now()))]),
             last_reconnects: BTreeMap::from([("server".into(), Instant::now())]),
             known_tools: KnownTools::default(),
+            gateway_mode: GatewayModeState::default(),
+            instruction_slots: BTreeMap::new(),
+            last_gateway_instructions: None,
         };
         actor.turn_boundary("opaque-a".into(), None).await.unwrap();
         assert_eq!(actor.auth_pending.len(), 1);
@@ -1023,6 +1252,7 @@ mod tests {
                     id: "new".into(),
                     url: "https://example.com/mcp".into(),
                     headers: BTreeMap::new(),
+                    is_gateway: false,
                 }]),
             )
             .await
@@ -1079,8 +1309,9 @@ mod tests {
             id: "srv".into(),
             url: format!("http://{addr}/mcp"),
             headers: BTreeMap::new(),
+            is_gateway: false,
         };
-        let (cmd, catalog, known) = spawn_mcp_actor(
+        let (cmd, catalog, known, _gw) = spawn_mcp_actor(
             GramBootstrapClient::new(
                 format!("http://{addr}"),
                 crate::http_layer::build_bootstrap_client(client.clone()),
@@ -1180,6 +1411,657 @@ mod tests {
             deleted,
             vec!["Bearer opaque-a", "Bearer opaque-b"],
             "each session is closed with the credential it was opened with"
+        );
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_mode_exposes_six_meta_tools_surfaces_instructions_and_hides_tool_search() {
+        use crate::catalog::{HiddenCatalogSource, PerServerOnlyToolSource, UnknownToolSource};
+        use crate::compaction::TranscriptEpoch;
+        use crate::tools::tool_search::ToolSearchTool;
+        use agentkit_tools_core::{
+            CompositePermissionChecker, OwnedToolContext, PermissionDecision, ToolRequest,
+        };
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+        use serde_json::{Value, json};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const GATEWAY_INSTRUCTIONS: &str = "Tools from these servers: \"Linear\", \"Speakeasy assistant tools\".\n\nUse list_servers and describe_server.";
+        let meta_tools = [
+            "list_servers",
+            "describe_server",
+            "describe_tools",
+            "execute_tool",
+            "execute_read_only_tool",
+            "connection_status",
+        ];
+        let list_servers_calls = Arc::new(AtomicUsize::new(0));
+        let calls_counter = Arc::clone(&list_servers_calls);
+
+        let app = Router::new().route(
+            "/gateway",
+            post(move |Json(message): Json<Value>| {
+                let calls_counter = Arc::clone(&calls_counter);
+                async move {
+                    if message.get("id").is_none() {
+                        return StatusCode::ACCEPTED.into_response();
+                    }
+                    let method = message["method"].as_str().unwrap_or("");
+                    if method == "server/discover" {
+                        return Json(json!({
+                            "jsonrpc": "2.0",
+                            "id": message["id"],
+                            "error": {"code": -32601, "message": "Method not found"}
+                        }))
+                        .into_response();
+                    }
+                    let result = match method {
+                        "initialize" => json!({
+                            "protocolVersion": message["params"]["protocolVersion"],
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {"name": "project-gateway", "version": "1"},
+                            "instructions": GATEWAY_INSTRUCTIONS,
+                        }),
+                        "tools/list" => json!({
+                            "tools": meta_tools.iter().map(|name| json!({
+                                "name": name,
+                                "description": format!("gateway {name}"),
+                                "inputSchema": {"type": "object"},
+                            })).collect::<Vec<_>>()
+                        }),
+                        "tools/call" => {
+                            if message["params"]["name"] == "list_servers" {
+                                calls_counter.fetch_add(1, Ordering::SeqCst);
+                            }
+                            json!({
+                                "content": [{"type": "text", "text": "{\"servers\":[]}"}],
+                                "isError": false
+                            })
+                        }
+                        _ => json!({}),
+                    };
+                    Json(json!({"jsonrpc": "2.0", "id": message["id"], "result": result}))
+                        .into_response()
+                }
+            })
+            .get(|| async { StatusCode::METHOD_NOT_ALLOWED })
+            .delete(|| async { StatusCode::OK }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("gw-token-1");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, catalog, known, gateway_mode) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&gateway),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        let catalog_source =
+            HiddenCatalogSource::new(catalog.clone(), cmd.clone(), known, gateway_mode.clone());
+        let search_source = PerServerOnlyToolSource::new(
+            ToolSearchTool::new(catalog, cmd.clone(), TranscriptEpoch::default()),
+            gateway_mode.clone(),
+        );
+        let unknown_source = UnknownToolSource::new(gateway_mode.clone());
+
+        // Turn boundary eagerly connects the gateway, populates the 6 bare
+        // meta-tools, and emits initialize.instructions.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "gw-token-1".into(),
+            desired: Some(vec![gateway.clone()]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+
+        let declared: BTreeSet<String> = catalog_source
+            .specs()
+            .into_iter()
+            .map(|s| s.name.0)
+            .collect();
+        let expected: BTreeSet<String> = meta_tools.iter().map(|s| (*s).to_string()).collect();
+        assert_eq!(
+            declared, expected,
+            "gateway mode must expose all 6 meta-tools directly under bare names"
+        );
+        assert!(
+            search_source.specs().is_empty(),
+            "tool_search must be omitted from declared specs in gateway mode"
+        );
+        assert!(
+            search_source.get(&ToolName::new("tool_search")).is_none(),
+            "tool_search must not dispatch in gateway mode"
+        );
+
+        let mut received_notices = Vec::new();
+        while let Ok(RunnerContent::Text(text)) = notices.try_recv() {
+            received_notices.push(text);
+        }
+        assert!(
+            received_notices
+                .iter()
+                .any(|n| n.contains("<project-gateway-instructions>")
+                    && n.contains(GATEWAY_INSTRUCTIONS)),
+            "gateway initialize.instructions must be surfaced: {received_notices:?}"
+        );
+
+        // Calling a bare gateway meta-tool dispatches to the gateway.
+        let list_tool = catalog_source
+            .get(&ToolName::new("list_servers"))
+            .expect("bare list_servers must resolve");
+        let owned_ctx = OwnedToolContext {
+            session_id: "session-1".into(),
+            turn_id: "turn-1".into(),
+            metadata: Default::default(),
+            permissions: Arc::new(CompositePermissionChecker::new(PermissionDecision::Allow)),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
+        };
+        let mut ctx = owned_ctx.borrowed();
+        let result = list_tool
+            .invoke(
+                ToolRequest::new("call-1", "list_servers", json!({}), "session-1", "turn-1"),
+                &mut ctx,
+            )
+            .await
+            .unwrap();
+        assert!(!result.result.is_error);
+        assert_eq!(list_servers_calls.load(Ordering::SeqCst), 1);
+
+        // Unknown tool in gateway mode points to gateway discovery tools, not tool_search.
+        let unknown = unknown_source
+            .get(&ToolName::new("nonexistent"))
+            .expect("unknown source resolves fallback");
+        let err_result = unknown
+            .invoke(
+                ToolRequest::new("call-2", "nonexistent", json!({}), "session-1", "turn-1"),
+                &mut ctx,
+            )
+            .await
+            .unwrap();
+        assert!(err_result.result.is_error);
+        let err_text = format!("{:?}", err_result.result.output);
+        assert!(err_text.contains("list_servers"));
+        assert!(!err_text.contains("tool_search"));
+
+        // Flip mid-thread back to per-server mode: gateway tools disappear,
+        // tool_search returns, and assistant_mcp_servers_updated notice fires.
+        let per_server = McpServer {
+            id: "linear".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: false,
+        };
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "gw-token-2".into(),
+            desired: Some(vec![per_server]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+
+        assert!(
+            catalog_source.specs().is_empty(),
+            "per-server mode must hide MCP tools again"
+        );
+        assert_eq!(
+            search_source
+                .specs()
+                .into_iter()
+                .map(|s| s.name.0)
+                .collect::<Vec<_>>(),
+            vec!["tool_search".to_string()],
+            "per-server mode must restore tool_search"
+        );
+        let mut flip_notices = Vec::new();
+        while let Ok(RunnerContent::Text(text)) = notices.try_recv() {
+            flip_notices.push(text);
+        }
+        assert!(
+            flip_notices
+                .iter()
+                .any(|n| n.contains("assistant_mcp_servers_updated")
+                    && n.contains("Use tool_search")),
+            "flip back to per-server must emit update notice: {flip_notices:?}"
+        );
+
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_401_fails_clearly_without_creating_mcp_auth_flow() {
+        use axum::{Router, http::StatusCode, routing::post};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let auth_flow_calls = Arc::new(AtomicUsize::new(0));
+        let auth_flow_counter = Arc::clone(&auth_flow_calls);
+
+        let app = Router::new()
+            .route(
+                "/gateway",
+                post(|| async {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            axum::http::header::WWW_AUTHENTICATE,
+                            r#"Bearer error="invalid_token""#,
+                        )],
+                    )
+                }),
+            )
+            .route(
+                "/rpc/assistantMcpAuth.create",
+                post(move || {
+                    let counter = Arc::clone(&auth_flow_counter);
+                    async move {
+                        counter.fetch_add(1, Ordering::SeqCst);
+                        StatusCode::OK
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("gw-rejected");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, _catalog, _known, _gw) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&gateway),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "gw-rejected".into(),
+            desired: Some(vec![gateway]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        let err = ack
+            .await
+            .unwrap()
+            .expect_err("gateway 401 must fail the turn clearly");
+        assert!(
+            err.to_string().contains("401 Unauthorized"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            auth_flow_calls.load(Ordering::SeqCst),
+            0,
+            "gateway 401 must never invoke /rpc/assistantMcpAuth.create"
+        );
+        assert!(
+            notices.try_recv().is_err(),
+            "gateway 401 must not emit assistant_mcp_auth_required"
+        );
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_connect_failure_preserves_mode_change_notice_for_retry() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let reject_gateway = Arc::new(AtomicBool::new(true));
+        let reject_flag = Arc::clone(&reject_gateway);
+
+        let app = Router::new().route(
+            "/gateway",
+            post(move |Json(body): Json<serde_json::Value>| {
+                let reject = reject_flag.load(Ordering::SeqCst);
+                async move {
+                    if reject {
+                        return (
+                            StatusCode::UNAUTHORIZED,
+                            [(
+                                axum::http::header::WWW_AUTHENTICATE,
+                                r#"Bearer error="invalid_token""#,
+                            )],
+                        )
+                            .into_response();
+                    }
+                    if body.get("id").is_none() {
+                        return StatusCode::ACCEPTED.into_response();
+                    }
+                    let id = body.get("id").cloned().unwrap_or(serde_json::json!(1));
+                    let method = body
+                        .get("method")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    if method == "server/discover" {
+                        return Json(serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "error": {"code": -32601, "message": "Method not found"}
+                        }))
+                        .into_response();
+                    }
+                    let resp = match method {
+                        "initialize" => serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "protocolVersion": body["params"]["protocolVersion"],
+                                "capabilities": { "tools": {} },
+                                "serverInfo": { "name": "project-gateway", "version": "1.0.0" },
+                                "instructions": "Retry gateway instructions."
+                            }
+                        }),
+                        "tools/list" => serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": id,
+                            "result": {
+                                "tools": [
+                                    { "name": "list_servers", "description": "List servers", "inputSchema": { "type": "object" } }
+                                ]
+                            }
+                        }),
+                        _ => serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
+                    };
+                    (StatusCode::OK, Json(resp)).into_response()
+                }
+            })
+            .get(|| async { StatusCode::METHOD_NOT_ALLOWED })
+            .delete(|| async { StatusCode::OK }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("tok-1");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let per_server = McpServer {
+            id: "linear".into(),
+            url: format!("http://{addr}/linear"),
+            headers: BTreeMap::new(),
+            is_gateway: false,
+        };
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, _catalog, _known, gw_mode) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&per_server),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        // First attempt to flip per-server -> gateway fails with 401.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![gateway.clone()]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        assert!(ack.await.unwrap().is_err());
+        assert!(
+            gw_mode.specs().is_empty(),
+            "failed connect must clear advertised gateway tools"
+        );
+        assert!(
+            notices.try_recv().is_err(),
+            "failed flip must emit no notice"
+        );
+
+        // Next turn succeeds and must emit both the mode-change notice and gateway instructions.
+        reject_gateway.store(false, Ordering::SeqCst);
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-3".into(),
+            desired: Some(vec![gateway]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(gw_mode.is_active());
+
+        let mut emitted = Vec::new();
+        while let Ok(RunnerContent::Text(text)) = notices.try_recv() {
+            emitted.push(text);
+        }
+        assert!(
+            emitted
+                .iter()
+                .any(|n| n.contains("assistant_mcp_servers_updated")
+                    && n.contains("Project Gateway")),
+            "retry after failed connect must emit mode-change notice: {emitted:?}"
+        );
+        assert!(
+            emitted
+                .iter()
+                .any(|n| n.contains("Retry gateway instructions.")),
+            "retry after failed connect must emit gateway instructions: {emitted:?}"
+        );
+        server_task.abort();
+    }
+
+    #[tokio::test]
+    async fn gateway_connect_failure_fallback_rebuilds_transport_with_rotated_token() {
+        use axum::{
+            Json, Router,
+            http::{HeaderMap, StatusCode, header::AUTHORIZATION},
+            response::IntoResponse,
+            routing::post,
+        };
+        use std::sync::Mutex;
+
+        let seen_linear_auth = Arc::new(Mutex::new(Vec::<String>::new()));
+        let auth_log = Arc::clone(&seen_linear_auth);
+
+        let app = Router::new()
+            .route(
+                "/gateway",
+                post(|| async {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        [(
+                            axum::http::header::WWW_AUTHENTICATE,
+                            r#"Bearer error="invalid_token""#,
+                        )],
+                    )
+                }),
+            )
+            .route(
+                "/linear",
+                post(
+                    move |headers: HeaderMap, Json(body): Json<serde_json::Value>| {
+                        let auth_log = Arc::clone(&auth_log);
+                        async move {
+                            if let Some(auth) = headers
+                                .get(AUTHORIZATION)
+                                .and_then(|v| v.to_str().ok())
+                                .map(str::to_string)
+                            {
+                                auth_log.lock().unwrap().push(auth);
+                            }
+                            if body.get("id").is_none() {
+                                return StatusCode::ACCEPTED.into_response();
+                            }
+                            let id = body.get("id").cloned().unwrap_or(serde_json::json!(1));
+                            let method = body
+                                .get("method")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
+                            if method == "server/discover" {
+                                return Json(serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "error": {"code": -32601, "message": "Method not found"}
+                                }))
+                                .into_response();
+                            }
+                            let resp = match method {
+                                "initialize" => serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "result": {
+                                        "protocolVersion": body["params"]["protocolVersion"],
+                                        "capabilities": { "tools": {} },
+                                        "serverInfo": { "name": "linear", "version": "1.0.0" }
+                                    }
+                                }),
+                                "tools/list" => serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": id,
+                                    "result": { "tools": [] }
+                                }),
+                                _ => {
+                                    serde_json::json!({ "jsonrpc": "2.0", "id": id, "result": {} })
+                                }
+                            };
+                            (StatusCode::OK, Json(resp)).into_response()
+                        }
+                    },
+                )
+                .get(|| async { StatusCode::METHOD_NOT_ALLOWED })
+                .delete(|| async { StatusCode::OK }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let tokens = TokenRegistry::new("tok-1");
+        let client = reqwest::Client::new();
+        let (notice_tx, mut notices) = mpsc::unbounded_channel();
+        let per_server = McpServer {
+            id: "linear".into(),
+            url: format!("http://{addr}/linear"),
+            headers: BTreeMap::new(),
+            is_gateway: false,
+        };
+        let gateway = McpServer {
+            id: "gateway".into(),
+            url: format!("http://{addr}/gateway"),
+            headers: BTreeMap::new(),
+            is_gateway: true,
+        };
+        let (cmd, _catalog, _known, gw_mode) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&per_server),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+
+        // Turn rotates to tok-2 and tries gateway; gateway rejects with 401.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![gateway]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        assert!(ack.await.unwrap().is_err());
+
+        // Next turn falls back to per-server `linear` carrying the same tok-2.
+        // Because `configured` stayed in sync with `manager` / `tokens`,
+        // `linear` is freshly re-registered with tok-2 (not stale tok-1), and
+        // no spurious mode-change notice is emitted.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "tok-2".into(),
+            desired: Some(vec![per_server]),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(!gw_mode.is_active());
+        assert!(
+            notices.try_recv().is_err(),
+            "fallback to already-announced per-server set must not emit spurious notice"
+        );
+
+        let (reply, statuses) = oneshot::channel();
+        cmd.send(McpCmd::EnsureConnected {
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        let statuses = statuses.await.unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].status, McpServerConnectionStatus::Connected);
+
+        let auths = seen_linear_auth.lock().unwrap().clone();
+        assert!(!auths.is_empty());
+        assert!(
+            auths.iter().all(|a| a == "Bearer tok-2"),
+            "restored per-server transport must carry tok-2, got {auths:?}"
         );
         server_task.abort();
     }

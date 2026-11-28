@@ -126,7 +126,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"agent (get-plugins|get-my-connections|get-claude-observability-plugin|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff|list-pending-access-requests|list-requestable-access|request-access)",
-		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
+		"agents (list-sessions|revoke-session|list|create|get|get-runtime-gateway|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-org-units|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -424,6 +424,10 @@ func ParseEndpoint(
 		agentsGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
 		agentsGetIDFlag           = agentsGetFlags.String("id", "REQUIRED", "")
 		agentsGetSessionTokenFlag = agentsGetFlags.String("session-token", "", "")
+
+		agentsGetRuntimeGatewayFlags            = flag.NewFlagSet("get-runtime-gateway", flag.ExitOnError)
+		agentsGetRuntimeGatewayAgentIDFlag      = agentsGetRuntimeGatewayFlags.String("agent-id", "REQUIRED", "")
+		agentsGetRuntimeGatewaySessionTokenFlag = agentsGetRuntimeGatewayFlags.String("session-token", "", "")
 
 		agentsRenameFlags            = flag.NewFlagSet("rename", flag.ExitOnError)
 		agentsRenameBodyFlag         = agentsRenameFlags.String("body", "REQUIRED", "")
@@ -4717,6 +4721,7 @@ func ParseEndpoint(
 		adminListOrganizationsAccountTypesFlag      = adminListOrganizationsFlags.String("account-types", "", "")
 		adminListOrganizationsTrialStatesFlag       = adminListOrganizationsFlags.String("trial-states", "", "")
 		adminListOrganizationsDisabledStatusFlag    = adminListOrganizationsFlags.String("disabled-status", "", "")
+		adminListOrganizationsWhitelistedFlag       = adminListOrganizationsFlags.String("whitelisted", "", "")
 		adminListOrganizationsMinMembersFlag        = adminListOrganizationsFlags.String("min-members", "", "")
 		adminListOrganizationsMaxMembersFlag        = adminListOrganizationsFlags.String("max-members", "", "")
 		adminListOrganizationsCreatedFromFlag       = adminListOrganizationsFlags.String("created-from", "", "")
@@ -5150,6 +5155,14 @@ func ParseEndpoint(
 		adminRepairOrganizationAssistantAgentNamesFlags                 = flag.NewFlagSet("repair-organization-assistant-agent-names", flag.ExitOnError)
 		adminRepairOrganizationAssistantAgentNamesBodyFlag              = adminRepairOrganizationAssistantAgentNamesFlags.String("body", "REQUIRED", "")
 		adminRepairOrganizationAssistantAgentNamesAdminSessionTokenFlag = adminRepairOrganizationAssistantAgentNamesFlags.String("admin-session-token", "", "")
+
+		adminBackfillOrganizationAssistantBuiltinGrantsFlags                 = flag.NewFlagSet("backfill-organization-assistant-builtin-grants", flag.ExitOnError)
+		adminBackfillOrganizationAssistantBuiltinGrantsBodyFlag              = adminBackfillOrganizationAssistantBuiltinGrantsFlags.String("body", "REQUIRED", "")
+		adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionTokenFlag = adminBackfillOrganizationAssistantBuiltinGrantsFlags.String("admin-session-token", "", "")
+
+		adminMigrateOrganizationAssistantSlackFlags                 = flag.NewFlagSet("migrate-organization-assistant-slack", flag.ExitOnError)
+		adminMigrateOrganizationAssistantSlackBodyFlag              = adminMigrateOrganizationAssistantSlackFlags.String("body", "REQUIRED", "")
+		adminMigrateOrganizationAssistantSlackAdminSessionTokenFlag = adminMigrateOrganizationAssistantSlackFlags.String("admin-session-token", "", "")
 
 		adminListOrganizationAssistantsFlags                 = flag.NewFlagSet("list-organization-assistants", flag.ExitOnError)
 		adminListOrganizationAssistantsOrganizationIDFlag    = adminListOrganizationAssistantsFlags.String("organization-id", "REQUIRED", "")
@@ -5912,6 +5925,7 @@ func ParseEndpoint(
 	agentsListFlags.Usage = agentsListUsage
 	agentsCreateFlags.Usage = agentsCreateUsage
 	agentsGetFlags.Usage = agentsGetUsage
+	agentsGetRuntimeGatewayFlags.Usage = agentsGetRuntimeGatewayUsage
 	agentsRenameFlags.Usage = agentsRenameUsage
 	agentsListDelegableGrantsFlags.Usage = agentsListDelegableGrantsUsage
 	agentsListPolicyGrantsFlags.Usage = agentsListPolicyGrantsUsage
@@ -6953,6 +6967,8 @@ func ParseEndpoint(
 	adminStartMemoryEvalRunFlags.Usage = adminStartMemoryEvalRunUsage
 	adminListAssistantOrganizationsFlags.Usage = adminListAssistantOrganizationsUsage
 	adminRepairOrganizationAssistantAgentNamesFlags.Usage = adminRepairOrganizationAssistantAgentNamesUsage
+	adminBackfillOrganizationAssistantBuiltinGrantsFlags.Usage = adminBackfillOrganizationAssistantBuiltinGrantsUsage
+	adminMigrateOrganizationAssistantSlackFlags.Usage = adminMigrateOrganizationAssistantSlackUsage
 	adminListOrganizationAssistantsFlags.Usage = adminListOrganizationAssistantsUsage
 	adminMigrateOrganizationAssistantIdentitiesFlags.Usage = adminMigrateOrganizationAssistantIdentitiesUsage
 	adminMigrateOrganizationAssistantsToKitFlags.Usage = adminMigrateOrganizationAssistantsToKitUsage
@@ -7463,6 +7479,9 @@ func ParseEndpoint(
 
 			case "get":
 				epf = agentsGetFlags
+
+			case "get-runtime-gateway":
+				epf = agentsGetRuntimeGatewayFlags
 
 			case "rename":
 				epf = agentsRenameFlags
@@ -10419,6 +10438,12 @@ func ParseEndpoint(
 			case "repair-organization-assistant-agent-names":
 				epf = adminRepairOrganizationAssistantAgentNamesFlags
 
+			case "backfill-organization-assistant-builtin-grants":
+				epf = adminBackfillOrganizationAssistantBuiltinGrantsFlags
+
+			case "migrate-organization-assistant-slack":
+				epf = adminMigrateOrganizationAssistantSlackFlags
+
 			case "list-organization-assistants":
 				epf = adminListOrganizationAssistantsFlags
 
@@ -11010,6 +11035,9 @@ func ParseEndpoint(
 			case "get":
 				endpoint = c.Get()
 				data, err = agentsc.BuildGetPayload(*agentsGetIDFlag, *agentsGetSessionTokenFlag)
+			case "get-runtime-gateway":
+				endpoint = c.GetRuntimeGateway()
+				data, err = agentsc.BuildGetRuntimeGatewayPayload(*agentsGetRuntimeGatewayAgentIDFlag, *agentsGetRuntimeGatewaySessionTokenFlag)
 			case "rename":
 				endpoint = c.Rename()
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
@@ -13684,7 +13712,7 @@ func ParseEndpoint(
 				data, err = adminc.BuildListUserOrganizationsPayload(*adminListUserOrganizationsUserIDFlag, *adminListUserOrganizationsPageFlag, *adminListUserOrganizationsLimitFlag, *adminListUserOrganizationsAdminSessionTokenFlag)
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
-				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
+				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsAccountTypesFlag, *adminListOrganizationsTrialStatesFlag, *adminListOrganizationsDisabledStatusFlag, *adminListOrganizationsWhitelistedFlag, *adminListOrganizationsMinMembersFlag, *adminListOrganizationsMaxMembersFlag, *adminListOrganizationsCreatedFromFlag, *adminListOrganizationsCreatedToFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsSortFlag, *adminListOrganizationsDirectionFlag, *adminListOrganizationsPageFlag, *adminListOrganizationsAdminSessionTokenFlag)
 			case "extend-trial":
 				endpoint = c.ExtendTrial()
 				data, err = adminc.BuildExtendTrialPayload(*adminExtendTrialBodyFlag, *adminExtendTrialAdminSessionTokenFlag)
@@ -13994,6 +14022,12 @@ func ParseEndpoint(
 			case "repair-organization-assistant-agent-names":
 				endpoint = c.RepairOrganizationAssistantAgentNames()
 				data, err = adminc.BuildRepairOrganizationAssistantAgentNamesPayload(*adminRepairOrganizationAssistantAgentNamesBodyFlag, *adminRepairOrganizationAssistantAgentNamesAdminSessionTokenFlag)
+			case "backfill-organization-assistant-builtin-grants":
+				endpoint = c.BackfillOrganizationAssistantBuiltinGrants()
+				data, err = adminc.BuildBackfillOrganizationAssistantBuiltinGrantsPayload(*adminBackfillOrganizationAssistantBuiltinGrantsBodyFlag, *adminBackfillOrganizationAssistantBuiltinGrantsAdminSessionTokenFlag)
+			case "migrate-organization-assistant-slack":
+				endpoint = c.MigrateOrganizationAssistantSlack()
+				data, err = adminc.BuildMigrateOrganizationAssistantSlackPayload(*adminMigrateOrganizationAssistantSlackBodyFlag, *adminMigrateOrganizationAssistantSlackAdminSessionTokenFlag)
 			case "list-organization-assistants":
 				endpoint = c.ListOrganizationAssistants()
 				data, err = adminc.BuildListOrganizationAssistantsPayload(*adminListOrganizationAssistantsOrganizationIDFlag, *adminListOrganizationAssistantsAdminSessionTokenFlag)
@@ -15174,6 +15208,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
+	fmt.Fprintln(os.Stderr, `    get-runtime-gateway: Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
 	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
@@ -15312,6 +15347,26 @@ func agentsGetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func agentsGetRuntimeGatewayUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agents get-runtime-gateway", os.Args[0])
+	fmt.Fprint(os.Stderr, " -agent-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the project gateway an agent runtime must call. Uses the same agent authorization as credential issuance and does not require project:read. Unscoped agents must be assigned to a project before setup.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents get-runtime-gateway --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func agentsRenameUsage() {
@@ -33113,7 +33168,7 @@ func triggersCreateTriggerInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers create-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers create-trigger-instance --body '{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"definition_slug\": \"abc123\",\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersUpdateTriggerInstanceUsage() {
@@ -33135,7 +33190,7 @@ func triggersUpdateTriggerInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers update-trigger-instance --body '{\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "triggers update-trigger-instance --body '{\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"config\": {\n         \"abc123\": \"abc123\"\n      },\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"target_display\": \"abc123\",\n      \"target_kind\": \"noop\",\n      \"target_ref\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func triggersDeleteTriggerInstanceUsage() {
@@ -34048,6 +34103,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    start-memory-eval-run: Queue an Organizational Memory eval run against the demo organization's synthetic corpus. Spends model credits; one run at a time and a daily limit.`)
 	fmt.Fprintln(os.Stderr, `    list-assistant-organizations: Lists live organizations with live assistants in live projects.`)
 	fmt.Fprintln(os.Stderr, `    repair-organization-assistant-agent-names: Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.`)
+	fmt.Fprintln(os.Stderr, `    backfill-organization-assistant-builtin-grants: Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.`)
+	fmt.Fprintln(os.Stderr, `    migrate-organization-assistant-slack: Migrates every live assistant with legacy per-assistant Slack toolsets or environment-backed Slack triggers in one organization to the built-in assistant-slack toolset backed by a slack_app typed auth client. Creates or reuses an encrypted slack_app auth client, grants the assistant's agent mcp:connect on assistant-slack and mcp:auth on the client, repoints Slack triggers to the client, and detaches (and soft-deletes if unreferenced) Slack-only per-assistant toolsets without deleting environments. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-assistants: Lists every live assistant of one organization with its identity state, runtime, and whether its creator is still a member.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistant-identities: Gives every assistant of one organization that has no dedicated agent its own agent, owned by the assistant's creator, and binds its triggers to workload identities. The agent starts with access to every MCP server and skill in the assistant's project, administration of the assistant, and project inference only when the creator has it. Assistants whose creator is no longer a member are skipped and reported. Idempotent, so it is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    migrate-organization-assistants-to-kit: Moves assistants of one organization from the default runtime to Kit. Only an assistant with a usable dedicated agent, a shared user-session issuer in its project, no work in flight, and no runtime still inside its warm window is switched; its previous runtimes are retired and stopped by the runtime janitor. Every other assistant is left unchanged and reported. Idempotent, so it is safe to run again.`)
@@ -34533,6 +34590,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprint(os.Stderr, " -account-types JSON")
 	fmt.Fprint(os.Stderr, " -trial-states JSON")
 	fmt.Fprint(os.Stderr, " -disabled-status STRING")
+	fmt.Fprint(os.Stderr, " -whitelisted BOOL")
 	fmt.Fprint(os.Stderr, " -min-members INT64")
 	fmt.Fprint(os.Stderr, " -max-members INT64")
 	fmt.Fprint(os.Stderr, " -created-from STRING")
@@ -34555,6 +34613,7 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    -account-types JSON: `)
 	fmt.Fprintln(os.Stderr, `    -trial-states JSON: `)
 	fmt.Fprintln(os.Stderr, `    -disabled-status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -whitelisted BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -min-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -max-members INT64: `)
 	fmt.Fprintln(os.Stderr, `    -created-from STRING: `)
@@ -34568,7 +34627,7 @@ func adminListOrganizationsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --account-types '[\n      \"abc123\"\n   ]' --trial-states '[\n      \"abc123\"\n   ]' --disabled-status \"active\" --whitelisted false --min-members 1 --max-members 1 --created-from \"abc123\" --created-to \"abc123\" --cursor \"abc123\" --limit 1 --sort \"abc123\" --direction \"abc123\" --page 1 --admin-session-token \"abc123\"")
 }
 
 func adminExtendTrialUsage() {
@@ -36643,6 +36702,46 @@ func adminRepairOrganizationAssistantAgentNamesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin repair-organization-assistant-agent-names --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBackfillOrganizationAssistantBuiltinGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin backfill-organization-assistant-builtin-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Grants every live agent-backed assistant in one organization explicit mcp:connect policy grants for its built-in toolsets (assistants for every assistant; platform and speakeasy-slack as well for managed assistants). Idempotent, so it is safe to run again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin backfill-organization-assistant-builtin-grants --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminMigrateOrganizationAssistantSlackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin migrate-organization-assistant-slack", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Migrates every live assistant with legacy per-assistant Slack toolsets or environment-backed Slack triggers in one organization to the built-in assistant-slack toolset backed by a slack_app typed auth client. Creates or reuses an encrypted slack_app auth client, grants the assistant's agent mcp:connect on assistant-slack and mcp:auth on the client, repoints Slack triggers to the client, and detaches (and soft-deletes if unreferenced) Slack-only per-assistant toolsets without deleting environments. Idempotent, so it is safe to run again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-organization-assistant-slack --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListOrganizationAssistantsUsage() {
