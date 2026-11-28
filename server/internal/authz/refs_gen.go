@@ -276,6 +276,11 @@ func (r AgentRef) Read() Check {
 	return newRefCheck(ScopeAgentRead, r.id.String(), r.dimensions())
 }
 
+// Create requests ScopeAgentCreate: Add agents you own. Does not allow changing or deleting existing agents.
+func (r AgentRef) Create() Check {
+	return newRefCheck(ScopeAgentCreate, r.id.String(), r.dimensions())
+}
+
 // Write requests ScopeAgentWrite: Create, configure, and manage agents.
 func (r AgentRef) Write() Check {
 	return newRefCheck(ScopeAgentWrite, r.id.String(), r.dimensions())
@@ -426,6 +431,11 @@ func Agents(org OrgID) AgentCollection {
 // Read requests ScopeAgentRead on every agent resource of the organization.
 func (c AgentCollection) Read() Check {
 	return Agent(AgentID{id: c.org.id}).Read()
+}
+
+// Create requests ScopeAgentCreate on every agent resource of the organization.
+func (c AgentCollection) Create() Check {
+	return Agent(AgentID{id: c.org.id}).Create()
 }
 
 // Write requests ScopeAgentWrite on every agent resource of the organization.

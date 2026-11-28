@@ -232,8 +232,11 @@ func TestScopeOverrideOnlyNarrowsAgentManagement(t *testing.T) {
 	permissions, err := authorizer.Permissions(widened, human, other)
 	require.NoError(t, err)
 	require.Equal(t, AgentPermissions{Read: true, Write: false, Authorize: false, Transfer: false}, permissions)
-	require.Len(t, human.LiveGrants(), 1, "delegation stays bounded by live grants")
-	require.Equal(t, authz.ScopeAgentRead, human.LiveGrants()[0].Scope)
+	liveScopes := make([]authz.Scope, 0, len(human.LiveGrants()))
+	for _, grant := range human.LiveGrants() {
+		liveScopes = append(liveScopes, grant.Scope)
+	}
+	require.ElementsMatch(t, []authz.Scope{authz.ScopeAgentCreate, authz.ScopeAgentRead}, liveScopes, "delegation stays bounded by live grants")
 
 	// Outside development the engine ignores a non-admin's override header.
 	ignored := contextvalues.SetRBACScopeOverride(validatedHumanContext(t, "org-a", "admin"), "project:read")

@@ -6,6 +6,7 @@ import type { Scope } from "@gram/client/models/components/rolegrant.js";
 /** The resource kind each scope's checks and grant selectors name. */
 export const scopeResourceKinds: Readonly<Record<string, string>> = {
   "agent:authorize": "agent",
+  "agent:create": "agent",
   "agent:read": "agent",
   "agent:transfer": "agent",
   "agent:write": "agent",
@@ -478,6 +479,7 @@ export function assistants(projectId: string): {
 /** One agent resource: authz.Agent(id). */
 export function agent(id: string): {
   readonly read: () => Check;
+  readonly create: () => Check;
   readonly write: () => Check;
   readonly authorize: () => Check;
   readonly transfer: () => Check;
@@ -486,6 +488,9 @@ export function agent(id: string): {
     /** agent:read: View agents */
     read: (): Check =>
       newCheck("agent:read", "agent", id, {}, [id]),
+    /** agent:create: Create agents */
+    create: (): Check =>
+      newCheck("agent:create", "agent", id, {}, [id]),
     /** agent:write: Manage agents */
     write: (): Check =>
       newCheck("agent:write", "agent", id, {}, [id]),
@@ -501,6 +506,7 @@ export function agent(id: string): {
 /** Every agent resource of one parent: authz.Agents(org). */
 export function agents(orgId: string): {
   readonly read: () => Check;
+  readonly create: () => Check;
   readonly write: () => Check;
   readonly authorize: () => Check;
   readonly transfer: () => Check;
@@ -509,6 +515,9 @@ export function agents(orgId: string): {
     /** agent:read: View agents */
     read: (): Check =>
       newCheck("agent:read", "agent", orgId, {}, [orgId], { collection: true }),
+    /** agent:create: Create agents */
+    create: (): Check =>
+      newCheck("agent:create", "agent", orgId, {}, [orgId], { collection: true }),
     /** agent:write: Manage agents */
     write: (): Check =>
       newCheck("agent:write", "agent", orgId, {}, [orgId], { collection: true }),

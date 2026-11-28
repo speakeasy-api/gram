@@ -98,6 +98,8 @@ const (
 	ScopeInferenceExecute Scope = "inference:execute"
 	// ScopeAgentRead is "View agents": View agents and their settings.
 	ScopeAgentRead Scope = "agent:read"
+	// ScopeAgentCreate is "Create agents": Add agents you own. Does not allow changing or deleting existing agents.
+	ScopeAgentCreate Scope = "agent:create"
 	// ScopeAgentWrite is "Manage agents": Create, configure, and manage agents.
 	ScopeAgentWrite Scope = "agent:write"
 	// ScopeAgentAuthorize is "Authorize agent credentials": Authorize agents and manage their credentials.

@@ -562,13 +562,25 @@
       "temporary_grantable": true
     },
     {
+      "slug": "agent:create",
+      "label": "Create agents",
+      "description": "Add agents you own. Does not allow changing or deleting existing agents.",
+      "resource_type": "agent",
+      "category": "agent",
+      "sensitive": false,
+      "sub_scopes": [],
+      "visibility": "user_visible",
+      "agent_eligible": false,
+      "temporary_grantable": false
+    },
+    {
       "slug": "agent:write",
       "label": "Manage agents",
       "description": "Create, configure, and manage agents.",
       "resource_type": "agent",
       "category": "agent",
       "sensitive": false,
-      "sub_scopes": [],
+      "sub_scopes": ["agent:create"],
       "visibility": "user_visible",
       "agent_eligible": false,
       "temporary_grantable": false

@@ -56,6 +56,7 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		"chat read":           {Chat(ChatIDFrom(id)).Read(), literal(ScopeChatRead, id, nil)},
 		"chat write":          {Chat(ChatIDFrom(id)).Write(), literal(ScopeChatWrite, id, nil)},
 		"agent read":          {Agent(AgentIDFrom(id)).Read(), literal(ScopeAgentRead, id, nil)},
+		"agent create":        {Agent(AgentIDFrom(id)).Create(), literal(ScopeAgentCreate, id, nil)},
 		"agent write":         {Agent(AgentIDFrom(id)).Write(), literal(ScopeAgentWrite, id, nil)},
 		"agent authorize":     {Agent(AgentIDFrom(id)).Authorize(), literal(ScopeAgentAuthorize, id, nil)},
 		"agent transfer":      {Agent(AgentIDFrom(id)).Transfer(), literal(ScopeAgentTransfer, id, nil)},
@@ -84,7 +85,7 @@ func TestRefs_CoverEveryPermission(t *testing.T) {
 		Skill(SkillIDFrom("s")).Read(), Skill(SkillIDFrom("s")).Write(),
 		Assistant(AssistantIDFrom("a"), ProjectIDFrom("p")).Read(), Assistant(AssistantIDFrom("a"), ProjectIDFrom("p")).Write(),
 		Chat(ChatIDFrom("c")).Read(), Chat(ChatIDFrom("c")).Write(),
-		Agent(AgentIDFrom("a")).Read(), Agent(AgentIDFrom("a")).Write(), Agent(AgentIDFrom("a")).Authorize(), Agent(AgentIDFrom("a")).Transfer(),
+		Agent(AgentIDFrom("a")).Read(), Agent(AgentIDFrom("a")).Create(), Agent(AgentIDFrom("a")).Write(), Agent(AgentIDFrom("a")).Authorize(), Agent(AgentIDFrom("a")).Transfer(),
 		Workload(WorkloadIDFrom("w")).Read(), Workload(WorkloadIDFrom("w")).Write(),
 	} {
 		reached[check.Scope] = true

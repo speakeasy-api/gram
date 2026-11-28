@@ -64,6 +64,7 @@ export const Scope = {
   InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
+  AgentCreate: "agent:create",
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
