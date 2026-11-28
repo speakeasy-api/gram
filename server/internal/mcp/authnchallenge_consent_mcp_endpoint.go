@@ -98,6 +98,10 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
+	// The consent page fetches with credentials, so no response may set or clear browser state.
+	w = &consentBrowserStateWriter{ResponseWriter: w}
+	defer stripBrowserStateHeaders(w.Header())
+
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		return oops.E(oops.CodeMethodNotAllowed, nil, "method not allowed").LogWarn(ctx, logger)
 	}
@@ -734,6 +738,36 @@ func (w *consentSessionCaptureWriter) Flush() {
 		flusher.Flush()
 	}
 }
+
+// consentBrowserStateWriter drops browser-state headers before the status line is sent.
+type consentBrowserStateWriter struct {
+	http.ResponseWriter
+}
+
+var _ http.Flusher = (*consentBrowserStateWriter)(nil)
+
+func (w *consentBrowserStateWriter) WriteHeader(status int) {
+	stripBrowserStateHeaders(w.Header())
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *consentBrowserStateWriter) Write(b []byte) (int, error) {
+	stripBrowserStateHeaders(w.Header())
+	n, err := w.ResponseWriter.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("write consent response: %w", err)
+	}
+	return n, nil
+}
+
+func (w *consentBrowserStateWriter) Flush() {
+	stripBrowserStateHeaders(w.Header())
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *consentBrowserStateWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // consentJSONRPCRequest is the locally served JSON-RPC request shape.
 type consentJSONRPCRequest struct {

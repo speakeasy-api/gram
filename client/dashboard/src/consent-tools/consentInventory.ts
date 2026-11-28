@@ -95,6 +95,8 @@ export async function fetchConsentInventory(
       fetch: (input, init) =>
         fetch(input, {
           ...init,
+          // Credentialed requests must never follow a redirect.
+          redirect: "error",
           signal:
             init?.method === "DELETE"
               ? AbortSignal.timeout(2000)
@@ -106,7 +108,8 @@ export async function fetchConsentInventory(
                 : init?.signal,
         }),
       requestInit: {
-        credentials: "omit",
+        // Federated sign-ins bind the challenge to a host-only browser cookie.
+        credentials: "same-origin",
         headers: {
           "Gram-Consent-State": state,
           "Gram-Consent-Csrf": csrfToken,

@@ -239,7 +239,7 @@ describe("ConsentToolsApp", () => {
         };
       }
     ).requestInit;
-    expect(requestInit.credentials).toBe("omit");
+    expect(requestInit.credentials).toBe("same-origin");
     const headers = requestInit.headers;
     expect(headers["Gram-Consent-State"]).toBe("state-1");
     expect(headers["Gram-Consent-Csrf"]).toBe("csrf-1");

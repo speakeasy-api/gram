@@ -43,6 +43,7 @@ it.each([false, true])(
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.redirect).toBe("error");
         expect(new Headers(init?.headers).get("Gram-Consent-Auth-Client")).toBe(
           "00000000-0000-4000-8000-000000000001",
         );

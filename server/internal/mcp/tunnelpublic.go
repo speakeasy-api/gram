@@ -367,8 +367,14 @@ func (s *Service) serveTunneledPublicBackend(
 // backend plant or wipe browser state on the Speakeasy or custom-domain origin.
 func stripPublicResponseHeaders(resp *http.Response) {
 	resp.Header.Del("WWW-Authenticate")
-	resp.Header.Del("Set-Cookie")
-	resp.Header.Del("Clear-Site-Data")
+	stripBrowserStateHeaders(resp.Header)
+}
+
+// stripBrowserStateHeaders removes headers that change browser state on the
+// origin serving the response.
+func stripBrowserStateHeaders(h http.Header) {
+	h.Del("Set-Cookie")
+	h.Del("Clear-Site-Data")
 }
 
 // reservationCleanupTimeout bounds the detached Redis cleanup for an
