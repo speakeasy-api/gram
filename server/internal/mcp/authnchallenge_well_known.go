@@ -364,11 +364,11 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
-	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
-		if OnAuthenticationHost(ctx) {
-			return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
-		}
+	if s.servesMCPHostIssuer(ctx, endpoint, baseURL) {
 		return s.serveMCPHostIssuerMetadata(w, r, endpoint, baseURL)
+	}
+	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
+		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
 	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))
 	if err != nil {
@@ -424,6 +424,12 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 // through it. The authorization endpoint is still advertised because common
 // MCP clients refuse a document without one, which would leave them unable to
 // refresh at all.
+//
+// Every issuer that turns on use_authentication_host, and every MCP server
+// moved onto one, leaves clients holding the MCP host issuer, so this document
+// is needed for as long as issuers can still turn it on. Once every issuer has
+// it on and request logs show clients no longer fetch this document or sign
+// assertions for the issuer alias, it and the alias can be removed.
 func (s *Service) serveMCPHostIssuerMetadata(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, baseURL string) error {
 	ctx := r.Context()
 	urls, err := endpoint.AuthorizationServerURLs(baseURL)

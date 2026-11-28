@@ -269,15 +269,29 @@ func (s *Service) arrivedAtAuthorizationServer(ctx context.Context, endpoint *Re
 	return s.authorizationServerBaseURL(endpoint, resourceBaseURL) == arrivedAt
 }
 
+// servesMCPHostIssuer reports whether the request is on the MCP host for an
+// endpoint whose own authorization server moved to the authentication host,
+// so the MCP host answers under the issuer it announced before: the endpoint's
+// root on the MCP host. Only the authorization server of an issuer that opts
+// in to the authentication host moves, and only for a resource on the platform
+// host, so this is false on the authentication host, on custom domains and
+// private network origins, on shared authorization server routes, and for
+// issuers that have not opted in. The metadata document and the issuer alias
+// on client assertion audiences both key on it, so the two cannot drift apart.
+func (s *Service) servesMCPHostIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) bool {
+	return !OnAuthenticationHost(ctx) &&
+		endpoint.servingSharedAuthorizationServer() == nil &&
+		!s.arrivedAtAuthorizationServer(ctx, endpoint, resourceBaseURL)
+}
+
 // requestAuthorizationServerURLs is AuthorizationServerURLs for the host the
 // request arrived on. Issuer is the endpoint's issuer; Token and Revoke name
 // the host the request was sent to. That keeps an assertion's accepted
 // audiences exact for the addressed endpoint: the issuer, or the URL the
 // request was sent to.
 //
-// A request on the MCP host for an endpoint whose issuer announces the
-// authentication host also carries the endpoint's root on the MCP host as
-// IssuerAlias. That is the issuer the MCP host announced before the issuer
+// When servesMCPHostIssuer holds, the URLs also carry the endpoint's root on
+// the MCP host as IssuerAlias. That is the issuer the MCP host announced before the issuer
 // opted in, and still announces to clients that rediscover it, so a client
 // holding that metadata signs its assertions for it.
 //
@@ -301,7 +315,7 @@ func (s *Service) requestAuthorizationServerURLs(ctx context.Context, endpoint *
 	}
 	urls.Token = addressed.Token
 	urls.Revoke = addressed.Revoke
-	if addressed.Issuer != urls.Issuer {
+	if s.servesMCPHostIssuer(ctx, endpoint, resourceBaseURL) {
 		urls.IssuerAlias = addressed.Issuer
 	}
 	return urls, nil

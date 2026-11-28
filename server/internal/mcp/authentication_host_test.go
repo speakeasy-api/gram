@@ -600,6 +600,48 @@ func TestAuthenticationHost_SharedOptedInMCPHostServesRecordedIssuer(t *testing.
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
+// A private_key_jwt client of a server moved onto a shared issuer that opts in
+// to the authentication host keeps authenticating at the MCP host token and
+// revocation endpoints its recorded metadata names, signing for the recorded
+// issuer or for the token URL that metadata advertises. Those are the
+// server's own authorization server, not the shared one, so the issuer alias
+// applies.
+func TestAuthenticationHost_SharedOptedInMCPHostAcceptsRecordedIssuerAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	signer := newAssertionSigner(t)
+	client := seedAssertionClient(t, ctx, ti, issuer.ID, signer)
+	setIssuerMode(t, ctx, ti, issuer.ID, string(authserver.ModeShared), "")
+	useAuthenticationHost(t, ctx, ti, issuer.OrganizationID.String, issuer.ID)
+	newAuthenticationHostHarness(t, ti)
+
+	meta := fetchMCPHostAuthorizationServerMetadata(t, ti, slug)
+	recordedIssuer, ok := meta["issuer"].(string)
+	require.True(t, ok)
+	advertisedTokenURL, ok := meta["token_endpoint"].(string)
+	require.True(t, ok)
+
+	for _, aud := range []string{recordedIssuer, advertisedTokenURL} {
+		form := url.Values{}
+		form.Set("grant_type", oauthwire.GrantTypeRefreshToken)
+		form.Set("refresh_token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+		form.Set("client_id", client.ClientID)
+		form.Set("resource", mcpHostRoot(ti, slug))
+		w := postForm(t, ti, slug, "token", withAssertion(form, signer.assertion(t, client.ClientID, aud)))
+		require.Equal(t, http.StatusOK, w.Code, "aud %q: %s", aud, w.Body.String())
+	}
+
+	form := url.Values{}
+	form.Set("token", seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil))
+	form.Set("token_type_hint", "refresh_token")
+	form.Set("client_id", client.ClientID)
+	w := postForm(t, ti, slug, "revoke", withAssertion(form, signer.assertion(t, client.ClientID, recordedIssuer)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
 // A client registered with the issuer an MCP server used before it moved to
 // another issuer is unknown to the new one, so its refresh is refused with
 // invalid_client (RFC 6749 §5.2), not invalid_grant. The MCP TypeScript SDK
