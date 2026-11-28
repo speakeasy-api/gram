@@ -9,4 +9,5 @@ Tool calls now keep saved configuration (saved environments and resolved OAuth a
 - A cached client credentials token is reused only by calls with the same client secret.
 - A variable set to system-provided or to none is no longer taken from a request header, on servers with or without a default environment.
 - For function tools and resources, a request header no longer replaces a value that system environment or saved configuration sets, unless the variable is set to user-provided.
+- Resource reads apply per-variable provider settings to configured values the same way tool calls do.
 - Tool call arguments no longer set environment variables.

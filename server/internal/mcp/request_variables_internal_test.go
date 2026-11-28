@@ -104,3 +104,26 @@ func TestFilterRequestVariables(t *testing.T) {
 		})
 	}
 }
+
+// With complete settings, each layer keeps only the variables set to come from it; without them, every layer is left alone.
+func TestFilterOmittedEnvVars(t *testing.T) {
+	t.Parallel()
+
+	layers := func() toolconfig.ToolCallEnv {
+		values := map[string]string{"FROM_SYSTEM": "a", "FROM_USER": "b", "FROM_NONE": "c", "UNLISTED": "d"}
+		return toolconfig.ToolCallEnv{SystemEnv: toolconfig.CIEnvFrom(values), SavedConfig: toolconfig.CIEnvFrom(values), UserConfig: toolconfig.CIEnvFrom(values)}
+	}
+	providedBy := map[string]string{"from_system": "system", "from_user": "user", "from_none": "none"}
+
+	complete := layers()
+	filterOmittedEnvVars(complete, variableSettings{providedBy: providedBy, complete: true})
+	require.Equal(t, map[string]string{"from_system": "a"}, complete.SystemEnv.All())
+	require.Equal(t, map[string]string{"from_user": "b"}, complete.SavedConfig.All())
+	require.Equal(t, map[string]string{"from_user": "b"}, complete.UserConfig.All())
+
+	partial := layers()
+	filterOmittedEnvVars(partial, variableSettings{providedBy: providedBy, complete: false})
+	require.Equal(t, layers().SystemEnv.All(), partial.SystemEnv.All())
+	require.Equal(t, layers().SavedConfig.All(), partial.SavedConfig.All())
+	require.Equal(t, layers().UserConfig.All(), partial.UserConfig.All())
+}

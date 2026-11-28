@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -87,38 +88,55 @@ func TestSystemEnvServerURLHoldsAcrossSelectedEnvironment(t *testing.T) {
 			}
 			// The tool has no server URL of its own, so nothing is called.
 			require.Error(t, err)
+			require.Equal(t, "no server URL provided for tool", oops.Innermost(err).Error())
 			require.Zero(t, systemHits.Load())
 		})
 	}
 }
 
-// A system client asks for its token at the token URL system environment or the tool names, whichever saved environment the request selects.
+// A system client asks for its token at the token URL system environment names, or else the tool's own, whichever saved environment the request selects.
 func TestSystemClientTokenURLHoldsAcrossSelectedEnvironment(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	auth := requireProjectAuthContext(t, ctx)
-	ts := createPublicMCPToolset(t, ctx, ti, auth, "env-layers-"+uuid.NewString()[:8])
+	for _, tc := range []struct {
+		name string
+		// systemURL says whether system environment sets the token URL, in place of the tool's own.
+		systemURL bool
+	}{
+		{name: "the tool's own token URL"},
+		{name: "system token URL", systemURL: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	tokenURL, tokenHits := countingServer(t, `{"access_token":"machine-token","expires_in":60}`)
-	otherURL, otherHits := countingServer(t, `{"access_token":"other-token","expires_in":60}`)
-	ti.addClientCredentialsTool(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID, tokenURL+"/oauth/token")
-	ti.service.SetEnvironmentLoader(layeredEnv{
-		system: map[string]string{"TEST_SERVER_URL": toolServer(t).URL, "MACHINE_CLIENT_ID": "machine-client", "MACHINE_CLIENT_SECRET": "machine-secret"},
-		saved:  map[string]string{"MACHINE_TOKEN_URL": otherURL + "/oauth/token"},
-	})
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			ts := createPublicMCPToolset(t, ctx, ti, auth, "env-layers-"+uuid.NewString()[:8])
 
-	_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
-		ProjectID:     *auth.ProjectID,
-		Toolset:       ts.Slug,
-		Environment:   "selected",
-		Authenticated: true,
-		Mode:          mcp.ToolModeStatic,
-	}, "machine_tool", json.RawMessage(`{}`))
-	require.NoError(t, err)
+			tokenURL, tokenHits := countingServer(t, `{"access_token":"machine-token","expires_in":60}`)
+			otherURL, otherHits := countingServer(t, `{"access_token":"other-token","expires_in":60}`)
+			system := map[string]string{"TEST_SERVER_URL": toolServer(t).URL, "MACHINE_CLIENT_ID": "machine-client", "MACHINE_CLIENT_SECRET": "machine-secret"}
+			toolTokenURL := tokenURL + "/oauth/token"
+			if tc.systemURL {
+				system["MACHINE_TOKEN_URL"] = tokenURL + "/oauth/token"
+				toolTokenURL = "https://unused.example.invalid/oauth/token"
+			}
+			ti.addClientCredentialsTool(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID, toolTokenURL)
+			ti.service.SetEnvironmentLoader(layeredEnv{system: system, saved: map[string]string{"MACHINE_TOKEN_URL": otherURL + "/oauth/token"}})
 
-	require.Zero(t, otherHits.Load())
-	require.Equal(t, int64(1), tokenHits.Load())
+			_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
+				ProjectID:     *auth.ProjectID,
+				Toolset:       ts.Slug,
+				Environment:   "selected",
+				Authenticated: true,
+				Mode:          mcp.ToolModeStatic,
+			}, "machine_tool", json.RawMessage(`{}`))
+			require.NoError(t, err)
+
+			require.Zero(t, otherHits.Load())
+			require.Equal(t, int64(1), tokenHits.Load())
+		})
+	}
 }
 
 // A variable set to system-provided is not taken from a request header, on a server with or without a default environment.

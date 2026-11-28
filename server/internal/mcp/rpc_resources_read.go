@@ -252,11 +252,12 @@ func handleResourcesRead(
 		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		Credentials: nil,
 	}
-	// A resource is read by a function, so request headers follow the same rules as a function call.
+	// A resource is read by a function, so its variables follow the same rules as a function call.
 	settings, err := loadVariableSettings(ctx, mcpmetadata_repo.New(db), payload.projectID, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load variable settings").LogError(ctx, logger)
 	}
+	filterOmittedEnvVars(resourceEnv, settings)
 	filterRequestVariables(ctx, logger, resourceEnv, settings, sources, true)
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), resourceEnv, plan, logAttrs)
 	if err != nil {
