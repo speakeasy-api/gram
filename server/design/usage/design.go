@@ -611,6 +611,31 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createStripeCheckout"}`)
 	})
 
+	Method("createTrialPaymentMethodCheckout", func() {
+		Description("Create an embedded Stripe Checkout session that saves a card to start the organization's free trial")
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("theme", String, "Appearance for the embedded Checkout session.", func() {
+				Enum("light", "dark")
+				Default("light")
+			})
+		})
+
+		Result(StripeEmbeddedCheckout)
+
+		HTTP(func() {
+			POST("/rpc/usage.createTrialPaymentMethodCheckout")
+			Param("theme")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTrialPaymentMethodCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createTrialPaymentMethodCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createTrialPaymentMethodCheckout"}`)
+	})
+
 	Method("getStripeSubscription", func() {
 		Description("Get the live lifecycle state of the organization's Stripe PAYG subscription")
 

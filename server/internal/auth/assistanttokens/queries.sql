@@ -7,12 +7,6 @@ WHERE t.id = @thread_id
   AND t.project_id = @project_id
   AND a.project_id = @project_id;
 
--- name: GetAssistantRevocation :one
-SELECT a.deleted AS assistant_deleted, a.status AS assistant_status
-FROM assistants a
-WHERE a.id = @assistant_id
-  AND a.project_id = @project_id;
-
 -- name: ListKitInferenceSessionBindings :many
 -- Resolve provider session attribution only inside the authenticated runtime.
 SELECT s.acp_session_id, t.id AS thread_id, t.chat_id

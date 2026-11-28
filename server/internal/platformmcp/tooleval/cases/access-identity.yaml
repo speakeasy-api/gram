@@ -11,6 +11,9 @@
 - id: access-platform-context-scope
   prompt: Before we start, what kinds of things can you manage for me through this connection, and which jobs will I still have to do in the dashboard?
   expect: [get_platform_context]
+- id: access-free-trial-start
+  prompt: Has our free trial started yet, and if not, what do I need to do to start it?
+  expect: [whoami, get_platform_context]
 
 # Projects: create and rename.
 - id: access-create-project

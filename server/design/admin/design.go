@@ -56,6 +56,23 @@ var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", 
 	Attribute("limit", Int)
 })
 
+var AdminTrialCardSharingOrganization = Type("AdminTrialCardSharingOrganization", func() {
+	Description("Another organization that offered the same card to start its self-serve trial. Carries no card or Stripe identifiers.")
+	Required("id", "name", "slug", "card_added_at")
+
+	Attribute("id", String, "The ID of the other organization.")
+	Attribute("name", String, "The name of the other organization.")
+	Attribute("slug", String, "The slug of the other organization.")
+	Attribute("card_added_at", String, func() {
+		Description("The time at which the other organization last offered a card to start its trial.")
+		Format(FormatDateTime)
+	})
+	Attribute("rejection_reason", String, func() {
+		Description("Why the card could not start the other organization's trial. Absent when the card started that organization's trial.")
+		Enum("prepaid_card", "card_used")
+	})
+})
+
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
 	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
@@ -101,6 +118,15 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
 	})
+	Attribute("trial_card_added_at", String, func() {
+		Description("The time at which the organization last offered a card to start its self-serve trial. Absent when it never offered one, and absent on list rows.")
+		Format(FormatDateTime)
+	})
+	Attribute("trial_card_rejection_reason", String, func() {
+		Description("Why the organization's latest card could not start its self-serve trial. Absent when that card started the trial or no card was offered, and absent on list rows.")
+		Enum("prepaid_card", "card_used")
+	})
+	Attribute("organizations_sharing_trial_card", ArrayOf(AdminTrialCardSharingOrganization), "Other organizations that offered the same card as this organization's latest card, oldest first, with whether it started their trial. Absent when none did or no card was offered, and absent on list rows.")
 	Attribute("adoption_dashboard_url", String, func() {
 		Description("Staff-entered link to the organization's adoption dashboard. Absent when none has been set.")
 		Format(FormatURI)

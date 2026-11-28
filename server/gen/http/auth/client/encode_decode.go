@@ -2521,6 +2521,21 @@ func unmarshalTrialResponseBodyToAuthTrial(v *TrialResponseBody) *auth.Trial {
 	return res
 }
 
+// unmarshalTrialCardRejectionResponseBodyToAuthTrialCardRejection builds a
+// value of type *auth.TrialCardRejection from a value of type
+// *TrialCardRejectionResponseBody.
+func unmarshalTrialCardRejectionResponseBodyToAuthTrialCardRejection(v *TrialCardRejectionResponseBody) *auth.TrialCardRejection {
+	if v == nil {
+		return nil
+	}
+	res := &auth.TrialCardRejection{
+		Reason:     *v.Reason,
+		RejectedAt: *v.RejectedAt,
+	}
+
+	return res
+}
+
 // unmarshalOrganizationEntryResponseBodyToAuthOrganizationEntry builds a value
 // of type *auth.OrganizationEntry from a value of type
 // *OrganizationEntryResponseBody.

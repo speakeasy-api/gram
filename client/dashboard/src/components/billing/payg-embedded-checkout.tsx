@@ -9,23 +9,10 @@ import {
   useCheckoutForm,
 } from "@stripe/react-stripe-js/checkout";
 import { useRef, useState } from "react";
-import {
-  loadStripe,
-  type Stripe,
-  type StripeCheckoutFormConfirmEvent,
-} from "@stripe/stripe-js";
+import type { StripeCheckoutFormConfirmEvent } from "@stripe/stripe-js";
+import { stripePromiseFor } from "@/components/billing/stripe-loader";
 import { Heading } from "@/components/ui/Heading";
 import { useConfig } from "@/components/ui/hooks/useConfig";
-
-const stripePromises = new Map<string, Promise<Stripe | null>>();
-
-function stripePromiseFor(publishableKey: string): Promise<Stripe | null> {
-  const existing = stripePromises.get(publishableKey);
-  if (existing) return existing;
-  const created = loadStripe(publishableKey);
-  stripePromises.set(publishableKey, created);
-  return created;
-}
 
 /** Embedded checkout confirms cards inline; redirect methods use the return URL. */
 export function PaygEmbeddedCheckout({
