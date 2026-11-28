@@ -1,5 +1,33 @@
 # server
 
+## 2.46.0
+
+### Minor Changes
+
+- c4a27a1: Add staged hooks rollouts that clear a growing share of organizations for a new hooks version and advance after each 24-hour soak.
+- 62aff2b: The Project Assistant now knows what the user was just doing in the dashboard. The dashboard keeps a short log of the pages the user opened, the result of each action they took, the errors it showed them, and repeated failures of the same action. When the user opens the docked assistant, the new `assistants.inferIntent` endpoint reads that log with a small model and returns the user's likely goal and blocker, a one-line opener, and up to three prompts written for that task. The dock shows them above its usual suggestions. Each message to the assistant also carries the log and the inferred goal in its `<dashboard_context>` block, so a question like "how can I see if this worked?" is answered about the action the user just took instead of with a clarifying question. The log stays in the browser and goes only to Speakeasy's server, it names API calls but never their arguments, and the endpoint stores nothing. The dashboard side is behind the `assistant-activity-context` feature flag. Chat titles and summaries now skip a leading `<dashboard_context>` block.
+
+### Patch Changes
+
+- 6293c96: Limit each user to one organization in a single shared rule. Self-serve organization creation refuses a user who already has one, and an organization that arrives from the identity provider for such a user is disabled and recorded as `organization:disabled_by_membership_cap`.
+- 6041fe4: Hook events and telemetry that were queued before an organization was disabled are no longer processed after it is disabled. Queued logs, metrics and spans are dropped, signal evaluation skips its messages, and risk scans leave captured messages unscanned so they are scanned if the organization is re-enabled within the scan window.
+- 0ba3402: Disabling an organization now also stops its Anthropic inference webhook, which denies every signed request, its plugin marketplace install URLs, device enrollment with join tokens issued earlier, Channels, scheduled device integration syncs, AI integration usage polls and Okta application syncs, public skill share links, and signed chat attachment URLs. Each takes effect from the next request or run, and resumes when the organization is re-enabled.
+- cb06354: Session handoff links from a disabled organization no longer open. The link is not used up, so it works again if the organization is re-enabled before the link expires.
+- 54d9746: Platform MCP checks on every request whether the organization has been disabled, and denies access to disabled organizations, including through tokens issued before the organization was disabled.
+- 8f88305: Speakeasy no longer publishes plugins for a disabled organization. The hourly plugin sweep skips its projects, and any publish already queued when the organization was disabled is refused without retries, so its plugin marketplace gets no new commits and no new plugin API keys.
+- 2dc93ed: `render-platform-mcp` reads its server URL from `--server-url` or `GRAM_SERVER_URL` and no longer falls back to a built-in host.
+- 94cba25: Gateway admission telemetry now attributes agent and workload requests to the actual caller, including rejected organization-gateway requests.
+- a9419d5: Tool calls now keep saved configuration (saved environments and resolved OAuth access tokens) apart from `MCP-*` request headers.
+  
+  - A server URL sent as a request header is used only when the server has no system or saved configuration.
+  - An OAuth token URL override is used only when it comes from the same layer as the client ID and secret, or a lower one: a request header needs both sent as headers, and a saved environment's needs neither set in system environment. Otherwise the configured URL applies.
+  - A cached client credentials token is reused only by calls with the same client secret.
+  - A variable set to system-provided or to none is no longer taken from a request header, on servers with or without a default environment.
+  - For function tools and resources, a request header no longer replaces a value that system environment or saved configuration sets, unless the variable is set to user-provided.
+  - Resource reads apply per-variable provider settings to configured values the same way tool calls do.
+  - Tool call arguments no longer set environment variables.
+- 4b3c3f1: Speakeasy no longer serves any MCP server, organization gateway or agent gateway that belongs to a disabled organization or to one that is not whitelisted. Such requests answer as not found, from the next request after the flag changes, and the dashboard stops offering the organization gateway.
+
 ## 2.45.0
 
 ### Minor Changes
