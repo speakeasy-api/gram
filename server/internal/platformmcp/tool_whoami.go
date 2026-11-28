@@ -12,7 +12,7 @@ import (
 const (
 	whoamiToolName        = "whoami"
 	whoamiToolTitle       = "Show Who I Am Connected As"
-	whoamiToolDescription = "Show who this session is connected as: the user (email, display name), the active organization (ID, name, slug) and the user's live roles in it. On an external connection it also gives the connecting client's registered name and the user's other organizations; to work in one, the user must reconnect and pick it. Use this for questions about the caller's own account, organization and roles instead of guessing from other tools; to find other members, organization administrators can use list_access_members. Show the user names and email, not IDs."
+	whoamiToolDescription = "Show who this session is connected as: the user (email, display name), the active organization (ID, name, slug) and the user's live roles in it. On an external connection it also gives the connecting client's registered name and the user's other organizations; to work in one, the user must reconnect and pick it. Use this for questions about the caller's own account, organization and roles instead of guessing from other tools; to find other members, organization administrators can use list_access_members. Show the user names and email, not IDs. When the result includes free_trial, the organization's free trial has not started: tell the user it starts once an organization admin adds a card, and show free_trial.start_url as a clickable link."
 )
 
 func registerWhoamiTool(reg *Registrar, whoami *WhoamiService) {

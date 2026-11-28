@@ -77,6 +77,9 @@ tokio = { version = "1", features = [
   "time",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 unused_must_use = "deny"

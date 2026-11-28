@@ -8,10 +8,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/trials"
 )
 
 // Each status set exceeds the admin list's 50-row page size.
@@ -83,6 +87,67 @@ func adminSeedFixtures(now time.Time) []adminSeedFixture {
 	}
 	fixtures[60].Name = fixtures[0].Name // Duplicate display names, distinct canonical targets.
 	return fixtures
+}
+
+// AdminSeedSharedCardFingerprint is the fictional card fingerprint two trial
+// fixtures offered: it started one organization's trial and was rejected for
+// the other, so the staff view shows a card reused across organizations.
+const AdminSeedSharedCardFingerprint = "fp_admin_seed_example_shared_card"
+
+// AdminSeedPrepaidCardFingerprint is the fictional fingerprint of the prepaid
+// card a trial fixture offered.
+const AdminSeedPrepaidCardFingerprint = "fp_admin_seed_example_prepaid_card"
+
+// adminSeedTrialFixture is a fictional organization in a self-serve free trial
+// state. Card is nil for an organization that never offered one.
+type adminSeedTrialFixture struct {
+	ID, Name, Slug string
+	CreatedAt      time.Time
+	Card           *adminSeedTrialCard
+}
+
+// adminSeedTrialCard is the latest card a fixture offered, stored in its
+// trial_payment_methods row. An empty RejectionReason means the card started a
+// running enterprise trial ending at TrialEndsAt; otherwise the organization
+// has no trial and still awaits a card. Every identifier is fictional and
+// marked as an admin seed example.
+type adminSeedTrialCard struct {
+	CustomerID, PaymentMethodID, CheckoutSessionID, Fingerprint string
+	Funding, RejectionReason                                    string
+	TrialEndsAt                                                 time.Time
+}
+
+// StartedTrial reports whether the card started the fixture's trial.
+func (c *adminSeedTrialCard) StartedTrial() bool {
+	return c != nil && c.RejectionReason == ""
+}
+
+// adminSeedTrialFixtures covers the card-gated free trial: an organization
+// that waits for a card, one whose trial started with a card, one that offered
+// the same card and was rejected because it already started that trial, and
+// one whose prepaid card was rejected.
+func adminSeedTrialFixtures(now time.Time) []adminSeedTrialFixture {
+	now = now.UTC()
+	card := func(suffix, fingerprint, funding, rejection string) *adminSeedTrialCard {
+		return &adminSeedTrialCard{
+			CustomerID:        "cus_admin_seed_example_" + suffix,
+			PaymentMethodID:   "pm_admin_seed_example_" + suffix,
+			CheckoutSessionID: "cs_admin_seed_example_" + suffix,
+			Fingerprint:       fingerprint,
+			Funding:           funding,
+			RejectionReason:   rejection,
+			TrialEndsAt:       time.Time{},
+		}
+	}
+	started, reused, prepaid := now.AddDate(0, 0, -5), now.AddDate(0, 0, -2), now.AddDate(0, 0, -3)
+	startedCard := card("a", AdminSeedSharedCardFingerprint, "credit", "")
+	startedCard.TrialEndsAt = started.AddDate(0, 0, 14)
+	return []adminSeedTrialFixture{
+		{ID: "org_local_admin_trial_pending", Name: "Fictional Trial Lab Awaiting Card", Slug: "fictional-trial-lab-awaiting-card", CreatedAt: now.AddDate(0, 0, -1), Card: nil},
+		{ID: "org_local_admin_trial_card_a", Name: "Fictional Trial Lab Shared Card A", Slug: "fictional-trial-lab-shared-card-a", CreatedAt: started, Card: startedCard},
+		{ID: "org_local_admin_trial_card_b", Name: "Fictional Trial Lab Shared Card B", Slug: "fictional-trial-lab-shared-card-b", CreatedAt: reused, Card: card("b", AdminSeedSharedCardFingerprint, "credit", trials.CardRejectionUsed)},
+		{ID: "org_local_admin_trial_prepaid", Name: "Fictional Trial Lab Prepaid Card", Slug: "fictional-trial-lab-prepaid-card", CreatedAt: prepaid, Card: card("prepaid", AdminSeedPrepaidCardFingerprint, "prepaid", trials.CardRejectionPrepaid)},
+	}
 }
 
 // Dedicated fictional users cover lifecycle and overflow without changing the
@@ -163,7 +228,20 @@ func runAdminSeed(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
 			return errors.New("admin seed member identity collision")
 		}
 	}
+	trialFixtures := adminSeedTrialFixtures(now)
+	for _, fixture := range trialFixtures {
+		collision, err := q.AdminSeedOrganizationCollision(ctx, repo.AdminSeedOrganizationCollisionParams{OrganizationID: fixture.ID, Slug: fixture.Slug})
+		if err != nil {
+			return fmt.Errorf("validate fictional trial organization identity: %w", err)
+		}
+		if collision {
+			return errors.New("admin seed trial organization identity collision")
+		}
+	}
 	updatedAt := conv.ToPGTimestamptz(now)
+	if err := seedAdminTrialFixtures(ctx, q, trialFixtures, updatedAt); err != nil {
+		return err
+	}
 	for i, fixture := range fixtures {
 		var disabledAt *time.Time
 		if fixture.Disabled {
@@ -253,6 +331,70 @@ func runAdminSeed(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit admin seed: %w", err)
+	}
+	return nil
+}
+
+// seedAdminTrialFixtures writes the free trial fixtures. Each one is reset to
+// its fixture state, so a card or trial a developer added locally does not
+// survive a rerun. Every write is scoped to one fictional organization.
+func seedAdminTrialFixtures(ctx context.Context, q *repo.Queries, fixtures []adminSeedTrialFixture, updatedAt pgtype.Timestamptz) error {
+	for _, fixture := range fixtures {
+		accountType, whitelisted := string(billing.TierBase), false
+		if fixture.Card.StartedTrial() {
+			accountType, whitelisted = string(billing.TierEnterprise), true
+		}
+		if err := q.AdminSeedUpsertTrialOrganization(ctx, repo.AdminSeedUpsertTrialOrganizationParams{
+			ID:              fixture.ID,
+			Name:            fixture.Name,
+			Slug:            fixture.Slug,
+			GramAccountType: accountType,
+			Whitelisted:     whitelisted,
+			CreationSource:  orgprovision.SourceSignup,
+			CreatedAt:       conv.ToPGTimestamptz(fixture.CreatedAt),
+			UpdatedAt:       updatedAt,
+		}); err != nil {
+			return fmt.Errorf("seed fictional trial organization: %w", err)
+		}
+
+		if fixture.Card == nil {
+			if err := q.AdminSeedClearTrialPaymentMethod(ctx, fixture.ID); err != nil {
+				return fmt.Errorf("clear fictional trial card: %w", err)
+			}
+		} else {
+			var rejection pgtype.Text
+			if !fixture.Card.StartedTrial() {
+				rejection = conv.ToPGText(fixture.Card.RejectionReason)
+			}
+			if err := q.AdminSeedUpsertTrialPaymentMethod(ctx, repo.AdminSeedUpsertTrialPaymentMethodParams{
+				OrganizationID:          fixture.ID,
+				StripeCustomerID:        fixture.Card.CustomerID,
+				StripePaymentMethodID:   fixture.Card.PaymentMethodID,
+				CardFingerprint:         fixture.Card.Fingerprint,
+				CardFunding:             fixture.Card.Funding,
+				StripeCheckoutSessionID: fixture.Card.CheckoutSessionID,
+				RejectionReason:         rejection,
+				OfferedAt:               conv.ToPGTimestamptz(fixture.CreatedAt),
+			}); err != nil {
+				return fmt.Errorf("seed fictional trial card: %w", err)
+			}
+		}
+
+		if !fixture.Card.StartedTrial() {
+			if err := q.AdminSeedClearTrial(ctx, fixture.ID); err != nil {
+				return fmt.Errorf("clear fictional trial: %w", err)
+			}
+			continue
+		}
+		if err := q.AdminSeedUpsertTrial(ctx, repo.AdminSeedUpsertTrialParams{
+			OrganizationID: fixture.ID,
+			Tier:           string(billing.TierEnterprise),
+			EndsAt:         conv.ToPGTimestamptz(fixture.Card.TrialEndsAt),
+			CreatedAt:      conv.ToPGTimestamptz(fixture.Card.TrialEndsAt.AddDate(0, 0, -14)),
+			UpdatedAt:      updatedAt,
+		}); err != nil {
+			return fmt.Errorf("seed fictional trial: %w", err)
+		}
 	}
 	return nil
 }

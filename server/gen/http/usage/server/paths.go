@@ -72,6 +72,11 @@ func CreateStripeCheckoutUsagePath() string {
 	return "/rpc/usage.createStripeCheckout"
 }
 
+// CreateTrialPaymentMethodCheckoutUsagePath returns the URL path to the usage service createTrialPaymentMethodCheckout HTTP endpoint.
+func CreateTrialPaymentMethodCheckoutUsagePath() string {
+	return "/rpc/usage.createTrialPaymentMethodCheckout"
+}
+
 // GetStripeSubscriptionUsagePath returns the URL path to the usage service getStripeSubscription HTTP endpoint.
 func GetStripeSubscriptionUsagePath() string {
 	return "/rpc/usage.getStripeSubscription"

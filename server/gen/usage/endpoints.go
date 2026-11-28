@@ -16,25 +16,26 @@ import (
 
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
-	GetPeriodUsage            goa.Endpoint
-	GetMeterUsage             goa.Endpoint
-	GetSpendBreakdown         goa.Endpoint
-	GetTokensUnderManagement  goa.Endpoint
-	SetBillingMetadata        goa.Endpoint
-	GetBillingEmail           goa.Endpoint
-	SetBillingEmail           goa.Endpoint
-	SetSpendCap               goa.Endpoint
-	GetInferenceSpendCaps     goa.Endpoint
-	GetUsageTiers             goa.Endpoint
-	CreateCustomerSession     goa.Endpoint
-	GetStripeCheckoutStatus   goa.Endpoint
-	CreateStripeCheckout      goa.Endpoint
-	GetStripeSubscription     goa.Endpoint
-	GetPaygBillingSummary     goa.Endpoint
-	CreateStripePortalSession goa.Endpoint
-	CancelStripeSubscription  goa.Endpoint
-	ResumeStripeSubscription  goa.Endpoint
-	CreateTopUpCheckout       goa.Endpoint
+	GetPeriodUsage                   goa.Endpoint
+	GetMeterUsage                    goa.Endpoint
+	GetSpendBreakdown                goa.Endpoint
+	GetTokensUnderManagement         goa.Endpoint
+	SetBillingMetadata               goa.Endpoint
+	GetBillingEmail                  goa.Endpoint
+	SetBillingEmail                  goa.Endpoint
+	SetSpendCap                      goa.Endpoint
+	GetInferenceSpendCaps            goa.Endpoint
+	GetUsageTiers                    goa.Endpoint
+	CreateCustomerSession            goa.Endpoint
+	GetStripeCheckoutStatus          goa.Endpoint
+	CreateStripeCheckout             goa.Endpoint
+	CreateTrialPaymentMethodCheckout goa.Endpoint
+	GetStripeSubscription            goa.Endpoint
+	GetPaygBillingSummary            goa.Endpoint
+	CreateStripePortalSession        goa.Endpoint
+	CancelStripeSubscription         goa.Endpoint
+	ResumeStripeSubscription         goa.Endpoint
+	CreateTopUpCheckout              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "usage" service with endpoints.
@@ -42,25 +43,26 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPeriodUsage:            NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
-		GetMeterUsage:             NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
-		GetSpendBreakdown:         NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
-		GetTokensUnderManagement:  NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
-		SetBillingMetadata:        NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
-		GetBillingEmail:           NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
-		SetBillingEmail:           NewSetBillingEmailEndpoint(s, a.APIKeyAuth),
-		SetSpendCap:               NewSetSpendCapEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendCaps:     NewGetInferenceSpendCapsEndpoint(s, a.APIKeyAuth),
-		GetUsageTiers:             NewGetUsageTiersEndpoint(s),
-		CreateCustomerSession:     NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
-		GetStripeCheckoutStatus:   NewGetStripeCheckoutStatusEndpoint(s, a.APIKeyAuth),
-		CreateStripeCheckout:      NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:     NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:     NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		CreateStripePortalSession: NewCreateStripePortalSessionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:  NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:  NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CreateTopUpCheckout:       NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
+		GetPeriodUsage:                   NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		GetMeterUsage:                    NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:                NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
+		GetTokensUnderManagement:         NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
+		SetBillingMetadata:               NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
+		GetBillingEmail:                  NewGetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetBillingEmail:                  NewSetBillingEmailEndpoint(s, a.APIKeyAuth),
+		SetSpendCap:                      NewSetSpendCapEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendCaps:            NewGetInferenceSpendCapsEndpoint(s, a.APIKeyAuth),
+		GetUsageTiers:                    NewGetUsageTiersEndpoint(s),
+		CreateCustomerSession:            NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
+		GetStripeCheckoutStatus:          NewGetStripeCheckoutStatusEndpoint(s, a.APIKeyAuth),
+		CreateStripeCheckout:             NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
+		CreateTrialPaymentMethodCheckout: NewCreateTrialPaymentMethodCheckoutEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:            NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:            NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		CreateStripePortalSession:        NewCreateStripePortalSessionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:         NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:         NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CreateTopUpCheckout:              NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -79,6 +81,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.GetStripeCheckoutStatus = m(e.GetStripeCheckoutStatus)
 	e.CreateStripeCheckout = m(e.CreateStripeCheckout)
+	e.CreateTrialPaymentMethodCheckout = m(e.CreateTrialPaymentMethodCheckout)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.CreateStripePortalSession = m(e.CreateStripePortalSession)
@@ -368,6 +371,29 @@ func NewCreateStripeCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.CreateStripeCheckout(ctx, p)
+	}
+}
+
+// NewCreateTrialPaymentMethodCheckoutEndpoint returns an endpoint function
+// that calls the method "createTrialPaymentMethodCheckout" of service "usage".
+func NewCreateTrialPaymentMethodCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateTrialPaymentMethodCheckoutPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateTrialPaymentMethodCheckout(ctx, p)
 	}
 }
 

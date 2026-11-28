@@ -1373,10 +1373,10 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_process_ok")
 	require.NoError(t, err)
 
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, _, threadID := insertTurnReadyAssistantFixture(t, conn)
 
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
 	runTurnPrompt := &atomic.Pointer[string]{}
 	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil, runTurnMCPServers: runTurnMCP, runTurnPrompt: runTurnPrompt}
@@ -1563,11 +1563,11 @@ func TestProcessEventTurnNestsSkillNoticeForRegularAndMCPAuthPrompts(t *testing.
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_skill_snapshot_prompts")
 	require.NoError(t, err)
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, _, threadID := insertTurnReadyAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
 	prompt := &atomic.Pointer[string]{}
 	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnPrompt: prompt}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil, nil, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, newTurnReadyTokens(t, conn), nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	assistant, err := core.GetAssistant(t.Context(), projectID, assistantID)
 	require.NoError(t, err)
 	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindSlack}
@@ -1607,14 +1607,14 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_process_fail")
 	require.NoError(t, err)
 
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, _, threadID := insertTurnReadyAssistantFixture(t, conn)
 	baseline, err := marshalAssistantSkillSetSnapshot(newAssistantSkillSetSnapshot([]assistantSkillRow{{SkillID: uuid.New(), Name: "baseline", ResolvedVersionID: uuid.New(), Description: "old"}}))
 	require.NoError(t, err)
 	_, err = assistantsrepo.New(conn).InitThreadSkillSnapshot(t.Context(), assistantsrepo.InitThreadSkillSnapshotParams{Candidate: baseline, ThreadID: threadID, ProjectID: projectID})
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	backend := testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: errors.New("runtime RunTurn blew up")}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
@@ -1647,11 +1647,11 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_unhealthy_turn")
 	require.NoError(t, err)
 
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, _, threadID := insertTurnReadyAssistantFixture(t, conn)
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendGKE,
 		runTurnErr: ErrRuntimeUnhealthy,
@@ -1689,11 +1689,11 @@ func TestServiceCoreProcessThreadEventsCapsRuntimeTeardowns(t *testing.T) {
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_teardown_cap")
 	require.NoError(t, err)
 
-	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	projectID, assistantID, _, threadID := insertTurnReadyAssistantFixture(t, conn)
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := newTurnReadyTokens(t, conn)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendGKE,
 		runTurnErr: ErrRuntimeUnhealthy,

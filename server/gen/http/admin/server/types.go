@@ -1120,6 +1120,17 @@ type UpdateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1189,6 +1200,17 @@ type DisableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1247,6 +1269,17 @@ type EnableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1305,6 +1338,17 @@ type GetOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1422,6 +1466,17 @@ type ExtendTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1480,6 +1535,17 @@ type CreateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1538,6 +1604,17 @@ type RearmTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1661,6 +1738,17 @@ type SetStripeCustomerResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -1719,6 +1807,17 @@ type SetAdoptionDashboardURLResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -2236,6 +2335,17 @@ type StartTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -2294,6 +2404,17 @@ type ChangeTrialEndDateResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -3034,6 +3155,17 @@ type SetStripeSubscriptionResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -31700,6 +31832,23 @@ type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AdminTrialCardSharingOrganizationResponseBody is used to define fields on
+// response body types.
+type AdminTrialCardSharingOrganizationResponseBody struct {
+	// The ID of the other organization.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the other organization.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the other organization.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The time at which the other organization last offered a card to start its
+	// trial.
+	CardAddedAt string `form:"card_added_at" json:"card_added_at" xml:"card_added_at"`
+	// Why the card could not start the other organization's trial. Absent when the
+	// card started that organization's trial.
+	RejectionReason *string `form:"rejection_reason,omitempty" json:"rejection_reason,omitempty" xml:"rejection_reason,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -31850,6 +31999,17 @@ type AdminOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// The time at which the organization last offered a card to start its
+	// self-serve trial. Absent when it never offered one, and absent on list rows.
+	TrialCardAddedAt *string `form:"trial_card_added_at,omitempty" json:"trial_card_added_at,omitempty" xml:"trial_card_added_at,omitempty"`
+	// Why the organization's latest card could not start its self-serve trial.
+	// Absent when that card started the trial or no card was offered, and absent
+	// on list rows.
+	TrialCardRejectionReason *string `form:"trial_card_rejection_reason,omitempty" json:"trial_card_rejection_reason,omitempty" xml:"trial_card_rejection_reason,omitempty"`
+	// Other organizations that offered the same card as this organization's latest
+	// card, oldest first, with whether it started their trial. Absent when none
+	// did or no card was offered, and absent on list rows.
+	OrganizationsSharingTrialCard []*AdminTrialCardSharingOrganizationResponseBody `form:"organizations_sharing_trial_card,omitempty" json:"organizations_sharing_trial_card,omitempty" xml:"organizations_sharing_trial_card,omitempty"`
 	// Staff-entered link to the organization's adoption dashboard. Absent when
 	// none has been set.
 	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
@@ -33994,11 +34154,23 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34047,11 +34219,23 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34077,11 +34261,23 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34107,11 +34303,23 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34283,11 +34491,23 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34313,11 +34533,23 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34343,11 +34575,23 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34468,11 +34712,23 @@ func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCu
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -34498,11 +34754,23 @@ func NewSetAdoptionDashboardURLResponseBody(res *admin.AdminOrganization) *SetAd
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -35062,11 +35330,23 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -35092,11 +35372,23 @@ func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTria
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
@@ -36397,11 +36689,23 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		TrialCardAddedAt:               res.TrialCardAddedAt,
+		TrialCardRejectionReason:       res.TrialCardRejectionReason,
 		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
 		UpdatedAt:                      res.UpdatedAt,
+	}
+	if res.OrganizationsSharingTrialCard != nil {
+		body.OrganizationsSharingTrialCard = make([]*AdminTrialCardSharingOrganizationResponseBody, len(res.OrganizationsSharingTrialCard))
+		for i, val := range res.OrganizationsSharingTrialCard {
+			if val == nil {
+				body.OrganizationsSharingTrialCard[i] = nil
+				continue
+			}
+			body.OrganizationsSharingTrialCard[i] = marshalAdminAdminTrialCardSharingOrganizationToAdminTrialCardSharingOrganizationResponseBody(val)
+		}
 	}
 	return body
 }
