@@ -2121,6 +2121,8 @@ SELECT
   a.state,
   a.configured,
   a.workload_binding_json,
+  a.initiating_user_id,
+  a.initiating_user_resolution,
   r.backend_metadata_json,
   asst.name AS assistant_name,
   asst.status AS assistant_status,
@@ -2166,21 +2168,23 @@ type GetLiveAssistantATEActorByUIDParams struct {
 }
 
 type GetLiveAssistantATEActorByUIDRow struct {
-	ID                  uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.UUID
-	AssistantID         uuid.UUID
-	RuntimeID           uuid.UUID
-	AssistantThreadID   uuid.UUID
-	ActorName           string
-	ActorUid            string
-	State               string
-	Configured          bool
-	WorkloadBindingJson []byte
-	BackendMetadataJson []byte
-	AssistantName       string
-	AssistantStatus     string
-	ChatID              uuid.UUID
+	ID                       uuid.UUID
+	OrganizationID           string
+	ProjectID                uuid.UUID
+	AssistantID              uuid.UUID
+	RuntimeID                uuid.UUID
+	AssistantThreadID        uuid.UUID
+	ActorName                string
+	ActorUid                 string
+	State                    string
+	Configured               bool
+	WorkloadBindingJson      []byte
+	InitiatingUserID         pgtype.Text
+	InitiatingUserResolution string
+	BackendMetadataJson      []byte
+	AssistantName            string
+	AssistantStatus          string
+	ChatID                   uuid.UUID
 }
 
 // Looks up a live, configured, running ATE thread actor by its unique ATE
@@ -2208,6 +2212,8 @@ func (q *Queries) GetLiveAssistantATEActorByUID(ctx context.Context, arg GetLive
 		&i.State,
 		&i.Configured,
 		&i.WorkloadBindingJson,
+		&i.InitiatingUserID,
+		&i.InitiatingUserResolution,
 		&i.BackendMetadataJson,
 		&i.AssistantName,
 		&i.AssistantStatus,

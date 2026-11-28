@@ -404,16 +404,18 @@ func TestATEEgress_EndToEndCredentialInjectionAndWebAccess(t *testing.T) {
 			})
 			require.NoError(t, err)
 			actorRow, err := q.InsertAssistantATEActor(ctx, assistantrepo.InsertAssistantATEActorParams{
-				ActorName:           actorName,
-				ActorUid:            actorUID,
-				State:               "running",
-				Configured:          true,
-				WorkloadBindingJson: bindingJSON,
-				WarmUntil:           pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
-				RuntimeID:           runtimeRec.ID,
-				ProjectID:           project,
-				AssistantID:         a.ID,
-				ThreadID:            threadID,
+				ActorName:                actorName,
+				ActorUid:                 actorUID,
+				State:                    "running",
+				Configured:               true,
+				WorkloadBindingJson:      bindingJSON,
+				WarmUntil:                pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
+				InitiatingUserID:         pgtype.Text{},
+				InitiatingUserResolution: assistants.ATEInitiatorNoUser,
+				RuntimeID:                runtimeRec.ID,
+				ProjectID:                project,
+				AssistantID:              a.ID,
+				ThreadID:                 threadID,
 			})
 			require.NoError(t, err)
 

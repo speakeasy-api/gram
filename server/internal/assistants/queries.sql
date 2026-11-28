@@ -2154,6 +2154,8 @@ SELECT
   a.state,
   a.configured,
   a.workload_binding_json,
+  a.initiating_user_id,
+  a.initiating_user_resolution,
   r.backend_metadata_json,
   asst.name AS assistant_name,
   asst.status AS assistant_status,

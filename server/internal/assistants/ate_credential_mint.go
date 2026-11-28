@@ -22,6 +22,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orgserving"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/userblock"
 )
 
 var _ atecred.ActorCredentialMinter = (*ServiceCore)(nil)
@@ -135,13 +136,61 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 	if !ownerEligible {
 		return "", time.Time{}, fmt.Errorf("%w: agent owner ineligible", atecred.ErrActorCredentialDenied)
 	}
+	if s.authz != nil {
+		if err := s.authz.CheckUsersBlocked(ctx, agentRec.OwnerUserID); err != nil {
+			if errors.Is(err, userblock.ErrBlocked) {
+				return "", time.Time{}, fmt.Errorf("%w: agent owner blocked", atecred.ErrActorCredentialDenied)
+			}
+			return "", time.Time{}, fmt.Errorf("check ATE actor owner block state: %w", err)
+		}
+	}
+
+	var (
+		principal        urn.Principal
+		authorizerUserID string
+		execCtx          executionprofiles.Context
+	)
+	switch row.InitiatingUserResolution {
+	case ATEInitiatorDashboardSender, ATEInitiatorSlackMapping, ATEInitiatorWakeRequester, ATEInitiatorMCPAuthResume:
+		initiatingUserID := strings.TrimSpace(row.InitiatingUserID.String)
+		if !row.InitiatingUserID.Valid || initiatingUserID == "" {
+			return "", time.Time{}, fmt.Errorf("%w: missing initiating user id for resolution %q", atecred.ErrActorCredentialDenied, row.InitiatingUserResolution)
+		}
+		_, userEligible, err := runtimepolicy.ResolveEligibleUser(ctx, s.db, row.OrganizationID, initiatingUserID)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("check ATE actor initiating user eligibility: %w", err)
+		}
+		if !userEligible {
+			return "", time.Time{}, fmt.Errorf("%w: initiating user ineligible", atecred.ErrActorCredentialDenied)
+		}
+		if s.authz != nil {
+			if err := s.authz.CheckUsersBlocked(ctx, initiatingUserID); err != nil {
+				if errors.Is(err, userblock.ErrBlocked) {
+					return "", time.Time{}, fmt.Errorf("%w: initiating user blocked", atecred.ErrActorCredentialDenied)
+				}
+				return "", time.Time{}, fmt.Errorf("check ATE actor initiating user block state: %w", err)
+			}
+		}
+		principal = urn.NewPrincipal(urn.PrincipalTypeAgent, workload.AgentID.String())
+		authorizerUserID = initiatingUserID
+		execCtx = executionprofiles.ContextUserBacked
+	case ATEInitiatorNoUser:
+		if row.InitiatingUserID.Valid && strings.TrimSpace(row.InitiatingUserID.String) != "" {
+			return "", time.Time{}, fmt.Errorf("%w: unexpected initiating user id for no_user resolution", atecred.ErrActorCredentialDenied)
+		}
+		principal = urn.NewWorkloadPrincipal(workload.IssuerID, workload.Subject)
+		authorizerUserID = ""
+		execCtx = executionprofiles.ContextUserless
+	default:
+		return "", time.Time{}, fmt.Errorf("%w: unsupported initiating user resolution %q", atecred.ErrActorCredentialDenied, row.InitiatingUserResolution)
+	}
 
 	versionID, err := s.bindExecutionProfile(ctx, executionprofiles.Target{
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		AssistantID:    row.AssistantID,
 		TriggerID:      triggerID,
-		Context:        executionprofiles.ContextUserless,
+		Context:        execCtx,
 	})
 	if err != nil {
 		return "", time.Time{}, err
@@ -150,8 +199,8 @@ func (s *ServiceCore) MintATEActorCredential(ctx context.Context, atespace, acto
 	cred := principalcredential.Credential{
 		OrganizationID:            row.OrganizationID,
 		ProjectID:                 row.ProjectID,
-		Principal:                 urn.NewWorkloadPrincipal(workload.IssuerID, workload.Subject),
-		AuthorizerUserID:          "",
+		Principal:                 principal,
+		AuthorizerUserID:          authorizerUserID,
 		SelectionProfileVersionID: uuid.NullUUID{UUID: versionID, Valid: true},
 	}
 
