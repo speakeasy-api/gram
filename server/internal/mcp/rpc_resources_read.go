@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -123,7 +124,7 @@ func handleResourcesRead(
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
-	savedConfig, userConfig, _, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
+	savedConfig, userConfig, sources, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +240,7 @@ func handleResourcesRead(
 	if decision.Denied() {
 		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 	}
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
+	resourceEnv := toolconfig.ToolCallEnv{
 		SystemEnv:   systemConfig,
 		SavedConfig: savedConfig,
 		UserConfig:  userConfig,
@@ -250,7 +251,14 @@ func handleResourcesRead(
 		// resource handler.
 		MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 		Credentials: nil,
-	}, plan, logAttrs)
+	}
+	// A resource is read by a function, so request headers follow the same rules as a function call.
+	settings, err := loadVariableSettings(ctx, mcpmetadata_repo.New(db), payload.projectID, toolsetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load variable settings").LogError(ctx, logger)
+	}
+	filterRequestVariables(ctx, logger, resourceEnv, settings, sources, true)
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), resourceEnv, plan, logAttrs)
 	if err != nil {
 		if errors.Is(err, shutdowndrain.ErrInterrupted) {
 			interruption := interruptedAtShutdown(ctx, logger, metrics, logAttrs, mcpversions.MethodResourcesRead, string(plan.Kind), err)

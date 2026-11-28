@@ -409,11 +409,13 @@ func TestRequestTokenURLNotUsedWithSavedClient(t *testing.T) {
 		name      string
 		headers   func(other string) map[string]string
 		arguments func(other string) map[string]any
+		logged    string
 	}{
 		{
 			name:      "request header",
 			headers:   func(other string) map[string]string { return map[string]string{"Mcp-Machine-Token-Url": other} },
 			arguments: func(string) map[string]any { return map[string]any{} },
+			logged:    "token url override not used",
 		},
 		{
 			name: "request header with a request client secret",
@@ -421,6 +423,7 @@ func TestRequestTokenURLNotUsedWithSavedClient(t *testing.T) {
 				return map[string]string{"Mcp-Machine-Token-Url": other, "Mcp-Machine-Client-Secret": "request-secret"}
 			},
 			arguments: func(string) map[string]any { return map[string]any{} },
+			logged:    "token url override not used",
 		},
 		{
 			name:    "tool call arguments",
@@ -428,6 +431,7 @@ func TestRequestTokenURLNotUsedWithSavedClient(t *testing.T) {
 			arguments: func(other string) map[string]any {
 				return map[string]any{"environmentVariables": map[string]any{"MACHINE_TOKEN_URL": other, "TEST_SERVER_URL": other}}
 			},
+			logged: "environment variables in tool call arguments not used",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -451,6 +455,7 @@ func TestRequestTokenURLNotUsedWithSavedClient(t *testing.T) {
 			require.Zero(t, otherRequests.Load())
 			require.False(t, call.isError)
 			require.JSONEq(t, `{"authorization":"Bearer machine-token"}`, call.text)
+			require.Contains(t, call.logs, tc.logged)
 		})
 	}
 }

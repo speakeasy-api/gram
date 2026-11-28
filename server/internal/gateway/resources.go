@@ -115,7 +115,7 @@ func (tp *ToolProxy) doFunctionResource(
 
 	// For each variable required by the function, allow saved config and user config to merge/override
 	for _, varName := range plan.Variables {
-		if val := env.ConfiguredOrUserGet(varName); val != "" {
+		if val := env.UserOrSavedGet(varName); val != "" {
 			payloadEnv[varName] = val
 		}
 	}

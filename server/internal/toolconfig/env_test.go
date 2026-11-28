@@ -24,7 +24,6 @@ func TestToolCallEnv_LayerPrecedence(t *testing.T) {
 	require.Equal(t, "saved-d", merged.Get("d"))
 	require.Equal(t, "user-e", merged.Get("e"))
 
-	require.True(t, env.HasConfiguredEnv())
 	require.False(t, env.HasUserValue("A"))
 	require.False(t, env.HasUserValue("B"))
 	require.True(t, env.HasUserValue("C"))
@@ -36,26 +35,48 @@ func TestToolCallEnv_LayerPrecedence(t *testing.T) {
 	require.Equal(t, "saved-c", env.ConfiguredGet("C"))
 	require.Empty(t, env.ConfiguredGet("E"))
 
-	require.Equal(t, "saved-b", env.ConfiguredOrUserGet("B"))
-	require.Equal(t, "user-c", env.ConfiguredOrUserGet("C"))
-	require.Equal(t, "user-e", env.ConfiguredOrUserGet("E"))
-	require.Empty(t, env.ConfiguredOrUserGet("A"))
+	require.Equal(t, "saved-b", env.UserOrSavedGet("B"))
+	require.Equal(t, "user-c", env.UserOrSavedGet("C"))
+	require.Equal(t, "user-e", env.UserOrSavedGet("E"))
+	require.Empty(t, env.UserOrSavedGet("A"))
 }
 
 func TestToolCallEnv_NilSafety(t *testing.T) {
 	t.Parallel()
 
 	var empty toolconfig.ToolCallEnv
-	require.False(t, empty.HasConfiguredEnv())
 	require.False(t, empty.HasUserValue("KEY"))
 	require.Empty(t, empty.ConfiguredGet("KEY"))
-	require.Empty(t, empty.ConfiguredOrUserGet("KEY"))
+	require.Empty(t, empty.UserOrSavedGet("KEY"))
 	require.Empty(t, empty.Merged().All())
 
 	savedOnly := toolconfig.ToolCallEnv{
 		SavedConfig: toolconfig.CIEnvFrom(map[string]string{"KEY": "saved"}),
 	}
-	require.True(t, savedOnly.HasConfiguredEnv())
 	require.False(t, savedOnly.HasUserValue("KEY"))
 	require.Equal(t, "saved", savedOnly.ConfiguredGet("KEY"))
+}
+
+// An empty value is not a value to the layer getters, but Merged keeps it: an
+// empty entry in a higher layer still replaces a lower layer's value there.
+func TestToolCallEnv_EmptyValues(t *testing.T) {
+	t.Parallel()
+
+	env := toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"A": "sys-a", "B": "sys-b"}),
+		SavedConfig: toolconfig.CIEnvFrom(map[string]string{"A": "", "C": "saved-c"}),
+		UserConfig:  toolconfig.CIEnvFrom(map[string]string{"B": "", "C": ""}),
+	}
+
+	require.False(t, env.HasUserValue("B"))
+	require.False(t, env.HasUserValue("C"))
+	require.Equal(t, "sys-a", env.ConfiguredGet("A"))
+	require.Equal(t, "saved-c", env.ConfiguredGet("C"))
+	require.Equal(t, "saved-c", env.UserOrSavedGet("C"))
+	require.Empty(t, env.UserOrSavedGet("A"))
+
+	merged := env.Merged()
+	require.Empty(t, merged.Get("A"))
+	require.Empty(t, merged.Get("B"))
+	require.Empty(t, merged.Get("C"))
 }

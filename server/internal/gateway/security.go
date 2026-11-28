@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -230,6 +232,28 @@ func processSecurity(
 	return true
 }
 
+// envLayer is the layer of a ToolCallEnv a variable takes its value from, lowest first.
+type envLayer int
+
+const (
+	layerSystem envLayer = iota
+	layerSaved
+	layerRequest
+)
+
+// layerOf reports the layer that supplies key: the highest one holding a
+// non-empty value for it. A key no layer sets counts as system environment.
+func layerOf(env toolconfig.ToolCallEnv, key string) envLayer {
+	switch {
+	case env.HasUserValue(key):
+		return layerRequest
+	case key != "" && env.SavedConfig.Get(key) != "":
+		return layerSaved
+	default:
+		return layerSystem
+	}
+}
+
 type oAuthFlows struct {
 	ClientCredentials *oAuthFlow `json:"clientCredentials,omitempty" yaml:"clientCredentials,omitempty"`
 	AuthorizationCode *oAuthFlow `json:"authorizationCode,omitempty" yaml:"authorizationCode,omitempty"`
@@ -244,8 +268,10 @@ type oAuthFlow struct {
 var _ cache.CacheableObject[clientCredentialsTokenCache] = (*clientCredentialsTokenCache)(nil)
 
 type clientCredentialsTokenCache struct {
-	ProjectID   string
-	ClientID    string
+	ProjectID string
+	ClientID  string
+	// SecretHash is clientSecretHash of the secret the token was obtained with.
+	SecretHash  string
 	TokenURL    string
 	AccessToken string
 	Scopes      []string
@@ -265,12 +291,20 @@ func normalizeScopes(scopes []string) string {
 	return strings.Join(normalized, ",")
 }
 
-func clientCredentialsTokenCacheCacheKey(projectID, clientID, tokenURL string, scopes []string) string {
-	return "clientCredentialsTokenCache:projectID-" + projectID + "-clientID-" + clientID + "-tokenURL-" + url.QueryEscape(tokenURL) + "-scopes-" + normalizeScopes(scopes)
+// clientSecretHash identifies a client secret in a cache key without storing
+// it. A token is cached under the secret that obtained it, so only a call
+// holding the same client ID and secret reuses it.
+func clientSecretHash(projectID, clientID, clientSecret string) string {
+	sum := sha256.Sum256([]byte(projectID + "\x00" + clientID + "\x00" + clientSecret))
+	return hex.EncodeToString(sum[:])
+}
+
+func clientCredentialsTokenCacheCacheKey(projectID, clientID, secretHash, tokenURL string, scopes []string) string {
+	return "clientCredentialsTokenCache:projectID-" + projectID + "-clientID-" + clientID + "-secret-" + secretHash + "-tokenURL-" + url.QueryEscape(tokenURL) + "-scopes-" + normalizeScopes(scopes)
 }
 
 func (c clientCredentialsTokenCache) CacheKey() string {
-	return clientCredentialsTokenCacheCacheKey(c.ProjectID, c.ClientID, c.TokenURL, c.Scopes)
+	return clientCredentialsTokenCacheCacheKey(c.ProjectID, c.ClientID, c.SecretHash, c.TokenURL, c.Scopes)
 }
 
 func (c clientCredentialsTokenCache) TTL() time.Duration {
@@ -313,12 +347,19 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		return accessToken, accessTokenVar, false, nil
 	}
 
-	// A request-level token URL override applies only when the request also
-	// supplies both client ID and client secret; otherwise fall back to
-	// configured layers or the tool's default tokenUrl.
-	if env.HasUserValue(tokenURLVar) && (!env.HasUserValue(clientIDVar) || !env.HasUserValue(secretVar)) {
-		logger.WarnContext(ctx, "request token url not used: the client credentials are configured", attr.SlogEnvVarName(tokenURLVar), attr.SlogSecurityScheme(security.Key))
-		tokenURLOverride = env.ConfiguredGet(tokenURLVar)
+	// A token URL override applies only from the layer the client ID and
+	// secret come from, or one below it: a request-level override needs both
+	// in the request, and a saved one needs neither in system environment.
+	// Otherwise fall back to the layers at or below the client's, or the
+	// tool's default tokenUrl.
+	clientLayer := min(layerOf(env, clientIDVar), layerOf(env, secretVar))
+	if layerOf(env, tokenURLVar) > clientLayer {
+		logger.WarnContext(ctx, "token url override not used: client id and client secret come from a lower configuration layer", attr.SlogEnvVarName(tokenURLVar), attr.SlogSecurityScheme(security.Key))
+		if clientLayer == layerSaved {
+			tokenURLOverride = env.ConfiguredGet(tokenURLVar)
+		} else {
+			tokenURLOverride = env.SystemEnv.Get(tokenURLVar)
+		}
 	}
 
 	if clientSecret == "" {
@@ -356,7 +397,8 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials token url found"), tokenRequest: false}
 	}
 
-	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
+	secretHash := clientSecretHash(tool.ProjectID, clientID, clientSecret)
+	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, secretHash, tokenURL, requestedScopes)
 	if token := getTokenFromCache(ctx, logger, tokenCache, cacheKey); token != "" {
 		req.Header.Set("Authorization", formatForBearer(token))
 		return token, secretVar, true, nil
@@ -437,6 +479,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		if err := tokenCache.Store(ctx, clientCredentialsTokenCache{
 			ProjectID:   tool.ProjectID,
 			ClientID:    clientID,
+			SecretHash:  secretHash,
 			TokenURL:    tokenURL,
 			AccessToken: accessToken,
 			Scopes:      requestedScopes,
@@ -580,6 +623,7 @@ func getTokenFromCache(ctx context.Context, logger *slog.Logger, tokenCache cach
 		if err := tokenCache.Delete(ctx, clientCredentialsTokenCache{
 			ProjectID:   cachedToken.ProjectID,
 			ClientID:    cachedToken.ClientID,
+			SecretHash:  cachedToken.SecretHash,
 			TokenURL:    cachedToken.TokenURL,
 			AccessToken: cachedToken.AccessToken,
 			Scopes:      cachedToken.Scopes,

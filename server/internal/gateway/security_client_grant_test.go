@@ -600,3 +600,93 @@ func TestServerEnvVarSystemEnvKeepsItsServer(t *testing.T) {
 	defer mu.Unlock()
 	require.Equal(t, map[string][]string{"default": {"system-api-key"}}, hits)
 }
+
+// A saved token URL applies to a saved client, and not to a client from system environment.
+func TestClientCredentialsSavedTokenURLFollowsClientLayer(t *testing.T) {
+	t.Parallel()
+
+	client := map[string]string{"ACME_CLIENT_ID": "client-id", "ACME_CLIENT_SECRET": "client-secret"}
+
+	for _, tc := range []struct {
+		name      string
+		system    map[string]string
+		saved     map[string]string
+		wantSaved int
+	}{
+		{name: "system client", system: client, saved: map[string]string{}, wantSaved: 0},
+		{name: "saved client", system: map[string]string{}, saved: client, wantSaved: 1},
+		{name: "client split across system and saved", system: map[string]string{"ACME_CLIENT_ID": "client-id"}, saved: map[string]string{"ACME_CLIENT_SECRET": "client-secret"}, wantSaved: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			defaultURL, defaultForms := recordingTokenEndpoint(t, "default-tok")
+			savedURL, savedForms := recordingTokenEndpoint(t, "saved-tok")
+			sec := &HTTPToolSecurity{
+				Key:          "acme",
+				Type:         NullString{Value: "oauth2", Valid: true},
+				OAuthTypes:   []string{"client_credentials"},
+				OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + defaultURL + `"}}`),
+				EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+			}
+			saved := toolconfig.CIEnvFrom(tc.saved)
+			saved.Set("ACME_TOKEN_URL", savedURL)
+			env := toolconfig.ToolCallEnv{
+				SystemEnv:   toolconfig.CIEnvFrom(tc.system),
+				SavedConfig: saved,
+				UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+			}
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/resource", nil)
+			var status int
+			ok := processSecurity(t.Context(), testenv.NewLogger(t), unsafePolicy(t), req, httptest.NewRecorder(), &status, newTestToolDescriptor(), &HTTPToolCallPlan{Security: []*HTTPToolSecurity{sec}}, testenv.NewMemoryCache(), env, "https://api.example", tm.HTTPLogAttributes{})
+			require.True(t, ok)
+			require.Len(t, savedForms(), tc.wantSaved)
+			require.Len(t, defaultForms(), 1-tc.wantSaved)
+		})
+	}
+}
+
+// A cached token is reused only by a call that holds the client secret that obtained it.
+func TestClientCredentialsCachedTokenNeedsSameSecret(t *testing.T) {
+	t.Parallel()
+
+	tokenURL, forms := recordingTokenEndpoint(t, "cached-tok")
+	sec := &HTTPToolSecurity{
+		Key:          "acme",
+		Type:         NullString{Value: "oauth2", Valid: true},
+		OAuthTypes:   []string{"client_credentials"},
+		OAuthFlows:   []byte(`{"clientCredentials":{"tokenUrl":"` + tokenURL + `"}}`),
+		EnvVariables: []string{"ACME_CLIENT_ID", "ACME_CLIENT_SECRET", "ACME_TOKEN_URL", "ACME_ACCESS_TOKEN"},
+	}
+	shared := testenv.NewMemoryCache()
+	descriptor := newTestToolDescriptor()
+	call := func(env toolconfig.ToolCallEnv) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.example/resource", nil)
+		var status int
+		ok := processSecurity(t.Context(), testenv.NewLogger(t), unsafePolicy(t), req, httptest.NewRecorder(), &status, descriptor, &HTTPToolCallPlan{Security: []*HTTPToolSecurity{sec}}, shared, env, "https://api.example", tm.HTTPLogAttributes{})
+		require.True(t, ok)
+	}
+	system := toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"ACME_CLIENT_ID": "client-id", "ACME_CLIENT_SECRET": "client-secret"}),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+	}
+	request := toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		SavedConfig: toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  toolconfig.CIEnvFrom(map[string]string{"ACME_CLIENT_ID": "client-id", "ACME_CLIENT_SECRET": "another-secret", "ACME_TOKEN_URL": tokenURL}),
+	}
+
+	call(system)
+	require.Len(t, forms(), 1)
+
+	// The same client and secret reuse the cached token.
+	call(system)
+	require.Len(t, forms(), 1)
+
+	// The same client ID with another secret asks the token endpoint itself.
+	call(request)
+	require.Len(t, forms(), 2)
+	require.Equal(t, "another-secret", forms()[1].Get("client_secret"))
+}

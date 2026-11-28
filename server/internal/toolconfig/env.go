@@ -294,12 +294,6 @@ func (e ToolCallEnv) Merged() *CaseInsensitiveEnv {
 	return merged
 }
 
-// HasConfiguredEnv reports whether any platform-configured variable exists in
-// SystemEnv or SavedConfig.
-func (e ToolCallEnv) HasConfiguredEnv() bool {
-	return e.SystemEnv.Len() > 0 || e.SavedConfig.Len() > 0
-}
-
 // HasUserValue reports whether UserConfig holds a non-empty value for key.
 func (e ToolCallEnv) HasUserValue(key string) bool {
 	return key != "" && e.UserConfig.Get(key) != ""
@@ -316,8 +310,9 @@ func (e ToolCallEnv) ConfiguredGet(key string) string {
 	return e.SystemEnv.Get(key)
 }
 
-// ConfiguredOrUserGet returns key from UserConfig if non-empty, otherwise from SavedConfig.
-func (e ToolCallEnv) ConfiguredOrUserGet(key string) string {
+// UserOrSavedGet returns key from UserConfig if non-empty, otherwise from
+// SavedConfig. It does not read SystemEnv.
+func (e ToolCallEnv) UserOrSavedGet(key string) string {
 	if key == "" {
 		return ""
 	}
