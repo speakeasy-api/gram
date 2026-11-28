@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -107,6 +108,29 @@ func TestMintRejectsMalformedPrincipals(t *testing.T) {
 		_, _, err := issuer.Mint(c)
 		require.ErrorIs(t, err, principalcredential.ErrInvalid)
 	}
+}
+
+func TestMintWithLifetimeBoundsAndShapeErrors(t *testing.T) {
+	t.Parallel()
+	issuer := principalcredential.New(newSigner(t), nil)
+	valid := agentCredential()
+
+	expectedExp := time.Now().Add(2 * time.Minute)
+	raw, id, exp, err := issuer.MintWithLifetime(valid, 2*time.Minute)
+	require.NoError(t, err)
+	require.NotEmpty(t, raw)
+	require.NotEmpty(t, id)
+	require.WithinDuration(t, expectedExp, exp, 5*time.Second)
+
+	for _, badLifetime := range []time.Duration{0, 500 * time.Millisecond, -time.Second, principalcredential.Lifetime + time.Second} {
+		_, _, _, err := issuer.MintWithLifetime(valid, badLifetime)
+		require.ErrorIs(t, err, principalcredential.ErrInvalid, badLifetime.String())
+	}
+
+	badShape := agentCredential()
+	badShape.AuthorizerUserID = ""
+	_, _, _, err = issuer.MintWithLifetime(badShape, 2*time.Minute)
+	require.ErrorIs(t, err, principalcredential.ErrInvalid)
 }
 
 func TestValidateRejectsOtherSignersAndTokens(t *testing.T) {
