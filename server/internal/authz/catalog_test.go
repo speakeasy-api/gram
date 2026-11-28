@@ -61,7 +61,9 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 
 // The sensitive set is a product decision (AIS-825): other members' private
 // activity, and administration that can remove people or rewrite every role.
-// Secrets and credentials are deliberately not in it.
+// The reasons declared for the scopes that replace org:admin (credentials,
+// member identity and activity, access control) are not carried by any scope
+// yet.
 func TestScopeCatalog_SensitiveSet(t *testing.T) {
 	t.Parallel()
 

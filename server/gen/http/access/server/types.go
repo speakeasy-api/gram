@@ -10602,7 +10602,8 @@ type ScopeDefinitionResponseBody struct {
 	// are checked against a project but are not project permissions.
 	Category string `form:"category" json:"category" xml:"category"`
 	// Whether granting this scope exposes other members' private activity or
-	// allows destructive administration. Clients warn before granting it.
+	// identity, handles credentials, decides other members' access, or allows
+	// destructive administration. Clients warn before granting it.
 	Sensitive bool `form:"sensitive" json:"sensitive" xml:"sensitive"`
 	// Why the scope is sensitive. Absent when sensitive is false.
 	Sensitivity *string `form:"sensitivity,omitempty" json:"sensitivity,omitempty" xml:"sensitivity,omitempty"`

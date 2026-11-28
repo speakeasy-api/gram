@@ -136,6 +136,9 @@ func (r Registry) Validate() error {
 			if c := t.CategoryFor(p); !slices.Contains(ScopeCategories, c) {
 				fail("%s: unknown category %q", owner, c)
 			}
+			if p.Sensitivity != SensitivityNone && !slices.Contains(Sensitivities, p.Sensitivity) {
+				fail("%s: unknown sensitivity %q; add it to sensitivity.go", owner, p.Sensitivity)
+			}
 			permissionDimKeys := map[string]bool{}
 			for _, d := range p.Dimensions {
 				validateDimension(fail, owner, d)

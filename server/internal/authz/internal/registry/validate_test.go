@@ -263,6 +263,15 @@ func TestRegistryValidate_RejectsBrokenModels(t *testing.T) {
 			want: `thing: unknown category "nowhere"`,
 		},
 		{
+			name: "unknown sensitivity",
+			model: func() Registry {
+				p := validTestPermission("read")
+				p.Sensitivity = "secrets"
+				return validTestRegistry(validTestType("thing", p))
+			}(),
+			want: `thing.read: unknown sensitivity "secrets"`,
+		},
+		{
 			name: "permission exempts itself",
 			model: validTestRegistry(validTestType("thing",
 				withExclusions(validTestPermission("evaluate"), Exclusion{Kind: ExclusionExemption, Action: "evaluate", Agent: AgentUnsafe(), Subject: ""}),
