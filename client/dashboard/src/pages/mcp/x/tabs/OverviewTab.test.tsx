@@ -63,7 +63,7 @@ const server = {
   tunneledMcpServerId: "tunnel",
 } as McpServer;
 
-it("places tunnel status above the usage dashboard", () => {
+it("places plugin status, then tunnel status, above the usage dashboard", () => {
   const { container } = render(
     <OverviewTab
       mcpServer={server}
@@ -73,7 +73,7 @@ it("places tunnel status above the usage dashboard", () => {
     { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe(
-    "Tunnel statusPluginsShared usage dashboard",
+    "PluginsTunnel statusShared usage dashboard",
   );
   const url = new URL(
     screen.getByRole("link").getAttribute("href")!,
