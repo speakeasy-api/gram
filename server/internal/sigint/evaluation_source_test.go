@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/sigint"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -68,6 +69,18 @@ func TestEvaluationMessageBatchScopesAndSplitProjection(t *testing.T) {
 	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{uuid.New()})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+
+	_, err = adminrepo.New(ti.conn).AdminDisableOrganization(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)
+	require.NoError(t, err)
+	require.Empty(t, rows, "a disabled organization's queued messages are not evaluated")
+	_, err = adminrepo.New(ti.conn).AdminEnableOrganization(ctx, auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "a re-enabled organization's messages are evaluated again")
+
 	require.NoError(t, fixtures.ForceSoftDeleteChat(ctx, chatID))
 
 	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, ids)

@@ -5279,6 +5279,9 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.DisabledStatus != nil {
 			values.Add("disabled_status", *p.DisabledStatus)
 		}
+		if p.Whitelisted != nil {
+			values.Add("whitelisted", fmt.Sprintf("%v", *p.Whitelisted))
+		}
 		if p.MinMembers != nil {
 			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
 		}
@@ -22549,6 +22552,471 @@ func DecodeUpdateSignupOfferResponse(decoder func(*http.Response) goahttp.Decode
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("admin", "updateSignupOffer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSelfServeStatusRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "getSelfServeStatus" endpoint
+func (c *Client) BuildGetSelfServeStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSelfServeStatusAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getSelfServeStatus", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSelfServeStatusRequest returns an encoder for requests sent to the
+// admin getSelfServeStatus server.
+func EncodeGetSelfServeStatusRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetSelfServeStatusPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getSelfServeStatus", "*admin.GetSelfServeStatusPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetSelfServeStatusResponse returns a decoder for responses returned by
+// the admin getSelfServeStatus endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetSelfServeStatusResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSelfServeStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSelfServeStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			res := NewGetSelfServeStatusAdminSelfServeStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSelfServeStatusUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSelfServeStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSelfServeStatusBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSelfServeStatusNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSelfServeStatusConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSelfServeStatusUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSelfServeStatusInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSelfServeStatusInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+				}
+				err = ValidateGetSelfServeStatusInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+				}
+				return nil, NewGetSelfServeStatusInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSelfServeStatusUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+				}
+				err = ValidateGetSelfServeStatusUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+				}
+				return nil, NewGetSelfServeStatusUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getSelfServeStatus", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSelfServeStatusGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getSelfServeStatus", err)
+			}
+			err = ValidateGetSelfServeStatusGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getSelfServeStatus", err)
+			}
+			return nil, NewGetSelfServeStatusGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getSelfServeStatus", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetSelfServeDisabledRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "setSelfServeDisabled"
+// endpoint
+func (c *Client) BuildSetSelfServeDisabledRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSelfServeDisabledAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setSelfServeDisabled", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSelfServeDisabledRequest returns an encoder for requests sent to
+// the admin setSelfServeDisabled server.
+func EncodeSetSelfServeDisabledRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetSelfServeDisabledPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setSelfServeDisabled", "*admin.SetSelfServeDisabledPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetSelfServeDisabledRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setSelfServeDisabled", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSelfServeDisabledResponse returns a decoder for responses returned
+// by the admin setSelfServeDisabled endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetSelfServeDisabledResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSelfServeDisabledResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSelfServeDisabledResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			res := NewSetSelfServeDisabledAdminSelfServeStatusOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSelfServeDisabledUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSelfServeDisabledForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSelfServeDisabledBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSelfServeDisabledNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSelfServeDisabledConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSelfServeDisabledUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSelfServeDisabledInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSelfServeDisabledInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+				}
+				err = ValidateSetSelfServeDisabledInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+				}
+				return nil, NewSetSelfServeDisabledInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSelfServeDisabledUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+				}
+				err = ValidateSetSelfServeDisabledUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+				}
+				return nil, NewSetSelfServeDisabledUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setSelfServeDisabled", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSelfServeDisabledGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setSelfServeDisabled", err)
+			}
+			err = ValidateSetSelfServeDisabledGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setSelfServeDisabled", err)
+			}
+			return nil, NewSetSelfServeDisabledGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setSelfServeDisabled", resp.StatusCode, string(body))
 		}
 	}
 }

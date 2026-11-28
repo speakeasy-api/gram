@@ -46,6 +46,10 @@ const (
 	// SourceDefault means the platform-wide default pin applies.
 	SourceDefault Source = "default"
 
+	// SourceStage means an active staged rollout clears the organization for
+	// a version newer than the default pin.
+	SourceStage Source = "stage"
+
 	// SourceUnset means no pin applies: there is no override and no default
 	// pin has been set yet.
 	SourceUnset Source = "unset"
@@ -70,20 +74,32 @@ type OrganizationPins struct {
 
 	// Default is the platform-wide default pin, nil until one is set.
 	Default *Pin
+
+	// Stage is the current staged rollout, nil when none was ever staged.
+	Stage *Stage
 }
 
 // Effective returns the pin that applies to the organization and where it
-// comes from. It returns a nil pin with SourceUnset when neither applies.
-// Canary status is the caller's to check, since it depends on the slug.
-func (p OrganizationPins) Effective() (*Pin, Source) {
+// comes from. It returns a nil pin with SourceUnset when none applies. Canary
+// status is the caller's to check.
+func (p OrganizationPins) Effective(organizationID string) (*Pin, Source) {
 	switch {
 	case p.Override != nil:
 		return p.Override, SourceOrganization
+	case p.stageClears(organizationID):
+		return &Pin{Version: p.Stage.Version, SetBy: p.Stage.SetBy, SetAt: p.Stage.SetAt}, SourceStage
 	case p.Default != nil:
 		return p.Default, SourceDefault
 	default:
 		return nil, SourceUnset
 	}
+}
+
+func (p OrganizationPins) stageClears(organizationID string) bool {
+	if !p.Stage.Active() || !InStage(organizationID, p.Stage.Percent) {
+		return false
+	}
+	return p.Default == nil || p.Stage.Version > p.Default.Version
 }
 
 // Override is an organization's current override, with the organization's
@@ -130,31 +146,59 @@ type PinReader interface {
 // Store reads and writes pins. Writes append to the pin history; the newest
 // row in a scope is the current pin.
 type Store struct {
+	db      repo.DBTX
 	queries *repo.Queries
 }
 
 var _ PinReader = (*Store)(nil)
 
 func NewStore(db repo.DBTX) *Store {
-	return &Store{queries: repo.New(db)}
+	return &Store{db: db, queries: repo.New(db)}
 }
 
-// OrganizationPins reads the organization's override and the default pin.
+type snapshotBeginner interface {
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
+}
+
+// OrganizationPins reads the organization's override, the default pin and the
+// staged rollout from one snapshot, so a concurrent stage completion can't pair
+// the old default with the completed stage.
 func (s *Store) OrganizationPins(ctx context.Context, organizationID string) (OrganizationPins, error) {
-	override, err := s.organizationOverride(ctx, organizationID)
+	db, ok := s.db.(snapshotBeginner)
+	if !ok {
+		return organizationPins(ctx, s.queries, organizationID)
+	}
+	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
+	if err != nil {
+		return OrganizationPins{}, fmt.Errorf("begin hooks rollout pins read: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	return organizationPins(ctx, repo.New(tx), organizationID)
+}
+
+func organizationPins(ctx context.Context, q *repo.Queries, organizationID string) (OrganizationPins, error) {
+	override, err := organizationOverride(ctx, q, organizationID)
 	if err != nil {
 		return OrganizationPins{}, err
 	}
-	defaultPin, err := s.DefaultPin(ctx)
+	pin, err := defaultPin(ctx, q)
 	if err != nil {
 		return OrganizationPins{}, err
 	}
-	return OrganizationPins{Override: override, Default: defaultPin}, nil
+	stage, err := currentStage(ctx, q)
+	if err != nil {
+		return OrganizationPins{}, err
+	}
+	return OrganizationPins{Override: override, Default: pin, Stage: stage}, nil
 }
 
 // DefaultPin reads the default pin, nil when none has been set.
 func (s *Store) DefaultPin(ctx context.Context) (*Pin, error) {
-	row, err := s.queries.GetDefaultHooksRolloutPin(ctx)
+	return defaultPin(ctx, s.queries)
+}
+
+func defaultPin(ctx context.Context, q *repo.Queries) (*Pin, error) {
+	row, err := q.GetDefaultHooksRolloutPin(ctx)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
@@ -165,7 +209,11 @@ func (s *Store) DefaultPin(ctx context.Context) (*Pin, error) {
 }
 
 func (s *Store) organizationOverride(ctx context.Context, organizationID string) (*Pin, error) {
-	row, err := s.queries.GetOrganizationHooksRolloutPin(ctx, conv.ToPGText(organizationID))
+	return organizationOverride(ctx, s.queries, organizationID)
+}
+
+func organizationOverride(ctx context.Context, q *repo.Queries, organizationID string) (*Pin, error) {
+	row, err := q.GetOrganizationHooksRolloutPin(ctx, conv.ToPGText(organizationID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
@@ -176,23 +224,34 @@ func (s *Store) organizationOverride(ctx context.Context, organizationID string)
 }
 
 // SetDefault moves the default pin to version. Setting the version it already
-// has records nothing.
+// has records nothing. A staged rollout of version or older is cancelled, since
+// the default pin already clears everyone it would, and its completion must
+// not move the default pin back.
 func (s *Store) SetDefault(ctx context.Context, version int, setBy string) error {
-	current, err := s.DefaultPin(ctx)
-	if err != nil {
-		return err
+	db, ok := s.db.(Beginner)
+	if !ok {
+		return errors.New("set default hooks rollout pin: store needs a database that can begin transactions")
 	}
-	if current != nil && current.Version == version {
-		return nil
-	}
-	if _, err := s.queries.InsertHooksRolloutPin(ctx, repo.InsertHooksRolloutPinParams{
-		OrganizationID: pgtype.Text{String: "", Valid: false},
-		Version:        pgtype.Int4{Int32: conv.SafeInt32(version), Valid: true},
-		SetBy:          setBy,
-	}); err != nil {
-		return fmt.Errorf("insert default hooks rollout pin: %w", err)
-	}
-	return nil
+	return withStageLock(ctx, db, func(q *repo.Queries) error {
+		current, err := defaultPin(ctx, q)
+		if err != nil {
+			return err
+		}
+		if current != nil && current.Version == version {
+			return nil
+		}
+		if err := insertDefaultPin(ctx, q, version, setBy); err != nil {
+			return err
+		}
+		stage, err := currentStage(ctx, q)
+		if err != nil {
+			return err
+		}
+		if !stage.Active() || stage.Version > version {
+			return nil
+		}
+		return insertStage(ctx, q, Stage{Revision: 0, Version: stage.Version, Percent: stage.Percent, State: StageCancelled, Reason: fmt.Sprintf("Superseded by the default pin moving to %d.", version), SetBy: setBy, SetAt: time.Time{}})
+	})
 }
 
 // SetOrganizationOverride pins the organization to version regardless of the

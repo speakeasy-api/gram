@@ -13,12 +13,13 @@ import (
 func TestOrganizationSearchForwardsDashboardFilters(t *testing.T) {
 	t.Parallel()
 	reads := &recordingOrganizationReader{list: &gen.AdminListOrganizationsResult{Total: 21}}
-	_, body, data := callStaffReadTool(t, reads, "find_organizations", `{"account_types":["payg"],"trial_states":["ending_soon"],"disabled_status":"active","min_members":"9007199254740993","max_members":"9223372036854775807","created_from":"2026-01-01","created_to":"2026-02-28","sort":"member_count","direction":"desc","page":2,"limit":5}`)
+	_, body, data := callStaffReadTool(t, reads, "find_organizations", `{"account_types":["payg"],"trial_states":["ending_soon"],"disabled_status":"active","whitelisted":false,"min_members":"9007199254740993","max_members":"9223372036854775807","created_from":"2026-01-01","created_to":"2026-02-28","sort":"member_count","direction":"desc","page":2,"limit":5}`)
 	require.NotContains(t, body, `"isError":true`)
 	require.Nil(t, reads.listInput.Q)
 	require.Equal(t, []string{"payg"}, reads.listInput.AccountTypes)
 	require.Equal(t, []string{"ending_soon"}, reads.listInput.TrialStates)
 	require.Equal(t, "active", *reads.listInput.DisabledStatus)
+	require.False(t, *reads.listInput.Whitelisted)
 	require.EqualValues(t, 9007199254740993, *reads.listInput.MinMembers)
 	require.EqualValues(t, 9223372036854775807, *reads.listInput.MaxMembers)
 	require.Equal(t, "2026-01-01", *reads.listInput.CreatedFrom)

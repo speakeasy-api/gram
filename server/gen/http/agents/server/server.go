@@ -24,6 +24,7 @@ type Server struct {
 	List                   http.Handler
 	Create                 http.Handler
 	Get                    http.Handler
+	GetRuntimeGateway      http.Handler
 	Rename                 http.Handler
 	ListDelegableGrants    http.Handler
 	ListPolicyGrants       http.Handler
@@ -74,6 +75,7 @@ func New(
 			{"List", "GET", "/rpc/agents.list"},
 			{"Create", "POST", "/rpc/agents.create"},
 			{"Get", "GET", "/rpc/agents.get"},
+			{"GetRuntimeGateway", "GET", "/rpc/agents.getRuntimeGateway"},
 			{"Rename", "POST", "/rpc/agents.rename"},
 			{"ListDelegableGrants", "GET", "/rpc/agents.listDelegableGrants"},
 			{"ListPolicyGrants", "GET", "/rpc/agents.listPolicyGrants"},
@@ -96,6 +98,7 @@ func New(
 		List:                   NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		Create:                 NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		Get:                    NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		GetRuntimeGateway:      NewGetRuntimeGatewayHandler(e.GetRuntimeGateway, mux, decoder, encoder, errhandler, formatter),
 		Rename:                 NewRenameHandler(e.Rename, mux, decoder, encoder, errhandler, formatter),
 		ListDelegableGrants:    NewListDelegableGrantsHandler(e.ListDelegableGrants, mux, decoder, encoder, errhandler, formatter),
 		ListPolicyGrants:       NewListPolicyGrantsHandler(e.ListPolicyGrants, mux, decoder, encoder, errhandler, formatter),
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
 	s.Create = m(s.Create)
 	s.Get = m(s.Get)
+	s.GetRuntimeGateway = m(s.GetRuntimeGateway)
 	s.Rename = m(s.Rename)
 	s.ListDelegableGrants = m(s.ListDelegableGrants)
 	s.ListPolicyGrants = m(s.ListPolicyGrants)
@@ -153,6 +157,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
 	MountCreateHandler(mux, h.Create)
 	MountGetHandler(mux, h.Get)
+	MountGetRuntimeGatewayHandler(mux, h.GetRuntimeGateway)
 	MountRenameHandler(mux, h.Rename)
 	MountListDelegableGrantsHandler(mux, h.ListDelegableGrants)
 	MountListPolicyGrantsHandler(mux, h.ListPolicyGrants)
@@ -418,6 +423,59 @@ func NewGetHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "get")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRuntimeGatewayHandler configures the mux to serve the "agents"
+// service "getRuntimeGateway" endpoint.
+func MountGetRuntimeGatewayHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/agents.getRuntimeGateway", f)
+}
+
+// NewGetRuntimeGatewayHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agents" service "getRuntimeGateway" endpoint.
+func NewGetRuntimeGatewayHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRuntimeGatewayRequest(mux, decoder)
+		encodeResponse = EncodeGetRuntimeGatewayResponse(encoder)
+		encodeError    = EncodeGetRuntimeGatewayError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRuntimeGateway")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agents")
 		payload, err := decodeRequest(r)
 		if err != nil {

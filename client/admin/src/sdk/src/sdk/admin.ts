@@ -62,6 +62,7 @@ import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
 import { adminGetSecretBackfills } from "../funcs/adminGetSecretBackfills.js";
+import { adminGetSelfServeStatus } from "../funcs/adminGetSelfServeStatus.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -127,6 +128,7 @@ import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeatur
 import { adminSetOrganizationHooksRollout } from "../funcs/adminSetOrganizationHooksRollout.js";
 import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
+import { adminSetSelfServeDisabled } from "../funcs/adminSetSelfServeDisabled.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
 import { adminStartMemoryEvalRun } from "../funcs/adminStartMemoryEvalRun.js";
@@ -203,6 +205,7 @@ import { AdminRegistryPromotionCandidate } from "../models/components/adminregis
 import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
 import { AdminRunnerKeyOrganizationBackfill } from "../models/components/adminrunnerkeyorganizationbackfill.js";
 import { AdminSecretBackfills } from "../models/components/adminsecretbackfills.js";
+import { AdminSelfServeStatus } from "../models/components/adminselfservestatus.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -284,6 +287,7 @@ import { SetOrganizationFeatureRequestBody } from "../models/components/setorgan
 import { SetOrganizationHooksRolloutRequestBody } from "../models/components/setorganizationhooksrolloutrequestbody.js";
 import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
+import { SetSelfServeDisabledRequestBody } from "../models/components/setselfservedisabledrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
 import { StartMemoryEvalRunRequestBody } from "../models/components/startmemoryevalrunrequestbody.js";
@@ -2343,6 +2347,38 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminRunnerKeyOrganizationBackfill> {
     return unwrapAsync(adminRunRunnerKeyOrganizationBackfill(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getSelfServeStatus admin
+   *
+   * @remarks
+   * Report whether self-serve signup is disabled across the platform.
+   */
+  async getSelfServeStatus(
+    options?: RequestOptions,
+  ): Promise<AdminSelfServeStatus> {
+    return unwrapAsync(adminGetSelfServeStatus(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * setSelfServeDisabled admin
+   *
+   * @remarks
+   * Turn self-serve signup off or on across the platform. Existing organizations are unaffected.
+   */
+  async setSelfServeDisabled(
+    request: SetSelfServeDisabledRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminSelfServeStatus> {
+    return unwrapAsync(adminSetSelfServeDisabled(
       this,
       request,
       options,

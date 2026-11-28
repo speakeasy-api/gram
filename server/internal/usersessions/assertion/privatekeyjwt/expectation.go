@@ -15,7 +15,8 @@ type Expectation struct {
 	// ReplayIssuer scopes spent identifiers to this authorization server.
 	ReplayIssuer string
 
-	// Audiences names the issuer and addressed endpoint accepted for aud.
+	// Audiences names the issuer, any issuer alias, and the addressed
+	// endpoint accepted for aud.
 	Audiences Audiences
 }
 

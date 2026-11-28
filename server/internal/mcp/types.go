@@ -77,6 +77,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
 			shared:                false,
+			presented:             false,
 		}
 	}
 

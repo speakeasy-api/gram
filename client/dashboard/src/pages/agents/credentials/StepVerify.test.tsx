@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { StepVerify } from "./StepVerify";
 
-const gatewayURL = "https://app.example.test/agent-mcp/agent_example";
+const gatewayURL = "https://api.example.test/mcp/gateway/example/projects/main";
 
 afterEach(cleanup);
 

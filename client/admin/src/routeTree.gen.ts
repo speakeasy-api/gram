@@ -28,6 +28,7 @@ import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as SecretBackfillsRouteImport } from './routes/secret-backfills'
+import { Route as SelfServeRouteImport } from './routes/self-serve'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
 import { Route as TailscaleOauthMigrationRouteImport } from './routes/tailscale-oauth-migration'
@@ -158,6 +159,11 @@ const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
 const SecretBackfillsRoute = SecretBackfillsRouteImport.update({
   id: '/secret-backfills',
   path: '/secret-backfills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelfServeRoute = SelfServeRouteImport.update({
+  id: '/self-serve',
+  path: '/self-serve',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupOffersRoute = SignupOffersRouteImport.update({
@@ -384,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/secret-backfills': typeof SecretBackfillsRoute
+  '/self-serve': typeof SelfServeRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
@@ -436,6 +443,7 @@ export interface FileRoutesByTo {
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/secret-backfills': typeof SecretBackfillsRoute
+  '/self-serve': typeof SelfServeRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
@@ -490,6 +498,7 @@ export interface FileRoutesById {
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/secret-backfills': typeof SecretBackfillsRoute
+  '/self-serve': typeof SelfServeRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
@@ -549,6 +558,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/remote-session-issuers'
     | '/secret-backfills'
+    | '/self-serve'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/tailscale-oauth-migration'
@@ -601,6 +611,7 @@ export interface FileRouteTypes {
     | '/onboarding-steps'
     | '/platform-mcp-feedback'
     | '/secret-backfills'
+    | '/self-serve'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/tailscale-oauth-migration'
@@ -654,6 +665,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/remote-session-issuers'
     | '/secret-backfills'
+    | '/self-serve'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/tailscale-oauth-migration'
@@ -712,6 +724,7 @@ export interface RootRouteChildren {
   RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SecretBackfillsRoute: typeof SecretBackfillsRoute
+  SelfServeRoute: typeof SelfServeRoute
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
   TailscaleOauthMigrationRoute: typeof TailscaleOauthMigrationRoute
@@ -852,6 +865,13 @@ declare module '@tanstack/react-router' {
       path: '/secret-backfills'
       fullPath: '/secret-backfills'
       preLoaderRoute: typeof SecretBackfillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/self-serve': {
+      id: '/self-serve'
+      path: '/self-serve'
+      fullPath: '/self-serve'
+      preLoaderRoute: typeof SelfServeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup-offers': {
@@ -1292,6 +1312,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SecretBackfillsRoute: SecretBackfillsRoute,
+  SelfServeRoute: SelfServeRoute,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
   TailscaleOauthMigrationRoute: TailscaleOauthMigrationRoute,

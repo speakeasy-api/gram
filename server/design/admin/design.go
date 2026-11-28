@@ -924,6 +924,7 @@ var _ = Service("admin", func() {
 			Attribute("account_types", ArrayOf(String), "Match any of these gram_account_type values. Empty matches every account type. A value no organization carries matches nothing rather than failing the request.")
 			Attribute("trial_states", ArrayOf(String), "Match any of running, ending_soon, expired, demoted, converted or none. Empty matches every trial state. An unrecognised value matches nothing rather than failing the request.")
 			Attribute("disabled_status", String, "Organization status: all (default), active (disabled_at IS NULL), or disabled (disabled_at IS NOT NULL). Applies even to exact ID matches.", func() { Enum("all", "active", "disabled") })
+			Attribute("whitelisted", Boolean, "Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.")
 			Attribute("min_members", Int64, "Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.", func() { Minimum(0) })
 			Attribute("max_members", Int64, "Inclusive maximum active member count, from 0 through 9223372036854775807. Must be at least min_members. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.", func() { Minimum(0) })
 			Attribute("created_from", String, "Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Each date bound is optional; must not be after created_to.")
@@ -945,6 +946,7 @@ var _ = Service("admin", func() {
 			Param("account_types")
 			Param("trial_states")
 			Param("disabled_status")
+			Param("whitelisted")
 			Param("min_members")
 			Param("max_members")
 			Param("created_from")
@@ -1412,6 +1414,7 @@ var _ = Service("admin", func() {
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	selfServeMethods()
 	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
