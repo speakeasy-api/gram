@@ -77,7 +77,7 @@ type memberDescribeResult struct {
 // failures, and returns results in member order. Every describe and retry
 // shares one listing deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
+	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, s.listingTime()))
 	defer cancelAll()
 	ctx = context.WithValue(budget, listingBudgetKey{}, budget)
 	results := make([]memberDescribeResult, len(members))
@@ -93,6 +93,14 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	}
 	group.Wait()
 	return results
+}
+
+// listingTime bounds a whole inventory, retries included.
+func (s *Service) listingTime() time.Duration {
+	if s.gatewayListingTime > 0 {
+		return s.gatewayListingTime
+	}
+	return maxGatewayListingTime
 }
 
 // describeMetaMemberWithRetry describes a member, and describes it again after

@@ -186,6 +186,11 @@ func (s *Service) SetRemoteSessionRecheckPacing(rate ratelimit.Rate, batch int32
 	}
 }
 
+// SetGatewayListingTime replaces the whole-inventory listing budget for a test.
+func (s *Service) SetGatewayListingTime(budget time.Duration) {
+	s.gatewayListingTime = budget
+}
+
 // SetRiskScanEvaluator replaces observation only in the test binary.
 func (s *Service) SetRiskScanEvaluator(evaluator *mcpriskscan.Evaluator) {
 	s.scanEvaluator = evaluator
