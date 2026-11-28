@@ -163,6 +163,27 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 	return rows, nil
 }
 
+// connectionEMARefusalRow is Acme Wiki refusing a person's managed sign-in through the organization
+// gateway a few hours ago. No served request follows, so readiness counts the person as refused.
+func (s *seeder) connectionEMARefusalRow() (mcpconnectionattempts.Row, error) {
+	key := "connection-ema-refusal"
+	subject := urn.NewUserSubject(s.userID("priya"))
+	at := s.now.Add(-3*time.Hour - 12*time.Minute)
+	scope := mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), mcpconnectionattempts.AppOf(s.catalog, demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
+	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(s.det(key), at, scope), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeEMAProviderRejected, true, at,
+		mcpconnectionattempts.Subject(&subject),
+		mcpconnectionattempts.Member(s.det("mcpserver-ema-wiki")),
+		mcpconnectionattempts.RemoteSessionClient(s.det("ema-client-wiki")),
+		mcpconnectionattempts.Detail("redemption"),
+	)
+	if err != nil {
+		return row, fmt.Errorf("build managed sign-in refusal event: %w", err)
+	}
+	row.TraceID = md5Hex(s.name(key))
+	row.ClientFamily, row.ClientVersion, row.DeviceKey = mcpconnectionattempts.FamilyClaudeCode, "2.1.4", s.connectionDevice(key)
+	return row, nil
+}
+
 // connectionRequestServed is an answered request a minute after the person's latest
 // refusal on each connection, so the daily refusals read as passing failures, never a
 // suspected problem. Served requests have no attempt rows, so the logs do not change.
@@ -225,6 +246,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		return err
 	}
 	rows = append(rows, requestRows...)
+	refusal, err := s.connectionEMARefusalRow()
+	if err != nil {
+		return err
+	}
+	rows = append(rows, refusal)
 	tokenRows, err := s.connectionWorkloadRows()
 	if err != nil {
 		return err
@@ -251,6 +277,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			cond:     `(SELECT uniqExact(outcome) FROM mcp_connection_events WHERE organization_id = @org AND is_final) != 4`,
 			settings: "",
 			msg:      "demo seed postflight: connection events must cover connected, failed, blocked and declined",
+		},
+		{
+			cond:     `(SELECT count() FROM mcp_connection_events WHERE organization_id = @org AND reason = 'ema_provider_rejected' AND member_id != '') = 0`,
+			settings: "",
+			msg:      "demo seed postflight: expected a refused managed sign-in on Acme Wiki",
 		},
 		{
 			cond:     `(SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = @org) = 0`,

@@ -134,6 +134,9 @@ var frozenCodes = []string{
 	"address_not_found",
 	"unmanaged_account",
 	"gateway_machine_access_disabled",
+	"upstream_ema_idp_refused",
+	"upstream_ema_not_renewed",
+	"upstream_ema_service_refused",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -245,17 +248,20 @@ func TestCatalog_StageDependentPartiesAreSeparateCodes(t *testing.T) {
 	t.Parallel()
 
 	cases := map[Code]WhoFixes{
-		CodeTransientFailure:           WhoSpeakeasy,
-		CodeIDPTransientFailure:        WhoProvider,
-		CodeProviderTransientFailure:   WhoProvider,
-		CodeProviderRejected:           WhoPerson,
-		CodeEMAProviderRejected:        WhoAdmin,
-		CodeUpstreamReconnectRequired:  WhoPerson,
-		CodeUpstreamEMARefused:         WhoAdmin,
-		CodeUpstreamCredentialChoice:   WhoApp,
-		CodeUpstreamSignInNotSetUp:     WhoAdmin,
-		CodeProviderOAuthInvalidClient: WhoAdmin,
-		CodeRefreshInvalidClient:       WhoPerson,
+		CodeTransientFailure:                   WhoSpeakeasy,
+		CodeIDPTransientFailure:                WhoProvider,
+		CodeProviderTransientFailure:           WhoProvider,
+		CodeProviderRejected:                   WhoPerson,
+		CodeEMAProviderRejected:                WhoAdmin,
+		CodeUpstreamReconnectRequired:          WhoPerson,
+		CodeUpstreamEMARefused:                 WhoAdmin,
+		CodeUpstreamEMAIdentityProviderRefused: WhoAdmin,
+		CodeUpstreamEMAServiceRefused:          WhoAdmin,
+		CodeUpstreamEMANotRenewed:              WhoAdmin,
+		CodeUpstreamCredentialChoice:           WhoApp,
+		CodeUpstreamSignInNotSetUp:             WhoAdmin,
+		CodeProviderOAuthInvalidClient:         WhoAdmin,
+		CodeRefreshInvalidClient:               WhoPerson,
 	}
 	for code, who := range cases {
 		meaning, ok := MeaningOf(code.String())

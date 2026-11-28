@@ -204,8 +204,8 @@ func TestConsentTemplateRendersCachedChainedServiceConnected(t *testing.T) {
 func TestConsentTemplateRendersRejectedChainedServiceWithOwnAccountButton(t *testing.T) {
 	t.Parallel()
 
-	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your identity provider sign-in.", 0)
-	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your identity provider sign-in.`, html)
+	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your company sign-in.", 0)
+	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your company sign-in.`, html)
 	require.Regexp(t, `value="connect" class="interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm" data-connect-link data-connect-fallback > Use your own account </button>`, html, "the same outlined button as every other state")
 	require.NotContains(t, html, "> Connect </button>")
 	require.Contains(t, html, "0 of 1 connected")
@@ -242,14 +242,14 @@ func TestConsentChainCheckKeptSignInSaysItRetries(t *testing.T) {
 
 	kept := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: "", Retained: true}, "Example")
 	require.Equal(t, chainCheckRejected, kept.Status)
-	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own Example account.", kept.Message)
+	require.Equal(t, "Your saved company sign-in for Example isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your Speakeasy admin, or use your own Example account.", kept.Message)
 
 	noToken := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageDelegation, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
 	require.Equal(t, chainCheckRejected, noToken.Status)
-	require.Equal(t, "Example isn't set up for identity provider sign-in yet. Ask your administrator, or use your own Example account.", noToken.Message, "no kept sign-in means nothing retries")
+	require.Equal(t, "Company sign-in for Example isn't set up correctly. Ask your Speakeasy admin, or use your own Example account.", noToken.Message, "no kept sign-in means nothing retries")
 
 	unset := classifyChainCheck(identitychaining.Outcome{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonConfigurationRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, "Example")
-	require.Equal(t, "Example isn't set up for identity provider sign-in yet. Ask your administrator, or use your own Example account.", unset.Message)
+	require.Equal(t, "Company sign-in for Example isn't set up correctly. Ask your Speakeasy admin, or use your own Example account.", unset.Message)
 }
 
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {
@@ -273,6 +273,30 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	require.True(t, chained[clientA.ID])
 	require.True(t, chained[clientB.ID])
 	require.Len(t, g.requests, 2, "one render judges each distinct request once, and each client's request is its own")
+}
+
+// The chained cards name, with each request, the members it serves, once; a member on another upstream has its own request.
+func TestConsentChainedMetaClients_NamesTheMembersEachRequestServes(t *testing.T) {
+	t.Parallel()
+	client := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
+	g := &funcGovernor{configured: true, serves: func(identitychaining.Request) (uuid.UUID, bool) { return client.RemoteSessionIssuerID, true }}
+	s, endpoint, state := consentChainingFixture(t, g)
+	endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	docs := metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{McpServerID: uuid.New(), ProjectID: endpoint.ProjectID, McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
+	wiki := docs
+	wiki.McpServerID = uuid.New()
+	other := docs
+	other.McpServerID, other.UpstreamUrl = uuid.New(), "https://other.example.test/mcp"
+	routing := consentRouting{backend: consentBackendMeta, upstream: "", members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{client.ID: {docs, docs, wiki, other}}, hostedClients: nil}
+
+	chained, members := s.consentChainedMetaClients(t.Context(), endpoint, state, []remotesessions.Client{client}, routing)
+	require.Len(t, chained[client.ID], 2)
+	req, ok := consentMemberRequest(endpoint, state, client, docs)
+	require.True(t, ok)
+	require.Equal(t, []uuid.UUID{docs.McpServerID, wiki.McpServerID}, members[req])
+	otherReq, ok := consentMemberRequest(endpoint, state, client, other)
+	require.True(t, ok)
+	require.Equal(t, []uuid.UUID{other.McpServerID}, members[otherReq])
 }
 
 func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {

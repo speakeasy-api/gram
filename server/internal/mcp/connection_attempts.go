@@ -415,31 +415,49 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
-func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code) string {
-	if signInID == uuid.Nil {
-		return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + code.String()
+func refusedConsentKey(attempt mcpconnectionattempts.Attempt, clientID, signInID, memberID uuid.UUID, code mcpconnectionattempts.Code) string {
+	key := "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String()
+	if signInID != uuid.Nil {
+		key += ":" + signInID.String()
 	}
-	return "connectionAttemptIneligible:" + attempt.ID().String() + ":" + clientID.String() + ":" + signInID.String() + ":" + code.String()
+	key += ":" + code.String()
+	if memberID != uuid.Nil {
+		key += ":" + memberID.String()
+	}
+	return key
 }
 
-// chainingRefusalCode is the row for a sign-in Speakeasy won't vouch for, naming who fixes it.
-func chainingRefusalCode(reason identitychaining.Reason) (mcpconnectionattempts.Code, bool) {
-	switch reason {
-	case identitychaining.ReasonIneligibleIdentity:
-		return mcpconnectionattempts.CodeIneligibleIdentity, true
-	case identitychaining.ReasonUnmanagedAccount:
-		return mcpconnectionattempts.CodeUnmanagedAccount, true
-	default:
-		return mcpconnectionattempts.Code{}, false
+// chainingRefusalCode is the step and code a consent page records for a failed managed sign-in, from chainingVerdicts.
+func chainingRefusalCode(outcome identitychaining.Outcome) (mcpconnectionattempts.Step, mcpconnectionattempts.Code, bool) {
+	verdict, ok := chainingVerdictOf(outcome)
+	switch {
+	case !ok || verdict.message == nil, outcome.Reason == identitychaining.ReasonReauthenticationRequired:
+		// Starting again is the page's own answer, not a refusal to log; an exchange that ran and was turned down is.
+		return mcpconnectionattempts.Step{}, mcpconnectionattempts.Code{}, false
+	case verdict.code == mcpconnectionattempts.CodeIneligibleIdentity, verdict.code == mcpconnectionattempts.CodeUnmanagedAccount:
+		return mcpconnectionattempts.StepInboundConsent, verdict.code, true
+	}
+	return mcpconnectionattempts.StepUpstreamEMA, verdict.code, true
+}
+
+// recordRefusedConsents writes the refusal under each member, or once with none, in one cache budget, so a stalled cache delays the page once.
+func (s *Service) recordRefusedConsents(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, members []uuid.UUID, step mcpconnectionattempts.Step, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	for _, member := range members {
+		s.recordRefusedConsent(ctx, logger, attempt, clientID, signInID, member, step, code, append(slices.Clone(opts), mcpconnectionattempts.Member(member))...)
+	}
+	if len(members) == 0 {
+		s.recordRefusedConsent(ctx, logger, attempt, clientID, signInID, uuid.Nil, step, code, opts...)
 	}
 }
 
-// recordRefusedConsent writes one row per attempt, client, sign-in and code, however often the page reloads; a cache failure writes it anyway.
-func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID uuid.UUID, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+// recordRefusedConsent writes one row per attempt, client, sign-in, code and gateway member, however often the page reloads; a cache failure writes it anyway.
+func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, clientID, signInID, memberID uuid.UUID, step mcpconnectionattempts.Step, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if attempt.IsZero() {
 		return
 	}
-	key := refusedConsentKey(attempt, clientID, signInID, code)
+	key := refusedConsentKey(attempt, clientID, signInID, memberID, code)
 	marked := false
 	if s.userSessionRefreshReplayCoordination != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
@@ -454,7 +472,7 @@ func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger,
 			marked = true
 		}
 	}
-	if s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, code, opts...) || !marked {
+	if s.connections.Step(ctx, attempt, step, code, opts...) || !marked {
 		return
 	}
 	// Not accepted, so the next render offers it again.
@@ -885,8 +903,16 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 		if errors.Is(ctx.Err(), context.Canceled) && errors.Is(failed.err, context.Canceled) {
 			continue
 		}
+		if held, ok := errors.AsType[memberHeldRefusalError](failed.err); ok {
+			opts := []mcpconnectionattempts.Option{
+				gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject),
+				mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)), mcpconnectionattempts.RemoteSessionClient(held.serviceClient),
+			}
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, held.refusal, append(opts, memberChainingDetail(held.chaining)...)...)
+		}
 		if what, recorded := gate.listingFailureHappened(failed.member, failed.err); recorded {
-			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err)))
+			opts := []mcpconnectionattempts.Option{gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject), mcpconnectionattempts.Provider(memberUpstreamHost(failed.err))}
+			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, append(opts, memberChainingDetail(failed.err)...)...)
 		}
 	}
 }

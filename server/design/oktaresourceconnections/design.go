@@ -8,6 +8,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+var ResourceConnectionRefusal = Type("OktaResourceConnectionRefusal", func() {
+	Description("People whose Cross App Access sign-in to this server was refused in the last 24 hours, by one party. Refusals do not change state: a connection refused for some people can still be verified by others.")
+	Required("refused_by", "people", "last_refused_at")
+	Attribute("refused_by", String, "identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider's sign-in. Setup problems and expired sign-ins are not counted.", func() {
+		Enum("identity_provider", "service")
+	})
+	Attribute("people", Int, "Distinct people refused in the last 24 hours who have not had a request answered by this server since.")
+	Attribute("last_refused_at", String, "When the latest of those refusals happened.", func() {
+		Format(FormatDateTime)
+	})
+})
+
 var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 	Description("One MCP server and the Okta resource connection recorded for its upstream, with the derived Cross App Access state and the exact values the administrator enters in the identity provider console. Servers that share an upstream resource share one Okta resource connection.")
 	Required("mcp_server_id", "project_id", "project_slug", "server_name", "server_slug", "state", "pending", "resource_indicator", "scopes", "client_binding")
@@ -35,6 +47,7 @@ var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 	Attribute("observed_at", String, "When the exchange behind observed_result started.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("recent_refusals", ArrayOf(ResourceConnectionRefusal), "People refused Cross App Access sign-in to this server in the last 24 hours, by who refused. Omitted when there are none, or when Connection Logs are off or could not be read.")
 	Attribute("pending", Boolean, "Whether the administrator still has a step to do for this server.")
 	Attribute("issuer_id", String, "The upstream authorization server ID. Together with the resource indicator, identifies the shared readiness confirmation; independent of the confirmed identity assertion audience.", func() {
 		Format(FormatUUID)

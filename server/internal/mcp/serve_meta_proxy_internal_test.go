@@ -14,8 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -518,4 +521,64 @@ func TestMemberTokens_ProxiedMemberResolvesFromItsAssociations(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, memberTokens, got)
 	require.Equal(t, []uuid.UUID{associated.serverID, hosted.serverID}, resolvedFor)
+}
+
+// A refusal behind a held connection keeps the held answer and its reconnect, and is recorded as its own row.
+func TestChainMetaMember_RefusalBehindAHeldConnectionKeepsTheReconnect(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	gate := &metaGateContext{organizationID: chainingTestOrg, projectID: project, metaServerID: uuid.New(), userSessionIssuerID: uuid.New(), userID: "user-1", connectRoot: "https://speakeasy.example.test/mcp/gateway"}
+	member := metaMember{slug: "docs", serverID: uuid.New(), projectID: project, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	denied := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonAccessDenied, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}
+	rec := mcpconnectionattemptstest.New(t)
+	s := chainingService(t, &recordingChainer{outcome: denied})
+	s.connections = rec.Recorder
+	gate.chainUpstream = s.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
+	ctx := humanChainingContext(t, "user-1", chainingTestOrg)
+
+	serviceClient := uuid.New()
+	remoteSession := uuid.New()
+	unreadable := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: serviceClient, ClientCredentialErr: remotesessions.StoredSignInUnreadableForTest(remoteSession, errors.New("decrypt"))}
+	_, token, err := chainMetaMember(ctx, *gate, member, "https://docs.example.test/mcp", unreadable, nil)
+	require.Empty(t, token)
+	require.Contains(t, err.Error(), `server "docs" can't use its saved sign-in anymore`)
+
+	auth, instructions := connectionRouteFailure(err, true)
+	require.Equal(t, "reauth_required", auth, "Code Mode verification still offers the reconnect")
+	require.Contains(t, instructions, "tools.connect")
+	require.Equal(t, gatewayServerReconnect, listingFailureStatus(err, gatewayServerConnected), "gateway consent still offers the reconnect")
+
+	s.recordDialFailure(ctx, gate, member, err)
+	rows := rec.Rows()
+	require.Len(t, rows, 2)
+	require.ElementsMatch(t, []string{mcpconnectionattempts.CodeAccessDenied.String(), mcpconnectionattempts.CodeStoredSignInUnreadable.String()}, []string{rows[0].Reason, rows[1].Reason})
+	for _, row := range rows {
+		require.Equal(t, member.serverID.String(), row.MemberID)
+	}
+	refusal, beside := rows[0], rows[1]
+	if refusal.Reason != mcpconnectionattempts.CodeAccessDenied.String() {
+		refusal, beside = beside, refusal
+	}
+	require.Equal(t, serviceClient.String(), refusal.RemoteSessionClientID, "the refusal names the held connection's service client")
+	require.Equal(t, remoteSession.String(), beside.RemoteSessionID)
+	require.Equal(t, remoteSession.String(), refusal.RemoteSessionID, "and carries the held row's options")
+	require.Equal(t, string(identitychaining.StageExchange), refusal.SubReason, "the detail names the failed stage")
+	require.Equal(t, string(mcpconnectionattempts.OutcomeBlocked), refusal.Outcome)
+
+	s.recordListingFailures(ctx, gate, []unavailableMember{{member: member, err: err}})
+	listed := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeAccessDenied)
+	require.Equal(t, member.serverID.String(), listed.MemberID)
+	require.Equal(t, serviceClient.String(), listed.RemoteSessionClientID)
+	require.Equal(t, string(identitychaining.StageExchange), listed.SubReason)
+
+	held := errors.New("held")
+	plain := metaGateContext{chainUpstream: func(context.Context, metaMember, string) (string, error) {
+		return "", &metaMemberError{message: "not working"}
+	}}
+	stored := remotesessions.UpstreamToken{CredentialOwner: remotesessions.CredentialOwnerSubject, ClientCredentialErr: remotesessions.ErrNoValidToken}
+	_, _, err = chainMetaMember(t.Context(), plain, metaMember{slug: "m"}, "r", stored, held)
+	require.ErrorIs(t, err, held, "an unclassified failure leaves the held connection's answer")
+	_, refused := errors.AsType[memberHeldRefusalError](err)
+	require.False(t, refused)
 }

@@ -64,9 +64,31 @@ const (
 	// upstreamRefreshReconnect: the person has to reconnect the upstream.
 	upstreamRefreshReconnect upstreamRefreshCheck = "upstream_reconnect_required"
 
-	// upstreamRefreshEMARefused: the provider refused managed sign-in for good.
+	// upstreamRefreshEMARefused: written by older servers for any refusal, so it names no party.
 	upstreamRefreshEMARefused upstreamRefreshCheck = "upstream_ema_refused"
+
+	// upstreamRefreshEMAServiceRefused: the service refused managed sign-in for good.
+	upstreamRefreshEMAServiceRefused upstreamRefreshCheck = "upstream_ema_service_refused"
+
+	// upstreamRefreshEMAIdentityProviderRefused: the identity provider refused managed sign-in for good.
+	upstreamRefreshEMAIdentityProviderRefused upstreamRefreshCheck = "upstream_ema_idp_refused"
+
+	// upstreamRefreshEMANotRenewed: managed sign-in failed for good with no one refusing, such as a setup problem.
+	upstreamRefreshEMANotRenewed upstreamRefreshCheck = "upstream_ema_not_renewed"
 )
+
+// emaRefusedRefreshCheck names who refused a cached managed sign-in refusal, from chainingVerdicts, as the request before it did.
+func emaRefusedRefreshCheck(verdict identitychaining.RefreshVerdict) upstreamRefreshCheck {
+	refusal := identitychaining.Outcome{Stage: verdict.Stage, Reason: verdict.Reason, Confidence: "", Retryable: false, Cached: true, Provider: verdict.Provider, Unavailable: "", Submitted: false, Retained: false, Failures: nil}
+	recorded, _ := chainingVerdictOf(refusal)
+	switch recorded.code.RefusedBy() {
+	case mcpconnectionattempts.RefusedByIdentityProvider:
+		return upstreamRefreshEMAIdentityProviderRefused
+	case mcpconnectionattempts.RefusedByService:
+		return upstreamRefreshEMAServiceRefused
+	}
+	return upstreamRefreshEMANotRenewed
+}
 
 // unconfirmedRefreshCheck blames the setup only for a reason the setup causes; an outage is no one's to fix.
 func unconfirmedRefreshCheck(reason identitychaining.Reason) upstreamRefreshCheck {
@@ -88,7 +110,7 @@ func upstreamRefreshOf(reconnect bool) upstreamRefreshCheck {
 }
 
 func (c upstreamRefreshCheck) reconnect() bool {
-	return c == upstreamRefreshReconnect || c == upstreamRefreshEMARefused
+	return c == upstreamRefreshReconnect || c == upstreamRefreshEMARefused || c == upstreamRefreshEMAIdentityProviderRefused || c == upstreamRefreshEMAServiceRefused || c == upstreamRefreshEMANotRenewed
 }
 
 // refuseInboundRefresh records a refusal only after its response was delivered.
@@ -144,6 +166,12 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):
 		return mcpconnectionattempts.CodeUpstreamEMARefused, true
+	case string(upstreamRefreshEMAIdentityProviderRefused):
+		return mcpconnectionattempts.CodeUpstreamEMAIdentityProviderRefused, true
+	case string(upstreamRefreshEMAServiceRefused):
+		return mcpconnectionattempts.CodeUpstreamEMAServiceRefused, true
+	case string(upstreamRefreshEMANotRenewed):
+		return mcpconnectionattempts.CodeUpstreamEMANotRenewed, true
 	case "invalid_request":
 		var none mcpconnectionattempts.Code
 		return none, false

@@ -92,13 +92,14 @@ func TestConsentChainCheck_RejectionsAreGeneric(t *testing.T) {
 		reason identitychaining.Reason
 		want   string
 	}{
-		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, "didn't accept your identity provider sign-in"},
-		{identitychaining.StageRedemption, identitychaining.ReasonInvalidClient, "didn't accept your identity provider sign-in"},
-		{identitychaining.StageRedemption, identitychaining.ReasonInsufficientScope, "didn't accept your identity provider sign-in"},
-		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, "Your identity provider didn't allow access to"},
-		{identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, "Your identity provider didn't allow access to"},
-		{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, "Your identity provider didn't allow access to"},
-		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, "isn't set up for identity provider sign-in"},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, "didn't accept your company sign-in"},
+		{identitychaining.StageRedemption, identitychaining.ReasonUnknownRejection, "didn't accept your company sign-in"},
+		{identitychaining.StageRedemption, identitychaining.ReasonInvalidClient, "isn't set up correctly. Ask your Speakeasy admin"},
+		{identitychaining.StageRedemption, identitychaining.ReasonInsufficientScope, "gave fewer permissions"},
+		{identitychaining.StageExchange, identitychaining.ReasonAccessDenied, "Your company sign-in service didn't allow access to"},
+		{identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, "Your company sign-in service didn't allow access to"},
+		{identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, "isn't set up correctly. Ask your Speakeasy admin"},
+		{identitychaining.StageSelection, identitychaining.ReasonConfigurationRequired, "isn't set up correctly. Ask your Speakeasy admin"},
 		{identitychaining.StageDelegation, identitychaining.ReasonReauthenticationRequired, "sign-in for"},
 	} {
 		outcome := identitychaining.Outcome{Stage: tc.stage, Reason: tc.reason, Confidence: identitychaining.ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}
@@ -122,7 +123,7 @@ func TestConsentChainCheck_TransientAndAmbiguousAreUnknown(t *testing.T) {
 
 	for _, outcome := range []identitychaining.Outcome{
 		{Stage: identitychaining.StagePersistence, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""},
-		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""},
 		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonStaleConfiguration, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""},
 		{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
 		{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonProviderUnavailable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},

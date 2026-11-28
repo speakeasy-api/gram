@@ -43,6 +43,13 @@
   args:
     project_slug: payments
     mcp_server_id: 5f1e2a00-0000-4000-8000-000000000021
+- id: access-xaa-readiness-refused-people
+  prompt: Some people get refused when they sign in to the Linear server through Okta, but it works for others. Why?
+  expect: [get_xaa_readiness]
+  allow: [find_mcp]
+  args:
+    project_slug: default
+    mcp_server_id: 5f1e2a00-0000-4000-8000-000000000012
 
 # Speakeasy's own issuer URI, which outside services register.
 - id: access-internal-session-issuer

@@ -28,6 +28,7 @@ func TestParts_AStepNamesThePartItBroke(t *testing.T) {
 		{StepMCPRequest, CodeInvalidBearerToken, PartAppSignIn},
 		{StepInboundToken, CodeUpstreamReconnectRequired, PartServiceSignIn},
 		{StepInboundToken, CodeUpstreamEMARefused, PartServiceSignIn},
+		{StepInboundToken, CodeUpstreamEMAServiceRefused, PartServiceSignIn},
 	} {
 		require.Equal(t, c.want, PartOf(c.step.String(), c.code.String()), c.step.String()+" "+c.code.String())
 	}
@@ -108,6 +109,7 @@ var callerOwnOnRequest = []Code{
 	CodeApprovalNeedsAdmin, CodeRefreshTokenClientMismatch, CodeRefreshTokenUsedByOtherApp, CodeStoredSessionInvalid,
 	CodeStoredSignInUnreadable, CodeUpstreamCredentialNotChosen, CodeSignInMethodNotAccepted, CodeCredentialChoiceInvalid,
 	CodeAddressNotAllowed, CodeAddressNotFound, CodeKillswitchCheckUnavailable,
+	CodeUpstreamEMAServiceRefused, CodeUpstreamEMANotRenewed,
 }
 
 // A new failed reason must be placed: the server not answering anyone, or one caller's own.

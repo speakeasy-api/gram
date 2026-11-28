@@ -1,6 +1,8 @@
 import { enumPresentation } from "@/lib/enum";
 import type { BadgeProps } from "@/components/ui/Badge";
+import { formatRelativeTime } from "@/lib/dates";
 import { chunk } from "@/lib/utils";
+import type { OktaResourceConnectionRefusal } from "@gram/client/models/components/oktaresourceconnectionrefusal.js";
 import type {
   BrokenReason,
   ClientBinding,
@@ -145,6 +147,29 @@ export function observedNote(row: {
     };
   }
   return undefined;
+}
+
+function peopleNotConnected(count: number): string {
+  return count === 1
+    ? "1 person who hasn't connected since being refused"
+    : `${count} people who haven't connected since being refused`;
+}
+
+/** People refused in the last day who haven't connected since being refused, next to a state that stays as it is. */
+export function refusalNotes(
+  refusals: OktaResourceConnectionRefusal[] | undefined,
+): StateNoteCopy[] {
+  return (refusals ?? []).map((refusal) => {
+    const when = formatRelativeTime(refusal.lastRefusedAt) ?? "recently";
+    const summary =
+      refusal.refusedBy === "identity_provider"
+        ? `In the last day, your identity provider refused ${peopleNotConnected(refusal.people)}. Last refusal ${when}. Check they are assigned to the app and allowed these permissions there.`
+        : `In the last day, the service refused ${peopleNotConnected(refusal.people)}. Last refusal ${when}. Check the service accepts sign-ins from your identity provider and that its client is set up.`;
+    return {
+      summary,
+      tooltip: `${summary} The status shows the setup, not each person's sign-in. To see who was refused, open Connection Logs for this server, or for the gateway they used to reach it.`,
+    };
+  });
 }
 
 const CLIENT_BINDING_NOTES: Record<ClientBinding, string | undefined> = {

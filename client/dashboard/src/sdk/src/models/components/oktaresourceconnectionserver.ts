@@ -9,6 +9,10 @@ import * as openEnums from "../../types/enums.js";
 import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  OktaResourceConnectionRefusal,
+  OktaResourceConnectionRefusal$inboundSchema,
+} from "./oktaresourceconnectionrefusal.js";
 
 /**
  * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
@@ -152,6 +156,10 @@ export type OktaResourceConnectionServer = {
   projectId: string;
   projectSlug: string;
   /**
+   * People refused Cross App Access sign-in to this server in the last 24 hours, by who refused. Omitted when there are none, or when Connection Logs are off or could not be read.
+   */
+  recentRefusals?: Array<OktaResourceConnectionRefusal> | undefined;
+  /**
    * The resource indicator to enter on the connection: the server's RFC 9728 resource identifier when known, otherwise its URL.
    */
   resourceIndicator: string;
@@ -225,6 +233,9 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
     pending: z.boolean(),
     project_id: z.string(),
     project_slug: z.string(),
+    recent_refusals: z.optional(
+      z.array(OktaResourceConnectionRefusal$inboundSchema),
+    ),
     resource_indicator: z.string(),
     scopes: z.array(z.string()),
     server_name: z.string(),
@@ -248,6 +259,7 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
       "okta_application_label": "oktaApplicationLabel",
       "project_id": "projectId",
       "project_slug": "projectSlug",
+      "recent_refusals": "recentRefusals",
       "resource_indicator": "resourceIndicator",
       "server_name": "serverName",
       "server_slug": "serverSlug",

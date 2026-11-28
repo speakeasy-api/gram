@@ -34,12 +34,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	healthrepo "github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -59,6 +62,12 @@ var oktaOrgHostSuffixes = []string{"okta.com", "oktapreview.com", "okta-emea.com
 // Okta application instance ids.
 var oktaAppIDPattern = regexp.MustCompile(`^0oa[A-Za-z0-9]{10,40}$`)
 
+// RefusalReader reads the people refused Cross App Access sign-in on the filter's servers.
+type RefusalReader func(ctx context.Context, filter mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error)
+
+// refusalReadTimeout bounds the advisory refusal read so a slow ClickHouse can't hold readiness.
+const refusalReadTimeout = 3 * time.Second
+
 type Service struct {
 	tracer   trace.Tracer
 	logger   *slog.Logger
@@ -67,6 +76,7 @@ type Service struct {
 	authz    *authz.Engine
 	audit    *audit.Logger
 	features feature.Provider
+	refusals RefusalReader
 }
 
 var (
@@ -82,6 +92,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	features feature.Provider,
+	refusals RefusalReader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
 	return &Service{
@@ -92,6 +103,7 @@ func NewService(
 		authz:    authzEngine,
 		audit:    auditLogger,
 		features: features,
+		refusals: refusals,
 	}
 }
 
@@ -582,6 +594,7 @@ func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.List
 		}
 		servers = append(servers, buildRow(snap, r))
 	}
+	s.addRecentRefusals(ctx, logger, authCtx.ActiveOrganizationID, servers)
 	return &srv.ListOktaResourceConnectionsResult{
 		Servers:           servers,
 		PendingCount:      snap.pending,
@@ -591,6 +604,79 @@ func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.List
 		ConnectionID:      conv.PtrEmpty(snap.connection.ID.String()),
 		DeepLink:          conv.PtrEmpty(snap.deepLink),
 	}, nil
+}
+
+// addRecentRefusals is advisory: a failed or slow read leaves the refusals out.
+func (s *Service) addRecentRefusals(ctx context.Context, logger *slog.Logger, organizationID string, servers []*srv.OktaResourceConnectionServer) {
+	if s.refusals == nil || len(servers) == 0 {
+		return
+	}
+	byID := make(map[string]*srv.OktaResourceConnectionServer, len(servers))
+	ids := make([]string, 0, len(servers))
+	var projects []uuid.UUID
+	for _, sv := range servers {
+		byID[sv.McpServerID] = sv
+		ids = append(ids, sv.McpServerID)
+		if project, err := uuid.Parse(sv.ProjectID); err == nil && !slices.Contains(projects, project) {
+			projects = append(projects, project)
+		}
+	}
+	for _, r := range s.readRefusals(ctx, logger, organizationID, projects, ids) {
+		if sv, ok := byID[r.ServerID]; ok {
+			sv.RecentRefusals = append(sv.RecentRefusals, refusalRow(r))
+		}
+	}
+}
+
+// RecentRefusals reads one server's recent refusals the way List reports them,
+// for organizations without an Okta connection. It is advisory like List.
+func (s *Service) RecentRefusals(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) []*srv.OktaResourceConnectionRefusal {
+	if s.refusals == nil {
+		return nil
+	}
+	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
+	var out []*srv.OktaResourceConnectionRefusal
+	for _, r := range s.readRefusals(ctx, logger, organizationID, []uuid.UUID{projectID}, []string{serverID.String()}) {
+		if r.ServerID == serverID.String() {
+			out = append(out, refusalRow(r))
+		}
+	}
+	return out
+}
+
+func (s *Service) readRefusals(ctx context.Context, logger *slog.Logger, organizationID string, projects []uuid.UUID, ids []string) []mcpconnectionattempts.Refusals {
+	ctx, cancel := context.WithTimeout(ctx, refusalReadTimeout)
+	defer cancel()
+	// The window matches verifiedHold, so a refusal a held verified result hides is still shown.
+	since := time.Now().Add(-verifiedHold)
+	// Nothing is recorded while logs are off, so a person refused before then may have connected since.
+	logsOn, err := healthrepo.New(s.db).GetLogsOnSince(ctx, healthrepo.GetLogsOnSinceParams{OrganizationID: organizationID, FeatureName: string(productfeatures.FeatureLogs)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		logger.WarnContext(ctx, "read when logs were turned on", attr.SlogError(err))
+		return nil
+	case logsOn.Time.After(since):
+		since = logsOn.Time
+	}
+	refusals, err := s.refusals(ctx, mcpconnectionattempts.RefusalFilter{OrganizationID: organizationID, ProjectIDs: projects, ServerIDs: ids, Since: since})
+	switch {
+	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
+		return nil
+	case err != nil:
+		logger.WarnContext(ctx, "read recent cross app access refusals", attr.SlogError(err))
+		return nil
+	}
+	return refusals
+}
+
+func refusalRow(r mcpconnectionattempts.Refusals) *srv.OktaResourceConnectionRefusal {
+	people, _ := conv.ClampedUint64ToInt(r.People)
+	return &srv.OktaResourceConnectionRefusal{
+		RefusedBy:     string(r.RefusedBy),
+		People:        people,
+		LastRefusedAt: r.LastRefusedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 // lockConnection holds the live connection for the write; a pending or
@@ -959,6 +1045,7 @@ func buildRow(snap *snapshot, r row) *srv.OktaResourceConnectionServer {
 		BrokenReason:              conv.PtrEmpty(r.broken),
 		ObservedResult:            nil,
 		ObservedAt:                nil,
+		RecentRefusals:            nil,
 	}
 	if rc := r.connection; rc != nil {
 		out.ObservedResult = conv.FromPGText[string](rc.ObservedResult)

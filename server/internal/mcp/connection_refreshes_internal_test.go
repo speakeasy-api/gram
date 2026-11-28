@@ -76,6 +76,9 @@ func TestInboundRefreshHappened(t *testing.T) {
 		"agent_not_admitted":                    mcpconnectionattempts.CodeSubjectNotAdmitted,
 		"upstream_reconnect_required":           mcpconnectionattempts.CodeUpstreamReconnectRequired,
 		"upstream_ema_refused":                  mcpconnectionattempts.CodeUpstreamEMARefused,
+		"upstream_ema_idp_refused":              mcpconnectionattempts.CodeUpstreamEMAIdentityProviderRefused,
+		"upstream_ema_service_refused":          mcpconnectionattempts.CodeUpstreamEMAServiceRefused,
+		"upstream_ema_not_renewed":              mcpconnectionattempts.CodeUpstreamEMANotRenewed,
 	} {
 		code, ok := inboundRefreshHappened(reason)
 		require.True(t, ok, reason)

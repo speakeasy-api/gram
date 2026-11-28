@@ -146,6 +146,8 @@ type platformMCPConfig struct {
 	Skills      platformmcp.SkillsManagement
 	// CallbackOrigins resolves new-client redirect URIs shown in setup guides.
 	CallbackOrigins remotesessions.CallbackOrigins
+	// XAARefusals reads the recent refusals Cross App Access readiness reports. Nil reports none.
+	XAARefusals oktaresourceconnections.RefusalReader
 	// OutboundCallbackOrigin is the pinned origin of the identity provider
 	// callback the Platform MCP OAuth login registers.
 	OutboundCallbackOrigin *url.URL
@@ -577,7 +579,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithFunctionsDisabled(config.FunctionsDisabled).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags, config.XAARefusals), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
@@ -1377,7 +1379,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
 		WithFunctionsDisabled(config.FunctionsDisabled).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags, config.XAARefusals), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).

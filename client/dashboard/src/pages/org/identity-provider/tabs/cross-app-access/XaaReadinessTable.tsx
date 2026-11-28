@@ -1,4 +1,6 @@
 import { ExternalLink, MoreHorizontal } from "lucide-react";
+import { Fragment, cloneElement } from "react";
+import type { ReactElement } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +18,7 @@ import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { RowSelection } from "@/hooks/useRowSelection";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 
 import { OktaLinkButton } from "./OktaLinkButton";
@@ -29,6 +32,7 @@ import {
   notApplicableReasonLabel,
   notApplicableReasonSummary,
   observedNote,
+  refusalNotes,
   xaaStateLabel,
   xaaStateVariant,
 } from "./xaaView";
@@ -90,16 +94,22 @@ function ServerCell({
 function StateNote({
   tooltip,
   summary,
+  clamp = true,
 }: {
   tooltip: string;
   summary: string;
+  /** False shows the whole note, for one that carries the fix. */
+  clamp?: boolean;
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={tooltip}>
       <Text
         muted
         small
-        className="line-clamp-3 text-xs leading-5 whitespace-normal"
+        className={cn(
+          "text-xs leading-5 whitespace-normal",
+          clamp && "line-clamp-3",
+        )}
       >
         {summary}
       </Text>
@@ -132,6 +142,39 @@ function StateCell({
       )}
       {note && <StateNote tooltip={note.tooltip} summary={note.summary} />}
     </div>
+  );
+}
+
+/** Refusals span the row's width under it, lined up with the server name, so the narrow State column doesn't wrap them. */
+function RefusalNotesRow({
+  row,
+  span,
+}: {
+  row: OktaResourceConnectionServer;
+  span: number;
+}): JSX.Element | null {
+  const notes = refusalNotes(row.recentRefusals);
+  if (notes.length === 0) return null;
+  return (
+    <tr
+      aria-label={`Recent refusals for ${row.serverName}`}
+      className="[grid-column:1/-1] grid [grid-template-columns:subgrid] border-b last:border-none"
+    >
+      <td aria-hidden />
+      <td colSpan={span - 1} className="[grid-column:2/-1] px-4 pb-3">
+        {/* Full width: the table centers its cells' content. */}
+        <div className="flex w-full flex-col items-start gap-1">
+          {notes.map((refusal) => (
+            <StateNote
+              key={refusal.summary}
+              tooltip={refusal.tooltip}
+              summary={refusal.summary}
+              clamp={false}
+            />
+          ))}
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -395,6 +438,20 @@ export function XaaReadinessTable({
           columns={columns}
           data={rows}
           rowKey={(row) => row.mcpServerId}
+          renderRow={(row, rowElement) => {
+            if (refusalNotes(row.recentRefusals).length === 0) {
+              return rowElement;
+            }
+            return (
+              <Fragment key={row.mcpServerId}>
+                {cloneElement(
+                  rowElement as ReactElement<{ className?: string }>,
+                  { className: "border-b-0" },
+                )}
+                <RefusalNotesRow row={row} span={columns.length} />
+              </Fragment>
+            );
+          }}
           noResultsMessage={<Text muted>{emptyMessage}</Text>}
         />
       </div>

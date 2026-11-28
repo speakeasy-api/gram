@@ -352,6 +352,12 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	if (routeErr == nil || held) && token == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
 		chained, err := gate.chainUpstream(ctx, member, resource)
 		if held && chained == "" {
+			if refusal, refused := errors.AsType[memberConnectionError](err); refused && routeErr != nil {
+				if _, chaining := errors.AsType[memberChainingError](err); chaining {
+					// The held answer keeps its reconnect; the refusal is recorded beside it.
+					return routed, "", memberHeldRefusalError{error: routeErr, refusal: refusal.code, chaining: err, serviceClient: routed.RemoteSessionClientID}
+				}
+			}
 			return routed, "", routeErr
 		}
 		var none remotesessions.UpstreamToken
@@ -382,6 +388,10 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 	if id, ok := remotesessions.UnreadableRemoteSessionID(err); ok {
 		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
 	}
+	if held, ok := errors.AsType[memberHeldRefusalError](err); ok {
+		s.recordMemberFailure(ctx, gate, member, held.serviceClient, held.refusal, append(slices.Clone(opts), memberChainingDetail(held.chaining)...)...)
+	}
+	opts = append(opts, memberChainingDetail(err)...)
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		code := mcpconnectionattempts.CodeInvalidRemoteSession
 		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {

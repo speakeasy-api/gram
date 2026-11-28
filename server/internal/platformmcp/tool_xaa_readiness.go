@@ -33,6 +33,7 @@ import (
 
 type xaaConnectionsReader interface {
 	List(context.Context, *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error)
+	RecentRefusals(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) []*srv.OktaResourceConnectionRefusal
 }
 
 type oktaSignInReader interface {
@@ -189,18 +190,25 @@ type GetXAAReadinessInput struct {
 // client IDs, scopes, URLs and administrator-entered labels from List.
 // Okta sign-in carries only the public values Okta must be given.
 type GetXAAReadinessOutput struct {
-	ProjectID           string  `json:"project_id"`
-	MCPServerID         string  `json:"mcp_server_id"`
-	State               string  `json:"state" jsonschema:"when the organization has an Okta connection and the vendor's order names no Speakeasy issuer, or this server's sign-in is federated and the order also names an external issuer, the Okta resource connection state: not_applicable, needs_agent, needs_connection, broken, connected or verified. Otherwise, including whenever the order names the Speakeasy issuer, unless this server's sign-in is federated and the order also names an external issuer: not_applicable, ready (identity chaining serves this server now) or not_ready (identity_chaining says why)"`
-	Pending             bool    `json:"pending"`
-	NotApplicableReason *string `json:"not_applicable_reason,omitempty"`
-	BrokenReason        *string `json:"broken_reason,omitempty"`
-	ObservedResult      *string `json:"observed_result,omitempty"`
-	ObservedAt          *string `json:"observed_at,omitempty"`
+	ProjectID           string       `json:"project_id"`
+	MCPServerID         string       `json:"mcp_server_id"`
+	State               string       `json:"state" jsonschema:"when the organization has an Okta connection and the vendor's order names no Speakeasy issuer, or this server's sign-in is federated and the order also names an external issuer, the Okta resource connection state: not_applicable, needs_agent, needs_connection, broken, connected or verified. Otherwise, including whenever the order names the Speakeasy issuer, unless this server's sign-in is federated and the order also names an external issuer: not_applicable, ready (identity chaining serves this server now) or not_ready (identity_chaining says why)"`
+	Pending             bool         `json:"pending"`
+	NotApplicableReason *string      `json:"not_applicable_reason,omitempty"`
+	BrokenReason        *string      `json:"broken_reason,omitempty"`
+	ObservedResult      *string      `json:"observed_result,omitempty"`
+	ObservedAt          *string      `json:"observed_at,omitempty"`
+	RecentRefusals      []XAARefusal `json:"recent_refusals,omitempty" jsonschema:"people refused Cross-App Access sign-in to this server in the last 24 hours, by who refused; refusals never change state, so a verified or ready server can still refuse some people. Omitted when there are none, and also when Connection Logs are off or could not be read"`
 	// Absent when this deployment cannot inspect identity chaining.
 	IdentityChaining     *XAAIdentityChaining `json:"identity_chaining,omitempty"`
 	OktaSignIn           *OktaSignInStatus    `json:"okta_sign_in,omitempty" jsonschema:"organization Okta sign-in setup, which XAA relies on; omitted when it could not be read"`
 	FederatedCallbackURL *string              `json:"federated_callback_url,omitempty" jsonschema:"redirect URI to register in the identity provider sign-in app for this server's user sign-in"`
+}
+
+type XAARefusal struct {
+	RefusedBy     string `json:"refused_by" jsonschema:"identity_provider (the identity provider refused access or the permissions, for example the person is not assigned to the app there; fix it in the identity provider) or service (the service refused the identity provider's sign-in; check the service accepts sign-ins from the organization's identity provider and that its client is set up). Setup problems and expired sign-ins are not counted"`
+	People        int    `json:"people" jsonschema:"distinct people refused who have not had a request answered by this server since"`
+	LastRefusedAt string `json:"last_refused_at" jsonschema:"when the latest of those refusals happened, RFC 3339"`
 }
 
 type XAAIdentityChaining struct {
@@ -259,7 +267,7 @@ type OktaChecklistStep struct {
 func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name: "get_xaa_readiness", Title: "Check Cross-App Access Readiness",
-		Description: "Check one MCP server's Cross-App Access (XAA) setup: whether the organization's identity provider, such as Okta, can vouch for people and their agents at that server. For whether a server added through setup works at all, use get_mcp_readiness instead. Inspects stored Cross-App Access (XAA) readiness, the enterprise-managed authorization path where an EMA provider (an external identity provider such as Okta, or the organization's Speakeasy issuer) issues ID-JAGs, for one exact project and MCP server. When the organization has an Okta connection and the vendor's order names no Speakeasy issuer, or this server's sign-in is federated and the order also names an external issuer, reports the dashboard's derived Okta resource connection state and exchange evidence (connected means administrator-confirmed, not verified). Otherwise, including for any vendor whose order names the Speakeasy issuer (unless this server's sign-in is federated through an external issuer and the order also names one) and in organizations with no Okta connection, state comes from identity chaining alone: ready, not_ready or not_applicable, without the Okta fields. May fetch read-only OAuth resource metadata to resolve the endpoint; does not exchange tokens, connect or change configuration. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes (recorded when identity chaining was prepared), the scopes actually requested after dropping OpenID Connect scopes, and whether the server connection's scopes have changed since (prepareEMA with the current expected_generation applies them); served is true only when exactly one ready binding serves the upstream at runtime and at least one EMA provider in the vendor's order can serve now; providers lists the providers the vendor accepts, stored as an ordered list: by default the endpoint's trusted external issuer alone, or the organization's Speakeasy issuer when the endpoint trusts none, or else the administrator's saved list, each with unavailable_reason when it cannot serve and last_accepted_at when the vendor has accepted that exact provider anywhere in the organization (omitted both when it never has and when acceptance could not be read, so absence is not proof the vendor never accepted it). Identity chaining skips providers that cannot serve, including providers the endpoint's sign-in does not go through (not_trusted_by_endpoint: an external issuer other than the sign-in's trusted issuer, or the Speakeasy issuer on a sign-in federated through an external issuer, since Speakeasy vouches only for servers that use Speakeasy's own sign-in). Each server can use only the provider its sign-in goes through, so the saved list acts as the set of providers the vendor accepts and its order does not change who vouches; not_served_reason says why served is false. The Speakeasy issuer serves only while the organization's sign-in enforcement is on. Changing which providers a vendor accepts is not available here; organization admins choose them on the dashboard's Organization → IDP and SSO → Identity providers → Services page for the vendor, or with the organizationRemoteSessionIssuers.setEMAProviders management API (saving a provider list needs the ema-providers rollout; restoring the default does not). federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Proxied servers need a live OAuth credential offer to be eligible. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
+		Description: "Check one MCP server's Cross-App Access (XAA) setup: whether the organization's identity provider, such as Okta, can vouch for people and their agents at that server. For whether a server added through setup works at all, use get_mcp_readiness instead. Inspects stored Cross-App Access (XAA) readiness, the enterprise-managed authorization path where an EMA provider (an external identity provider such as Okta, or the organization's Speakeasy issuer) issues ID-JAGs, for one exact project and MCP server. When the organization has an Okta connection and the vendor's order names no Speakeasy issuer, or this server's sign-in is federated and the order also names an external issuer, reports the dashboard's derived Okta resource connection state and exchange evidence (connected means administrator-confirmed, not verified). Otherwise, including for any vendor whose order names the Speakeasy issuer (unless this server's sign-in is federated through an external issuer and the order also names one) and in organizations with no Okta connection, state comes from identity chaining alone: ready, not_ready or not_applicable, without the Okta fields. In both cases, including Speakeasy-vouched servers, recent_refusals reports how many people the identity provider refused (access or permissions denied) or the service refused (it turned down the identity provider's sign-in) in the last 24 hours, counting only people who have not connected since being refused, and when; setup problems and expired sign-ins are not counted, refusals never change state, so a verified or ready server can still be refusing some people, and Connection Logs list who was refused. May fetch read-only OAuth resource metadata to resolve the endpoint; does not exchange tokens, connect or change configuration. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes (recorded when identity chaining was prepared), the scopes actually requested after dropping OpenID Connect scopes, and whether the server connection's scopes have changed since (prepareEMA with the current expected_generation applies them); served is true only when exactly one ready binding serves the upstream at runtime and at least one EMA provider in the vendor's order can serve now; providers lists the providers the vendor accepts, stored as an ordered list: by default the endpoint's trusted external issuer alone, or the organization's Speakeasy issuer when the endpoint trusts none, or else the administrator's saved list, each with unavailable_reason when it cannot serve and last_accepted_at when the vendor has accepted that exact provider anywhere in the organization (omitted both when it never has and when acceptance could not be read, so absence is not proof the vendor never accepted it). Identity chaining skips providers that cannot serve, including providers the endpoint's sign-in does not go through (not_trusted_by_endpoint: an external issuer other than the sign-in's trusted issuer, or the Speakeasy issuer on a sign-in federated through an external issuer, since Speakeasy vouches only for servers that use Speakeasy's own sign-in). Each server can use only the provider its sign-in goes through, so the saved list acts as the set of providers the vendor accepts and its order does not change who vouches; not_served_reason says why served is false. The Speakeasy issuer serves only while the organization's sign-in enforcement is on. Changing which providers a vendor accepts is not available here; organization admins choose them on the dashboard's Organization → IDP and SSO → Identity providers → Services page for the vendor, or with the organizationRemoteSessionIssuers.setEMAProviders management API (saving a provider list needs the ema-providers rollout; restoring the default does not). federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Proxied servers need a live OAuth credential offer to be eligible. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, DiscoveryScopes: discoveryMCPRead, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetXAAReadinessInput) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 		// External-only: the service reads an org-wide snapshot under a live member
@@ -345,10 +353,15 @@ func (s *xaaReadinessService) readOkta(ctx context.Context, organizationID strin
 			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
 		}
 		if ok && server.speakeasy {
-			return s.providerOutput(ctx, organizationID, projectID, serverID, server)
+			// Refusals are the list's, as the dashboard shows them.
+			result, output, err := s.providerOutput(ctx, organizationID, projectID, serverID, server)
+			if result == nil && err == nil {
+				output.RecentRefusals = xaaRefusals(row.RecentRefusals)
+			}
+			return result, output, err
 		}
 	}
-	output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt, OktaSignIn: s.readSignIn(ctx, organizationID)}
+	output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt, RecentRefusals: xaaRefusals(row.RecentRefusals), OktaSignIn: s.readSignIn(ctx, organizationID)}
 	if s.identity != nil {
 		issuerID := uuid.Nil
 		if row.IssuerID != nil {
@@ -363,6 +376,16 @@ func (s *xaaReadinessService) readOkta(ctx context.Context, organizationID strin
 	return nil, output, nil
 }
 
+func xaaRefusals(rows []*srv.OktaResourceConnectionRefusal) []XAARefusal {
+	out := make([]XAARefusal, 0, len(rows))
+	for _, r := range rows {
+		if r != nil {
+			out = append(out, XAARefusal{RefusedBy: r.RefusedBy, People: r.People, LastRefusedAt: r.LastRefusedAt})
+		}
+	}
+	return out
+}
+
 func (s *xaaReadinessService) readProviderAgnostic(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 	server, ok, err := s.servers.Server(ctx, organizationID, projectID, serverID)
 	if err != nil {
@@ -371,7 +394,11 @@ func (s *xaaReadinessService) readProviderAgnostic(ctx context.Context, organiza
 	if !ok {
 		return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
 	}
-	return s.providerOutput(ctx, organizationID, projectID, serverID, server)
+	result, output, err := s.providerOutput(ctx, organizationID, projectID, serverID, server)
+	if result == nil && err == nil && s.connections != nil {
+		output.RecentRefusals = xaaRefusals(s.connections.RecentRefusals(ctx, organizationID, projectID, serverID))
+	}
+	return result, output, err
 }
 
 // providerOutput derives readiness from identity chaining alone, so it holds

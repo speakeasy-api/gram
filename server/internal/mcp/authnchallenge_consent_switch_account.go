@@ -152,7 +152,7 @@ func (s *Service) switchSignInAccount(w http.ResponseWriter, r *http.Request, en
 			return switchRefused(oops.E(oops.CodeBadRequest, nil, switchAccountChanged).LogWarn(ctx, logger))
 		}
 	}
-	if _, _, err := s.chainedConsentClient(ctx, logger, endpoint, state, r.PostForm.Get("client_id")); err != nil {
+	if _, _, _, err := s.chainedConsentClient(ctx, logger, endpoint, state, r.PostForm.Get("client_id")); err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeBadRequest {
 			return switchRefused(oops.E(oops.CodeBadRequest, err, switchAccountChanged))
 		}

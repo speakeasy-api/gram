@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -35,6 +37,9 @@ const issuerGateReasonIdentityChainingIneligible = "identity_chaining_ineligible
 
 // issuerGateReasonIdentityChainingUnmanaged: the human signed in with an account the organization doesn't manage, which they fix.
 const issuerGateReasonIdentityChainingUnmanaged = "identity_chaining_unmanaged"
+
+// issuerGateReasonIdentityChainingRefused: the identity provider or service refused, or the setup failed, for good.
+const issuerGateReasonIdentityChainingRefused = "identity_chaining_refused"
 
 // identityChainer acquires downstream tokens by identity chaining when a human
 // has no usable interactive token for an upstream.
@@ -176,7 +181,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			issuerGateReasonIdentityChainingReauthentication, mcpconnectionattempts.CodeReauthenticationRequired)
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
-		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication, remoteSessionReconnectDescription)
 	case unusable && outcome.ProviderRefusal():
 		// The provider refused for good, which refresh also sees, so the
 		// client lands here again only after reauthorizing. Reauthorizing
@@ -187,15 +192,30 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 			attr.SlogMcpURL(authentication.mcpURL),
 		)
-		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
-	case outcome.Reason == identitychaining.ReasonIneligibleIdentity:
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an ineligible account",
-			issuerGateReasonIdentityChainingIneligible, mcpconnectionattempts.CodeIneligibleIdentity)
-	case outcome.Reason == identitychaining.ReasonUnmanagedAccount:
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining refused an unmanaged account",
-			issuerGateReasonIdentityChainingUnmanaged, mcpconnectionattempts.CodeUnmanagedAccount)
+		return none, s.rejectRemoteSession(ctx, w, authentication, s.chainingRefused(ctx, logger, authentication, outcome, strictErr))
 	}
-	return none, identityChainingError(outcome)
+	service := ""
+	if verdict, ok := chainingVerdictOf(outcome); ok {
+		refused := s.chainingRefused(ctx, logger, authentication, outcome, errIdentityChainingFailed)
+		service = refused.service
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: identity chaining failed for good", chainingGateReason(outcome), verdict.code, refused)
+	}
+	return none, identityChainingError(outcome, service)
+}
+
+// errIdentityChainingFailed is a definitive managed sign-in failure with no stored session behind it.
+var errIdentityChainingFailed = errors.New("identity chaining failed for good")
+
+// chainingGateReason is the rejection metric's reason for a failed managed sign-in.
+func chainingGateReason(outcome identitychaining.Outcome) string {
+	switch outcome.Reason {
+	case identitychaining.ReasonIneligibleIdentity:
+		return issuerGateReasonIdentityChainingIneligible
+	case identitychaining.ReasonUnmanagedAccount:
+		return issuerGateReasonIdentityChainingUnmanaged
+	default:
+		return issuerGateReasonIdentityChainingRefused
+	}
 }
 
 // resolveStrictUpstreamToken is the issuer gate's all-or-nothing resolution
@@ -272,24 +292,93 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 	return false
 }
 
-// identityChainingError is the client-facing failure for an applicable
-// attempt. It names no reason code or provider detail.
-func identityChainingError(outcome identitychaining.Outcome) error {
+// chainingRefusedError is a refused managed sign-in: its error_description, and the code and options of its Connection Logs row.
+type chainingRefusedError struct {
+	error
+	description string
+	code        mcpconnectionattempts.Code
+
+	// service is the name the description uses, empty when it reads neutrally.
+	service string
+
+	// stage is the stage that failed, empty for a refusal of the account itself, which reason names instead.
+	stage  identitychaining.Stage
+	reason string
+
+	// client and provider are the chosen service client and its issuer, zero when unknown.
+	client   uuid.UUID
+	provider string
+}
+
+func (e *chainingRefusedError) Unwrap() error { return e.error }
+
+// options are the row's options: the stage or reason as its detail, else detail, and the service client it refused.
+func (e *chainingRefusedError) options(detail string) []mcpconnectionattempts.Option {
+	switch {
+	case e.stage != "":
+		detail = string(e.stage)
+	case e.reason != "":
+		detail = e.reason
+	}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(detail)}
+	if e.client != uuid.Nil {
+		opts = append(opts, mcpconnectionattempts.RemoteSessionClient(e.client), mcpconnectionattempts.Provider(e.provider))
+	}
+	return opts
+}
+
+// chainingRefused names outcome's refusal on err from chainingVerdicts, for the chosen client.
+func (s *Service) chainingRefused(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication, outcome identitychaining.Outcome, err error) *chainingRefusedError {
+	refused := &chainingRefusedError{error: err, description: remoteSessionReconnectDescription, code: mcpconnectionattempts.CodeInvalidRemoteSession, service: "", stage: "", reason: "", client: uuid.Nil, provider: ""}
+	client, service, ok := s.chosenService(ctx, logger, authentication)
+	if ok {
+		refused.client, refused.provider = client.ID, client.IssuerURL
+	}
+	verdict, known := chainingVerdictOf(outcome)
+	if !known {
+		return refused
+	}
+	refused.code, refused.reason = verdict.code, chainingGateReason(outcome)
+	if refused.reason == issuerGateReasonIdentityChainingRefused {
+		refused.stage = outcome.Stage
+	}
+	if verdict.message != nil {
+		refused.service = service
+		refused.description = verdict.message.description(service)
+	}
+	return refused
+}
+
+// chosenService is the chosen client's registration and the service the consent page names for it; ok is false when it cannot be read.
+func (s *Service) chosenService(ctx context.Context, logger *slog.Logger, authentication *issuerGateAuthentication) (remotesessions.Client, string, bool) {
+	var none remotesessions.Client
+	endpoint := authentication.endpoint
+	if !authentication.chosenClient.Valid || s.remoteChallengeMgr == nil {
+		return none, "", false
+	}
+	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, endpoint.ProjectID, endpoint.OrganizationID, []uuid.UUID{authentication.chosenClient.UUID})
+	if err != nil {
+		logger.WarnContext(ctx, "load refused client for its service name", attr.SlogError(err))
+		return none, "", false
+	}
+	if len(clients) != 1 {
+		return none, "", false
+	}
+	// A direct endpoint owns its upstream's resource alone, so no member rows are read.
+	owner := &resourceDisplayOwner{endpoint: endpoint, load: nil, loaded: true, upstreams: nil}
+	client := s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)[0]
+	return client, s.serviceDisplayName(ctx, logger, owner, client), true
+}
+
+// identityChainingError is the client-facing failure for an applicable attempt, from chainingVerdicts.
+func identityChainingError(outcome identitychaining.Outcome, service string) error {
 	if outcome.Retryable {
 		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
-	if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
-		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server can't use your account, because your company doesn't manage it.")
-	}
-	if exchangeRejectedSignIn(outcome) {
-		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
+	if verdict, ok := chainingVerdictOf(outcome); ok && verdict.message != nil {
+		return oops.E(oops.CodeForbidden, nil, "%s", verdict.message.description(service))
 	}
 	return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Contact your administrator.")
-}
-
-// exchangeRejectedSignIn reports the provider turning down the saved sign-in, which a new one may repair.
-func exchangeRejectedSignIn(outcome identitychaining.Outcome) bool {
-	return outcome.Stage == identitychaining.StageExchange && outcome.Reason == identitychaining.ReasonInvalidGrant
 }
 
 // metaMemberChainer returns the runtime chaining hook for member,
@@ -326,19 +415,51 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case outcome.Retryable:
 			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
 		}
-		if outcome.Reason == identitychaining.ReasonUnmanagedAccount {
-			return "", memberConnectionError{&metaMemberError{message: fmt.Sprintf("Company sign-in for server %q can't use your account, because your company doesn't manage it.", member.slug)}, mcpconnectionattempts.CodeUnmanagedAccount}
-		}
-		if exchangeRejectedSignIn(outcome) {
-			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
-		}
 		failure := &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
-		if outcome.Reason == identitychaining.ReasonIneligibleIdentity {
-			return "", memberConnectionError{failure, mcpconnectionattempts.CodeIneligibleIdentity}
+		verdict, ok := chainingVerdictOf(outcome)
+		if !ok {
+			return "", failure
 		}
-		return "", failure
+		if verdict.message != nil {
+			failure.message = memberChainingText(member.slug, *verdict.message)
+		}
+		chaining := memberChainingError{metaMemberError: failure, stage: ""}
+		if chainingGateReason(outcome) == issuerGateReasonIdentityChainingRefused {
+			chaining.stage = outcome.Stage
+		}
+		return "", memberConnectionError{chaining, verdict.code}
 	}
 }
+
+// memberChainingError is a member's definitive managed sign-in failure; stage is empty for a refusal of the account itself.
+type memberChainingError struct {
+	*metaMemberError
+	stage identitychaining.Stage
+}
+
+func (e memberChainingError) Unwrap() error { return e.metaMemberError }
+
+// memberChainingDetail is the failed stage as a refusal row's detail, none when err names no stage.
+func memberChainingDetail(err error) []mcpconnectionattempts.Option {
+	if chaining, ok := errors.AsType[memberChainingError](err); ok && chaining.stage != "" {
+		return []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(string(chaining.stage))}
+	}
+	return nil
+}
+
+// memberHeldRefusalError is a held connection's failure, answered as is, behind which managed sign-in was also refused.
+type memberHeldRefusalError struct {
+	error
+	refusal mcpconnectionattempts.Code
+
+	// chaining is the refusal, for its detail.
+	chaining error
+
+	// serviceClient is the service client of the held connection.
+	serviceClient uuid.UUID
+}
+
+func (e memberHeldRefusalError) Unwrap() error { return e.error }
 
 func (s *Service) gatewayMemberChainer(gate *metaGateContext, kind mcpidentity.Kind, signInID uuid.UUID) func(context.Context, metaMember, string) (string, error) {
 	return func(ctx context.Context, member metaMember, resource string) (string, error) {
@@ -355,7 +476,7 @@ func (s *Service) gatewayMemberChainer(gate *metaGateContext, kind mcpidentity.K
 // request the runtime builds. It reads configuration only, never acquires a
 // token, and degrades to not chained on any lookup fault.
 func (s *Service) consentChainedClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, routing consentRouting) map[uuid.UUID]bool {
-	requests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	requests, _ := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 	if requests == nil {
 		return nil
 	}
@@ -369,22 +490,22 @@ func (s *Service) consentChainedClients(ctx context.Context, endpoint *ResolvedM
 // consentChainingRequests returns, per chained client, the runtime requests
 // identity chaining answers for it: one for a direct upstream, one per
 // distinct gateway member. Unchained clients have no entry.
-func (s *Service) consentChainingRequests(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, routing consentRouting) map[uuid.UUID][]identitychaining.Request {
+func (s *Service) consentChainingRequests(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, routing consentRouting) (map[uuid.UUID][]identitychaining.Request, map[identitychaining.Request][]uuid.UUID) {
 	subject := challengeState.Subject
 	if s.identityChainer == nil || len(clients) == 0 || endpoint.UserSessionIssuerID == uuid.Nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
-		return nil
+		return nil, nil
 	}
 	// Configured is a per-project shortcut. An organization gateway has no
 	// project of its own, so its members' requests, each in its member's
 	// project, decide instead.
 	if !endpoint.IsOrganizationGateway() && !s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
-		return nil
+		return nil, nil
 	}
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
 	if _, ok, err := s.consentDirectBackend(ctx, endpoint, routing); err != nil || !ok {
-		return nil
+		return nil, nil
 	}
 	// The runtime chains only through the client a credential chose, so each
 	// card is judged with the request its client builds: restricted to that
@@ -394,7 +515,7 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 		choice := upstreamChoice{clientID: uuid.NullUUID{UUID: c.ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true}}
 		req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 		if err != nil {
-			return nil
+			return nil, nil
 		}
 		if !ok {
 			continue
@@ -404,9 +525,9 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 		}
 	}
 	if len(requests) == 0 {
-		return nil
+		return nil, nil
 	}
-	return requests
+	return requests, nil
 }
 
 // directChainingRequest builds the request the runtime makes for userID on a
@@ -464,7 +585,8 @@ func (s *Service) consentDirectBackend(ctx context.Context, endpoint *ResolvedMc
 // consentChainedMetaClients marks a gateway card chained only when chaining
 // serves every member behind its authorization server through that card's
 // own issuer, each judged with the request routeMetaMember's chainer builds.
-func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, routing consentRouting) map[uuid.UUID][]identitychaining.Request {
+// It also returns the members each request serves.
+func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, routing consentRouting) (map[uuid.UUID][]identitychaining.Request, map[identitychaining.Request][]uuid.UUID) {
 	var memberCtx context.Context
 	type servedBy struct {
 		issuer uuid.UUID
@@ -472,6 +594,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 	}
 	served := map[identitychaining.Request]servedBy{}
 	chained := make(map[uuid.UUID][]identitychaining.Request, len(clients))
+	serving := map[identitychaining.Request][]uuid.UUID{}
 	for _, c := range clients {
 		members, resolved := routing.members[c.ID]
 		if !resolved {
@@ -479,7 +602,7 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 				stamped, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 				if err != nil {
 					s.logger.WarnContext(ctx, "stamp consent subject for identity chaining", attr.SlogError(err))
-					return nil
+					return nil, nil
 				}
 				memberCtx = stamped
 			}
@@ -491,15 +614,13 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 			}
 		}
 		var requests []identitychaining.Request
+		clientServing := map[identitychaining.Request][]uuid.UUID{}
 		for _, m := range members {
-			// The member's own project: an organization gateway's members span
-			// projects, and a stored gateway's share its one.
-			req, ok := identitychaining.NewRequest(endpoint.OrganizationID, m.ProjectID, endpoint.UserSessionIssuerID, challengeState.Subject.ID, m.UpstreamUrl, m.Tunneled, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
+			req, ok := consentMemberRequest(endpoint, challengeState, c, m)
 			if !ok {
 				requests = nil
 				break
 			}
-			req.RemoteSessionClientID = uuid.NullUUID{UUID: c.ID, Valid: true}
 			answer, seen := served[req]
 			if !seen {
 				answer.issuer, answer.ok = s.identityChainer.Serves(ctx, req)
@@ -512,12 +633,25 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 			if !slices.Contains(requests, req) {
 				requests = append(requests, req)
 			}
+			if !slices.Contains(clientServing[req], m.McpServerID) {
+				clientServing[req] = append(clientServing[req], m.McpServerID)
+			}
 		}
 		if len(requests) > 0 {
 			chained[c.ID] = requests
+			maps.Copy(serving, clientServing)
 		}
 	}
-	return chained
+	return chained, serving
+}
+
+// consentMemberRequest is the request a gateway member's chained card makes for client c.
+func consentMemberRequest(endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, c remotesessions.Client, m metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow) (identitychaining.Request, bool) {
+	// The member's own project: an organization gateway's members span
+	// projects, and a stored gateway's share its one.
+	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, m.ProjectID, endpoint.UserSessionIssuerID, challengeState.Subject.ID, m.UpstreamUrl, m.Tunneled, uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true})
+	req.RemoteSessionClientID = uuid.NullUUID{UUID: c.ID, Valid: true}
+	return req, ok
 }
 
 // Chained tokens belong to the authenticated human, not a stored grant.

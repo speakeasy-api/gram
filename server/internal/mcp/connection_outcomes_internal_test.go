@@ -906,3 +906,33 @@ func TestListingFailureNamesAnAddressOnly(t *testing.T) {
 		})
 	}
 }
+
+// ctxStalledCache never answers before its caller gives up.
+type ctxStalledCache struct{ cache.Cache }
+
+func (ctxStalledCache) Add(ctx context.Context, _ string, _ time.Duration) (bool, error) {
+	<-ctx.Done()
+	return false, fmt.Errorf("stalled cache: %w", ctx.Err())
+}
+
+// A stalled cache delays a gateway's consent refusal by one budget, not one per member, and every member still gets its row.
+func TestRecordRefusedConsents_OneBudgetForEveryMember(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: ctxStalledCache{}}
+	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
+	members := make([]uuid.UUID, 10)
+	for i := range members {
+		members[i] = uuid.New()
+	}
+
+	started := time.Now()
+	service.recordRefusedConsents(t.Context(), testenv.NewLogger(t), attempt, uuid.New(), uuid.Nil, members, mcpconnectionattempts.StepUpstreamEMA, mcpconnectionattempts.CodeAccessDenied)
+	require.Less(t, time.Since(started), 3*memberStatusTimeout)
+	rows := rec.Rows()
+	require.Len(t, rows, len(members))
+	for i, row := range rows {
+		require.Equal(t, members[i].String(), row.MemberID)
+	}
+}

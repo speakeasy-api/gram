@@ -129569,6 +129569,28 @@ components:
             required:
                 - mcp_server_id
                 - audience
+        OktaResourceConnectionRefusal:
+            type: object
+            properties:
+                last_refused_at:
+                    type: string
+                    description: When the latest of those refusals happened.
+                    format: date-time
+                people:
+                    type: integer
+                    description: Distinct people refused in the last 24 hours who have not had a request answered by this server since.
+                    format: int64
+                refused_by:
+                    type: string
+                    description: 'identity_provider: the identity provider refused access or the permissions, for example because the person is not assigned to the app there; service: the service refused the identity provider''s sign-in. Setup problems and expired sign-ins are not counted.'
+                    enum:
+                        - identity_provider
+                        - service
+            description: 'People whose Cross App Access sign-in to this server was refused in the last 24 hours, by one party. Refusals do not change state: a connection refused for some people can still be verified by others.'
+            required:
+                - refused_by
+                - people
+                - last_refused_at
         OktaResourceConnectionServer:
             type: object
             properties:
@@ -129645,6 +129667,11 @@ components:
                     format: uuid
                 project_slug:
                     type: string
+                recent_refusals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OktaResourceConnectionRefusal'
+                    description: People refused Cross App Access sign-in to this server in the last 24 hours, by who refused. Omitted when there are none, or when Connection Logs are off or could not be read.
                 resource_indicator:
                     type: string
                     description: 'The resource indicator to enter on the connection: the server''s RFC 9728 resource identifier when known, otherwise its URL.'

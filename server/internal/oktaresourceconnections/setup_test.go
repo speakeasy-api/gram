@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
@@ -61,6 +62,9 @@ type instance struct {
 	connectionID uuid.UUID
 	oktaIssuerID uuid.UUID
 	authCtx      *contextvalues.AuthContext
+
+	// refusals answers the service's recent refusal reads; nil reads none.
+	refusals oktaresourceconnections.RefusalReader
 }
 
 func createOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool) string {
@@ -98,10 +102,15 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), &feature.InMemory{})
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
-	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, authCtx: authCtx}
+	si := &instance{svc: nil, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, authCtx: authCtx, refusals: nil}
+	si.svc = oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), &feature.InMemory{}, func(ctx context.Context, filter mcpconnectionattempts.RefusalFilter) ([]mcpconnectionattempts.Refusals, error) {
+		if si.refusals == nil {
+			return nil, nil
+		}
+		return si.refusals(ctx, filter)
+	})
 	si.connectionID = createConnection(t, ctx, si)
 	return ctx, si
 }

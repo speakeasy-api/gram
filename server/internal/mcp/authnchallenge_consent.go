@@ -2319,7 +2319,7 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, connectedClients, discoverScopes)
-	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	chainRequests, _ := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()

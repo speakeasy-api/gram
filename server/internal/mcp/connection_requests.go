@@ -242,9 +242,13 @@ func consentRefusalHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
 func resolveFailureHappened(err error) mcpconnectionattempts.Code {
+	refused, chainingRefused := errors.AsType[*chainingRefusedError](err)
 	switch {
+	// An outage clears by itself, so it outranks a refusal it wraps.
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		return remotesessions.ConnectionOutageHappened(err)
+	case chainingRefused:
+		return refused.code
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	case errors.Is(err, remotesessions.ErrStoredSignInUnreadable):

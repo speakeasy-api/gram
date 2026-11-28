@@ -905,7 +905,7 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		if needsSetup {
 			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
 		}
-		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
+		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication, remoteSessionReconnectDescription)
 	case authClientNoAccess:
 		endpoint := authentication.endpoint
 		s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, authentication.request,
