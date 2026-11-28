@@ -76,6 +76,14 @@ type Client struct {
 	// enableOrganization endpoint.
 	EnableOrganizationDoer goahttp.Doer
 
+	// ResolveOrganizations Doer is the HTTP client used to make requests to the
+	// resolveOrganizations endpoint.
+	ResolveOrganizationsDoer goahttp.Doer
+
+	// BulkDisableOrganizations Doer is the HTTP client used to make requests to
+	// the bulkDisableOrganizations endpoint.
+	BulkDisableOrganizationsDoer goahttp.Doer
+
 	// GetOrganization Doer is the HTTP client used to make requests to the
 	// getOrganization endpoint.
 	GetOrganizationDoer goahttp.Doer
@@ -627,6 +635,8 @@ func NewClient(
 		BulkUpdateAccountTypeDoer:                      doer,
 		DisableOrganizationDoer:                        doer,
 		EnableOrganizationDoer:                         doer,
+		ResolveOrganizationsDoer:                       doer,
+		BulkDisableOrganizationsDoer:                   doer,
 		GetOrganizationDoer:                            doer,
 		ListOrganizationMembersDoer:                    doer,
 		ListOrganizationProjectsDoer:                   doer,
@@ -1119,6 +1129,54 @@ func (c *Client) EnableOrganization() goa.Endpoint {
 		resp, err := c.EnableOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "enableOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ResolveOrganizations returns an endpoint that makes HTTP requests to the
+// admin service resolveOrganizations server.
+func (c *Client) ResolveOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeResolveOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeResolveOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildResolveOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ResolveOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "resolveOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BulkDisableOrganizations returns an endpoint that makes HTTP requests to the
+// admin service bulkDisableOrganizations server.
+func (c *Client) BulkDisableOrganizations() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBulkDisableOrganizationsRequest(c.encoder)
+		decodeResponse = DecodeBulkDisableOrganizationsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBulkDisableOrganizationsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BulkDisableOrganizationsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "bulkDisableOrganizations", err)
 		}
 		return decodeResponse(resp)
 	}

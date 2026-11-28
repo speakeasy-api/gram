@@ -508,7 +508,7 @@ describe("organizations list", () => {
     const trigger = filterTrigger();
     expect(trigger.textContent).toBe("Filters");
     expect(trigger.parentElement?.textContent).toBe(
-      "FiltersCreate organization",
+      "FiltersBulk disableCreate organization",
     );
     for (const name of [
       "Type",

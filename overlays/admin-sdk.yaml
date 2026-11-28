@@ -95,6 +95,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminBulkUpdateAccountType']
     update:
       x-speakeasy-name-override: bulkUpdateAccountType
+  - target: $.paths.*[?@.operationId=='adminBulkDisableOrganizations']
+    update:
+      x-speakeasy-name-override: bulkDisableOrganizations
   - target: $.paths.*[?@.operationId=='adminCancelStripeSubscription']
     update:
       x-speakeasy-name-override: cancelStripeSubscription
@@ -104,6 +107,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminCreateOrganization']
     update:
       x-speakeasy-name-override: createOrganization
+  - target: $.paths.*[?@.operationId=='adminResolveOrganizations']
+    update:
+      x-speakeasy-name-override: resolveOrganizations
   - target: $.paths.*[?@.operationId=='adminDisableOrganization']
     update:
       x-speakeasy-name-override: disableOrganization

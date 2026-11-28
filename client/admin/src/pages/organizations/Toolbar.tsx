@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/lib/organizationSearch";
 
 import { useApplyFilters } from "./applyFilters";
+import { BulkDisable } from "./BulkDisable";
 import { CreateOrganization } from "./CreateOrganization";
 import { FilterSheet } from "./FilterSheet";
 import type { WriteReporter } from "./OrganizationActions";
@@ -264,6 +265,7 @@ export function Toolbar({
       {/* Last in the row and the only filled control in it, so it reads as the
           page's primary action rather than another way to narrow the list. */}
       <span className="min-w-0 flex-1" />
+      <BulkDisable reporter={reporter} />
       <CreateOrganization reporter={reporter} />
     </div>
   );

@@ -134,6 +134,12 @@ import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminS
 import { adminGetStripeSubscriptionCandidate } from "@gram/admin-client/funcs/adminGetStripeSubscriptionCandidate";
 import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
 import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
+import { buildAdminResolveOrganizationsMutation } from "@gram/admin-client/react-query/adminResolveOrganizations";
+import { buildAdminBulkDisableOrganizationsMutation } from "@gram/admin-client/react-query/adminBulkDisableOrganizations";
+import type { ResolveOrganizationsRequestBody } from "@gram/admin-client/models/components/resolveorganizationsrequestbody";
+import type { AdminResolveOrganizationsResult } from "@gram/admin-client/models/components/adminresolveorganizationsresult";
+import type { BulkDisableOrganizationsRequestBody } from "@gram/admin-client/models/components/bulkdisableorganizationsrequestbody";
+import type { AdminBulkDisableOrganizationsResult } from "@gram/admin-client/models/components/adminbulkdisableorganizationsresult";
 import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
 import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
 import { buildAdminSetStripeSubscriptionMutation } from "@gram/admin-client/react-query/adminSetStripeSubscription";
@@ -616,6 +622,27 @@ export async function enableOrganization(
   return organizationFromSdk(
     await redirecting(enableOrganizationMutation.mutationFn({ request })),
   );
+}
+
+const resolveOrganizationsMutation =
+  buildAdminResolveOrganizationsMutation(redirectingClient);
+const bulkDisableOrganizationsMutation =
+  buildAdminBulkDisableOrganizationsMutation(redirectingClient);
+
+// The review step of a bulk disable. A POST because a CSV can carry a thousand
+// identifiers, but it writes nothing.
+export function resolveOrganizations(
+  request: ResolveOrganizationsRequestBody,
+): Promise<AdminResolveOrganizationsResult> {
+  return redirecting(resolveOrganizationsMutation.mutationFn({ request }));
+}
+
+// `missingIds` names what was not written. A caller that drops it reports the
+// batch as having done more than it did.
+export function bulkDisableOrganizations(
+  request: BulkDisableOrganizationsRequestBody,
+): Promise<AdminBulkDisableOrganizationsResult> {
+  return redirecting(bulkDisableOrganizationsMutation.mutationFn({ request }));
 }
 
 // The days are added to the trial's current end date, not to today, so an

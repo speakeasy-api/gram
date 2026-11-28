@@ -13,3 +13,8 @@ func IsAccountType(v string) bool {
 
 // Far above any realistic selection, far below a list worth echoing back.
 const MaxBulkAccountTypeIDs = 1000
+
+// MaxBulkDisableOrganizations bounds one bulk disable, and the review that
+// resolves its CSV before it. Every organization is locked and audited in one
+// transaction, so the cap is what keeps that transaction short.
+const MaxBulkDisableOrganizations = 1000

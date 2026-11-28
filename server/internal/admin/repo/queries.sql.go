@@ -3640,6 +3640,64 @@ func (q *Queries) AdminResolveOrganizationID(ctx context.Context, idOrSlug strin
 	return id, err
 }
 
+const adminResolveOrganizations = `-- name: AdminResolveOrganizations :many
+SELECT
+    id,
+    name,
+    slug,
+    gram_account_type AS account_type,
+    whitelisted,
+    disabled_at
+FROM organization_metadata
+WHERE id = ANY($1::text[])
+   OR slug = ANY($2::text[])
+`
+
+type AdminResolveOrganizationsParams struct {
+	Ids   []string
+	Slugs []string
+}
+
+type AdminResolveOrganizationsRow struct {
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	Whitelisted bool
+	DisabledAt  pgtype.Timestamptz
+}
+
+// Read-only lookup behind the bulk disable review. An id is matched only against
+// id and a slug only against slug, so one organization's slug that equals
+// another's id cannot cross over; the caller sorts rows back to the identifier
+// that found them.
+func (q *Queries) AdminResolveOrganizations(ctx context.Context, arg AdminResolveOrganizationsParams) ([]AdminResolveOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminResolveOrganizations, arg.Ids, arg.Slugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminResolveOrganizationsRow
+	for rows.Next() {
+		var i AdminResolveOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.AccountType,
+			&i.Whitelisted,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminResolveProjectIDBySlug = `-- name: AdminResolveProjectIDBySlug :one
 SELECT id
 FROM projects
