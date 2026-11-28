@@ -6,16 +6,17 @@ import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/limits"
 )
 
 var AdminMemoryEvalRunConfig = Type("AdminMemoryEvalRunConfig", func() {
 	Description("The models and repeats one Organizational Memory eval run compares.")
 	Required("answer_models", "judge_model", "summary_model", "digest_model", "runs")
-	Attribute("answer_models", ArrayOf(String), "Models that answer the eval questions; each is scored in every arm.", func() { MinLength(1); MaxLength(4) })
+	Attribute("answer_models", ArrayOf(String), "Models that answer the eval questions; each is scored in every arm.", func() { MinLength(1); MaxLength(limits.MaxAnswerModels) })
 	Attribute("judge_model", String, "Model that grades answers. Pick a different family from the answer models.")
 	Attribute("summary_model", String, "Model that writes the masked chat summaries Organizational Memory reads.")
 	Attribute("digest_model", String, "Model that writes day, week and month digests.")
-	Attribute("runs", Int, "Repeats per answer model and arm.", func() { Minimum(1); Maximum(3) })
+	Attribute("runs", Int, "Repeats per answer model and arm.", func() { Minimum(1); Maximum(limits.MaxRuns) })
 })
 
 var AdminMemoryEvalRun = Type("AdminMemoryEvalRun", func() {
@@ -35,11 +36,13 @@ var AdminMemoryEvalRun = Type("AdminMemoryEvalRun", func() {
 
 var AdminMemoryEvalOptions = Type("AdminMemoryEvalOptions", func() {
 	Description("What a new Organizational Memory eval run may use.")
-	Required("defaults", "allowed_models", "daily_run_limit", "runs_today")
+	Required("defaults", "allowed_models", "daily_run_limit", "runs_last_24h", "max_answer_models", "max_runs")
 	Attribute("defaults", AdminMemoryEvalRunConfig)
 	Attribute("allowed_models", ArrayOf(String), "Models a run may use.")
 	Attribute("daily_run_limit", Int, "Runs allowed per rolling 24 hours, across all staff.")
-	Attribute("runs_today", Int, "Runs started in the last 24 hours.")
+	Attribute("runs_last_24h", Int, "Runs started in the last 24 hours.")
+	Attribute("max_answer_models", Int, "Most answer models one run may compare.")
+	Attribute("max_runs", Int, "Most repeats per answer model and arm.")
 })
 
 // memoryEvalMethods are Organizational Memory eval runs over the synthetic corpus the
@@ -68,7 +71,7 @@ func memoryEvalMethods() {
 	Method("listMemoryEvalRuns", func() {
 		Meta("openapi:operationId", "adminListMemoryEvalRuns")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMemoryEvalRuns")
-		Description("Organizational Memory eval runs, newest first, without their reports.")
+		Description("Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.")
 		shared.CursorPagination()
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -118,12 +121,14 @@ func memoryEvalMethods() {
 		Error(string(oops.CodeRateLimitExceeded), func() {
 			Description(oops.CodeRateLimitExceeded.UserMessage())
 		})
+		declareUnavailable()
 		HTTP(func() {
 			POST("/admin/memoryEval.start")
 			Response(StatusOK)
 			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
 				ContentType("application/json")
 			})
+			declareUnavailableResponse()
 		})
 	})
 }

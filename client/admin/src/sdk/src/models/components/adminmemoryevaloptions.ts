@@ -29,9 +29,17 @@ export type AdminMemoryEvalOptions = {
    */
   defaults: AdminMemoryEvalRunConfig;
   /**
+   * Most answer models one run may compare.
+   */
+  maxAnswerModels: number;
+  /**
+   * Most repeats per answer model and arm.
+   */
+  maxRuns: number;
+  /**
    * Runs started in the last 24 hours.
    */
-  runsToday: number;
+  runsLast24h: number;
 };
 
 /** @internal */
@@ -43,13 +51,17 @@ export const AdminMemoryEvalOptions$inboundSchema: z.ZodMiniType<
     allowed_models: z.array(z.string()),
     daily_run_limit: z.int(),
     defaults: AdminMemoryEvalRunConfig$inboundSchema,
-    runs_today: z.int(),
+    max_answer_models: z.int(),
+    max_runs: z.int(),
+    runs_last_24h: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "allowed_models": "allowedModels",
       "daily_run_limit": "dailyRunLimit",
-      "runs_today": "runsToday",
+      "max_answer_models": "maxAnswerModels",
+      "max_runs": "maxRuns",
+      "runs_last_24h": "runsLast24h",
     });
   }),
 );

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/limits"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/evalrun/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -55,10 +56,10 @@ func DefaultConfig() Config {
 
 // MaxRuns bounds repeats per model and arm so one run cannot spend without
 // limit.
-const MaxRuns = 3
+const MaxRuns = limits.MaxRuns
 
 // MaxAnswerModels bounds the models one run compares.
-const MaxAnswerModels = 4
+const MaxAnswerModels = limits.MaxAnswerModels
 
 // Validate rejects a config the bench would reject, plus one larger than a
 // single run may spend.

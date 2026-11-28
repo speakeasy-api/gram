@@ -74,7 +74,7 @@ export type AdminListMemoryEvalRunsQueryError =
  * listMemoryEvalRuns admin
  *
  * @remarks
- * Organizational Memory eval runs, newest first, without their reports.
+ * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
  */
 export function useAdminListMemoryEvalRuns(
   request?: AdminListMemoryEvalRunsRequest | undefined,
@@ -101,7 +101,7 @@ export function useAdminListMemoryEvalRuns(
  * listMemoryEvalRuns admin
  *
  * @remarks
- * Organizational Memory eval runs, newest first, without their reports.
+ * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
  */
 export function useAdminListMemoryEvalRunsSuspense(
   request?: AdminListMemoryEvalRunsRequest | undefined,
@@ -128,7 +128,7 @@ export function useAdminListMemoryEvalRunsSuspense(
  * listMemoryEvalRuns admin
  *
  * @remarks
- * Organizational Memory eval runs, newest first, without their reports.
+ * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
  */
 export function useAdminListMemoryEvalRunsInfinite(
   request?: AdminListMemoryEvalRunsRequest | undefined,
@@ -169,7 +169,7 @@ export function useAdminListMemoryEvalRunsInfinite(
  * listMemoryEvalRuns admin
  *
  * @remarks
- * Organizational Memory eval runs, newest first, without their reports.
+ * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
  */
 export function useAdminListMemoryEvalRunsInfiniteSuspense(
   request?: AdminListMemoryEvalRunsRequest | undefined,
