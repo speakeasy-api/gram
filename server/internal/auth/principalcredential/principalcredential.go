@@ -133,7 +133,10 @@ func (i *Issuer) Mint(c Credential) (string, string, error) {
 // MintWithLifetime signs c for lifetime (bounded by [time.Second, Lifetime])
 // and returns the token, its ID, and its expiration timestamp.
 func (i *Issuer) MintWithLifetime(c Credential, lifetime time.Duration) (string, string, time.Time, error) {
-	if err := checkShape(c); err != nil || lifetime < time.Second || lifetime > Lifetime {
+	if err := checkShape(c); err != nil {
+		return "", "", time.Time{}, err
+	}
+	if lifetime < time.Second || lifetime > Lifetime {
 		return "", "", time.Time{}, ErrInvalid
 	}
 	now := time.Now()
