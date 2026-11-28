@@ -73,17 +73,21 @@ func TestUpdateOrganization_InternalCannotBeCombined(t *testing.T) {
 		{"whitelisted", &gen.UpdateOrganizationPayload{ID: "org_internal_combo", Internal: new(true), Whitelisted: new(true)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, err := svc.UpdateOrganization(ctx, tc.payload)
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			require.ErrorContains(t, err, "internal cannot be combined with account_type or whitelisted")
+
+			// Checked inside the subtest: parallel subtests run after the
+			// parent body returns, so a check out there would run first.
+			got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_internal_combo"})
+			require.NoError(t, err)
+			require.False(t, got.Internal)
+			require.Equal(t, "free", got.AccountType)
+			require.False(t, got.Whitelisted)
 		})
 	}
-
-	got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_internal_combo"})
-	require.NoError(t, err)
-	require.False(t, got.Internal)
-	require.Equal(t, "free", got.AccountType)
-	require.False(t, got.Whitelisted)
 }
 
 func TestUpdateOrganization_RequiresAField(t *testing.T) {
