@@ -98,7 +98,16 @@ enum OtlpProtocol {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    deny_same_user_inspection();
+    if let Err(e) = deny_same_user_inspection() {
+        // Tracing is not initialized yet; this is the only output channel.
+        // Fail closed: continuing would leave the runner's environment and
+        // tokens readable by `bun_run` children.
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("gram-assistant-runner: failed to mark process non-dumpable: {e}");
+        }
+        return ExitCode::FAILURE;
+    }
     let cli = Cli::parse();
     let result = match cli.mode {
         Mode::Serve {
@@ -148,17 +157,11 @@ async fn main() -> ExitCode {
 /// `/proc/<pid>/mem` or attach with ptrace. The runner holds deployment
 /// configuration in its environment and per-thread bearer tokens in memory.
 /// Children get the default dumpable state back when they exec.
-fn deny_same_user_inspection() {
+/// Non-Linux builds (local development only) have no equivalent and skip it.
+fn deny_same_user_inspection() -> std::io::Result<()> {
     #[cfg(target_os = "linux")]
-    if let Err(e) =
-        rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)
-    {
-        // Tracing is not initialized yet; this is the only output channel.
-        #[allow(clippy::print_stderr)]
-        {
-            eprintln!("gram-assistant-runner: failed to mark process non-dumpable: {e}");
-        }
-    }
+    rustix::process::set_dumpable_behavior(rustix::process::DumpableBehavior::NotDumpable)?;
+    Ok(())
 }
 
 /// Initializes the tracing subscriber, optionally layering an OTLP span
