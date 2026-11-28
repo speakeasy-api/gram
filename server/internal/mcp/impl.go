@@ -1225,9 +1225,9 @@ func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) err
 // proxy-backed (remote or tunneled) mcp_server, dispatches the request
 // through the unified endpoint dispatcher — the same issuer gate + backend
 // switch the POST path uses. handled=true means an authoritative outcome was
-// reached (dispatched, or failed in a way the caller must propagate);
-// handled=false means the slug does not resolve or resolves to a non-proxy
-// backend, so callers fall back to their legacy behavior.
+// reached (dispatched, not found, or failed in a way the caller must
+// propagate); handled=false means the slug resolves to a non-proxy backend,
+// so callers fall back to their legacy behavior.
 func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
 	ctx := r.Context()
 
@@ -1243,8 +1243,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	case err == nil:
 	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
 		// A denial must answer exactly as a miss, or it reveals the endpoint.
-		// The callers' fallback is a fixed response, not another lookup.
-		return false, nil
+		return true, oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage)
 	default:
 		// Unavailable addresses are terminal, never the legacy behavior.
 		return true, err

@@ -42,7 +42,7 @@ func TestWellKnownMetadata_DeniedEndpointMatchesMissing(t *testing.T) {
 			router.ServeHTTP(denied, httptest.NewRequest(http.MethodGet, documentPath+"/mcp/"+disabledSlug, nil))
 
 			require.Equal(t, http.StatusNotFound, missing.Code, "body=%s", missing.Body.String())
-			require.Contains(t, missing.Body.String(), publicMCPNotFoundMessage)
+			require.Contains(t, missing.Body.String(), mcpNotFoundDashboardHint)
 			require.Equal(t, missing.Code, denied.Code)
 			require.Equal(t, missing.Header(), denied.Header())
 			require.Equal(t, decodeErrorWithoutID(t, missing), decodeErrorWithoutID(t, denied))
@@ -117,6 +117,21 @@ func TestDeniedEndpointMatchesMissing_RegisterAndStreamRoutes(t *testing.T) {
 			require.Equal(t, missing.Code, denied.Code, "missing=%s denied=%s", missing.Body.String(), denied.Body.String())
 			require.Equal(t, missing.Header(), denied.Header())
 			require.Equal(t, decodeBodyWithoutID(t, missing), decodeBodyWithoutID(t, denied))
+
+			// Stream and session requests answer a JSON-RPC not-found, not the
+			// 405 a resolved toolset-backed server gives.
+			if tc.suffix == "" {
+				require.Equal(t, http.StatusNotFound, missing.Code, "body=%s", missing.Body.String())
+				var response struct {
+					Error struct {
+						Code    int    `json:"code"`
+						Message string `json:"message"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(missing.Body.Bytes(), &response), "body=%s", missing.Body.String())
+				require.Equal(t, -32002, response.Error.Code)
+				requireMCPNotFoundMessage(t, response.Error.Message)
+			}
 		})
 	}
 }

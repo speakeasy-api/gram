@@ -20,10 +20,6 @@ import (
 // unmatched MCP URL answers with.
 const unmatchedMCPMetadataMessage = "oauth metadata not found: no OAuth or OpenID metadata is published at this URL"
 
-// unmatchedMCPTransportMessage is the message an MCP request to an unmatched
-// MCP URL answers with.
-const unmatchedMCPTransportMessage = "mcp server not found: no MCP server is served at this URL. Check that the URL has no extra path segment, or copy the server's current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
-
 // unmatchedRouteMiddlewareHeader marks responses that passed through the mux
 // middleware chain.
 const unmatchedRouteMiddlewareHeader = "X-Test-Middleware"
@@ -109,6 +105,13 @@ func TestUnmatchedMCPRoute_TransportRequestAnswersJSONRPCNotFound(t *testing.T) 
 			headers: map[string]string{"Mcp-Session-Id": "session"},
 		},
 		{
+			name:    "unexpected method with protocol version",
+			method:  http.MethodPut,
+			path:    "/mcp/bad-slug/extra",
+			body:    nil,
+			headers: map[string]string{mcpversions.HTTPHeader: mcpversions.Version20251125},
+		},
+		{
 			name:    "post json with empty slug",
 			method:  http.MethodPost,
 			path:    "/mcp//",
@@ -149,7 +152,8 @@ func TestUnmatchedMCPRoute_TransportRequestAnswersJSONRPCNotFound(t *testing.T) 
 			errorBody, ok := response["error"].(map[string]any)
 			require.True(t, ok, "expected JSON-RPC error: %v", response)
 			require.InDelta(t, -32002, errorBody["code"], 0)
-			require.Equal(t, unmatchedMCPTransportMessage, errorBody["message"])
+			requireMCPNotFoundMessage(t, errorBody["message"])
+			require.Contains(t, errorBody["message"], "extra path segment")
 		})
 	}
 }

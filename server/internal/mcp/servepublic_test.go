@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -36,9 +37,24 @@ import (
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-// publicMCPNotFoundMessage is the user-facing message an unknown or denied MCP
-// server slug answers with.
-const publicMCPNotFoundMessage = "mcp server not found: no MCP server is served at this URL. If it was renamed or moved, copy its current URL from the MCP page in the Speakeasy dashboard and update your MCP client configuration"
+// mcpNotFoundPrefix starts every not-found message for an MCP URL.
+const mcpNotFoundPrefix = "mcp server not found"
+
+// mcpNotFoundDashboardHint is the next step every not-found message for an
+// MCP URL gives. Assert it with Contains so copy edits elsewhere in the
+// message do not break tests.
+const mcpNotFoundDashboardHint = "current URL from the MCP page in the Speakeasy dashboard"
+
+// requireMCPNotFoundMessage asserts that message is an actionable not-found
+// message for an MCP URL.
+func requireMCPNotFoundMessage(t *testing.T, message any) {
+	t.Helper()
+
+	text, ok := message.(string)
+	require.True(t, ok, "expected a string message: %v", message)
+	require.True(t, strings.HasPrefix(text, mcpNotFoundPrefix), "message=%q", text)
+	require.Contains(t, text, mcpNotFoundDashboardHint)
+}
 
 // makeInitializeBody creates a single JSON-RPC initialize request body.
 func makeInitializeBody() []byte {
@@ -403,7 +419,7 @@ func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	errorBody, ok := response["error"].(map[string]any)
 	require.True(t, ok, "expected JSON-RPC error: %v", response)
 	require.InDelta(t, -32002, errorBody["code"], 0)
-	require.Equal(t, publicMCPNotFoundMessage, errorBody["message"])
+	requireMCPNotFoundMessage(t, errorBody["message"])
 }
 
 func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
