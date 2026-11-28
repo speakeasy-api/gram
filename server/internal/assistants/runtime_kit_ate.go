@@ -204,6 +204,32 @@ func (k *KitATERuntimeBackend) metadata(r assistantRuntimeRecord) (kitATEMetadat
 	return m, nil
 }
 
+// metadataForReap verifies only runtime ownership (runtime, assistant, project
+// IDs) so Reap can still revoke workload bindings and delete recorded ATE
+// actors after configuration drift (changed egress hosts, template, or atespace).
+func (k *KitATERuntimeBackend) metadataForReap(r assistantRuntimeRecord) (kitATEMetadata, error) {
+	var m kitATEMetadata
+	if r.RuntimeVersion != 3 || r.Backend != runtimeBackendATE || r.ID == uuid.Nil || r.AssistantID == uuid.Nil || r.ProjectID == uuid.Nil {
+		return m, ErrKitRuntimeBinding
+	}
+	if kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
+		return kitATEMetadata{
+			RuntimeID:   r.ID,
+			AssistantID: r.AssistantID,
+			ProjectID:   r.ProjectID,
+			ImageDigest: "",
+			Atespace:    k.config.Atespace,
+			Template:    "",
+			EgressHosts: nil,
+			Threads:     map[string]kitATEThread{},
+		}, nil
+	}
+	if json.Unmarshal(r.BackendMetadataJSON, &m) != nil || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID {
+		return m, ErrKitRuntimeBinding
+	}
+	return m, nil
+}
+
 func saveKitATEMetadata(ctx context.Context, m kitATEMetadata) error {
 	write, ok := ctx.Value(kitAdmissionProgressKey{}).(kitAdmissionProgressWriter)
 	if !ok {
@@ -277,39 +303,8 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		var known bool
 		entry, known = m.Threads[thread.String()]
 		if !known {
-			entry.ActorName = kitATEActorName(locked, thread)
-			actor, err := k.getActor(ctx, entry)
-			if status.Code(err) == codes.NotFound {
-				actor, err = k.config.Client.CreateActor(ctx, &ateapiv1.CreateActorRequest{
-					Actor: &ateapiv1.Actor{
-						Metadata: &ateapiv1.ResourceMetadata{
-							Atespace:   k.config.Atespace,
-							Name:       entry.ActorName,
-							Uid:        "",
-							Version:    0,
-							CreateTime: nil,
-							UpdateTime: nil,
-							DeleteTime: nil,
-						},
-						ActorTemplate:  k.actorRef(k.templateVersionName()),
-						WorkerSelector: nil,
-						SourceTag:      nil,
-						Status:         nil,
-					},
-				})
-				if err != nil {
-					return fmt.Errorf("ATE CreateActor: %w", err)
-				}
-			} else if err != nil {
-				return fmt.Errorf("lookup ATE actor: %w", err)
-			}
-			meta := actor.GetMetadata()
-			if meta.GetUid() == "" || meta.GetName() != entry.ActorName || meta.GetAtespace() != k.config.Atespace {
-				return ErrKitRuntimeBinding
-			}
-			entry.ActorUID = meta.GetUid()
-			m.Threads[thread.String()] = entry
-			if err := saveKitATEMetadata(ctx, m); err != nil {
+			entry, err = k.createOrAdoptThreadActor(ctx, locked, thread, &m)
+			if err != nil {
 				return err
 			}
 		} else if _, err := k.getActor(ctx, entry); err != nil {
@@ -338,34 +333,56 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		}
 
 		if !entry.Configured {
-			locked.BackendMetadataJSON, err = json.Marshal(m)
-			if err != nil {
-				return fmt.Errorf("encode ATE bootstrap binding: %w", err)
-			}
-			bootstrap, err := k.config.Bootstrap(ctx, locked, thread, entry.ActorName)
-			if err != nil {
-				return err
-			}
-			entry.Workload = bootstrap.Workload
-			m.Threads[thread.String()] = entry
-			if err := saveKitATEMetadata(ctx, m); err != nil {
-				return err
-			}
-			if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
-				return err
-			}
-			archive, err := kitBootstrapArchive(bootstrap)
-			if err != nil {
-				return err
-			}
-			code, err := kitATEPost(ctx, helper, base+"/bootstrap", archive)
-			if err != nil || (code != http.StatusNoContent && code != http.StatusConflict) {
+			for attempt := range 2 {
+				locked.BackendMetadataJSON, err = json.Marshal(m)
+				if err != nil {
+					return fmt.Errorf("encode ATE bootstrap binding: %w", err)
+				}
+				bootstrap, err := k.config.Bootstrap(ctx, locked, thread, entry.ActorName)
+				if err != nil {
+					return err
+				}
+				entry.Workload = bootstrap.Workload
+				m.Threads[thread.String()] = entry
+				if err := saveKitATEMetadata(ctx, m); err != nil {
+					return err
+				}
+				if err := k.ensureEgress(ctx, entry.ActorName, bootstrap); err != nil {
+					return err
+				}
+				archive, err := kitBootstrapArchive(bootstrap)
+				if err != nil {
+					return err
+				}
+				code, err := kitATEPost(ctx, helper, base+"/bootstrap", archive)
+				if err != nil {
+					return errors.New("ATE Kit bootstrap failed")
+				}
+				if code == http.StatusNoContent {
+					entry.Configured = true
+					m.Threads[thread.String()] = entry
+					if err := saveKitATEMetadata(ctx, m); err != nil {
+						return err
+					}
+					break
+				}
+				if code == http.StatusConflict {
+					if err := k.retireThreadActorForRecreate(ctx, locked, thread, entry, &m); err != nil {
+						return err
+					}
+					if attempt == 1 {
+						return errors.New("ATE Kit bootstrap conflicted after actor recreation")
+					}
+					entry, err = k.createOrAdoptThreadActor(ctx, locked, thread, &m)
+					if err != nil {
+						return err
+					}
+					if err := waitKitATEHelper(ctx, helper, base+"/readyz", k.config.HelperPollInterval); err != nil {
+						return err
+					}
+					continue
+				}
 				return errors.New("ATE Kit bootstrap failed")
-			}
-			entry.Configured = true
-			m.Threads[thread.String()] = entry
-			if err := saveKitATEMetadata(ctx, m); err != nil {
-				return err
 			}
 		}
 
@@ -390,6 +407,66 @@ func (k *KitATERuntimeBackend) prepare(ctx context.Context, r assistantRuntimeRe
 		return nil
 	})
 	return prepared, entry, token, err
+}
+
+func (k *KitATERuntimeBackend) createOrAdoptThreadActor(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, m *kitATEMetadata) (kitATEThread, error) {
+	entry := kitATEThread{
+		ActorName:  kitATEActorName(locked, thread),
+		ActorUID:   "",
+		Configured: false,
+		Workload:   nil,
+	}
+	actor, err := k.getActor(ctx, entry)
+	if status.Code(err) == codes.NotFound {
+		actor, err = k.config.Client.CreateActor(ctx, &ateapiv1.CreateActorRequest{
+			Actor: &ateapiv1.Actor{
+				Metadata: &ateapiv1.ResourceMetadata{
+					Atespace:   k.config.Atespace,
+					Name:       entry.ActorName,
+					Uid:        "",
+					Version:    0,
+					CreateTime: nil,
+					UpdateTime: nil,
+					DeleteTime: nil,
+				},
+				ActorTemplate:  k.actorRef(k.templateVersionName()),
+				WorkerSelector: nil,
+				SourceTag:      nil,
+				Status:         nil,
+			},
+		})
+		if err != nil {
+			return kitATEThread{}, fmt.Errorf("ATE CreateActor: %w", err)
+		}
+	} else if err != nil {
+		return kitATEThread{}, fmt.Errorf("lookup ATE actor: %w", err)
+	}
+	meta := actor.GetMetadata()
+	if meta.GetUid() == "" || meta.GetName() != entry.ActorName || meta.GetAtespace() != k.config.Atespace {
+		return kitATEThread{}, ErrKitRuntimeBinding
+	}
+	entry.ActorUID = meta.GetUid()
+	m.Threads[thread.String()] = entry
+	if err := saveKitATEMetadata(ctx, *m); err != nil {
+		return kitATEThread{}, err
+	}
+	return entry, nil
+}
+
+func (k *KitATERuntimeBackend) retireThreadActorForRecreate(ctx context.Context, locked assistantRuntimeRecord, thread uuid.UUID, entry kitATEThread, m *kitATEMetadata) error {
+	if entry.Workload != nil {
+		if err := k.config.Revoke(ctx, locked, entry.Workload); err != nil {
+			return fmt.Errorf("revoke conflicting ATE actor workload: %w", err)
+		}
+	}
+	if _, err := k.config.Client.DeleteActor(ctx, &ateapiv1.DeleteActorRequest{
+		Actor:   k.actorRef(entry.ActorName),
+		Options: &ateapiv1.DeleteOptions{Version: 0, Uid: entry.ActorUID},
+	}); err != nil && status.Code(err) != codes.NotFound {
+		return fmt.Errorf("delete conflicting ATE actor: %w", err)
+	}
+	delete(m.Threads, thread.String())
+	return saveKitATEMetadata(ctx, *m)
 }
 
 func waitKitATEHelper(ctx context.Context, client *guardian.HTTPClient, endpoint string, pollInterval time.Duration) error {
@@ -593,32 +670,48 @@ func hasCompletedDurableRootfsSnapshot(actor *ateapiv1.Actor, expectedUID string
 
 func (k *KitATERuntimeBackend) Reap(ctx context.Context, r assistantRuntimeRecord) error {
 	return k.config.Lifecycle(ctx, r, func(ctx context.Context, locked assistantRuntimeRecord) error {
-		m, err := k.metadata(locked)
+		m, err := k.metadataForReap(locked)
 		if err != nil {
 			return err
 		}
-		for _, t := range m.Threads {
+		atespace := m.Atespace
+		if atespace == "" {
+			atespace = k.config.Atespace
+		}
+		var reapErrs []error
+		for id, t := range m.Threads {
 			if t.Workload != nil {
 				if err := k.config.Revoke(ctx, locked, t.Workload); err != nil {
-					return err
+					reapErrs = append(reapErrs, err)
+					continue
 				}
 			}
-			_, err := k.getActor(ctx, t)
+			thread, err := uuid.Parse(id)
+			if err != nil || thread == uuid.Nil || t.ActorName != kitATEActorName(locked, thread) || t.ActorUID == "" || atespace == "" {
+				continue
+			}
+			ref := &ateapiv1.ObjectRef{Atespace: atespace, Name: t.ActorName}
+			actor, err := k.config.Client.GetActor(ctx, &ateapiv1.GetActorRequest{Actor: ref})
 			if status.Code(err) == codes.NotFound {
 				continue
 			}
 			if err != nil {
-				return err
+				reapErrs = append(reapErrs, fmt.Errorf("ATE GetActor: %w", err))
+				continue
+			}
+			meta := actor.GetMetadata()
+			if meta.GetAtespace() != atespace || meta.GetName() != t.ActorName || meta.GetUid() != t.ActorUID {
+				continue
 			}
 			_, err = k.config.Client.DeleteActor(ctx, &ateapiv1.DeleteActorRequest{
-				Actor:   k.actorRef(t.ActorName),
+				Actor:   ref,
 				Options: &ateapiv1.DeleteOptions{Version: 0, Uid: t.ActorUID},
 			})
 			if err != nil && status.Code(err) != codes.NotFound {
-				return fmt.Errorf("ATE DeleteActor: %w", err)
+				reapErrs = append(reapErrs, fmt.Errorf("ATE DeleteActor: %w", err))
 			}
 		}
-		return nil
+		return errors.Join(reapErrs...)
 	})
 }
 
