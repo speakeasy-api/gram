@@ -151,28 +151,6 @@ func (q *Queries) ListRiskRuleCountsByCategory(ctx context.Context, p RiskOvervi
 	if err != nil {
 		return nil, err
 	}
-	query, args, err := sb.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("build risk rule counts by category query: %w", err)
-	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query risk rule counts by category: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var out []RiskOverviewRuleCount
-	for rows.Next() {
-		var row RiskOverviewRuleCount
-		if err := rows.Scan(&row.RuleID, &row.Source, &row.Findings); err != nil {
-			return nil, fmt.Errorf("scan risk rule counts by category row: %w", err)
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read risk rule counts by category: %w", err)
-	}
-
-	return out, nil
+	return q.queryRuleCounts(ctx, "risk rule counts by category", sb)
 }
