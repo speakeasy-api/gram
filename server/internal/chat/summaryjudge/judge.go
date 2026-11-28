@@ -76,7 +76,7 @@ func NewJudge(logger *slog.Logger, db *pgxpool.Pool, client openrouter.Completio
 	return &Judge{
 		logger:    logger.With(attr.SlogComponent("chat-summary-judge")),
 		db:        db,
-		summaries: summaries.WithUsage(billing.ModelUsageSourceChatAnalysis, billing.ModelUsageSourceChatAnalysis),
+		summaries: summaries.WithUsage(billing.ModelUsageSourceOrgMemorySummary, billing.ModelUsageSourceChatAnalysis),
 		client:    client,
 		limiter:   limiter,
 	}

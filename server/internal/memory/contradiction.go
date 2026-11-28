@@ -8,6 +8,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -93,6 +94,7 @@ func (s *MemoryService) detectContradiction(ctx context.Context, orgID, projectI
 
 	req := openrouter.ObjectCompletionRequest{
 		MaxTokens:              nil,
+		ChatID:                 uuid.Nil,
 		OrgID:                  orgID,
 		ProjectID:              projectID,
 		Model:                  s.contradictionModel,

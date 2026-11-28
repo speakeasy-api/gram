@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -162,6 +163,7 @@ func (j *WorkUnitsJudge) Judge(ctx context.Context, in JudgeInput) (JudgeResult,
 		SchemaName:   "work_units_verdict",
 		Schema:       workUnitsSchema(),
 		Timeout:      workUnitsTimeout,
+		UsageSource:  billing.ModelUsageSourceChatAnalysis,
 	})
 	if err != nil {
 		span.RecordError(err)

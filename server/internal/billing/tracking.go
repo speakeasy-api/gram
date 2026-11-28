@@ -75,6 +75,15 @@ const (
 	// decision, and this tag is what attributes their spend distinctly within
 	// that key's usage.
 	ModelUsageSourceMCPResearch ModelUsageSource = "mcp-research"
+
+	// The Organizational Memory pipeline tags each of its stages separately so
+	// its spend can be split out of the shared chat-analysis and gram sources.
+	// Unregistered like chat analysis: platform internal key, excluded from
+	// Polar and TUM billing, never a BYOK slot. Callers keep chat-analysis (or
+	// the empty slot) as their KeySlot so key resolution does not change.
+	ModelUsageSourceOrgMemorySummary ModelUsageSource = "org-memory-summary"
+	ModelUsageSourceOrgMemoryFacts   ModelUsageSource = "org-memory-facts"
+	ModelUsageSourceOrgMemoryDigest  ModelUsageSource = "org-memory-digest"
 )
 
 // The platform-initiated risk-analysis judges are likewise unregistered:
@@ -86,6 +95,25 @@ const (
 	ModelUsageSourceRiskPolicy      ModelUsageSource = "risk-policy"
 	ModelUsageSourcePromptInjection ModelUsageSource = "prompt-injection"
 )
+
+// IsOrgMemorySource reports whether s tags an Organizational Memory pipeline
+// stage.
+func IsOrgMemorySource(s ModelUsageSource) bool {
+	switch s {
+	case ModelUsageSourceOrgMemorySummary, ModelUsageSourceOrgMemoryFacts, ModelUsageSourceOrgMemoryDigest:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsPlatformOnlySource reports whether s is reserved for inference the
+// platform runs itself. The completions proxy must not accept it from a
+// client: it would dodge Polar metering and TUM counts and mislabel the
+// traffic.
+func IsPlatformOnlySource(s ModelUsageSource) bool {
+	return s == ModelUsageSourceRiskAnalysis || IsOrgMemorySource(s)
+}
 
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {
@@ -120,7 +148,7 @@ func GramHostedHookSourceStrings() []string {
 // history, but raw logs legitimately carry an empty hook_source on hook, tool
 // call, and import rows, and excluding the empty string there would drop real usage.
 func GramHostedHookSourceNames() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch))
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), string(ModelUsageSourceMCPResearch), string(ModelUsageSourceOrgMemorySummary), string(ModelUsageSourceOrgMemoryFacts), string(ModelUsageSourceOrgMemoryDigest))
 }
 
 type ModelUsageEvent struct {

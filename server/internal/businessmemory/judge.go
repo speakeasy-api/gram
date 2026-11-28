@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/businessmemory/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
@@ -184,7 +185,8 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 				},
 			},
 		},
-		Timeout: extractionTimeout,
+		Timeout:     extractionTimeout,
+		UsageSource: billing.ModelUsageSourceOrgMemoryFacts,
 	})
 	if err != nil {
 		err = fmt.Errorf("call business memory extractor: %w", err)

@@ -2653,6 +2653,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
 		MaxTokens:    nil,
+		ChatID:       uuid.Nil,
 		OrgID:        orgID,
 		ProjectID:    projectID,
 		Model:        "",
@@ -2840,6 +2841,7 @@ func (s *Service) requestExclusionSuggestion(ctx context.Context, orgID, project
 	temperature := 0.2
 	response, err := s.completionClient.GetObjectCompletion(suggestCtx, openrouter.ObjectCompletionRequest{
 		MaxTokens:    nil,
+		ChatID:       uuid.Nil,
 		OrgID:        orgID,
 		ProjectID:    projectID,
 		Model:        "",
