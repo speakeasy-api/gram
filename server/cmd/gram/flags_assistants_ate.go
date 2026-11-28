@@ -110,7 +110,8 @@ func installKitATERuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, r
 func mountATECredentialMintEndpointFromCLI(ctx context.Context, logger *slog.Logger, mux goahttp.Muxer, c *cli.Context, core *assistants.ServiceCore, serverURL *url.URL) error {
 	sa := strings.TrimSpace(c.String("assistant-ate-cred-provider-service-account"))
 	localToken := strings.TrimSpace(c.String("assistant-ate-cred-provider-local-token"))
-	if !c.Bool("assistant-ate-enabled") && sa == "" && localToken == "" {
+	atespace := strings.TrimSpace(c.String("assistant-ate-atespace"))
+	if !c.Bool("assistant-ate-enabled") && ((sa == "" && localToken == "") || atespace == "") {
 		return nil
 	}
 	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
@@ -122,7 +123,6 @@ func mountATECredentialMintEndpointFromCLI(ctx context.Context, logger *slog.Log
 		return nil
 	}
 
-	atespace := strings.TrimSpace(c.String("assistant-ate-atespace"))
 	var (
 		mintURL string
 		urlErr  error
