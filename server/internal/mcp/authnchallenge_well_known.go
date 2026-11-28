@@ -428,8 +428,11 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 // Every issuer that turns on use_authentication_host, and every MCP server
 // moved onto one, leaves clients holding the MCP host issuer, so this document
 // is needed for as long as issuers can still turn it on. Once every issuer has
-// it on and request logs show clients no longer fetch this document or sign
-// assertions for the issuer alias, it and the alias can be removed.
+// it on and request logs show clients no longer use the MCP host issuer for
+// these servers (fetching this document, refreshing or revoking at the MCP
+// host token and revocation endpoints, or signing assertions for the issuer
+// alias), it and the alias can be removed. Clients can cache this document,
+// so its fetches alone do not show that.
 func (s *Service) serveMCPHostIssuerMetadata(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, baseURL string) error {
 	ctx := r.Context()
 	urls, err := endpoint.AuthorizationServerURLs(baseURL)
