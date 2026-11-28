@@ -1810,25 +1810,6 @@ INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls, tool_
 VALUES (@chat_id, @project_id, @role, @content, sqlc.narg('tool_calls'), sqlc.narg('tool_call_id'))
 RETURNING id;
 
--- name: StoreToolCallSummary :one
--- Preserve summaries for sibling calls carried by the same assistant message.
-UPDATE chat_messages
-SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
-  ARRAY[@tool_call_id::text],
-  @summary::jsonb
-)
-WHERE id = @message_id
-  AND chat_id = @chat_id
-  AND project_id = @project_id::uuid
-RETURNING (tool_call_summaries -> @tool_call_id::text)::text AS summary;
-
--- name: UpdateToolCallOutcome :exec
-UPDATE chat_messages
-SET tool_outcome = @tool_outcome,
-    tool_outcome_notes = @tool_outcome_notes
-WHERE id = @id AND project_id = @project_id::uuid;
-
 -- name: InsertChatResolution :one
 -- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
 -- pairing is verified here: a mis-plumbed caller would otherwise write a row
@@ -2373,13 +2354,6 @@ SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDA
 
 -- name: GetKitProjectionMessage :one
 SELECT * FROM chat_messages WHERE project_id = @project_id AND id = @id;
-
--- name: PatchKitProjectionMessage :execrows
-UPDATE chat_messages SET content = @content, content_raw = @content_raw,
- tool_calls = @tool_calls, content_hash = @content_hash, finish_reason = @finish_reason,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = @project_id AND chat_id = @chat_id AND id = @id AND source = 'kit'
-AND (content IS DISTINCT FROM @content OR content_raw IS DISTINCT FROM @content_raw OR tool_calls IS DISTINCT FROM @tool_calls OR finish_reason IS DISTINCT FROM @finish_reason);
 
 -- name: ValidateKitTranscriptBinding :one
 SELECT t.id FROM assistant_threads t

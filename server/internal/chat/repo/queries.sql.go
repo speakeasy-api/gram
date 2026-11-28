@@ -4316,42 +4316,6 @@ func (q *Queries) MarkClaudeTagMessages(ctx context.Context, arg MarkClaudeTagMe
 	return err
 }
 
-const patchKitProjectionMessage = `-- name: PatchKitProjectionMessage :execrows
-UPDATE chat_messages SET content = $1, content_raw = $2,
- tool_calls = $3, content_hash = $4, finish_reason = $5,
- risk_analyzed_at = CASE WHEN content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 THEN NULL ELSE risk_analyzed_at END
-WHERE project_id = $6 AND chat_id = $7 AND id = $8 AND source = 'kit'
-AND (content IS DISTINCT FROM $1 OR content_raw IS DISTINCT FROM $2 OR tool_calls IS DISTINCT FROM $3 OR finish_reason IS DISTINCT FROM $5)
-`
-
-type PatchKitProjectionMessageParams struct {
-	Content      string
-	ContentRaw   []byte
-	ToolCalls    []byte
-	ContentHash  []byte
-	FinishReason pgtype.Text
-	ProjectID    uuid.NullUUID
-	ChatID       uuid.UUID
-	ID           uuid.UUID
-}
-
-func (q *Queries) PatchKitProjectionMessage(ctx context.Context, arg PatchKitProjectionMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, patchKitProjectionMessage,
-		arg.Content,
-		arg.ContentRaw,
-		arg.ToolCalls,
-		arg.ContentHash,
-		arg.FinishReason,
-		arg.ProjectID,
-		arg.ChatID,
-		arg.ID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const recordChatSlackChannel = `-- name: RecordChatSlackChannel :exec
 UPDATE chats SET slack_team_id = coalesce(nullif($1::text, ''), slack_team_id),
  slack_channel_name = coalesce(nullif($2::text, ''), CASE WHEN slack_channel_id = $3::text THEN slack_channel_name END),
@@ -4926,41 +4890,6 @@ func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) 
 	return i, err
 }
 
-const storeToolCallSummary = `-- name: StoreToolCallSummary :one
-UPDATE chat_messages
-SET tool_call_summaries = jsonb_set(
-  COALESCE(tool_call_summaries, '{}'::jsonb),
-  ARRAY[$1::text],
-  $2::jsonb
-)
-WHERE id = $3
-  AND chat_id = $4
-  AND project_id = $5::uuid
-RETURNING (tool_call_summaries -> $1::text)::text AS summary
-`
-
-type StoreToolCallSummaryParams struct {
-	ToolCallID string
-	Summary    []byte
-	MessageID  uuid.UUID
-	ChatID     uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-// Preserve summaries for sibling calls carried by the same assistant message.
-func (q *Queries) StoreToolCallSummary(ctx context.Context, arg StoreToolCallSummaryParams) (string, error) {
-	row := q.db.QueryRow(ctx, storeToolCallSummary,
-		arg.ToolCallID,
-		arg.Summary,
-		arg.MessageID,
-		arg.ChatID,
-		arg.ProjectID,
-	)
-	var summary string
-	err := row.Scan(&summary)
-	return summary, err
-}
-
 const sumMessageTokenStatsByDay = `-- name: SumMessageTokenStatsByDay :many
 SELECT
   (date_trunc('day', cm.created_at AT TIME ZONE 'utc'))::timestamp AS day,
@@ -5156,30 +5085,6 @@ func (q *Queries) UpdateInferenceMessageAttribution(ctx context.Context, arg Upd
 		arg.UserID,
 		arg.Source,
 		arg.ChatID,
-		arg.ProjectID,
-	)
-	return err
-}
-
-const updateToolCallOutcome = `-- name: UpdateToolCallOutcome :exec
-UPDATE chat_messages
-SET tool_outcome = $1,
-    tool_outcome_notes = $2
-WHERE id = $3 AND project_id = $4::uuid
-`
-
-type UpdateToolCallOutcomeParams struct {
-	ToolOutcome      pgtype.Text
-	ToolOutcomeNotes pgtype.Text
-	ID               uuid.UUID
-	ProjectID        uuid.UUID
-}
-
-func (q *Queries) UpdateToolCallOutcome(ctx context.Context, arg UpdateToolCallOutcomeParams) error {
-	_, err := q.db.Exec(ctx, updateToolCallOutcome,
-		arg.ToolOutcome,
-		arg.ToolOutcomeNotes,
-		arg.ID,
 		arg.ProjectID,
 	)
 	return err

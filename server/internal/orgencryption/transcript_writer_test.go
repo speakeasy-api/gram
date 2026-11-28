@@ -3,13 +3,16 @@ package orgencryption_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -26,7 +29,7 @@ type transcriptWriterFixture struct {
 	store     *transcriptstore.Store
 }
 
-func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcriptWriterFixture {
+func newTranscriptWriterFixture(t *testing.T, provision, sealed bool) *transcriptWriterFixture {
 	t.Helper()
 	ti := newTestInstance(t)
 	p, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "Transcript test", Slug: "transcript-test", OrganizationID: ti.orgID})
@@ -37,12 +40,12 @@ func newTranscriptWriterFixture(t *testing.T, provision, shadow bool) *transcrip
 	if provision {
 		require.NoError(t, ti.fixture.Provisioner.EnsureUseCase(t.Context(), ti.orgID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()))
 	}
-	store, err := transcriptstore.New(ti.conn, ti.fixture.Service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := transcriptstore.New(ti.conn, ti.fixture.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, nil)
 	t.Cleanup(func() { require.NoError(t, shutdown(context.Background())) })
-	if shadow {
-		writer.WithTranscriptShadow(store, p.ID)
+	if sealed {
+		writer.WithTranscripts(transcriptstore.NewTranscripts(store, p.ID))
 	}
 	return &transcriptWriterFixture{testInstance: ti, projectID: p.ID, chatID: chatID, writer: writer, store: store}
 }
@@ -51,7 +54,7 @@ func (f *transcriptWriterFixture) message(content string) chat.MessageWrite {
 	return chat.MessageWrite{Params: chatrepo.CreateChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: content}}
 }
 
-func (f *transcriptWriterFixture) assertShadow(t *testing.T, id uuid.UUID) {
+func (f *transcriptWriterFixture) assertTranscript(t *testing.T, id uuid.UUID) {
 	t.Helper()
 	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
 	require.NoError(t, err)
@@ -76,7 +79,7 @@ func jsonOrNull(b []byte) string {
 	return string(b)
 }
 
-// Message and shadow counts are project scoped. Outbox counts cover the entire
+// Message and transcript counts are project scoped. Outbox counts cover the entire
 // isolated fixture database, including provisioning events captured in baselines.
 func (f *transcriptWriterFixture) counts(t *testing.T) [4]int64 {
 	t.Helper()
@@ -101,10 +104,10 @@ func TestTranscriptWriterNative(t *testing.T) {
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, m.Params.ID)
+	f.assertTranscript(t, m.Params.ID)
 	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
 	require.NoError(t, err)
-	require.Equal(t, m.Params.Content, row.Content, "shadow storage must retain plaintext")
+	require.Equal(t, m.Params.Content, row.Content, "transcript storage must retain plaintext")
 }
 
 // Each write warms the transcript key before its transaction, so a process
@@ -118,7 +121,7 @@ func TestTranscriptWriterUnwrapsOncePerCachePeriod(t *testing.T) {
 		n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
-		f.assertShadow(t, m.Params.ID)
+		f.assertTranscript(t, m.Params.ID)
 	}
 	require.Equal(t, before+1, f.fixture.KMS.Decrypts())
 }
@@ -130,16 +133,17 @@ func TestTranscriptWriterCallerTransaction(t *testing.T) {
 			t.Parallel()
 			f := newTranscriptWriterFixture(t, true, true)
 			before := f.counts(t)
-			require.NoError(t, f.writer.PrepareTranscriptShadow(t.Context(), f.projectID))
-			tx := testenv.BeginTx(t, t.Context(), f.conn)
 			m := f.message("EXAMPLE transactional content")
+			tx, err := f.writer.Begin(t.Context(), f.projectID)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 			n, err := f.writer.WriteInTx(t.Context(), tx, []chat.MessageWrite{m})
 			require.NoError(t, err)
 			require.EqualValues(t, 1, n)
 			require.Equal(t, before, f.counts(t), "caller transaction must not publish before commit")
 			if commit {
 				require.NoError(t, tx.Commit(t.Context()))
-				f.assertShadow(t, m.Params.ID)
+				f.assertTranscript(t, m.Params.ID)
 				after := f.counts(t)
 				require.Equal(t, before[0]+1, after[0])
 				require.Equal(t, before[1]+1, after[1])
@@ -184,13 +188,13 @@ func TestTranscriptWriterCorrelatedPromotion(t *testing.T) {
 	n, err := f.writer.WriteCorrelated(t.Context(), f.projectID, original, "example-external-id")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, original.Params.ID)
+	f.assertTranscript(t, original.Params.ID)
 	candidate := f.message("EXAMPLE candidate body must not replace stored body")
 	candidate.Params.Source = conv.ToPGText("codex")
 	n, err = f.writer.WriteCorrelated(t.Context(), f.projectID, candidate, "example-external-id")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, original.Params.ID)
+	f.assertTranscript(t, original.Params.ID)
 	opened, err := f.store.Load(t.Context(), f.orgID, f.projectID, original.Params.ID)
 	require.NoError(t, err)
 	require.Equal(t, original.Params.Content, opened.Content)
@@ -209,7 +213,7 @@ func TestTranscriptWriterExternalIdempotence(t *testing.T) {
 	n, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.assertShadow(t, id)
+	f.assertTranscript(t, id)
 	before := f.counts(t)
 	m.Params.ID = uuid.New()
 	m.Params.Content = "EXAMPLE retry does not replace original"
@@ -217,7 +221,7 @@ func TestTranscriptWriterExternalIdempotence(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, n)
 	require.Equal(t, before, f.counts(t))
-	f.assertShadow(t, id)
+	f.assertTranscript(t, id)
 }
 
 func TestTranscriptWriterAssistantTurn(t *testing.T) {
@@ -225,8 +229,8 @@ func TestTranscriptWriterAssistantTurn(t *testing.T) {
 	f := newTranscriptWriterFixture(t, true, true)
 	first, second := f.message("EXAMPLE first assistant"), f.message("EXAMPLE second assistant")
 	require.NoError(t, f.writer.WriteTurn(t.Context(), f.projectID, nil, []chat.MessageWrite{first, second}))
-	f.assertShadow(t, first.Params.ID)
-	f.assertShadow(t, second.Params.ID)
+	f.assertTranscript(t, first.Params.ID)
+	f.assertTranscript(t, second.Params.ID)
 	counts := f.counts(t)
 	require.EqualValues(t, 2, counts[0])
 	require.EqualValues(t, 2, counts[1])
@@ -235,8 +239,8 @@ func TestTranscriptWriterAssistantTurn(t *testing.T) {
 func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, false, false)
-	// Dropping only in this isolated database proves the opt-out path never consults shadow storage.
-	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts CASCADE`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without shadow storage; no fixture query can drop this table.
+	// Dropping only in this isolated database proves the opt-out path never consults transcript storage.
+	_, err := f.conn.Exec(t.Context(), `DROP TABLE chat_message_transcripts CASCADE`) //nolint:glint // notestingrawsql: deliberately simulate a legacy schema without transcript storage; no fixture query can drop this table.
 	require.NoError(t, err)
 	m := f.message("EXAMPLE opt-out plaintext")
 	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{m})
@@ -248,20 +252,21 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	require.Equal(t, m.Params.Content, rows[0].Content)
 
 	// Neither an accidentally empty allowlist nor another project may widen
-	// capture to this project or start consulting unavailable shadow storage.
-	f.writer.WithTranscriptShadow(f.store, []uuid.UUID{}...)
+	// capture to this project or start consulting unavailable transcript storage.
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, []uuid.UUID{}...))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE empty allowlist")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	f.writer.WithTranscriptShadow(f.store, uuid.New())
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store, uuid.New()))
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE excluded project")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 }
 
-// A write that captures nothing (an external retry or a skipped projection)
-// still succeeds while the key cannot load. A write that captures fails closed.
-func TestTranscriptWriterNoopsSucceedWithoutKey(t *testing.T) {
+// Begin loads the key before every write transaction, so a key that will not
+// load fails each write before anything is stored, even one that would have
+// changed nothing.
+func TestTranscriptWriterFailsClosedWithoutKey(t *testing.T) {
 	t.Parallel()
 	f := newTranscriptWriterFixture(t, true, true)
 	m := chat.ExternalMessageWrite{Params: chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: "EXAMPLE imported content", ExternalMessageID: conv.ToPGText("example-import-id")}}
@@ -271,18 +276,15 @@ func TestTranscriptWriterNoopsSucceedWithoutKey(t *testing.T) {
 	before := f.counts(t)
 
 	m.Params.ID = uuid.New()
-	n, err := f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
-	require.NoError(t, err, "a retry captures nothing")
-	require.Zero(t, n)
+	_, err = f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{m}, nil)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended, "a retry fails too")
 
 	projected := f.message("EXAMPLE projected body")
 	projected.Params.Source = conv.ToPGText("kit")
 	guard := func(context.Context, pgx.Tx) error { return nil }
 	skip := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return projected, false, nil }
-	changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, skip)
-	require.NoError(t, err, "a skipped projection captures nothing")
-	require.False(t, changed)
-	require.Equal(t, before, f.counts(t))
+	_, err = f.writer.ProjectMessage(t.Context(), f.projectID, projected.Params.ID, guard, skip)
+	require.ErrorIs(t, err, orgencryption.ErrSuspended, "a skipped projection fails too")
 
 	fresh := m
 	fresh.Params.ID = uuid.New()
@@ -315,12 +317,113 @@ func TestTranscriptWriterProjection(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.True(t, changed)
-			f.assertShadow(t, m.Params.ID)
+			f.assertTranscript(t, m.Params.ID)
 			m.Params.Content = "EXAMPLE updated projection"
 			changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 			require.NoError(t, err)
 			require.True(t, changed)
-			f.assertShadow(t, m.Params.ID)
+			f.assertTranscript(t, m.Params.ID)
 		})
 	}
+}
+
+// In encrypted mode the plaintext columns are empty, so an unchanged kit
+// re-patch must compare against the decrypted row: it reports no change and
+// keeps the completed risk analysis.
+func TestTranscriptWriterEncryptedRepatchKeepsRiskAnalysis(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, false)
+	f.writer.WithTranscripts(transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID))
+	m := f.message("EXAMPLE encrypted projection")
+	m.Params.Source = conv.ToPGText("kit")
+	m.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)
+	guard := func(context.Context, pgx.Tx) error { return nil }
+	build := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return m, true, nil }
+	changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	tx, err := f.writer.Begin(t.Context(), f.projectID)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	_, err = f.writer.UpdateChatMessage(t.Context(), tx, f.orgID, f.projectID, f.chatID, m.Params.ID, func(row *chatrepo.ChatMessage) error {
+		row.RiskAnalyzedAt = pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true}
+		return nil
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.False(t, changed, "an unchanged re-patch changes nothing")
+	row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	require.NoError(t, err)
+	require.Empty(t, row.Content, "encrypted mode keeps the plaintext empty")
+	require.True(t, row.RiskAnalyzedAt.Valid, "an unchanged re-patch keeps the completed risk analysis")
+
+	m.Params.Content = "EXAMPLE changed projection"
+	changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+	require.NoError(t, err)
+	require.True(t, changed)
+	row, err = chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: m.Params.ID})
+	require.NoError(t, err)
+	require.False(t, row.RiskAnalyzedAt.Valid, "changed content is analyzed again")
+	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
+	opened := []chatrepo.ChatMessage{row}
+	require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+	require.Equal(t, "EXAMPLE changed projection", opened[0].Content)
+}
+
+// In encrypted mode every insert path keeps the protected fields out of
+// chat_messages and seals them in the same transaction.
+func TestTranscriptWriterEncryptedInsertsStoreNoPlaintext(t *testing.T) {
+	t.Parallel()
+	f := newTranscriptWriterFixture(t, true, false)
+	encrypted := transcriptstore.NewTranscripts(f.store).WithEncryptedProjects(f.projectID)
+	f.writer.WithTranscripts(encrypted)
+
+	plain := f.message("EXAMPLE plain write")
+	plain.Params.ToolCalls = []byte(`[{"id":"example-call","type":"function","function":{"name":"example","arguments":"{}"}}]`)
+	n, err := f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{plain})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	correlated := f.message("EXAMPLE correlated prompt")
+	correlated.Params.Role = "user"
+	n, err = f.writer.WriteCorrelated(t.Context(), f.projectID, correlated, "agent-prompt:v1:example")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	external := chat.ExternalMessageWrite{Params: chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: f.chatID, ProjectID: f.projectID, Role: "assistant", Content: "EXAMPLE imported content", ExternalMessageID: conv.ToPGText("example-encrypted-import")}}
+	n, err = f.writer.WriteExternalWithContentParts(t.Context(), f.projectID, []chat.ExternalMessageWrite{external}, nil)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	wants := map[uuid.UUID]struct{ content, toolCalls string }{
+		plain.Params.ID:      {content: "EXAMPLE plain write", toolCalls: string(plain.Params.ToolCalls)},
+		correlated.Params.ID: {content: "EXAMPLE correlated prompt", toolCalls: ""},
+		external.Params.ID:   {content: "EXAMPLE imported content", toolCalls: ""},
+	}
+	for id, want := range wants {
+		row, err := chatrepo.New(f.conn).GetKitProjectionMessage(t.Context(), chatrepo.GetKitProjectionMessageParams{ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: id})
+		require.NoError(t, err)
+		require.Empty(t, row.Content, "chat_messages never holds the plaintext")
+		require.Empty(t, row.ToolCalls)
+		opened := []chatrepo.ChatMessage{row}
+		require.NoError(t, transcriptstore.OpenChatMessages(t.Context(), encrypted, f.orgID, f.projectID, opened, chatMessageTarget))
+		content, toolCalls := opened[0].Content, opened[0].ToolCalls
+		require.Equal(t, want.content, content, "the transcript holds what was written")
+		if want.toolCalls == "" {
+			require.Empty(t, toolCalls)
+			continue
+		}
+		require.JSONEq(t, want.toolCalls, string(toolCalls), "the transcript holds the tool calls")
+	}
+}
+
+// chatMessageTarget opens a full chat_messages row in place.
+func chatMessageTarget(m *chatrepo.ChatMessage) transcriptstore.OpenTarget {
+	return transcriptstore.OpenTarget{MessageID: m.ID, Set: func(f transcriptcrypto.ProtectedFields) {
+		*m = transcriptstore.WithProtectedFields(*m, f)
+	}}
 }

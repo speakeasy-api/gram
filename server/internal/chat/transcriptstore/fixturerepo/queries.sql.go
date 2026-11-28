@@ -16,6 +16,7 @@ const changeContent = `-- name: ChangeContent :execrows
 UPDATE chat_messages SET content='changed' WHERE id=$1 AND project_id=$2
 `
 
+// Direct body updates that bypass the application, so the transcript goes stale.
 func (q *Queries) ChangeContent(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
 	result, err := q.db.Exec(ctx, changeContent, iD, projectID)
 	if err != nil {
@@ -45,6 +46,17 @@ func (q *Queries) Ciphertext(ctx context.Context, messageID uuid.UUID, projectID
 	var ciphertext string
 	err := row.Scan(&ciphertext)
 	return ciphertext, err
+}
+
+const copySourceHashIsSet = `-- name: CopySourceHashIsSet :one
+SELECT (source_hash IS NOT NULL)::boolean AS hashed FROM chat_message_transcripts WHERE message_id=$1
+`
+
+func (q *Queries) CopySourceHashIsSet(ctx context.Context, messageID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, copySourceHashIsSet, messageID)
+	var hashed bool
+	err := row.Scan(&hashed)
+	return hashed, err
 }
 
 const createChat = `-- name: CreateChat :execrows
@@ -107,25 +119,13 @@ func (q *Queries) CreateProject(ctx context.Context, iD uuid.UUID, organizationI
 	return result.RowsAffected(), nil
 }
 
-const forgeSourceHash = `-- name: ForgeSourceHash :execrows
-UPDATE chat_message_transcripts t SET source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2 AND t.organization_id=$3
-`
-
-func (q *Queries) ForgeSourceHash(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, forgeSourceHash, iD, projectID, organizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const insertShadow = `-- name: InsertShadow :execrows
+const insertTranscript = `-- name: InsertTranscript :execrows
 INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
 VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'))
 `
 
-func (q *Queries) InsertShadow(ctx context.Context, messageID uuid.UUID, projectID uuid.UUID, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, insertShadow, messageID, projectID, organizationID)
+func (q *Queries) InsertTranscript(ctx context.Context, messageID uuid.UUID, projectID uuid.UUID, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, insertTranscript, messageID, projectID, organizationID)
 	if err != nil {
 		return 0, err
 	}
@@ -141,10 +141,49 @@ func (q *Queries) LockChat(ctx context.Context, iD uuid.UUID, projectID uuid.UUI
 	return err
 }
 
-const messageSnapshot = `-- name: MessageSnapshot :one
-SELECT row_to_json(m)::text FROM chat_messages m WHERE id=$1 AND project_id=$2
+const makeLegacyCopy = `-- name: MakeLegacyCopy :execrows
+UPDATE chat_message_transcripts t SET source_hash=sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) FROM chat_messages m WHERE m.id=t.message_id AND m.id=$1 AND m.project_id=$2 AND t.project_id=$2
 `
 
+// Turn a sealed transcript back into one sealed before body updates resealed
+// it: it carries the unkeyed source_hash of the current row.
+func (q *Queries) MakeLegacyCopy(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, makeLegacyCopy, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const messageMetadata = `-- name: MessageMetadata :one
+SELECT tool_call_count, content_bytes, content_raw_bytes, tool_calls_bytes FROM chat_messages WHERE id=$1 AND tool_call_count IS NOT NULL
+`
+
+type MessageMetadataRow struct {
+	ToolCallCount   pgtype.Int4
+	ContentBytes    pgtype.Int4
+	ContentRawBytes pgtype.Int4
+	ToolCallsBytes  pgtype.Int4
+}
+
+func (q *Queries) MessageMetadata(ctx context.Context, id uuid.UUID) (MessageMetadataRow, error) {
+	row := q.db.QueryRow(ctx, messageMetadata, id)
+	var i MessageMetadataRow
+	err := row.Scan(
+		&i.ToolCallCount,
+		&i.ContentBytes,
+		&i.ContentRawBytes,
+		&i.ToolCallsBytes,
+	)
+	return i, err
+}
+
+const messageSnapshot = `-- name: MessageSnapshot :one
+SELECT (to_jsonb(m) - 'tool_call_count' - 'content_bytes' - 'content_raw_bytes' - 'tool_calls_bytes')::text FROM chat_messages m WHERE id=$1 AND project_id=$2
+`
+
+// The message as sealing must leave it: the metadata columns are the only ones
+// it writes.
 func (q *Queries) MessageSnapshot(ctx context.Context, iD uuid.UUID, projectID uuid.NullUUID) (string, error) {
 	row := q.db.QueryRow(ctx, messageSnapshot, iD, projectID)
 	var column_1 string
@@ -226,6 +265,18 @@ func (q *Queries) SetJSONField(ctx context.Context, column1 string, column2 []by
 	return result.RowsAffected(), nil
 }
 
+const setSource = `-- name: SetSource :execrows
+UPDATE chat_messages SET source=$1 WHERE id=$2
+`
+
+func (q *Queries) SetSource(ctx context.Context, source pgtype.Text, iD uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setSource, source, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setStorageError = `-- name: SetStorageError :execrows
 UPDATE chat_messages SET storage_error=$1::text WHERE id=$2 AND project_id=$3
 `
@@ -236,6 +287,42 @@ func (q *Queries) SetStorageError(ctx context.Context, storageError pgtype.Text,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setToolCalls = `-- name: SetToolCalls :execrows
+UPDATE chat_messages SET tool_calls=$1 WHERE id=$2 AND project_id=$3
+`
+
+func (q *Queries) SetToolCalls(ctx context.Context, toolCalls []byte, iD uuid.UUID, projectID uuid.NullUUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setToolCalls, toolCalls, iD, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const toolCallIDs = `-- name: ToolCallIDs :many
+SELECT tool_call_id FROM chat_message_tool_call_ids WHERE message_id=$1 ORDER BY tool_call_id
+`
+
+func (q *Queries) ToolCallIDs(ctx context.Context, messageID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, toolCallIDs, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var tool_call_id string
+		if err := rows.Scan(&tool_call_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_call_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const unattributeMessage = `-- name: UnattributeMessage :execrows

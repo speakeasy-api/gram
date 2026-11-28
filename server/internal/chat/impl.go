@@ -94,13 +94,9 @@ type Service struct {
 	staffOrg     staff.Organization
 	riskFindings *chatfindings.Reader
 
-	// transcriptShadow opens encrypted shadow copies of message bodies. Nil
-	// unless some project reads through shadows.
-	transcriptShadow *transcriptstore.Store
-
-	// transcriptShadowReadProjects are the projects whose chat reads open
-	// shadows instead of plaintext.
-	transcriptShadowReadProjects map[uuid.UUID]struct{}
+	// transcripts opens the encrypted copies of protected fields for projects
+	// with encrypted transcripts. Nil opens none.
+	transcripts *transcriptstore.Transcripts
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -149,15 +145,10 @@ func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge 
 	return s
 }
 
-// WithTranscriptShadowReads makes chat reads for the listed projects open
-// message bodies from encrypted shadows instead of plaintext. An empty list or
-// a nil store leaves every project on plaintext.
-func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projectIDs ...uuid.UUID) *Service {
-	s.transcriptShadow = store
-	s.transcriptShadowReadProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
-	for _, projectID := range projectIDs {
-		s.transcriptShadowReadProjects[projectID] = struct{}{}
-	}
+// WithTranscripts makes chat reads open protected fields from encrypted transcripts
+// instead of plaintext for the projects the Transcripts serve.
+func (s *Service) WithTranscripts(transcripts *transcriptstore.Transcripts) *Service {
+	s.transcripts = transcripts
 	return s
 }
 
@@ -202,31 +193,30 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:                         auth.New(logger, db, sessions, authzEngine),
-		authz:                        authzEngine,
-		db:                           db,
-		sessions:                     sessions,
-		chatSessions:                 chatSessions,
-		assistantTokens:              assistantTokens,
-		logger:                       logger,
-		repo:                         repo.New(db),
-		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:                   openRouter,
-		completionClient:             completionClient,
-		contextWindow:                contextWindow,
-		assetStorage:                 assetStorage,
-		posthog:                      posthog,
-		telemetryService:             telemetryService,
-		billingRepo:                  billingRepo,
-		audit:                        auditLogger,
-		staffOrg:                     staffOrg,
-		riskFindings:                 nil,
-		transcriptShadow:             nil,
-		transcriptShadowReadProjects: nil,
-		access:                       NewSessionAccess(logger, db, authzEngine),
-		turnStream:                   nil, // opt in via WithTurnStream
-		streamMetrics:                nil, // opt in via WithStreamRotation
-		streamMaxAge:                 0,   // opt in via WithStreamRotation
+		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
+		db:               db,
+		sessions:         sessions,
+		chatSessions:     chatSessions,
+		assistantTokens:  assistantTokens,
+		logger:           logger,
+		repo:             repo.New(db),
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:       openRouter,
+		completionClient: completionClient,
+		contextWindow:    contextWindow,
+		assetStorage:     assetStorage,
+		posthog:          posthog,
+		telemetryService: telemetryService,
+		billingRepo:      billingRepo,
+		audit:            auditLogger,
+		staffOrg:         staffOrg,
+		riskFindings:     nil,
+		transcripts:      nil,
+		access:           NewSessionAccess(logger, db, authzEngine),
+		turnStream:       nil, // opt in via WithTurnStream
+		streamMetrics:    nil, // opt in via WithStreamRotation
+		streamMaxAge:     0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
 
@@ -1398,7 +1388,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load risk-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openShadowRows(ctx, s, authCtx, rows, riskWindowedMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, riskWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1450,7 +1440,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load search-windowed messages").LogError(ctx, s.logger)
 		}
-		if err := openShadowRows(ctx, s, authCtx, rows, searchWindowedMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, searchWindowedTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = make([]*gen.ChatMessage, len(rows))
@@ -1500,7 +1490,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 		// We paged forward from an existing anchor, so older messages exist.
 		hasMoreBefore = true
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1530,7 +1520,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -1563,7 +1553,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if isInitialLatest {
 			latestPageRows = rows
 		}
-		if err := openShadowRows(ctx, s, authCtx, rows, chatMessageBody); err != nil {
+		if err := openTranscriptRows(ctx, s, authCtx, rows, chatMessageTarget); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat messages").LogError(ctx, s.logger)
 		}
 		resultMessages = s.buildGenMessages(ctx, rows)
@@ -2622,7 +2612,7 @@ const (
 	// maxSummarizeTranscriptRunes bounds the transcript fed to the summarizer.
 	// Whole messages are dropped oldest-first so the end of the session is kept.
 	maxSummarizeTranscriptRunes = 100000
-	// maxSummarizeMessageRunes caps one message body in the summarize transcript.
+	// maxSummarizeMessageRunes caps one message in the summarize transcript.
 	maxSummarizeMessageRunes   = 4000
 	summarizeCompletionTimeout = 60 * time.Second
 )
@@ -2967,17 +2957,49 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "encode tool summary response").LogError(ctx, s.logger)
 	}
 
-	stored, err := queries.StoreToolCallSummary(ctx, repo.StoreToolCallSummaryParams{
-		ToolCallID: payload.ToolCallID, Summary: encodedRecord, MessageID: messageID,
-		ChatID: chatID, ProjectID: *authCtx.ProjectID,
+	// The summary is part of the protected fields, so it goes through UpdateChatMessage,
+	// which writes it to every copy of the protected fields in one transaction. Begin
+	// loads the key before the transaction begins.
+	tx, err := s.transcripts.Begin(ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin tool call summary transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	_, err = s.transcripts.UpdateChatMessage(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, chatID, messageID, func(m *repo.ChatMessage) error {
+		summaries, err := setToolCallSummary(m.ToolCallSummaries, payload.ToolCallID, encodedRecord)
+		if err != nil {
+			return err
+		}
+		m.ToolCallSummaries = summaries
+		return nil
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist tool call summary").LogError(ctx, s.logger)
 	}
-	if err := json.Unmarshal([]byte(stored), &record); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "decode stored tool summary").LogError(ctx, s.logger)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit tool call summary").LogError(ctx, s.logger)
 	}
 	return &gen.SummarizeToolCallResult{Summary: record.Summary, Impact: record.Impact, Cached: false}, nil
+}
+
+// setToolCallSummary sets one call's summary and keeps the summaries of
+// sibling calls carried by the same assistant message.
+func setToolCallSummary(summaries []byte, toolCallID string, summary []byte) ([]byte, error) {
+	merged := map[string]json.RawMessage{}
+	if len(summaries) > 0 {
+		if err := json.Unmarshal(summaries, &merged); err != nil {
+			return nil, fmt.Errorf("decode tool call summaries: %w", err)
+		}
+	}
+	if merged == nil {
+		merged = map[string]json.RawMessage{}
+	}
+	merged[toolCallID] = summary
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return nil, fmt.Errorf("encode tool call summaries: %w", err)
+	}
+	return encoded, nil
 }
 
 func findSummarizableToolCall(raw []byte, id string) (summarizableToolCall, error) {

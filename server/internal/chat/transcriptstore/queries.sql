@@ -1,36 +1,83 @@
--- name: Snapshot :one
-SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
-       sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))::bytea AS source_hash
+-- name: LockChatMessage :one
+-- Reads the whole message row and its current transcript in one statement and
+-- locks both for the rest of the caller's transaction, so no protected fields update can
+-- land between this read and the copies written from it. A legacy transcript
+-- with source_hash is not current: the column is empty for it, as for a message
+-- with no transcript (a real ciphertext is never empty). Every writer takes
+-- these locks through this statement, so they are always taken in the same
+-- order.
+SELECT sqlc.embed(m),
+       COALESCE((SELECT t.ciphertext FROM chat_message_transcripts t
+        WHERE t.message_id = m.id AND t.project_id = m.project_id
+          AND t.organization_id = p.organization_id AND t.source_hash IS NULL
+        FOR UPDATE), '')::text AS current_ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id;
+WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id
+FOR NO KEY UPDATE OF m
+FOR SHARE OF c, p;
+
+-- name: CurrentCiphertext :one
+-- The transcript an update decrypts and changes, locked until the transaction
+-- ends. Every transcript writer takes LockChatMessage's message lock first, so this
+-- lock only states the intent; take them in that order. A legacy transcript
+-- with source_hash may be stale, so it is not returned and the update starts
+-- from the plaintext row.
+SELECT ciphertext FROM chat_message_transcripts
+WHERE message_id = @message_id AND project_id = @project_id AND organization_id = @organization_id
+  AND source_hash IS NULL
+FOR UPDATE;
+
+-- name: WriteChatMessage :one
+-- The only statement that changes an existing message's protected fields: the six protected fields
+-- columns, their metadata, plus the non-protected fields the protected fields change may come with. Call it only
+-- through Transcripts.UpdateChatMessage, which locks the row, applies the change
+-- in Go and writes the encrypted transcript from the same value, in the
+-- same transaction.
+UPDATE chat_messages AS m
+SET content = @content, content_raw = sqlc.narg('content_raw'), tool_calls = sqlc.narg('tool_calls'),
+    tool_outcome_notes = sqlc.narg('tool_outcome_notes'), tool_call_summaries = sqlc.narg('tool_call_summaries'),
+    storage_error = sqlc.narg('storage_error'), tool_outcome = sqlc.narg('tool_outcome'),
+    finish_reason = sqlc.narg('finish_reason'), content_hash = sqlc.narg('content_hash'),
+    risk_analyzed_at = sqlc.narg('risk_analyzed_at'),
+    tool_call_count = @tool_call_count::integer, content_bytes = @content_bytes::integer,
+    content_raw_bytes = @content_raw_bytes::integer, tool_calls_bytes = @tool_calls_bytes::integer
+WHERE m.id = @message_id AND m.project_id = @project_id
+RETURNING m.*;
+
+-- name: CanonicalJSON :many
+-- The text form Postgres stores for jsonb, for a batch of messages, so
+-- protected fields are sealed and measured exactly as the columns hold them.
+-- @fields is a JSON array with one object per message; an object holds
+-- content_raw, tool_calls and tool_call_summaries only when they are not NULL.
+-- A missing key comes back as the empty string, which no JSON value is.
+SELECT (f.idx - 1)::integer AS idx,
+       (CASE WHEN f.value ? 'content_raw' THEN (f.value -> 'content_raw')::text ELSE '' END)::text AS content_raw,
+       (CASE WHEN f.value ? 'tool_calls' THEN (f.value -> 'tool_calls')::text ELSE '' END)::text AS tool_calls,
+       (CASE WHEN f.value ? 'tool_call_summaries' THEN (f.value -> 'tool_call_summaries')::text ELSE '' END)::text AS tool_call_summaries
+FROM jsonb_array_elements(@fields::jsonb) WITH ORDINALITY AS f(value, idx)
+ORDER BY f.idx;
 
 -- name: Capture :execrows
-WITH live AS MATERIALIZED (
- SELECT m.id FROM chat_messages m
- JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
- JOIN projects p ON p.id = c.project_id
- WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id
- AND m.chat_id = @chat_id
- AND sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')) = @source_hash::bytea
- FOR SHARE OF m, c, p
-)
-INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash)
-SELECT live.id, @project_id, @organization_id, @ciphertext, @source_hash::bytea FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, updated_at = clock_timestamp()
+-- A resealed transcript drops the legacy source_hash.
+INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext)
+VALUES (@message_id, @project_id, @organization_id, @ciphertext)
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = NULL, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = @project_id AND chat_message_transcripts.organization_id = @organization_id;
 
 -- name: Load :one
+-- A transcript that still carries the legacy source_hash was sealed before protected fields
+-- updates resealed it, so it may be stale: it reads as missing until backfill
+-- reseals it.
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
 JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
-WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id;
+WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = @organization_id
+  AND t.source_hash IS NULL;
 
 -- name: Backfill :many
 SELECT m.id FROM chat_messages m
@@ -40,8 +87,8 @@ WHERE m.project_id = @project_id AND p.organization_id = @organization_id AND m.
 ORDER BY m.id LIMIT @page_limit;
 
 -- name: Progress :one
-SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::bigint AS current,
-       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash <> sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8'))))::bigint AS waiting,
+SELECT count(*) FILTER (WHERE m.project_id = c.project_id AND t.message_id IS NOT NULL AND t.source_hash IS NULL)::bigint AS current,
+       count(*) FILTER (WHERE m.project_id = c.project_id AND (t.message_id IS NULL OR t.source_hash IS NOT NULL))::bigint AS waiting,
        count(*) FILTER (WHERE m.project_id IS DISTINCT FROM c.project_id)::bigint AS unattributed
 FROM chats c JOIN projects p ON p.id = c.project_id
 JOIN chat_messages m ON m.chat_id = c.id
@@ -49,11 +96,264 @@ LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = c
 WHERE c.project_id = @project_id AND p.organization_id = @organization_id;
 
 -- name: LoadMany :many
+-- Each requested message in the project, with its current transcript or an
+-- empty ciphertext when it has none. Legacy transcripts that still carry
+-- source_hash read as missing, as in Load.
 SELECT m.id, m.chat_id, m.content, m.content_raw, m.tool_calls,
-       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error, t.ciphertext,
-       (t.source_hash = sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))::boolean AS current
+       m.tool_outcome_notes, m.tool_call_summaries, m.storage_error,
+       COALESCE(t.ciphertext, '')::text AS ciphertext
 FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
+LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id
+  AND t.organization_id = p.organization_id AND t.source_hash IS NULL
 WHERE m.id = ANY(@message_ids::uuid[]) AND m.project_id = @project_id AND p.organization_id = @organization_id;
+
+-- name: UpdateMessageMetadata :execrows
+-- Plaintext-free metadata for a row resealed from its own columns (Capture and
+-- backfill), in the same transaction, while LockChatMessage's lock keeps the
+-- protected fields unchanged. Inserts and updates write it with the row.
+UPDATE chat_messages
+SET tool_call_count = @tool_call_count::integer, content_bytes = @content_bytes::integer,
+    content_raw_bytes = @content_raw_bytes::integer, tool_calls_bytes = @tool_calls_bytes::integer
+WHERE id = @message_id AND project_id = @project_id::uuid;
+
+-- name: DeleteToolCallIDs :exec
+DELETE FROM chat_message_tool_call_ids WHERE message_id = @message_id AND project_id = @project_id;
+
+-- name: InsertToolCallIDs :exec
+-- The chat and project come from the message, not from the caller, so a row
+-- cannot name another chat or project than its message. The tool-call IDs are
+-- the caller's, parsed from the snapshot that was just sealed.
+INSERT INTO chat_message_tool_call_ids (message_id, tool_call_id, chat_id, project_id)
+SELECT m.id, ids.tool_call_id, m.chat_id, m.project_id
+FROM chat_messages m
+CROSS JOIN unnest(@tool_call_ids::text[]) AS ids(tool_call_id)
+WHERE m.id = @message_id AND m.project_id = @project_id::uuid
+ON CONFLICT (message_id, tool_call_id) DO NOTHING;
+
+-- name: InsertChatMessages :copyfrom
+-- Stores new messages with their metadata. The caller supplies every id, so
+-- each row is new. Run only through Transcripts.InsertChatMessages, which
+-- writes the protected fields as the project's mode stores them.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+  , tool_call_count
+  , content_bytes
+  , content_raw_bytes
+  , tool_calls_bytes
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+  , @tool_call_count::integer
+  , @content_bytes::integer
+  , @content_raw_bytes::integer
+  , @tool_calls_bytes::integer
+);
+
+-- name: InsertExternalChatMessage :one
+-- Stores an imported message with its metadata unless one with the same
+-- external message ID is already in the chat. Run only through
+-- Transcripts.InsertExternalChatMessage.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+  , tool_call_count
+  , content_bytes
+  , content_raw_bytes
+  , tool_calls_bytes
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @created_at
+  , @tool_call_count::integer
+  , @content_bytes::integer
+  , @content_raw_bytes::integer
+  , @tool_calls_bytes::integer
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING
+RETURNING id;
+
+-- name: UpsertCorrelatedChatMessage :one
+-- Stores a message with its metadata, or promotes the earlier LiteLLM row for
+-- the same turn to the native-hook source. A promotion changes attribution
+-- only, so it leaves the protected fields and their metadata alone. Run only
+-- through Transcripts.UpsertCorrelatedChatMessage.
+INSERT INTO chat_messages (
+    id
+  , chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+  , tool_call_count
+  , content_bytes
+  , content_raw_bytes
+  , tool_calls_bytes
+)
+VALUES (
+    @id
+  , @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+  , @tool_call_count::integer
+  , @content_bytes::integer
+  , @content_raw_bytes::integer
+  , @tool_calls_bytes::integer
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;

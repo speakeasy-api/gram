@@ -45,7 +45,7 @@ func slowStore(t *testing.T, f *fixture) *Store {
 	kms := &slowKMS{KMS: f.keys.KMS, delay: prodUnwrap}
 	service, err := orgencryption.NewService(testenv.NewLogger(t), f.db, gcpauth.NewIdentity(gcpauth.NewStubResolver()), kms.clients, f.keys.Keys)
 	require.NoError(t, err)
-	store, err := New(f.db, service, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	store, err := New(f.db, service, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	return store
 }
@@ -53,10 +53,10 @@ func slowStore(t *testing.T, f *fixture) *Store {
 func (f *fixture) captureWith(t *testing.T, store *Store, id uuid.UUID) time.Duration {
 	t.Helper()
 	started := time.Now()
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is what the writer opens around Capture.
+	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary is what the writer opens around ResealChatMessages.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(context.Background()) }()
-	require.NoError(t, store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
+	require.NoError(t, store.ResealChatMessages(t.Context(), tx, f.org, f.project, []uuid.UUID{id}))
 	require.NoError(t, tx.Commit(t.Context()))
 	return time.Since(started)
 }

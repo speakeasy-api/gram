@@ -10,31 +10,41 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
+
+// MessageUpdater changes the protected fields of an existing message, so every copy of
+// it (plaintext and encrypted transcript) gets the same value, inside a
+// transaction from Begin, which loads the key before the transaction begins.
+type MessageUpdater interface {
+	Begin(ctx context.Context, projectID uuid.UUID) (pgx.Tx, error)
+	UpdateChatMessage(ctx context.Context, db repo.DBTX, organizationID string, projectID, chatID, messageID uuid.UUID, apply func(*repo.ChatMessage) error) (bool, error)
+}
 
 type AnalyzeSegment struct {
 	logger          *slog.Logger
 	repo            *repo.Queries
 	chatClient      openrouter.CompletionClient
-	db              *pgxpool.Pool
 	telemetryLogger *telemetry.Logger
+	messages        MessageUpdater
 }
 
-func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger) *AnalyzeSegment {
+func NewAnalyzeSegment(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, telemetryLogger *telemetry.Logger, messages MessageUpdater) *AnalyzeSegment {
 	return &AnalyzeSegment{
 		logger:          logger,
 		repo:            repo.New(db),
 		chatClient:      chatClient,
-		db:              db,
 		telemetryLogger: telemetryLogger,
+		messages:        messages,
 	}
 }
 
@@ -98,42 +108,46 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		return fmt.Errorf("failed to analyze segment with LLM: %w", err)
 	}
 
-	// Use transaction for atomic updates
-	tx, err := a.db.Begin(ctx)
+	score := min(max(result.Score, 0), 100)
+	// Outcome notes are part of the protected fields, which may be encrypted,
+	// so Begin loads the key before the transaction begins.
+	tx, err := a.messages.Begin(ctx, args.ProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil {
-			a.logger.WarnContext(ctx, "failed to rollback transaction", attr.SlogError(err))
-		}
-	}()
-
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	txRepo := a.repo.WithTx(tx)
 
-	// Update tool call outcomes
+	// Collect each message's judged outcome; the last one for a message wins.
+	var updated []uuid.UUID
+	judged := make(map[uuid.UUID]toolCallAnalysis)
 	for _, tc := range result.ToolCalls {
-		// Convert relative index to absolute
 		absoluteIndex := args.StartIndex + tc.MessageIndex
-		if absoluteIndex >= 0 && absoluteIndex < len(allMessages) {
-			msgID := allMessages[absoluteIndex].ID
-			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
-				ID:               msgID,
-				ProjectID:        args.ProjectID,
-				ToolOutcome:      conv.ToPGText(tc.Outcome),
-				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
-			}); err != nil {
-				a.logger.WarnContext(ctx, "failed to update tool call outcome",
-					attr.SlogError(err),
-					attr.SlogMessageID(msgID.String()),
-				)
-				// Continue with other updates
-			}
+		if absoluteIndex < 0 || absoluteIndex >= len(allMessages) {
+			continue
+		}
+		msgID := allMessages[absoluteIndex].ID
+		if _, seen := judged[msgID]; !seen {
+			updated = append(updated, msgID)
+		}
+		judged[msgID] = tc
+	}
+	// Write each message's outcome and notes as one change to its row.
+	// UpdateChatMessage locks the row and keeps every copy of the protected fields, which holds
+	// the notes, in step.
+	for _, msgID := range updated {
+		tc := judged[msgID]
+		_, err := a.messages.UpdateChatMessage(ctx, tx, args.OrgID, args.ProjectID, args.ChatID, msgID, func(m *repo.ChatMessage) error {
+			m.ToolOutcome = conv.ToPGText(tc.Outcome)
+			m.ToolOutcomeNotes = conv.ToPGText(tc.Notes)
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("update tool call outcome: %w", err)
 		}
 	}
 
 	// Insert resolution
-	score := min(max(result.Score, 0), 100)
 
 	resolutionID, err := txRepo.InsertChatResolution(ctx, repo.InsertChatResolutionParams{
 		ProjectID:       args.ProjectID,
@@ -170,7 +184,6 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		}
 	}
 
-	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}

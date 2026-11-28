@@ -14,11 +14,11 @@ import (
 const column = "chat_message_transcripts.ciphertext"
 const version = 1
 
-// Message contains only the sensitive fields covered by the transcript codec.
-// Origin, metadata, assets and derived data are outside this
-// message-body payload. Raw JSON fields must be valid JSON or nil; nil stays
+// ProtectedFields are the six chat_messages columns the transcript codec
+// encrypts. Origin, metadata, assets and derived data are outside this
+// payload. Raw JSON fields must be valid JSON or nil; nil stays
 // distinct from an explicit JSON null when the message is opened.
-type Message struct {
+type ProtectedFields struct {
 	StorageError      *string         `json:"storage_error"`
 	Content           string          `json:"content"`
 	ContentRaw        json.RawMessage `json:"content_raw,omitempty"`
@@ -38,7 +38,7 @@ type Identity struct {
 type payload struct {
 	Version int `json:"version"`
 	Identity
-	Message *Message `json:"message"`
+	Message *ProtectedFields `json:"message"`
 }
 
 // Codec uses a concrete organization-scoped encryptor, never a caller-selected
@@ -82,7 +82,7 @@ type cryptor interface {
 }
 
 // Encrypt seals a versioned payload bound to all three row identities.
-func (c *Codec) Encrypt(ctx context.Context, identity Identity, message Message) (string, error) {
+func (c *Codec) Encrypt(ctx context.Context, identity Identity, message ProtectedFields) (string, error) {
 	if c == nil || c.encryptor == nil {
 		return "", errors.New("transcript codec is not initialized")
 	}
@@ -90,15 +90,15 @@ func (c *Codec) Encrypt(ctx context.Context, identity Identity, message Message)
 }
 
 // Decrypt authenticates the payload and checks the expected row identities.
-// Every failure returns a zero Message, never partial plaintext.
-func (c *Codec) Decrypt(ctx context.Context, identity Identity, ciphertext string) (Message, error) {
+// Every failure returns zero ProtectedFields, never partial plaintext.
+func (c *Codec) Decrypt(ctx context.Context, identity Identity, ciphertext string) (ProtectedFields, error) {
 	if c == nil || c.encryptor == nil {
-		return Message{}, errors.New("transcript codec is not initialized")
+		return ProtectedFields{}, errors.New("transcript codec is not initialized")
 	}
 	return decrypt(ctx, c.encryptor, identity, ciphertext)
 }
 
-func encrypt(ctx context.Context, e cryptor, identity Identity, message Message) (string, error) {
+func encrypt(ctx context.Context, e cryptor, identity Identity, message ProtectedFields) (string, error) {
 	if identity.ProjectID == uuid.Nil || identity.MessageID == uuid.Nil || identity.ChatID == uuid.Nil {
 		return "", errors.New("transcript project, message and chat identities are required")
 	}
@@ -124,20 +124,20 @@ func encrypt(ctx context.Context, e cryptor, identity Identity, message Message)
 	return ciphertext, nil
 }
 
-func decrypt(ctx context.Context, e cryptor, identity Identity, ciphertext string) (Message, error) {
+func decrypt(ctx context.Context, e cryptor, identity Identity, ciphertext string) (ProtectedFields, error) {
 	if identity.ProjectID == uuid.Nil || identity.MessageID == uuid.Nil || identity.ChatID == uuid.Nil {
-		return Message{}, errors.New("transcript project, message and chat identities are required")
+		return ProtectedFields{}, errors.New("transcript project, message and chat identities are required")
 	}
 	plaintext, err := e.Decrypt(ctx, column, ciphertext)
 	if err != nil {
-		return Message{}, &operationError{operation: "decrypt transcript payload", cause: err}
+		return ProtectedFields{}, &operationError{operation: "decrypt transcript payload", cause: err}
 	}
 	var p payload
 	if err := json.Unmarshal(plaintext, &p); err != nil {
-		return Message{}, errors.New("decode transcript payload")
+		return ProtectedFields{}, errors.New("decode transcript payload")
 	}
 	if p.Version != version || p.Identity != identity || p.Message == nil {
-		return Message{}, errors.New("invalid transcript version or identity")
+		return ProtectedFields{}, errors.New("invalid transcript version or identity")
 	}
 	return *p.Message, nil
 }

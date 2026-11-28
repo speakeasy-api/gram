@@ -22,19 +22,19 @@ func TestCaptureRecordsOutcomeMetrics(t *testing.T) {
 	f.add(t, stored)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
-	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
+	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls ResealChatMessages; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	require.NoError(t, store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{stored}))
+	require.NoError(t, store.ResealChatMessages(t.Context(), tx, f.org, f.project, []uuid.UUID{stored}))
 	require.NoError(t, tx.Commit(t.Context()))
 
-	missing, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls Capture; fixture data uses generated queries.
+	missing, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary matches how the chat writer calls ResealChatMessages; fixture data uses generated queries.
 	require.NoError(t, err)
 	defer func() { _ = missing.Rollback(t.Context()) }()
-	require.ErrorIs(t, store.Capture(t.Context(), missing, f.org, f.project, []uuid.UUID{uuid.New(), uuid.New()}), ErrNotFound)
+	require.ErrorIs(t, store.ResealChatMessages(t.Context(), missing, f.org, f.project, []uuid.UUID{uuid.New(), uuid.New()}), ErrNotFound)
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &collected))
@@ -75,7 +75,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	f.capture(t, first, second)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{first, second, first})
@@ -93,7 +93,7 @@ func TestLoadManyOpensAPageAndRecordsReadMetrics(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 3}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
+func TestLoadManyLeavesOutMessagesWithoutATranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
 	captured, uncaptured := uuid.New(), uuid.New()
@@ -102,7 +102,7 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	f.capture(t, captured)
 
 	reader := sdkmetric.NewManualReader()
-	store, err := New(f.db, f.keys.Service, testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
 
 	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{captured, uncaptured})
@@ -119,24 +119,27 @@ func TestLoadManyLeavesOutMessagesWithoutAShadow(t *testing.T) {
 	require.Equal(t, map[string]int64{"success": 1, "plaintext_fallback": 2}, countsByOutcome(t, collected, meterReadMessages))
 }
 
-func TestLoadManyFailsThePageWhenAShadowIsStale(t *testing.T) {
+func TestLoadManyServesPlaintextForAStaleTranscript(t *testing.T) {
 	t.Parallel()
 	f := setup(t, true)
-	id := uuid.New()
-	f.add(t, id)
-	f.capture(t, id)
-	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), id, project(f.project))
+	stale, current := uuid.New(), uuid.New()
+	f.add(t, stale)
+	f.add(t, current)
+	f.capture(t, stale, current)
+	_, err := fixturerepo.New(f.db).ChangeContent(t.Context(), stale, project(f.project))
 	require.NoError(t, err)
 
-	opened, err := f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale)
-	require.Nil(t, opened)
-
-	_, err = fixturerepo.New(f.db).ForgeSourceHash(t.Context(), id, project(f.project), f.org)
+	reader := sdkmetric.NewManualReader()
+	store, err := New(f.db, f.keys.Service, testenv.NewLogger(t), testenv.NewTracerProvider(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	require.NoError(t, err)
-	opened, err = f.store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{id})
-	require.ErrorIs(t, err, ErrStale, "a forged matching hash cannot make an older body current")
-	require.Nil(t, opened)
+	opened, err := store.LoadMany(t.Context(), f.org, f.project, []uuid.UUID{stale, current})
+	require.NoError(t, err, "a disagreeing transcript does not fail the page")
+	require.NotContains(t, opened, stale, "its message is served from plaintext")
+	require.Contains(t, opened, current)
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	require.Equal(t, map[string]int64{"success": 1, "stale": 1}, countsByOutcome(t, collected, meterReadMessages))
 }
 
 func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
@@ -146,7 +149,7 @@ func TestLoadManyIsScopedToTheProjectAndOrganization(t *testing.T) {
 	f.add(t, id)
 	f.capture(t, id)
 
-	// Another tenant's scope sees no shadow, so it opens nothing.
+	// Another tenant's scope sees no transcript, so it opens nothing.
 	opened, err := f.store.LoadMany(t.Context(), "org_other", f.project, []uuid.UUID{id})
 	require.NoError(t, err)
 	require.Empty(t, opened)
@@ -186,7 +189,6 @@ func TestClassifyCoversFailureOutcomes(t *testing.T) {
 		{nil, outcomeSuccess},
 		{ErrNotFound, outcomeNotFound},
 		{fmt.Errorf("load: %w", ErrStale), outcomeStale},
-		{fmt.Errorf("capture: %w", ErrChanged), outcomeChanged},
 		{ErrInvalid, outcomeInvalid},
 		{safe(context.DeadlineExceeded), outcomeError},
 	} {
@@ -198,7 +200,7 @@ func TestCaptureRejectsInvalidArgumentsBeforeTelemetry(t *testing.T) {
 	t.Parallel()
 	// A zero-value store has no tracer or metrics; invalid input must not reach them.
 	ids := []uuid.UUID{uuid.New()}
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.New(), ids), ErrInvalid)
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "", uuid.New(), ids), ErrInvalid)
-	require.ErrorIs(t, (&Store{}).Capture(t.Context(), nil, "org", uuid.Nil, ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "org", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "", uuid.New(), ids), ErrInvalid)
+	require.ErrorIs(t, (&Store{}).ResealChatMessages(t.Context(), nil, "org", uuid.Nil, ids), ErrInvalid)
 }
