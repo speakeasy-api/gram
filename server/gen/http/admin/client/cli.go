@@ -4733,3 +4733,43 @@ func BuildFinalizeOrganizationEncryptionPayload(adminFinalizeOrganizationEncrypt
 
 	return v, nil
 }
+
+// BuildBlockUserPayload builds the payload for the admin blockUser endpoint
+// from CLI flags.
+func BuildBlockUserPayload(adminBlockUserBody string, adminBlockUserAdminSessionToken string) (*admin.BlockUserPayload, error) {
+	var err error
+	var body BlockUserRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBlockUserBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"reason\": \"aaa\",\n      \"user_id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.UserID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", body.UserID, utf8.RuneCountInString(body.UserID), 1, true))
+		}
+		if utf8.RuneCountInString(body.UserID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", body.UserID, utf8.RuneCountInString(body.UserID), 255, false))
+		}
+		if body.Reason != nil {
+			if utf8.RuneCountInString(*body.Reason) > 500 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 500, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBlockUserAdminSessionToken != "" {
+			adminSessionToken = &adminBlockUserAdminSessionToken
+		}
+	}
+	v := &admin.BlockUserPayload{
+		UserID: body.UserID,
+		Reason: body.Reason,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

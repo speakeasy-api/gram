@@ -540,6 +540,11 @@ type Service interface {
 	// spent the minimum time in dual_write, the confirmation matches, and the
 	// acknowledged unreadable count matches the count when finalize runs.
 	FinalizeOrganizationEncryption(context.Context, *FinalizeOrganizationEncryptionPayload) (res *AdminOrganizationEncryptionFinalizeResult, err error)
+	// Staff-only action that blacklists a user, atomically cascades all database
+	// revocations and sole-member organization disables, invalidates session
+	// caches, and executes best-effort WorkOS revocation steps with structured
+	// partial-failure reporting.
+	BlockUser(context.Context, *BlockUserPayload) (res *AdminBlockUserResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -562,7 +567,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [144]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [145]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption", "blockUser"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -800,6 +805,68 @@ type AdminBackfillMCPConnectGrantsResult struct {
 	// How many mcp:connect grants provisioned by the default auth permission
 	// backfill became explicit grants.
 	TakenOver int64
+}
+
+// AdminBlockUserResult is the result type of the admin service blockUser
+// method.
+type AdminBlockUserResult struct {
+	// Canonical ID of the blocked user.
+	UserID string
+	// Email address of the blocked user.
+	Email string
+	// Linked WorkOS user ID, if present.
+	WorkosUserID *string
+	// True if users.blacklisted_at was already set before this request.
+	AlreadyBlacklisted bool
+	// Timestamp when the user was blacklisted.
+	BlacklistedAt string
+	// IDs of organizations disabled because the blocked user was their sole
+	// remaining active non-staff member.
+	DisabledOrganizationIds []string
+	// Number of API keys created by the user that were soft-revoked.
+	RevokedAPIKeyCount int
+	// Number of recorded sign-ins revoked.
+	RevokedSignInCount int
+	// Number of hosted user sessions soft-revoked.
+	RevokedUserSessionCount int
+	// Number of remembered user session consents withdrawn.
+	RevokedUserSessionConsentCount int
+	// Number of user-owned hosted OAuth clients soft-revoked.
+	RevokedUserSessionClientCount int
+	// Number of Platform MCP connections revoked.
+	RevokedPlatformMcpConnectionCount int
+	// Number of Platform MCP sessions revoked.
+	RevokedPlatformMcpSessionCount int
+	// Number of user-owned Platform MCP OAuth clients revoked.
+	RevokedPlatformMcpOauthClientCount int
+	// Number of Channels OAuth grants revoked.
+	RevokedChannelsOauthGrantCount int
+	// Number of user-owned Channels OAuth clients revoked.
+	RevokedChannelsOauthClientCount int
+	// Immediate Redis dashboard epoch and JTI revocation push outcome.
+	SessionCache *AdminBlockUserStepResult
+	// Outcome of setting WorkOS user metadata blacklisted=true.
+	WorkosMetadata *AdminBlockUserStepResult
+	// Outcome of listing and revoking WorkOS AuthKit sessions.
+	WorkosSessions *AdminBlockUserStepResult
+	// Number of WorkOS AuthKit sessions revoked.
+	WorkosSessionsRevokedCount int
+	// Outcome of adding the user's email to the WorkOS Radar email blocklist.
+	WorkosRadar *AdminBlockUserStepResult
+	// Outcome of disabling the user in the registry service.
+	RegistryDisable *AdminBlockUserStepResult
+	// Non-fatal warnings or partial failure details from post-commit external
+	// steps.
+	Warnings []string
+}
+
+// Outcome of one post-commit cache or external system step during a user block.
+type AdminBlockUserStepResult struct {
+	// Step outcome: succeeded, partial, skipped, failed, or not_configured.
+	Status string
+	// Human-readable detail explaining skipped, partial, failed, or not_configured
+	// outcomes.
+	Detail *string
 }
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
@@ -3062,6 +3129,15 @@ type BackfillOrganizationAssistantBuiltinGrantsPayload struct {
 	AdminSessionToken *string
 	// The organization ID.
 	OrganizationID string
+}
+
+// BlockUserPayload is the payload type of the admin service blockUser method.
+type BlockUserPayload struct {
+	AdminSessionToken *string
+	// Canonical Speakeasy user ID to block.
+	UserID string
+	// Optional staff reason recorded in audit logs.
+	Reason *string
 }
 
 // BulkUpdateAccountTypePayload is the payload type of the admin service

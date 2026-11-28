@@ -2,7 +2,10 @@ package workos
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
@@ -300,6 +303,100 @@ func (wc *Client) ListOrgMemberships(ctx context.Context, orgID string) ([]Membe
 func (wc *Client) RevokeSession(ctx context.Context, sessionID string) error {
 	if err := wc.um.RevokeSession(ctx, usermanagement.RevokeSessionOpts{SessionID: sessionID}); err != nil {
 		return fmt.Errorf("revoke workos session: %w", err)
+	}
+	return nil
+}
+
+// maxUserSessionPages caps WorkOS session pagination for a single user.
+const maxUserSessionPages = 50
+
+// ListUserSessionIDs lists all active WorkOS AuthKit session IDs for
+// workosUserID. Historical sessions whose status is already revoked or expired
+// are skipped so callers only attempt to revoke live sessions. If pagination
+// fails after collecting earlier pages, the IDs collected so far are returned
+// alongside the error so callers can still revoke them best-effort.
+func (wc *Client) ListUserSessionIDs(ctx context.Context, workosUserID string) ([]string, error) {
+	if strings.TrimSpace(workosUserID) == "" {
+		return nil, fmt.Errorf("list workos user sessions: missing workos user ID")
+	}
+
+	var ids []string
+	after := ""
+	for range maxUserSessionPages {
+		resp, err := wc.um.ListSessions(ctx, workosUserID, usermanagement.ListSessionsOpts{
+			Limit:  100,
+			Before: "",
+			After:  after,
+			Order:  usermanagement.Desc,
+		})
+		if err != nil {
+			return ids, wrapSDKError(err, "list workos user sessions")
+		}
+		for _, sess := range resp.Data {
+			if sess.ID == "" {
+				continue
+			}
+			if sess.Status != "" && !strings.EqualFold(sess.Status, "active") {
+				continue
+			}
+			ids = append(ids, sess.ID)
+		}
+		if resp.ListMetadata.After == "" || len(resp.Data) == 0 {
+			return ids, nil
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return ids, fmt.Errorf("list workos user sessions: exceeded %d pages", maxUserSessionPages)
+}
+
+// SetUserBlacklistedMetadata updates the WorkOS user's custom "blacklisted"
+// metadata key without disturbing other metadata keys on the user.
+func (wc *Client) SetUserBlacklistedMetadata(ctx context.Context, workosUserID string, blacklisted bool) error {
+	if strings.TrimSpace(workosUserID) == "" {
+		return fmt.Errorf("set workos user blacklisted metadata: missing workos user ID")
+	}
+	value := "false"
+	if blacklisted {
+		value = "true"
+	}
+	if _, err := wc.um.UpdateUser(ctx, usermanagement.UpdateUserOpts{
+		User:             workosUserID,
+		Email:            "",
+		FirstName:        "",
+		LastName:         "",
+		EmailVerified:    false,
+		Password:         "",
+		PasswordHash:     "",
+		PasswordHashType: "",
+		ExternalID:       "",
+		Metadata: map[string]*string{
+			"blacklisted": &value,
+		},
+	}); err != nil {
+		return wrapSDKError(err, "set workos user blacklisted metadata")
+	}
+	return nil
+}
+
+type radarListEntryRequest struct {
+	Entry string `json:"entry"`
+}
+
+// AddRadarEmailBlocklistEntry adds email to the WorkOS Radar email blocklist
+// via POST /radar/lists/email/block. WorkOS returns 200/201/204 on success
+// (including when the entry is already present).
+func (wc *Client) AddRadarEmailBlocklistEntry(ctx context.Context, email string) error {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
+		return fmt.Errorf("add workos radar email blocklist entry: missing email")
+	}
+	body, err := json.Marshal(radarListEntryRequest{Entry: normalized})
+	if err != nil {
+		return fmt.Errorf("marshal workos radar email blocklist entry: %w", err)
+	}
+	if err := wc.do(ctx, http.MethodPost, "/radar/lists/email/block", body, nil); err != nil {
+		return fmt.Errorf("add workos radar email blocklist entry: %w", err)
 	}
 	return nil
 }

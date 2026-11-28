@@ -165,6 +165,7 @@ type Server struct {
 	RollbackOrganizationEncryption             http.Handler
 	RunOrganizationEncryption                  http.Handler
 	FinalizeOrganizationEncryption             http.Handler
+	BlockUser                                  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -338,6 +339,7 @@ func New(
 			{"RollbackOrganizationEncryption", "POST", "/admin/organizationEncryption.rollback"},
 			{"RunOrganizationEncryption", "POST", "/admin/organizationEncryption.run"},
 			{"FinalizeOrganizationEncryption", "POST", "/admin/organizationEncryption.finalize"},
+			{"BlockUser", "POST", "/admin/users.block"},
 		},
 		Login:                                      NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                   NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -483,6 +485,7 @@ func New(
 		RollbackOrganizationEncryption:             NewRollbackOrganizationEncryptionHandler(e.RollbackOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
 		RunOrganizationEncryption:                  NewRunOrganizationEncryptionHandler(e.RunOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
 		FinalizeOrganizationEncryption:             NewFinalizeOrganizationEncryptionHandler(e.FinalizeOrganizationEncryption, mux, decoder, encoder, errhandler, formatter),
+		BlockUser:                                  NewBlockUserHandler(e.BlockUser, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -635,6 +638,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RollbackOrganizationEncryption = m(s.RollbackOrganizationEncryption)
 	s.RunOrganizationEncryption = m(s.RunOrganizationEncryption)
 	s.FinalizeOrganizationEncryption = m(s.FinalizeOrganizationEncryption)
+	s.BlockUser = m(s.BlockUser)
 }
 
 // MethodNames returns the methods served.
@@ -786,6 +790,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRollbackOrganizationEncryptionHandler(mux, h.RollbackOrganizationEncryption)
 	MountRunOrganizationEncryptionHandler(mux, h.RunOrganizationEncryption)
 	MountFinalizeOrganizationEncryptionHandler(mux, h.FinalizeOrganizationEncryption)
+	MountBlockUserHandler(mux, h.BlockUser)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -8517,6 +8522,59 @@ func NewFinalizeOrganizationEncryptionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "finalizeOrganizationEncryption")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountBlockUserHandler configures the mux to serve the "admin" service
+// "blockUser" endpoint.
+func MountBlockUserHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/users.block", f)
+}
+
+// NewBlockUserHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "blockUser" endpoint.
+func NewBlockUserHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeBlockUserRequest(mux, decoder)
+		encodeResponse = EncodeBlockUserResponse(encoder)
+		encodeError    = EncodeBlockUserError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "blockUser")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

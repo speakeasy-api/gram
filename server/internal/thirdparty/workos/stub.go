@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,9 @@ type StubClient struct {
 	userExternalIDUpdates []UserExternalIDUpdate
 	orgExternalIDUpdates  []OrgExternalIDUpdate
 	revokedSessions       []string
+	userSessions          map[string][]string
+	blacklistedMetadata   map[string]bool
+	radarBlockedEmails    []string
 	directories           map[string][]Directory
 	directoryUsers        map[string][]DirectoryUser
 	directoryGroups       map[string][]DirectoryGroup
@@ -62,6 +66,9 @@ func NewStubClient() *StubClient {
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		revokedSessions:       nil,
+		userSessions:          make(map[string][]string),
+		blacklistedMetadata:   make(map[string]bool),
+		radarBlockedEmails:    nil,
 		directories:           make(map[string][]Directory),
 		directoryUsers:        make(map[string][]DirectoryUser),
 		directoryGroups:       make(map[string][]DirectoryGroup),
@@ -593,4 +600,63 @@ func (s *StubClient) RevokedSessions() []string {
 	defer s.mut.Unlock()
 
 	return append([]string(nil), s.revokedSessions...)
+}
+
+func (s *StubClient) SetUserSessionIDs(workosUserID string, sessionIDs []string) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.userSessions[workosUserID] = append([]string(nil), sessionIDs...)
+}
+
+func (s *StubClient) ListUserSessionIDs(_ context.Context, workosUserID string) ([]string, error) {
+	if strings.TrimSpace(workosUserID) == "" {
+		return nil, fmt.Errorf("list workos user sessions: missing workos user ID")
+	}
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]string(nil), s.userSessions[workosUserID]...), nil
+}
+
+func (s *StubClient) SetUserBlacklistedMetadata(_ context.Context, workosUserID string, blacklisted bool) error {
+	if strings.TrimSpace(workosUserID) == "" {
+		return fmt.Errorf("set workos user blacklisted metadata: missing workos user ID")
+	}
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.blacklistedMetadata[workosUserID] = blacklisted
+	return nil
+}
+
+func (s *StubClient) BlacklistedMetadata() map[string]bool {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	out := make(map[string]bool, len(s.blacklistedMetadata))
+	maps.Copy(out, s.blacklistedMetadata)
+	return out
+}
+
+func (s *StubClient) AddRadarEmailBlocklistEntry(_ context.Context, email string) error {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	if normalized == "" {
+		return fmt.Errorf("add workos radar email blocklist entry: missing email")
+	}
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.radarBlockedEmails = append(s.radarBlockedEmails, normalized)
+	return nil
+}
+
+func (s *StubClient) RadarBlockedEmails() []string {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]string(nil), s.radarBlockedEmails...)
 }

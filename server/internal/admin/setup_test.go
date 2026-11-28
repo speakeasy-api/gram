@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	authsessions "github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -98,6 +100,8 @@ func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context,
 		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
 		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
 		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		epochRaiser:      authsessions.NewEpochStore(redisClient),
+		tokenRevoker:     chatsessions.NewManager(logger, redisClient, "", nil),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
@@ -122,6 +126,9 @@ func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSVerif
 
 	ctx, svc, conn := newTestAdminService(t)
 	svc.workos = workos
+	if blocker, ok := workos.(WorkOSUserBlocker); ok {
+		svc.workosUserBlocker = blocker
+	}
 
 	return ctx, svc, conn
 }
