@@ -183,6 +183,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
 				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SessionID:      conv.PtrValOr(payload.ConversationID, ""),
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}
@@ -235,6 +236,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
 				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SessionID:      conv.PtrValOr(payload.ConversationID, ""),
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}
@@ -296,6 +298,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				ChatID:         chatIDForBlock(conv.PtrValOr(payload.ConversationID, "")),
 				ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SessionID:      conv.PtrValOr(payload.ConversationID, ""),
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 			}

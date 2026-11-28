@@ -87,6 +87,7 @@ func (s *Service) cursorSpendDenyReason(ctx context.Context, block *spendrules.B
 		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ChatID:         chatIDForBlock(conversationID),
 		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SessionID:      conversationID,
 	}); bURL != "" {
 		userReason = appendBlockURL(userReason, bURL)
 	}

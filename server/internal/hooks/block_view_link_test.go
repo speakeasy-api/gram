@@ -329,3 +329,79 @@ func TestToolCallBlockRecordsWithoutLinks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "blocked with no links", block.Reason)
 }
+
+// insertBlockFromProvider records a block reported by the given hook adapter
+// for a session and returns the provider the block page reads back.
+func insertBlockFromProvider(t *testing.T, ctx context.Context, ti *testInstance, provider, sessionID string) string {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	blockID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	ti.service.insertToolCallBlock(ctx, blockID, toolCallBlockParams{
+		Provider:       provider,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Reason:         "blocked for the provider test",
+		ToolName:       "Bash",
+		UserID:         authCtx.UserID,
+		RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SessionID:      sessionID,
+	})
+
+	block, err := riskRepo.New(ti.conn).GetToolCallBlock(ctx, riskRepo.GetToolCallBlockParams{
+		ID:           blockID,
+		ViewerUserID: authCtx.UserID,
+	})
+	require.NoError(t, err)
+	return block.Provider
+}
+
+// The Claude Code hooks report the bare "claude" adapter slug, which the
+// dashboard labels Claude Chat Desktop. A block must store the Claude Code
+// surface instead, even when the session has nothing cached.
+func TestToolCallBlockStoresClaudeCodeForBareClaudeSlug(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+
+	require.Equal(t, agentVariantClaudeCode, insertBlockFromProvider(t, ctx, ti, "claude", uuid.NewString()))
+}
+
+// Cowork ships the Claude Code Desktop adapter slug and identifies itself only
+// on the OTEL service.name cached for the session, so the block must take the
+// surface from the session cache.
+func TestToolCallBlockStoresCachedCoworkSurface(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cacheSessionMetadata(ctx, SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: agentVariantCowork,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}))
+
+	require.Equal(t, agentVariantCowork, insertBlockFromProvider(t, ctx, ti, surfaceClaudeCodeDesktop, sessionID))
+}
+
+// Non-Claude providers keep the adapter slug they reported.
+func TestToolCallBlockKeepsNonClaudeProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+
+	require.Equal(t, "codex", insertBlockFromProvider(t, ctx, ti, "codex", uuid.NewString()))
+}
