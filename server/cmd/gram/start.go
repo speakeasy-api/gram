@@ -132,6 +132,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryptionapi"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -991,6 +992,7 @@ func newStartCommand() *cli.Command {
 			}
 			callbackOrigins.OrganizationHosts = orgHosts
 			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+			identityResolver.SetOrganizationCreationRecorder(orgprovision.NewCreationRecorder(meterProvider))
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
@@ -1744,6 +1746,7 @@ func newStartCommand() *cli.Command {
 				trialEmailNotifier,
 			)
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
+			authService.SetOrganizationCreationRecorder(orgprovision.NewCreationRecorder(meterProvider))
 			auth.Attach(mux, authService)
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may

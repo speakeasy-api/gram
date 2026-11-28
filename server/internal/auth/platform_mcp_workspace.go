@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/emaildomain"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -39,32 +40,6 @@ const platformMCPWorkspaceLeaseTTL = 2 * time.Minute
 // on its analytics events.
 const platformMCPClientProperty = "client"
 
-// freeMailDomains are personal mailbox providers. Their domain names a mail
-// service, not the user's company, so a workspace name suggested from one
-// would be wrong for every user on it.
-var freeMailDomains = map[string]struct{}{
-	"aol.com":        {},
-	"gmail.com":      {},
-	"gmx.com":        {},
-	"googlemail.com": {},
-	"hey.com":        {},
-	"hotmail.com":    {},
-	"icloud.com":     {},
-	"live.com":       {},
-	"mac.com":        {},
-	"mail.com":       {},
-	"me.com":         {},
-	"msn.com":        {},
-	"outlook.com":    {},
-	"pm.me":          {},
-	"proton.me":      {},
-	"protonmail.com": {},
-	"qq.com":         {},
-	"yahoo.com":      {},
-	"yandex.com":     {},
-	"zoho.com":       {},
-}
-
 // PlatformMCPWorkspaceNameSuggestion returns the name the Platform MCP
 // workspace form starts with: the company from a work email domain, or the
 // user's own name for a personal mailbox. An empty result leaves the field
@@ -80,7 +55,9 @@ func (s *Service) PlatformMCPWorkspaceNameSuggestion(ctx context.Context, userID
 func suggestWorkspaceName(email, displayName string) string {
 	local, domain, _ := strings.Cut(strings.ToLower(strings.TrimSpace(email)), "@")
 	candidates := make([]string, 0, 3)
-	if _, free := freeMailDomains[domain]; domain != "" && !free {
+	// A personal mailbox domain names a mail service, not the user's company,
+	// so a workspace name suggested from one would be wrong for every user on it.
+	if domain != "" && !emaildomain.IsFreeWebmail(domain) {
 		candidates = append(candidates, capitalizeFirst(orgprovision.NameFromHostname(domain)))
 	}
 	if name := strings.TrimSpace(displayName); name != "" {

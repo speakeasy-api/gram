@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
@@ -86,6 +87,8 @@ type ProcessWorkOSOrganizationEvents struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations created from WorkOS events.
 	newOrganizationDefaultHost pgtype.Text
+
+	orgCreations *orgprovision.CreationRecorder
 }
 
 func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
@@ -101,6 +104,7 @@ func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, w
 		flags:         nil,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		orgCreations:               nil,
 	}
 }
 
@@ -137,6 +141,12 @@ func (p *ProcessWorkOSOrganizationEvents) deprovisionRevokes(ctx context.Context
 // organizations created from WorkOS events. Unset records none.
 func (p *ProcessWorkOSOrganizationEvents) SetNewOrganizationDefaultHost(host pgtype.Text) {
 	p.newOrganizationDefaultHost = host
+}
+
+// SetOrganizationCreationRecorder wires the counter for organizations created
+// from WorkOS events. Unset records none.
+func (p *ProcessWorkOSOrganizationEvents) SetOrganizationCreationRecorder(recorder *orgprovision.CreationRecorder) {
+	p.orgCreations = recorder
 }
 
 func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params ProcessWorkOSOrganizationEventsParams) (*ProcessWorkOSOrganizationEventsResult, error) {
@@ -248,6 +258,9 @@ type postCommitEffects struct {
 	// revokeSignIns asks the activity to revoke a deprovisioned user's
 	// sign-ins inside the event's transaction, when enforcement is on.
 	revokeSignIns *signInRevocation
+	// createdOrganization is the organization row the event inserted, counted
+	// once the transaction commits.
+	createdOrganization *orgrepo.OrganizationMetadatum
 }
 
 type signInRevocation struct {
@@ -256,6 +269,10 @@ type signInRevocation struct {
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+	if org := effects.createdOrganization; org != nil {
+		p.orgCreations.RecordCreated(ctx, *org, "")
+	}
+
 	if len(effects.revocationDeliveries) > 0 {
 		p.deliverer.DeliverNow(ctx, []string{effects.revocationOrganizationID}, effects.revocationDeliveries)
 	}
@@ -470,8 +487,12 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	case err != nil:
 		return effects, err
 	case resolved.isNew:
-		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID, newOrganizationDefaultHost); err != nil {
+		created, inserted, err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID, newOrganizationDefaultHost)
+		if err != nil {
 			return effects, err
+		}
+		if inserted {
+			effects.createdOrganization = &created
 		}
 		tx, ok := dbtx.(pgx.Tx)
 		if !ok {
@@ -559,30 +580,32 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	}
 }
 
-func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string, defaultHost pgtype.Text) error {
+// createOrganizationFromWorkOSEvent inserts the organization row an event
+// describes. It reports false when the event is not applied.
+func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string, defaultHost pgtype.Text) (orgrepo.OrganizationMetadatum, bool, error) {
 	// A zero row makes the normal cursor check accept genuine creates while
 	// keeping the create path consistent if a row appears between resolve and
 	// insert.
 	var newRow orgrepo.OrganizationMetadatum
 	if !shouldApplyOrganizationEvent(newRow, payload, eventID) {
-		return nil
+		return newRow, false, nil
 	}
 
 	// Seeded with the WorkOS organization ID rather than randomness so the
 	// advisory-lock key below is the same across duplicate deliveries.
 	slug, err := orgslug.StableBase(payload.Name, payload.ID)
 	if err != nil {
-		return fmt.Errorf("derive slug for WorkOS organization %q: %w", payload.ID, err)
+		return newRow, false, fmt.Errorf("derive slug for WorkOS organization %q: %w", payload.ID, err)
 	}
 	if err := repo.LockOrganizationSlug(ctx, slug); err != nil {
-		return fmt.Errorf("lock organization slug %q: %w", slug, err)
+		return newRow, false, fmt.Errorf("lock organization slug %q: %w", slug, err)
 	}
 	uniqueSlug, err := orgslug.FindUnique(ctx, repo, slug)
 	if err != nil {
-		return fmt.Errorf("find unique slug for workos organization %q: %w", payload.ID, err)
+		return newRow, false, fmt.Errorf("find unique slug for workos organization %q: %w", payload.ID, err)
 	}
 
-	_, err = repo.CreateOrganizationMetadataFromWorkOS(ctx, orgrepo.CreateOrganizationMetadataFromWorkOSParams{
+	created, err := repo.CreateOrganizationMetadataFromWorkOS(ctx, orgrepo.CreateOrganizationMetadataFromWorkOSParams{
 		ID:                organizationID,
 		Name:              payload.Name,
 		Slug:              uniqueSlug,
@@ -593,10 +616,10 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		DefaultHost:       defaultHost,
 	})
 	if err != nil {
-		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
+		return newRow, false, fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
 	}
 
-	return nil
+	return created, true, nil
 }
 
 func updateOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, row orgrepo.OrganizationMetadatum, payload workosOrganizationEventPayload, eventID string) error {

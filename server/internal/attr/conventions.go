@@ -3362,6 +3362,44 @@ func SlogOutboxPublicID(v string) slog.Attr { return slog.String(string(OutboxPu
 
 func OutboxBatchSize(v int) attribute.KeyValue { return OutboxBatchSizeKey.Int(v) }
 
+// OrganizationCreatedSourceKey and OrganizationCreatedAccountTypeKey label the
+// gram.organizations.created counter. They are unprefixed because monitors
+// query them by these exact names.
+const (
+	OrganizationCreatedSourceKey      = attribute.Key("creation_source")
+	OrganizationCreatedAccountTypeKey = attribute.Key("account_type")
+	// OrganizationCreatedEmailDomainClassKey is the kind of mail provider the
+	// creator's email belongs to, one of a bounded set of classes.
+	OrganizationCreatedEmailDomainClassKey = attribute.Key("email_domain_class")
+	// OrganizationCreatorEmailDomainKey is the creator's email domain. It is
+	// for logs only, never a metric attribute.
+	OrganizationCreatorEmailDomainKey = attribute.Key("gram.org.creator_email_domain")
+)
+
+func OrganizationCreatedSource(v string) attribute.KeyValue {
+	return OrganizationCreatedSourceKey.String(v)
+}
+
+func OrganizationCreatedAccountType(v string) attribute.KeyValue {
+	return OrganizationCreatedAccountTypeKey.String(v)
+}
+
+func SlogOrganizationCreatedSource(v string) slog.Attr {
+	return slog.String(string(OrganizationCreatedSourceKey), v)
+}
+
+func OrganizationCreatedEmailDomainClass(v string) attribute.KeyValue {
+	return OrganizationCreatedEmailDomainClassKey.String(v)
+}
+
+func SlogOrganizationCreatedEmailDomainClass(v string) slog.Attr {
+	return slog.String(string(OrganizationCreatedEmailDomainClassKey), v)
+}
+
+func SlogOrganizationCreatorEmailDomain(v string) slog.Attr {
+	return slog.String(string(OrganizationCreatorEmailDomainKey), v)
+}
+
 func OrganizationAccountType(v string) attribute.KeyValue {
 	return OrganizationAccountTypeKey.String(v)
 }

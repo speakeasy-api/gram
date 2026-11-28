@@ -113,6 +113,8 @@ type Service struct {
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
 
+	orgCreations *orgprovision.CreationRecorder
+
 	// staffOrg is the deployment's Speakeasy staff organization, whose
 	// OpenRouter keys bypass the tier credit limits.
 	staffOrg staff.Organization
@@ -304,6 +306,7 @@ func NewService(
 
 	return &Service{orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
+		orgCreations:               nil,
 		tracerProvider:             tracerProvider,
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -346,6 +349,12 @@ func NewService(
 // organizations staff create. Unset records none.
 func (s *Service) SetNewOrganizationDefaultHost(host pgtype.Text) {
 	s.newOrganizationDefaultHost = host
+}
+
+// SetOrganizationCreationRecorder wires the counter for organizations staff
+// create. Unset records none.
+func (s *Service) SetOrganizationCreationRecorder(recorder *orgprovision.CreationRecorder) {
+	s.orgCreations = recorder
 }
 
 func (s *Service) GetSession(ctx context.Context, _ *gen.GetSessionPayload) (*gen.AdminSession, error) {
@@ -1771,7 +1780,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	// already created this organization is updated rather than duplicated. The
 	// FromWorkOS variants of this query are for the sync path and would insert a
 	// second row here.
-	org, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	org, inserted, err := queries.UpsertOrganizationMetadataWithCreation(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:   created.GramOrganizationID,
 		Name: name,
 		Slug: uniqueSlug,
@@ -1809,6 +1818,9 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
+	}
+	if inserted {
+		s.orgCreations.RecordCreated(ctx, org, "")
 	}
 
 	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")

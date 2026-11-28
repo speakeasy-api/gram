@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -248,6 +249,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	callbackOrigins.OrganizationHosts = orgHosts
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
+	identityResolver.SetOrganizationCreationRecorder(orgprovision.NewCreationRecorder(meterProvider))
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
