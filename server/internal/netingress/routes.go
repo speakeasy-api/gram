@@ -14,27 +14,22 @@ type RouteSurface string
 type RouteID string
 
 const (
-	RouteSurfaceMCP RouteSurface = "mcp"
-	// A gateway addressed by agent rather than by slug. Its own prefix, not a
-	// reserved slug under /mcp, so it can never be shadowed by a real server
-	// whose slug happens to be "agent".
-	RouteSurfaceAgentMCP RouteSurface = "agentmcp"
-
-	RouteRuntime              RouteID = "runtime"
-	RouteInstall              RouteID = "install"
-	RouteInstallScript        RouteID = "install_script"
-	RouteProtectedResource    RouteID = "protected_resource"
-	RouteAuthorizationServer  RouteID = "authorization_server"
-	RouteRegister             RouteID = "register"
-	RouteAuthorize            RouteID = "authorize"
-	RouteConnect              RouteID = "connect"
-	RouteConnectRemoteSession RouteID = "connect_remote_session"
-	RouteConnectMCP           RouteID = "connect_mcp"
-	RouteConnectFirstParty    RouteID = "connect_first_party"
-	RouteConsentScript        RouteID = "consent_script"
-	RouteConsentToolsScript   RouteID = "consent_tools_script"
-	RouteToken                RouteID = "token"
-	RouteRevoke               RouteID = "revoke"
+	RouteSurfaceMCP           RouteSurface = "mcp"
+	RouteRuntime              RouteID      = "runtime"
+	RouteInstall              RouteID      = "install"
+	RouteInstallScript        RouteID      = "install_script"
+	RouteProtectedResource    RouteID      = "protected_resource"
+	RouteAuthorizationServer  RouteID      = "authorization_server"
+	RouteRegister             RouteID      = "register"
+	RouteAuthorize            RouteID      = "authorize"
+	RouteConnect              RouteID      = "connect"
+	RouteConnectRemoteSession RouteID      = "connect_remote_session"
+	RouteConnectMCP           RouteID      = "connect_mcp"
+	RouteConnectFirstParty    RouteID      = "connect_first_party"
+	RouteConsentScript        RouteID      = "consent_script"
+	RouteConsentToolsScript   RouteID      = "consent_tools_script"
+	RouteToken                RouteID      = "token"
+	RouteRevoke               RouteID      = "revoke"
 )
 
 type RouteSpec struct {
@@ -67,17 +62,6 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceMCP, ID: RouteConsentToolsScript, Method: http.MethodGet, Path: "/mcp/consent-tools-{hash}.js"},
 	{Surface: RouteSurfaceMCP, ID: RouteToken, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/token"},
 	{Surface: RouteSurfaceMCP, ID: RouteRevoke, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/revoke"},
-
-	// POST only: an agent gateway has no proxied stream and no upstream
-	// session, so it needs neither the GET stream nor the DELETE teardown the
-	// slug surfaces carry. Its members are derived per request, so there is no
-	// install page, and it authenticates with an agent key rather than OAuth,
-	// so it has no authorization-server routes either.
-	{Surface: RouteSurfaceAgentMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/agent-mcp/{agentID}"},
-	// Minting is authenticated by the agent key; spending the code is not,
-	// because the code is itself the credential — single-use and short-lived.
-	{Surface: RouteSurfaceAgentMCP, ID: RouteInstall, Method: http.MethodPost, Path: "/agent-mcp/{agentID}/install-code"},
-	{Surface: RouteSurfaceAgentMCP, ID: RouteInstallScript, Method: http.MethodGet, Path: "/agent-mcp/install/{code}"},
 }
 
 var privateRouteMatcher = newPrivateRouteMatcher()

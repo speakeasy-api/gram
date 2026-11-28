@@ -2,11 +2,14 @@ package privatekeyjwt
 
 import "slices"
 
-// Audiences is the pair of aud values one endpoint accepts on a client
-// assertion, each computed per request from the resolved endpoint.
+// Audiences is the aud values one endpoint accepts on a client assertion,
+// each computed per request from the resolved endpoint: its issuer identifier
+// and the URL the request was posted to, plus an issuer alias where the
+// authorization server still answers under a second issuer identifier.
 //
-// Two values are accepted rather than one because the correct audience is
-// genuinely ambiguous and the client cannot discover our preference. RFC 7523
+// Both the issuer and the endpoint URL are accepted because the correct
+// audience is genuinely ambiguous and the client cannot discover our
+// preference. RFC 7523
 // §3 and OIDC Core §9 say aud identifies the authorization server and that the
 // token endpoint URL MAY be used; FAPI 2.0 and draft-ietf-oauth-rfc7523bis
 // require the issuer identifier alone, and the libraries in the wild split
@@ -22,13 +25,19 @@ import "slices"
 // one it posts to, so this costs no interoperability, and it removes the one
 // cross-endpoint use an unspent assertion had.
 //
-// What neither value relaxes is cross-server replay, the dangerous case. Both
-// are derived per request from the endpoint being addressed, never from a
+// What none of the values relaxes is cross-server replay, the dangerous case.
+// All are derived per request from the endpoint being addressed, never from a
 // package-level constant, so an assertion minted for one MCP server does not
 // verify at another.
 type Audiences struct {
 	// Issuer is the endpoint's issuer identifier.
 	Issuer string
+
+	// IssuerAlias is a second issuer identifier the endpoint's authorization
+	// server answers to on the host the request was posted to, or "" when it
+	// has none. A client signs for the issuer its metadata named, so a client
+	// holding metadata that named the alias signs for the alias.
+	IssuerAlias string
 
 	// Endpoint is the URL of the endpoint the request was posted to.
 	Endpoint string
@@ -44,6 +53,9 @@ func (a Audiences) Match(presented []string) (AudienceKind, bool) {
 	if a.Issuer != "" && slices.Contains(presented, a.Issuer) {
 		return AudienceKindIssuer, true
 	}
+	if a.IssuerAlias != "" && slices.Contains(presented, a.IssuerAlias) {
+		return AudienceKindIssuerAlias, true
+	}
 	if a.Endpoint != "" && slices.Contains(presented, a.Endpoint) {
 		return AudienceKindEndpoint, true
 	}
@@ -54,9 +66,12 @@ func (a Audiences) Match(presented []string) (AudienceKind, bool) {
 // the form the claim validator consumes. Empty entries are dropped so a
 // caller that left a slot unset cannot accidentally admit an empty aud.
 func (a Audiences) accepted() []string {
-	values := make([]string, 0, 2)
+	values := make([]string, 0, 3)
 	if a.Issuer != "" {
 		values = append(values, a.Issuer)
+	}
+	if a.IssuerAlias != "" {
+		values = append(values, a.IssuerAlias)
 	}
 	if a.Endpoint != "" {
 		values = append(values, a.Endpoint)

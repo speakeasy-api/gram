@@ -26,6 +26,7 @@ type LogTransformHandler struct {
 	instruments  *enrich.Instruments
 	logPublisher gcp.Publisher[*otelv1.LogRecord]
 	enrichers    []enrich.LogEnricher
+	orgs         *orgDisabledChecker
 }
 
 func NewLogTransformHandler(
@@ -51,10 +52,15 @@ func NewLogTransformHandler(
 		instruments:  in,
 		logPublisher: logPublisher,
 		enrichers:    enrichers,
+		orgs:         newOrgDisabledChecker(replicaDB),
 	}
 }
 
 func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.InboundLogRecord, _ gcp.MessageMetadata) error {
+	if drop, err := h.orgs.Drop(ctx, h.logger, record.GetProvenance().GetOrganizationId()); err != nil || drop {
+		return err
+	}
+
 	out, err := transformInboundLog(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
 		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound log record")

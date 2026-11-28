@@ -11,6 +11,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getCurrentHooksRolloutStage = `-- name: GetCurrentHooksRolloutStage :one
+SELECT id, seq, version, percent, state, reason, set_by, created_at, updated_at
+FROM hooks_rollout_stages
+ORDER BY seq DESC
+LIMIT 1
+`
+
+func (q *Queries) GetCurrentHooksRolloutStage(ctx context.Context) (HooksRolloutStage, error) {
+	row := q.db.QueryRow(ctx, getCurrentHooksRolloutStage)
+	var i HooksRolloutStage
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.Version,
+		&i.Percent,
+		&i.State,
+		&i.Reason,
+		&i.SetBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getDefaultHooksRolloutPin = `-- name: GetDefaultHooksRolloutPin :one
 SELECT id, seq, organization_id, version, set_by, created_at, updated_at
 FROM hooks_rollout_pins
@@ -79,6 +103,43 @@ func (q *Queries) InsertHooksRolloutPin(ctx context.Context, arg InsertHooksRoll
 		&i.Seq,
 		&i.OrganizationID,
 		&i.Version,
+		&i.SetBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertHooksRolloutStage = `-- name: InsertHooksRolloutStage :one
+INSERT INTO hooks_rollout_stages (version, percent, state, reason, set_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, seq, version, percent, state, reason, set_by, created_at, updated_at
+`
+
+type InsertHooksRolloutStageParams struct {
+	Version int32
+	Percent int32
+	State   string
+	Reason  pgtype.Text
+	SetBy   string
+}
+
+func (q *Queries) InsertHooksRolloutStage(ctx context.Context, arg InsertHooksRolloutStageParams) (HooksRolloutStage, error) {
+	row := q.db.QueryRow(ctx, insertHooksRolloutStage,
+		arg.Version,
+		arg.Percent,
+		arg.State,
+		arg.Reason,
+		arg.SetBy,
+	)
+	var i HooksRolloutStage
+	err := row.Scan(
+		&i.ID,
+		&i.Seq,
+		&i.Version,
+		&i.Percent,
+		&i.State,
+		&i.Reason,
 		&i.SetBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -188,4 +249,15 @@ func (q *Queries) ListRecentHooksRolloutChanges(ctx context.Context, maxRows int
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockHooksRolloutStages = `-- name: LockHooksRolloutStages :exec
+SELECT pg_advisory_xact_lock(hashtextextended('hooks-rollout-stages', 0))
+`
+
+// Serializes stage changes so the scheduled advance and a staff pause can't
+// both build on the same current stage.
+func (q *Queries) LockHooksRolloutStages(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockHooksRolloutStages)
+	return err
 }

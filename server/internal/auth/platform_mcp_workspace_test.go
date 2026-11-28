@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgcap"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -74,7 +75,7 @@ func TestProvisionPlatformMCPWorkspace(t *testing.T) {
 
 	// The user now has an organization, so a second workspace is refused.
 	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Second Workspace", "Claude Code")
-	require.ErrorIs(t, err, auth.ErrUserHasOrganization)
+	require.ErrorIs(t, err, orgcap.ErrUserHasOrganization)
 }
 
 func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
@@ -143,7 +144,7 @@ func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *
 		switch {
 		case err == nil:
 			created++
-		case errors.Is(err, auth.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
+		case errors.Is(err, orgcap.ErrUserHasOrganization), errors.Is(err, auth.ErrWorkspaceCreationInProgress):
 			refused++
 		default:
 			require.NoError(t, err)

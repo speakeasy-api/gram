@@ -1200,6 +1200,239 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 	}
 }
 
+// BuildGetRuntimeGatewayRequest instantiates a HTTP request object with method
+// and path set to call the "agents" service "getRuntimeGateway" endpoint
+func (c *Client) BuildGetRuntimeGatewayRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRuntimeGatewayAgentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agents", "getRuntimeGateway", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRuntimeGatewayRequest returns an encoder for requests sent to the
+// agents getRuntimeGateway server.
+func EncodeGetRuntimeGatewayRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agents.GetRuntimeGatewayPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agents", "getRuntimeGateway", "*agents.GetRuntimeGatewayPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("agent_id", p.AgentID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRuntimeGatewayResponse returns a decoder for responses returned by
+// the agents getRuntimeGateway endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetRuntimeGatewayResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRuntimeGatewayResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRuntimeGatewayResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			res := NewGetRuntimeGatewayAgentRuntimeGatewayOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRuntimeGatewayUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRuntimeGatewayForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRuntimeGatewayBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRuntimeGatewayNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRuntimeGatewayConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRuntimeGatewayUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRuntimeGatewayInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRuntimeGatewayInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+				}
+				err = ValidateGetRuntimeGatewayInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+				}
+				return nil, NewGetRuntimeGatewayInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRuntimeGatewayUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+				}
+				err = ValidateGetRuntimeGatewayUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+				}
+				return nil, NewGetRuntimeGatewayUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agents", "getRuntimeGateway", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRuntimeGatewayGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agents", "getRuntimeGateway", err)
+			}
+			err = ValidateGetRuntimeGatewayGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agents", "getRuntimeGateway", err)
+			}
+			return nil, NewGetRuntimeGatewayGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agents", "getRuntimeGateway", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRenameRequest instantiates a HTTP request object with method and path
 // set to call the "agents" service "rename" endpoint
 func (c *Client) BuildRenameRequest(ctx context.Context, v any) (*http.Request, error) {
