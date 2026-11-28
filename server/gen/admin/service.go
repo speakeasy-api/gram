@@ -59,10 +59,11 @@ type Service interface {
 	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
 	// organization that is already active is unaffected.
 	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
-	// Looks up organizations by id and by slug without changing anything, so an
-	// operator can review a bulk operation's targets before confirming it.
-	// Identifiers that match nothing are reported back rather than failing the
-	// call.
+	// Looks up organizations by id and by slug without changing anything. Useful
+	// wherever a caller holds a list of identifiers, such as one read from a file,
+	// and needs to know what each points at, for example to show an operator the
+	// targets of a bulk operation before confirming it. Identifiers that match
+	// nothing are reported back rather than failing the call.
 	ResolveOrganizations(context.Context, *ResolveOrganizationsPayload) (res *AdminResolveOrganizationsResult, err error)
 	// Disables many organizations in one transaction: each is removed from the
 	// whitelist and has disabled_at stamped, keeping the original timestamp when
@@ -2547,8 +2548,8 @@ type AdminResolveOrganizationsResult struct {
 	MissingSlugs []string
 }
 
-// An organization a bulk operation would act on, with the state an operator
-// reviews before confirming.
+// An organization matched by an id or slug lookup, with its identity and its
+// current access state.
 type AdminResolvedOrganization struct {
 	// The ID of the organization.
 	ID string
@@ -4585,9 +4586,9 @@ type RepairOrganizationAssistantAgentNamesPayload struct {
 // resolveOrganizations method.
 type ResolveOrganizationsPayload struct {
 	AdminSessionToken *string
-	// Organization IDs to look up.
+	// Organization IDs to look up. Together with slugs, at most 1000 identifiers.
 	Ids []string
-	// Organization slugs to look up.
+	// Organization slugs to look up. Together with ids, at most 1000 identifiers.
 	Slugs []string
 }
 

@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * An organization a bulk operation would act on, with the state an operator reviews before confirming.
+ * An organization matched by an id or slug lookup, with its identity and its current access state.
  */
 export type AdminResolvedOrganization = {
   /**

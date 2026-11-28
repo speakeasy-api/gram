@@ -77,9 +77,9 @@ type EnableOrganizationRequestBody struct {
 // ResolveOrganizationsRequestBody is the type of the "admin" service
 // "resolveOrganizations" endpoint HTTP request body.
 type ResolveOrganizationsRequestBody struct {
-	// Organization IDs to look up.
+	// Organization IDs to look up. Together with slugs, at most 1000 identifiers.
 	Ids []string `form:"ids,omitempty" json:"ids,omitempty" xml:"ids,omitempty"`
-	// Organization slugs to look up.
+	// Organization slugs to look up. Together with ids, at most 1000 identifiers.
 	Slugs []string `form:"slugs,omitempty" json:"slugs,omitempty" xml:"slugs,omitempty"`
 }
 

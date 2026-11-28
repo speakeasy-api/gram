@@ -7154,7 +7154,7 @@ paths:
       tags:
         - admin
       summary: resolveOrganizations admin
-      description: Looks up organizations by id and by slug without changing anything, so an operator can review a bulk operation's targets before confirming it. Identifiers that match nothing are reported back rather than failing the call.
+      description: Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.
       operationId: adminResolveOrganizations
       requestBody:
         required: true
@@ -15644,7 +15644,7 @@ components:
         whitelisted:
           type: boolean
           description: Whether the organization is currently whitelisted.
-      description: An organization a bulk operation would act on, with the state an operator reviews before confirming.
+      description: An organization matched by an id or slug lookup, with its identity and its current access state.
       required:
         - id
         - name
@@ -18150,14 +18150,14 @@ components:
           items:
             type: string
             minLength: 1
-          description: Organization IDs to look up.
+          description: Organization IDs to look up. Together with slugs, at most 1000 identifiers.
           maxItems: 1000
         slugs:
           type: array
           items:
             type: string
             minLength: 1
-          description: Organization slugs to look up.
+          description: Organization slugs to look up. Together with ids, at most 1000 identifiers.
           maxItems: 1000
     ResumeStripeSubscriptionRequestBody:
       type: object

@@ -290,7 +290,7 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 })
 
 var AdminResolvedOrganization = Type("AdminResolvedOrganization", func() {
-	Description("An organization a bulk operation would act on, with the state an operator reviews before confirming.")
+	Description("An organization matched by an id or slug lookup, with its identity and its current access state.")
 	Required("id", "name", "slug", "account_type", "whitelisted")
 
 	Attribute("id", String, "The ID of the organization.")
@@ -817,20 +817,20 @@ var _ = Service("admin", func() {
 	})
 
 	Method("resolveOrganizations", func() {
-		Description("Looks up organizations by id and by slug without changing anything, so an operator can review a bulk operation's targets before confirming it. Identifiers that match nothing are reported back rather than failing the call.")
+		Description("Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
 
 			Attribute("ids", ArrayOf(String, func() {
 				MinLength(1)
-			}), "Organization IDs to look up.", func() {
-				MaxLength(constants.MaxBulkDisableOrganizations)
+			}), fmt.Sprintf("Organization IDs to look up. Together with slugs, at most %d identifiers.", constants.MaxResolveOrganizationsBatch), func() {
+				MaxLength(constants.MaxResolveOrganizationsBatch)
 			})
 			Attribute("slugs", ArrayOf(String, func() {
 				MinLength(1)
-			}), "Organization slugs to look up.", func() {
-				MaxLength(constants.MaxBulkDisableOrganizations)
+			}), fmt.Sprintf("Organization slugs to look up. Together with ids, at most %d identifiers.", constants.MaxResolveOrganizationsBatch), func() {
+				MaxLength(constants.MaxResolveOrganizationsBatch)
 			})
 		})
 

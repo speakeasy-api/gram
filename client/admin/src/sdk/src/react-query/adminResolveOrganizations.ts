@@ -51,7 +51,7 @@ export type AdminResolveOrganizationsMutationError =
  * resolveOrganizations admin
  *
  * @remarks
- * Looks up organizations by id and by slug without changing anything, so an operator can review a bulk operation's targets before confirming it. Identifiers that match nothing are reported back rather than failing the call.
+ * Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.
  */
 export function useAdminResolveOrganizationsMutation(
   options?: MutationHookOptions<

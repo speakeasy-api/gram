@@ -437,7 +437,7 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
 WHERE id = @id;
 
 -- name: AdminResolveOrganizations :many
--- Read-only lookup behind the bulk disable review. An id is matched only against
+-- Read-only lookup of organizations by id and by slug. An id is matched only against
 -- id and a slug only against slug, so one organization's slug that equals
 -- another's id cannot cross over; the caller sorts rows back to the identifier
 -- that found them.

@@ -6,11 +6,11 @@ import * as z from "zod/v4-mini";
 
 export type ResolveOrganizationsRequestBody = {
   /**
-   * Organization IDs to look up.
+   * Organization IDs to look up. Together with slugs, at most 1000 identifiers.
    */
   ids?: Array<string> | undefined;
   /**
-   * Organization slugs to look up.
+   * Organization slugs to look up. Together with ids, at most 1000 identifiers.
    */
   slugs?: Array<string> | undefined;
 };

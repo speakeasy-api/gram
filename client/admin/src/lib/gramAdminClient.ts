@@ -1428,16 +1428,16 @@ export function finalizeOrganizationEncryption(request: {
   );
 }
 
-// Bulk disable sits apart from the organization writes above: neither call
-// answers with an organization record. The first is the read-only review, the
-// second the batch outcome.
+// These sit apart from the organization writes above: neither call answers
+// with an organization record. The first is a read-only lookup, the second a
+// batch outcome.
 const resolveOrganizationsMutation =
   buildAdminResolveOrganizationsMutation(redirectingClient);
 const bulkDisableOrganizationsMutation =
   buildAdminBulkDisableOrganizationsMutation(redirectingClient);
 
-// The review step of a bulk disable. A POST because a CSV can carry a thousand
-// identifiers, but it writes nothing.
+// Looks organizations up by id and slug. A POST because a list can carry a
+// thousand identifiers, but it writes nothing.
 export function resolveOrganizations(
   request: ResolveOrganizationsRequestBody,
 ): Promise<AdminResolveOrganizationsResult> {

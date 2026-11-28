@@ -34043,7 +34043,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
-	fmt.Fprintln(os.Stderr, `    resolve-organizations: Looks up organizations by id and by slug without changing anything, so an operator can review a bulk operation's targets before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
+	fmt.Fprintln(os.Stderr, `    resolve-organizations: Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
 	fmt.Fprintln(os.Stderr, `    bulk-disable-organizations: Disables many organizations in one transaction: each is removed from the whitelist and has disabled_at stamped, keeping the original timestamp when it was already disabled. An ID that matches no organization is reported back rather than failing the batch.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
@@ -34495,7 +34495,7 @@ func adminResolveOrganizationsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Looks up organizations by id and by slug without changing anything, so an operator can review a bulk operation's targets before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
+	fmt.Fprintln(os.Stderr, `Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
