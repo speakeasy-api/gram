@@ -15,6 +15,8 @@ import (
 	ateapiv1 "go.ate.dev/substrate/api/ateapi/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/speakeasy-api/gram/server/internal/atecred"
 )
 
 const (
@@ -33,10 +35,6 @@ const (
 	// ateHTTPSPort is the default HTTPS destination port.
 	ateHTTPSPort int32 = 443
 
-	// ateActorJWTExpirationSeconds is the short lifetime requested for ATE-minted actor JWTs
-	// (300 s is the minimum permitted by ATE v1.0.1 ActorJwtSource).
-	ateActorJWTExpirationSeconds int64 = 300
-
 	// ateEgressTrustBundleVolumeName names the projected SystemInfo trust-bundle volume on ActorTemplates.
 	ateEgressTrustBundleVolumeName = "egress-trust-bundle"
 
@@ -51,12 +49,6 @@ const (
 
 	// ateSystemRootsTrustBundleName is ATE's predefined public CA root bundle name.
 	ateSystemRootsTrustBundleName = "system-roots.ate.dev"
-
-	// ateDirectWorkloadProjectGatewayAudience matches mcp.DirectWorkloadProjectGatewayAudience.
-	ateDirectWorkloadProjectGatewayAudience = "urn:speakeasy:mcp:project-gateway"
-
-	// ateDirectWorkloadInferenceAudience matches mcp.DirectWorkloadInferenceAudience.
-	ateDirectWorkloadInferenceAudience = "urn:speakeasy:inference:workload"
 
 	// ateTemplateDigestSuffixLen is the number of lowercase hex characters from
 	// the image sha256 digest appended to the ActorTemplate base name.
@@ -320,16 +312,19 @@ func parseKitATEHTTPSOrigin(raw string) (kitATEEgressEndpoint, error) {
 }
 
 // BuildKitATEEgressPolicyRules constructs the complete per-actor EgressPolicy
-// rule set in one place so JWT injection can never be attached to a wildcard:
-//   - TLS-terminating HTTPS rules with Authorization actorJwt replacement ONLY
-//     for the exact Speakeasy Project Gateway and inference host:port endpoints.
-//     When both endpoints share one host:port (ATE v1.0.1 has no path matcher
-//     and rejects duplicate host:port rules), one rule carries both audiences;
-//     when they use distinct host:port targets, each rule carries only its own
-//     endpoint's single audience.
+// rule set in one place so credential injection can never be attached to a
+// wildcard:
+//   - TLS-terminating HTTPS rules with Authorization credentialUri replacement
+//     ONLY for the exact Speakeasy Project Gateway and inference host:port
+//     endpoints. The credential URI names Speakeasy's custom credential
+//     provider and pins the exact (atespace, actorName, actorUID) tuple.
 //   - Broad public web access via bare "*" tls_passthrough (:443) and plain
 //     http (:80) with strictly nil Effects (never any credential injection).
-func BuildKitATEEgressPolicyRules(gatewayURL, inferenceURL string) ([]*ateapiv1.EgressRule, error) {
+func BuildKitATEEgressPolicyRules(atespace, actorName, actorUID, gatewayURL, inferenceURL string) ([]*ateapiv1.EgressRule, error) {
+	credentialURI, err := atecred.BuildCredentialURI(atespace, actorName, actorUID)
+	if err != nil {
+		return nil, fmt.Errorf("build ATE credential URI: %w", err)
+	}
 	gatewayTarget, err := parseKitATEHTTPSOrigin(gatewayURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse ATE Project Gateway egress origin: %w", err)
@@ -339,20 +334,12 @@ func BuildKitATEEgressPolicyRules(gatewayURL, inferenceURL string) ([]*ateapiv1.
 		return nil, fmt.Errorf("parse ATE inference egress origin: %w", err)
 	}
 
-	audiencesByTarget := map[kitATEEgressEndpoint][]string{}
-	addAudience := func(target kitATEEgressEndpoint, audience string) {
-		list := audiencesByTarget[target]
-		if !slices.Contains(list, audience) {
-			list = append(list, audience)
-			slices.Sort(list)
-			audiencesByTarget[target] = list
-		}
+	targetSet := map[kitATEEgressEndpoint]struct{}{
+		gatewayTarget:   {},
+		inferenceTarget: {},
 	}
-	addAudience(gatewayTarget, ateDirectWorkloadProjectGatewayAudience)
-	addAudience(inferenceTarget, ateDirectWorkloadInferenceAudience)
-
-	targets := make([]kitATEEgressEndpoint, 0, len(audiencesByTarget))
-	for target := range audiencesByTarget {
+	targets := make([]kitATEEgressEndpoint, 0, len(targetSet))
+	for target := range targetSet {
 		targets = append(targets, target)
 	}
 	slices.SortFunc(targets, func(a, b kitATEEgressEndpoint) int {
@@ -379,11 +366,8 @@ func BuildKitATEEgressPolicyRules(gatewayURL, inferenceURL string) ([]*ateapiv1.
 					ReplaceHeaders: []*ateapiv1.CredentialHeader{{
 						Header:        "Authorization",
 						Prefix:        "Bearer ",
-						CredentialUri: "",
-						ActorJwt: &ateapiv1.ActorJwtSource{
-							Audiences:         slices.Clone(audiencesByTarget[target]),
-							ExpirationSeconds: ateActorJWTExpirationSeconds,
-						},
+						CredentialUri: credentialURI,
+						ActorJwt:      nil,
 					}},
 				},
 			},
@@ -459,12 +443,12 @@ func kitATEBootstrapProjectGatewayURL(mcpJSON []byte) (string, error) {
 	return gw.URL, nil
 }
 
-func (k *KitATERuntimeBackend) ensureEgress(ctx context.Context, actor string, b KitLocalBootstrap) error {
+func (k *KitATERuntimeBackend) ensureEgress(ctx context.Context, actor, actorUID string, b KitLocalBootstrap) error {
 	gatewayURL, err := kitATEBootstrapProjectGatewayURL(b.MCPJSON)
 	if err != nil {
 		return err
 	}
-	desiredRules, err := BuildKitATEEgressPolicyRules(gatewayURL, b.InferenceEndpoint)
+	desiredRules, err := BuildKitATEEgressPolicyRules(k.config.Atespace, actor, actorUID, gatewayURL, b.InferenceEndpoint)
 	if err != nil {
 		return err
 	}

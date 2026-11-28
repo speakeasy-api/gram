@@ -55,10 +55,13 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			return fmt.Errorf("kit ACP bearer must be one printable ASCII token")
 		}
 	}
-	if b.Model == "" || b.Workload == nil || b.Workload.IssuerID == uuid.Nil || b.Workload.Subject == "" {
-		return fmt.Errorf("kit requires explicit model and workload assertion binding")
+	if b.Model == "" || b.Workload == nil || b.Workload.Subject == "" {
+		return fmt.Errorf("kit requires explicit model and workload binding")
 	}
 	if b.EgressInjectedAuth {
+		if b.Workload.IssuerID != uuid.Nil {
+			return fmt.Errorf("egress-injected kit bootstrap must not bind a workload issuer")
+		}
 		if b.AssertionFile != "" {
 			return fmt.Errorf("egress-injected kit bootstrap must not specify an assertion file")
 		}
@@ -67,7 +70,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			return fmt.Errorf("kit requires explicit HTTPS inference endpoint")
 		}
 	} else {
-		if !strings.HasPrefix(b.AssertionFile, "/") {
+		if b.Workload.IssuerID == uuid.Nil || !strings.HasPrefix(b.AssertionFile, "/") {
 			return fmt.Errorf("kit requires explicit model and workload assertion binding")
 		}
 		for _, raw := range []string{b.InferenceEndpoint, b.Workload.Audience} {

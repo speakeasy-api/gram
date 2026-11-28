@@ -199,35 +199,3 @@ func TestValidatorBoundaryAdmittedWorkloadSession(t *testing.T) {
 		})
 	}
 }
-
-func TestValidatorBoundaryDirectWorkload(t *testing.T) {
-	t.Parallel()
-	boundary := mcpidentity.NewValidatorBoundary()
-	agentID := uuid.New()
-	expiresAt := time.Now().Add(10 * time.Minute).Truncate(time.Second)
-	earlier := boundary.StampValidatedSession(t.Context(), validatedSession(t, urn.NewUserSubject("user_test")))
-	identity, ok := mcpidentity.FromContext(boundary.StampDirectWorkload(earlier, agentID, expiresAt))
-	require.True(t, ok)
-	require.Equal(t, mcpidentity.KindAgent, identity.Kind())
-	require.Equal(t, agentID.String(), identity.AgentID())
-	require.Empty(t, identity.UserID())
-	require.Equal(t, expiresAt, identity.ExpiresAt())
-	require.Empty(t, identity.SessionJTI())
-	for _, tc := range []struct {
-		name      string
-		boundary  *mcpidentity.ValidatorBoundary
-		agentID   uuid.UUID
-		expiresAt time.Time
-	}{
-		{"nil boundary", nil, agentID, expiresAt},
-		{"inert boundary", &mcpidentity.ValidatorBoundary{}, agentID, expiresAt},
-		{"missing agent", boundary, uuid.Nil, expiresAt},
-		{"zero expiry", boundary, agentID, time.Time{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			_, ok := mcpidentity.FromContext(tc.boundary.StampDirectWorkload(t.Context(), tc.agentID, tc.expiresAt))
-			require.False(t, ok)
-		})
-	}
-}
