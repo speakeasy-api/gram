@@ -29,6 +29,9 @@ type FindOrganizationsInput struct {
 	// DisabledStatus selects organisation access state.
 	DisabledStatus *string `json:"disabled_status,omitempty" jsonschema:"Access state: all, active or disabled; omit instead of supplying an empty value"`
 
+	// Whitelisted selects organizations by whether they are past the book-a-demo gate.
+	Whitelisted *bool `json:"whitelisted,omitempty" jsonschema:"true for whitelisted organizations only, false for organizations that are not whitelisted; omit for both"`
+
 	// MinMembers is decimal text to preserve int64 precision in MCP clients.
 	MinMembers *string `json:"min_members,omitempty" jsonschema:"Inclusive minimum member count as a nonnegative decimal integer string"`
 

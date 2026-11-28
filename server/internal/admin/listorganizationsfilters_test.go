@@ -33,6 +33,8 @@ type filterFixture struct {
 	trial      *trialFixture
 	trialState string
 	disabled   bool
+	// notWhitelisted is negated so the zero value matches the column default.
+	notWhitelisted bool
 }
 
 // filterCorpus spreads account type, trial state and disabled state across
@@ -48,13 +50,13 @@ func filterCorpus(now time.Time) []filterFixture {
 		{id: fltFreeNone, accountType: "free", trialState: "none"},
 		{id: fltFreeRunning, accountType: "free", trialState: "running", trial: &trialFixture{endsAt: now.Add(30 * 24 * time.Hour)}},
 		{id: fltFreeConverted, accountType: "free", trialState: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt}},
-		{id: fltProEnding, accountType: "pro", trialState: "ending_soon", trial: &trialFixture{endsAt: now.Add(24 * time.Hour)}},
+		{id: fltProEnding, accountType: "pro", trialState: "ending_soon", trial: &trialFixture{endsAt: now.Add(24 * time.Hour)}, notWhitelisted: true},
 		{id: fltProExpired, accountType: "pro", trialState: "expired", trial: &trialFixture{endsAt: now.Add(-24 * time.Hour)}},
 		{id: fltEntDemoted, accountType: "enterprise", trialState: "demoted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt}},
 		{id: fltEntConverted, accountType: "enterprise", trialState: "converted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), convertedAt: &convertedAt}},
 		{id: fltFreeWindowIn, accountType: "free", trialState: "ending_soon", trial: &trialFixture{endsAt: now.Add(endingSoonWindow - time.Hour)}},
 		{id: fltFreeWindowOut, accountType: "free", trialState: "running", trial: &trialFixture{endsAt: now.Add(endingSoonWindow + time.Hour)}},
-		{id: fltFreeOff, accountType: "free", trialState: "none", disabled: true},
+		{id: fltFreeOff, accountType: "free", trialState: "none", disabled: true, notWhitelisted: true},
 		{id: fltProOffRunning, accountType: "pro", trialState: "running", trial: &trialFixture{endsAt: now.Add(30 * 24 * time.Hour)}, disabled: true},
 	}
 }
@@ -63,7 +65,7 @@ func seedFilterCorpus(t *testing.T, ctx context.Context, conn *pgxpool.Pool, cor
 	t.Helper()
 
 	for _, f := range corpus {
-		org := orgFixture{id: f.id, name: "Org " + f.id, slug: f.id, accountType: f.accountType, whitelisted: true}
+		org := orgFixture{id: f.id, name: "Org " + f.id, slug: f.id, accountType: f.accountType, whitelisted: !f.notWhitelisted}
 		if f.disabled {
 			org.disabledAt = &disabledAt
 		}
@@ -238,6 +240,21 @@ func TestListOrganizations_SetFilters(t *testing.T) {
 				DisabledStatus: new("disabled"),
 			},
 			want: []string{fltProOffRunning},
+		},
+		{
+			name:    "whitelisted true keeps only whitelisted organizations",
+			payload: &gen.ListOrganizationsPayload{Whitelisted: new(true)},
+			want:    filterIDs(corpus, func(f filterFixture) bool { return !f.notWhitelisted }),
+		},
+		{
+			name:    "whitelisted false keeps only organizations that are not whitelisted",
+			payload: &gen.ListOrganizationsPayload{Whitelisted: new(false)},
+			want:    []string{fltProEnding, fltFreeOff},
+		},
+		{
+			name:    "whitelisted composes with status",
+			payload: &gen.ListOrganizationsPayload{Whitelisted: new(false), DisabledStatus: new("active")},
+			want:    []string{fltProEnding},
 		},
 		{
 			name:    "an unknown account type matches nothing without failing",

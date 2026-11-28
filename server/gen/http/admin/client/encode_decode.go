@@ -5279,6 +5279,9 @@ func EncodeListOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.DisabledStatus != nil {
 			values.Add("disabled_status", *p.DisabledStatus)
 		}
+		if p.Whitelisted != nil {
+			values.Add("whitelisted", fmt.Sprintf("%v", *p.Whitelisted))
+		}
 		if p.MinMembers != nil {
 			values.Add("min_members", fmt.Sprintf("%v", *p.MinMembers))
 		}
