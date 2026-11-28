@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,10 +31,6 @@ const (
 
 	// defaultListenAddr is the helper HTTP control address inside the actor sandbox.
 	defaultListenAddr = ":8082"
-
-	// defaultMarkerRelPath is the relative path inside --root recording completed
-	// write-once bootstrap across rootfs snapshot resumes.
-	defaultMarkerRelPath = ".ate-initialized"
 
 	// maxBootstrapBytes bounds the JSON payload uploaded to POST /bootstrap.
 	maxBootstrapBytes = 2 << 20 // 2 MiB
@@ -69,20 +66,20 @@ type config struct {
 	rootDir   string
 	probeAddr string
 	listen    string
-	marker    string
 	command   []string
 }
 
 type initializer struct {
 	rootDir   string
 	probeAddr string
-	markerRel string
 
-	mu       sync.Mutex
-	started  bool
-	launched bool
-	draining bool
-	launch   chan struct{}
+	mu          sync.Mutex
+	started     bool
+	launched    bool
+	draining    bool
+	hasBodyHash bool
+	bodyHash    [32]byte
+	launch      chan struct{}
 }
 
 func (s *initializer) signalLaunchLocked() {
@@ -123,17 +120,30 @@ func (s *initializer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		w.WriteHeader(http.StatusOK)
 	case r.Method == http.MethodPost && r.URL.Path == "/bootstrap":
-		// Initial write-once provisioning is reachable only through the authenticated ATE ingress.
+		// Provisioning is reachable only through the authenticated ATE ingress.
+		// On cold start, resume, or revert, PID 1 starts fresh and waits for
+		// POST /bootstrap to rewrite provisioned files before launching the workload.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
+		if err != nil {
+			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
+			return
+		}
+		sum := sha256.Sum256(body)
 		if s.started {
+			if s.hasBodyHash && sum == s.bodyHash {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBootstrapBytes))
-		if err != nil || s.install(body) != nil {
+		if s.install(body) != nil {
 			http.Error(w, "invalid bootstrap", http.StatusBadRequest)
 			return
 		}
 		s.started = true
+		s.bodyHash = sum
+		s.hasBodyHash = true
 		s.signalLaunchLocked()
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -287,7 +297,7 @@ func (s *initializer) install(body []byte) error {
 	dirs := make([]cleanDir, 0, len(payload.Dirs))
 	for _, d := range payload.Dirs {
 		rel, err := validateRelativePath(d.Path)
-		if err != nil || rel == s.markerRel {
+		if err != nil {
 			return errors.New("invalid bootstrap directory path")
 		}
 		if _, dup := seenDirs[rel]; dup {
@@ -309,7 +319,7 @@ func (s *initializer) install(body []byte) error {
 	totalBytes := 0
 	for _, f := range payload.Files {
 		rel, err := validateRelativePath(f.Path)
-		if err != nil || rel == s.markerRel {
+		if err != nil {
 			return errors.New("invalid bootstrap file path")
 		}
 		if _, dup := seenFiles[rel]; dup {
@@ -343,7 +353,7 @@ func (s *initializer) install(body []byte) error {
 			return err
 		}
 	}
-	return atomicWriteUnderRoot(s.rootDir, s.markerRel, []byte("1"), 0o600)
+	return nil
 }
 
 func newInitializer(cfg config) (*initializer, error) {
@@ -353,30 +363,18 @@ func newInitializer(cfg config) (*initializer, error) {
 	if _, _, err := net.SplitHostPort(cfg.probeAddr); err != nil {
 		return nil, fmt.Errorf("invalid probe address: %w", err)
 	}
-	markerRel, err := validateRelativePath(cfg.marker)
-	if err != nil {
-		return nil, fmt.Errorf("invalid marker path: %w", err)
-	}
 
-	state := &initializer{
-		rootDir:   filepath.Clean(cfg.rootDir),
-		probeAddr: cfg.probeAddr,
-		markerRel: markerRel,
-		mu:        sync.Mutex{},
-		started:   false,
-		launched:  false,
-		draining:  false,
-		launch:    make(chan struct{}),
-	}
-	if _, err := os.Stat(filepath.Join(state.rootDir, state.markerRel)); err == nil {
-		// Resuming from a durable rootfs snapshot: bootstrap files are already on
-		// disk, so launch the workload immediately without waiting for POST /bootstrap.
-		state.started = true
-		state.signalLaunchLocked()
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("check initialization marker: %w", err)
-	}
-	return state, nil
+	return &initializer{
+		rootDir:     filepath.Clean(cfg.rootDir),
+		probeAddr:   cfg.probeAddr,
+		mu:          sync.Mutex{},
+		started:     false,
+		launched:    false,
+		draining:    false,
+		hasBodyHash: false,
+		bodyHash:    [32]byte{},
+		launch:      make(chan struct{}),
+	}, nil
 }
 
 // run manages bootstrap HTTP handling, worker-drain SIGTERM trapping, and the
@@ -452,7 +450,6 @@ func parseConfig(args []string) (config, error) {
 	fs.StringVar(&cfg.rootDir, "root", "", "Absolute root directory that bootstrap files may be written under")
 	fs.StringVar(&cfg.probeAddr, "probe-addr", "", "TCP host:port probed by GET /app-readyz")
 	fs.StringVar(&cfg.listen, "listen", defaultListenAddr, "HTTP listen address for init endpoints")
-	fs.StringVar(&cfg.marker, "marker", defaultMarkerRelPath, "Relative path under --root marking completed initialization")
 	if err := fs.Parse(args); err != nil {
 		return config{}, fmt.Errorf("parse init flags: %w", err)
 	}

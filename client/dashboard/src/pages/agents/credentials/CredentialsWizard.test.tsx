@@ -69,12 +69,33 @@ const mocks = vi.hoisted(() => ({
   getPlugin: vi.fn(),
   listPolicyGrants: vi.fn(),
   // The organization's custom domain, if any.
+  projectGatewayURL:
+    "https://api.example.test/mcp/gateway/example/projects/main",
+  runtimeGatewayReason: undefined as string | undefined,
+  runtimeGateway: vi.fn(),
   customDomains: [] as {
     domain: string;
     ipAllowlist: string[];
     verified: boolean;
     activated: boolean;
   }[],
+}));
+
+vi.mock("@gram/client/react-query/agentRuntimeGateway.js", () => ({
+  useAgentRuntimeGateway: (...args: unknown[]) => {
+    mocks.runtimeGateway(...args);
+    return {
+      isPending: false,
+      isError: false,
+      data: mocks.projectGatewayURL
+        ? { available: true, url: mocks.projectGatewayURL }
+        : {
+            available: false,
+            unavailableReason:
+              mocks.runtimeGatewayReason ?? "machine_access_disabled",
+          },
+    };
+  },
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -519,6 +540,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requiredClientIds = {};
   mocks.projectId = "project_one";
+  mocks.projectGatewayURL =
+    "https://api.example.test/mcp/gateway/example/projects/main";
+  mocks.runtimeGatewayReason = undefined;
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
   mocks.canIngestHooks = false;
@@ -747,7 +771,7 @@ describe("Provisioning a new agent", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("creates the agent, issues its first key and mints one setup command", async () => {
+  it("creates the agent, issues its first key and shows the project gateway", async () => {
     fireEvent.click(await reachCredentialStep());
 
     await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
@@ -778,37 +802,25 @@ describe("Provisioning a new agent", () => {
       "agent_new",
     );
 
-    // The command renders in a syntax-highlighted block, so it reaches the
-    // DOM as a run of token elements rather than one string. Read the block.
-    const setupCommand = await screen.findByLabelText("setup command");
-    await waitFor(() =>
-      expect(setupCommand.textContent?.replace(/\s+/g, " ")).toMatch(
-        /curl -fsSL .*\/agent-mcp\/install\/setup_code/,
-      ),
+    const claude = await screen.findByLabelText("Claude Code");
+    expect(claude.textContent).toContain(mocks.projectGatewayURL);
+    expect(mocks.runtimeGateway).toHaveBeenCalledWith(
+      { agentId: "agent_new" },
+      undefined,
+      expect.objectContaining({ enabled: true }),
     );
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("quotes the custom domain when its IP allowlist locks the platform host", async () => {
-    mocks.customDomains = [
-      {
-        domain: "mcp.example.com",
-        ipAllowlist: ["203.0.113.0/24"],
-        verified: true,
-        activated: true,
-      },
-    ];
+  it("uses the custom-domain project gateway URL unchanged", async () => {
+    mocks.projectGatewayURL =
+      "https://mcp.example.com/mcp/gateway/example/projects/main";
     fireEvent.click(await reachCredentialStep());
 
     expect((await screen.findByLabelText("Claude Code")).textContent).toContain(
-      "https://mcp.example.com/agent-mcp/agent_new",
+      mocks.projectGatewayURL,
     );
-    // The setup command is still minted on the platform host: the browser
-    // need not be inside the allowlist.
-    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
-    expect(String(mocks.fetch.mock.calls[0]?.[0])).not.toContain(
-      "mcp.example.com",
-    );
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("does not ask about the sign-in grant before a server is chosen", async () => {

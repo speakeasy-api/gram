@@ -465,6 +465,7 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	router := goahttp.NewMuxer()
 	mcp.Attach(router, ti.service.Service, nil)
+	setMCPNotFoundHandler(t, router)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -480,6 +481,10 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 		missing,
 		denied,
 		{router: router, path: "/platform/mcp/conformance-missing-target", supported: mcpversions.SupportedPlatformToolset()},
+		// URLs no route matches answer through the not-found hook with the
+		// same shapes as a missing slug.
+		{router: router, path: "/mcp/conformance-missing-target/extra", supported: mcpversions.SupportedHostedToolset()},
+		{router: router, path: "/mcp", supported: mcpversions.SupportedHostedToolset()},
 	} {
 		for _, row := range missingTargetRows {
 			t.Run(target.path+"/modern-meta-without-header/"+row.name, func(t *testing.T) {
@@ -668,23 +673,5 @@ func TestConformanceMatrix_Platform(t *testing.T) {
 		authorization:   "Bearer " + mintAssistantToken(t, ti, authCtx, managedID),
 		supported:       mcpversions.SupportedPlatformToolset(),
 		assignsSessions: false,
-	})
-}
-
-func TestConformanceMatrix_AgentGateway(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fixture := seedAgentGateway(t, ctx, ti)
-
-	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service.Service, nil)
-
-	runConformanceMatrix(t, conformanceTarget{
-		router:          router,
-		path:            "/agent-mcp/" + fixture.agent.ID.String(),
-		authorization:   "Bearer " + fixture.token,
-		supported:       mcpversions.SupportedMetaServer(),
-		assignsSessions: true,
 	})
 }

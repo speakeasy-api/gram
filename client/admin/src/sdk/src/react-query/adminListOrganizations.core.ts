@@ -81,6 +81,7 @@ export function buildAdminListOrganizationsQuery(
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
       disabledStatus: request?.disabledStatus,
+      whitelisted: request?.whitelisted,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
       createdFrom: request?.createdFrom,
@@ -131,6 +132,7 @@ export function buildAdminListOrganizationsInfiniteQuery(
       accountTypes: request?.accountTypes,
       trialStates: request?.trialStates,
       disabledStatus: request?.disabledStatus,
+      whitelisted: request?.whitelisted,
       minMembers: request?.minMembers,
       maxMembers: request?.maxMembers,
       createdFrom: request?.createdFrom,
@@ -178,6 +180,7 @@ export function queryKeyAdminListOrganizations(
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
     disabledStatus?: DisabledStatus | undefined;
+    whitelisted?: boolean | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
     createdFrom?: string | undefined;
@@ -208,6 +211,7 @@ export function queryKeyAdminListOrganizationsInfinite(
     accountTypes?: Array<string> | undefined;
     trialStates?: Array<string> | undefined;
     disabledStatus?: DisabledStatus | undefined;
+    whitelisted?: boolean | undefined;
     minMembers?: bigint | undefined;
     maxMembers?: bigint | undefined;
     createdFrom?: string | undefined;

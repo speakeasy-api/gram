@@ -392,6 +392,14 @@ type Client struct {
 	// updateSignupOffer endpoint.
 	UpdateSignupOfferDoer goahttp.Doer
 
+	// GetSelfServeStatus Doer is the HTTP client used to make requests to the
+	// getSelfServeStatus endpoint.
+	GetSelfServeStatusDoer goahttp.Doer
+
+	// SetSelfServeDisabled Doer is the HTTP client used to make requests to the
+	// setSelfServeDisabled endpoint.
+	SetSelfServeDisabledDoer goahttp.Doer
+
 	// ListPlatformMcpFeedback Doer is the HTTP client used to make requests to the
 	// listPlatformMcpFeedback endpoint.
 	ListPlatformMcpFeedbackDoer goahttp.Doer
@@ -698,6 +706,8 @@ func NewClient(
 		ListSignupOffersDoer:                           doer,
 		CreateSignupOfferDoer:                          doer,
 		UpdateSignupOfferDoer:                          doer,
+		GetSelfServeStatusDoer:                         doer,
+		SetSelfServeDisabledDoer:                       doer,
 		ListPlatformMcpFeedbackDoer:                    doer,
 		GetStripeSubscriptionCandidateDoer:             doer,
 		SetStripeSubscriptionDoer:                      doer,
@@ -3010,6 +3020,54 @@ func (c *Client) UpdateSignupOffer() goa.Endpoint {
 		resp, err := c.UpdateSignupOfferDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateSignupOffer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetSelfServeStatus returns an endpoint that makes HTTP requests to the admin
+// service getSelfServeStatus server.
+func (c *Client) GetSelfServeStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetSelfServeStatusRequest(c.encoder)
+		decodeResponse = DecodeGetSelfServeStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetSelfServeStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetSelfServeStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getSelfServeStatus", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSelfServeDisabled returns an endpoint that makes HTTP requests to the
+// admin service setSelfServeDisabled server.
+func (c *Client) SetSelfServeDisabled() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSelfServeDisabledRequest(c.encoder)
+		decodeResponse = DecodeSetSelfServeDisabledResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSelfServeDisabledRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSelfServeDisabledDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setSelfServeDisabled", err)
 		}
 		return decodeResponse(resp)
 	}

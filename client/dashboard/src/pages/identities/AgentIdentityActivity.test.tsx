@@ -311,10 +311,6 @@ it("lists failed checks first, then the servers the agent reached by name, then 
   // Other checks name their resource as Roles & Permissions does.
   expect(screen.getByText("Project one")).toBeTruthy();
   expect(screen.getAllByText(/Allowed once/)).toHaveLength(2);
-  // Failed connections come with how gateway listings record them.
-  expect(
-    screen.getByText(/The agent gateway checks every server/),
-  ).toBeTruthy();
   expect(
     screen.getByText(/2 failed and 5 allowed checks in this period/),
   ).toBeTruthy();
@@ -339,10 +335,6 @@ it("reads a cut-off slice's counts as lower bounds and says resources may be mis
   expect(
     screen.getByText(/Grouped from the latest 2 of 202 checks/),
   ).toBeTruthy();
-  // No connection was denied, so the gateway note does not apply.
-  expect(
-    screen.queryByText(/The agent gateway checks every server/),
-  ).toBeNull();
 });
 it("names a tool list filtering pass rather than an empty scope", () => {
   mocks.challenges.mockImplementation(({ outcome }: { outcome: string }) =>

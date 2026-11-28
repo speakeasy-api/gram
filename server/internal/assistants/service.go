@@ -3764,7 +3764,6 @@ func (s *ServiceCore) prepareEventPrompt(
 	deliveryMode MCPDeliveryMode,
 	platformSlugs []string,
 	preResolvedIdentity *turnIdentity,
-	resolveIdentity bool,
 ) (preparedEventPrompt, error) {
 	var out preparedEventPrompt
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
@@ -3786,17 +3785,14 @@ func (s *ServiceCore) prepareEventPrompt(
 		notice = renderAssistantSkillSetChangeForMode(claimedSnapshot, currentSnapshot, deliveryMode)
 	}
 
-	haveIdentity := false
 	if preResolvedIdentity != nil {
 		out.identity = *preResolvedIdentity
-		haveIdentity = true
-	} else if resolveIdentity {
+	} else {
 		identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 		if err != nil {
 			return out, err
 		}
 		out.identity = identity
-		haveIdentity = true
 	}
 
 	prompt := ""
@@ -3812,15 +3808,13 @@ func (s *ServiceCore) prepareEventPrompt(
 		if err != nil {
 			return out, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		if haveIdentity {
-			senderLine, err := s.speakeasySenderContextLine(ctx, thread, out.identity)
-			if err != nil {
-				return out, err
-			}
-			prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
-			if err != nil {
-				return out, err
-			}
+		senderLine, err := s.speakeasySenderContextLine(ctx, thread, out.identity)
+		if err != nil {
+			return out, err
+		}
+		prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
+		if err != nil {
+			return out, err
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -3887,7 +3881,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		return err
 	}
 
-	prepared, err := s.prepareEventPrompt(ctx, thread, assistant, runtime, event, deliveryMode, platformSlugs, &identity, false)
+	prepared, err := s.prepareEventPrompt(ctx, thread, assistant, runtime, event, deliveryMode, platformSlugs, &identity)
 	if err != nil {
 		return err
 	}
@@ -3924,10 +3918,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 			}
 			evCtx := withAssistantLogEvent(steerCtx, ev)
 			s.emitAssistantTelemetry(evCtx, assistant, thread, &runtime, &ev, "turn_start", "assistant turn steered", "INFO", nil)
-			// Only Speakeasy Slack threads attach a verified sender context line
-			// to the prompt; Kit authentication is runtime-bound workload identity
-			// and never gates or defers a steered event by sender.
-			steerPrepared, prepErr := s.prepareEventPrompt(evCtx, thread, assistant, runtime, ev, deliveryMode, platformSlugs, nil, thread.SourceKind == sourceKindSpeakeasySlack)
+			// Every steered event passes the same sender eligibility check as an
+			// initial event; ineligible events fail via ErrTurnIdentity below
+			// without changing the running turn's credential or deferring.
+			// Sender context lines remain Speakeasy Slack-only inside
+			// renderSpeakeasySenderContext.
+			steerPrepared, prepErr := s.prepareEventPrompt(evCtx, thread, assistant, runtime, ev, deliveryMode, platformSlugs, nil)
 			if prepErr != nil {
 				// Preparation errors belong to the newly claimed event; settle
 				// or requeue it without disrupting the already-running turn.

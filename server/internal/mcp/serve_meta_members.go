@@ -278,7 +278,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		members []metaMember
 		err     error
 	)
-	storedMembership := !gate.organizationGateway && !gate.agentMembership
+	storedMembership := !gate.organizationGateway
 	if storedMembership {
 		ctx, members, gate.deniedMembers, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
@@ -330,9 +330,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 // resolveOrganizationMemberSnapshot derives a gateway's members from the
 // caller's own access rather than from stored membership rows: every servable
 // server in the organization is a candidate, and the caller's grants decide
-// which survive admission. It serves both derived gateways, the agent gateway
-// (grants carried by the agent key) and the organization gateway (grants of
-// the signed-in user). Nothing is persisted, so a grant revoked in the
+// which survive admission. It serves the organization gateway using grants of
+// the signed-in caller. Nothing is persisted, so a grant revoked in the
 // dashboard stops appearing on the caller's very next request with nothing to
 // redistribute or re-install.
 //

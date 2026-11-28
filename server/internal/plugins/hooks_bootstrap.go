@@ -46,10 +46,9 @@ var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA2
 // Values of GenerateConfig.InstallRoute. The speakeasy-hooks binary's own
 // install command writes "hooks_install".
 const (
-	InstallRouteMarketplace  = "marketplace"
-	InstallRouteDownload     = "download"
-	InstallRouteAgentInstall = "agent_install"
-	InstallRouteDogfood      = "dogfood"
+	InstallRouteMarketplace = "marketplace"
+	InstallRouteDownload    = "download"
+	InstallRouteDogfood     = "dogfood"
 )
 
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {

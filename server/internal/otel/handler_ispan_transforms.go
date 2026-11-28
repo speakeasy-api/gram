@@ -26,6 +26,7 @@ type SpanTransformHandler struct {
 	instruments   *enrich.Instruments
 	spanPublisher gcp.Publisher[*otelv1.Span]
 	enrichers     []enrich.SpanEnricher
+	orgs          *orgDisabledChecker
 }
 
 func NewSpanTransformHandler(
@@ -50,10 +51,15 @@ func NewSpanTransformHandler(
 		instruments:   in,
 		spanPublisher: spanPublisher,
 		enrichers:     enrichers,
+		orgs:          newOrgDisabledChecker(replicaDB),
 	}
 }
 
 func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan, _ gcp.MessageMetadata) error {
+	if drop, err := h.orgs.Drop(ctx, h.logger, m.GetProvenance().GetOrganizationId()); err != nil || drop {
+		return err
+	}
+
 	out, err := transformInboundSpan(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
 		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound span")
