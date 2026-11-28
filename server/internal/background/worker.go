@@ -335,6 +335,7 @@ func ForDeploymentProcessing(
 			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
 			IntentPolicyAssessments: gcp.NewNoopPublisher[*intentpolicyv1.Assessment](),
+			IntentPolicyTranscripts: gcp.NewNoopPublisher[*intentpolicyv1.TranscriptMessage](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,

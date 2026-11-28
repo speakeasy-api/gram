@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicies"
@@ -112,29 +113,35 @@ func newTestServiceWithFlags(t *testing.T, jev classifier.Classifier, flags feat
 	return ctx, svc
 }
 
-// recordingPublisher captures published assessments and settles every publish
+// recordingPublisher captures published messages and settles every publish
 // successfully.
-type recordingPublisher struct {
+type recordingPublisher[M any] struct {
 	mu       sync.Mutex
-	messages []*intentpolicyv1.Assessment
+	messages []M
 }
 
-func (p *recordingPublisher) Publish(_ context.Context, msg *intentpolicyv1.Assessment, _ ...gcp.PublishOption) gcp.PublishResult {
+func (p *recordingPublisher[M]) Publish(_ context.Context, msg M, _ ...gcp.PublishOption) gcp.PublishResult {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.messages = append(p.messages, msg)
 	return gcp.NewErrPublishResult(nil)
 }
 
-func (p *recordingPublisher) Stop(context.Context) error { return nil }
+func (p *recordingPublisher[M]) Stop(context.Context) error { return nil }
 
-func (p *recordingPublisher) published() []*intentpolicyv1.Assessment {
+func (p *recordingPublisher[M]) published() []M {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return append([]*intentpolicyv1.Assessment(nil), p.messages...)
+	return append([]M(nil), p.messages...)
 }
 
-func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service, *recordingPublisher) {
+// testResults holds what a test service published.
+type testResults struct {
+	assessments *recordingPublisher[*intentpolicyv1.Assessment]
+	transcripts *recordingPublisher[*intentpolicyv1.TranscriptMessage]
+}
+
+func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service, testResults) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -155,11 +162,14 @@ func newTestServiceWithResults(t *testing.T, jev classifier.Classifier, flags fe
 	)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	results := &recordingPublisher{mu: sync.Mutex{}, messages: nil}
+	results := testResults{
+		assessments: &recordingPublisher[*intentpolicyv1.Assessment]{mu: sync.Mutex{}, messages: nil},
+		transcripts: &recordingPublisher[*intentpolicyv1.TranscriptMessage]{mu: sync.Mutex{}, messages: nil},
+	}
 	writer, shutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev, results)
+	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev, results.assessments, results.transcripts, chatredact.New())
 	require.NoError(t, err)
 	return ctx, svc, results
 }

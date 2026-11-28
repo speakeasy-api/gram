@@ -1394,6 +1394,9 @@ func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (s
 		if buckets["lake"] == "" {
 			buckets["lake"] = "lake"
 		}
+		if buckets["intent-transcripts"] == "" {
+			buckets["intent-transcripts"] = "intent-transcripts"
+		}
 
 		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
 		if err != nil {
@@ -1566,6 +1569,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "intentPolicyAssessments", pub: intentPolicyAssessments})
 
+	intentPolicyTranscripts, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &intentpolicyv1.TranscriptMessage{},
+		gcp.WithPubSubPublishSettings(&telemetryPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for intent policy transcripts: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "intentPolicyTranscripts", pub: intentPolicyTranscripts})
+
 	// OTLP ingest publishes on the request path and waits for the result before
 	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
 	// that clients can retry instead of holding requests open indefinitely.
@@ -1648,6 +1659,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		OTELMetrics:             otelMetrics,
 		OTELSpans:               otelSpans,
 		IntentPolicyAssessments: intentPolicyAssessments,
+		IntentPolicyTranscripts: intentPolicyTranscripts,
 	}, shutdown, nil
 }
 

@@ -44,19 +44,21 @@ import (
 
 // Service implements the intentPolicies Goa service.
 type Service struct {
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	auth       *auth.Auth
-	authz      *authz.Engine
-	features   feature.Provider
-	chatWriter *chat.ChatMessageWriter
-	completion openrouter.CompletionClient
-	jev        *intentpolicy.JevEvaluator
-	guardrail  intentpolicy.Guardrail
-	engine     *intentpolicy.Engine
-	results    gcp.Publisher[*intentpolicyv1.Assessment]
-	now        func() time.Time
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	auth        *auth.Auth
+	authz       *authz.Engine
+	features    feature.Provider
+	chatWriter  *chat.ChatMessageWriter
+	completion  openrouter.CompletionClient
+	jev         *intentpolicy.JevEvaluator
+	guardrail   intentpolicy.Guardrail
+	engine      *intentpolicy.Engine
+	results     gcp.Publisher[*intentpolicyv1.Assessment]
+	transcripts gcp.Publisher[*intentpolicyv1.TranscriptMessage]
+	redactor    intentpolicy.Redactor
+	now         func() time.Time
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,7 +66,8 @@ var _ gen.Auther = (*Service)(nil)
 
 // NewService builds the service. jevClassifier should be pinned to
 // intentpolicy.JevModel, or classifier.Noop when no key is configured. results
-// receives one event per assessed call; nil publishes nothing.
+// receives one event per assessed call and transcripts one per message of the
+// analyzed generation, masked by redactor; a nil publisher publishes nothing.
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -76,6 +79,8 @@ func NewService(
 	completion openrouter.CompletionClient,
 	jevClassifier classifier.Classifier,
 	results gcp.Publisher[*intentpolicyv1.Assessment],
+	transcripts gcp.Publisher[*intentpolicyv1.TranscriptMessage],
+	redactor intentpolicy.Redactor,
 ) (*Service, error) {
 	logger = logger.With(attr.SlogComponent("intentpolicies.api"))
 	guardrail := intentpolicy.DefaultGuardrail()
@@ -84,19 +89,21 @@ func NewService(
 		return nil, fmt.Errorf("compile intent guardrail: %w", err)
 	}
 	return &Service{
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
-		logger:     logger,
-		db:         db,
-		auth:       auth.New(logger, db, sessions, authzEngine),
-		authz:      authzEngine,
-		features:   features,
-		chatWriter: chatWriter,
-		completion: completion,
-		jev:        intentpolicy.NewJevEvaluator(jevClassifier),
-		guardrail:  guardrail,
-		engine:     engine,
-		results:    results,
-		now:        time.Now,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/intentpolicies"),
+		logger:      logger,
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		features:    features,
+		chatWriter:  chatWriter,
+		completion:  completion,
+		jev:         intentpolicy.NewJevEvaluator(jevClassifier),
+		guardrail:   guardrail,
+		engine:      engine,
+		results:     results,
+		transcripts: transcripts,
+		redactor:    redactor,
+		now:         time.Now,
 	}, nil
 }
 
@@ -207,6 +214,9 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 			Generation: row.Generation,
 			Role:       row.Role,
 			ToolCalls:  row.ToolCalls,
+			Content:    row.Content,
+			ToolCallID: conv.FromPGTextOrEmpty[string](row.ToolCallID),
+			Model:      conv.FromPGTextOrEmpty[string](row.Model),
 			CreatedAt:  row.CreatedAt.Time,
 		})
 	}
@@ -223,7 +233,8 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "analyze session").LogError(ctx, logger)
 	}
-	s.publishResults(ctx, logger, authCtx, *generation, requestedAt, analysis)
+	// Windowed analyses of one session share a transcript; the first window exports it.
+	s.publishResults(ctx, logger, authCtx, chatID, *generation, requestedAt, analysis, messages, payload.Offset == 0)
 	return buildAnalysisView(chatID, *generation, analysis), nil
 }
 
@@ -231,9 +242,12 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 const publishTimeout = 30 * time.Second
 
 // publishResults publishes one event per assessment without delaying the
-// response. Failures are logged and never fail the analysis.
-func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, generation int32, requestedAt time.Time, analysis intentpolicy.Analysis) {
-	if s.results == nil || len(analysis.Assessments) == 0 {
+// response. When transcript is set it also exports the analyzed generation's
+// messages; masking and publishing them happen in the background. Failures
+// are logged and never fail the analysis.
+func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, chatID uuid.UUID, generation int32, requestedAt time.Time, analysis intentpolicy.Analysis, messages []intentpolicy.MessageRow, transcript bool) {
+	exportTranscript := transcript && s.transcripts != nil && len(messages) > 0
+	if s.results == nil || (len(analysis.Assessments) == 0 && !exportTranscript) {
 		return
 	}
 	analysisID, err := uuid.NewV7()
@@ -260,29 +274,48 @@ func (s *Service) publishResults(ctx context.Context, logger *slog.Logger, authC
 	}
 	go func() {
 		defer cancel()
-		failed, unsettled := 0, 0
-		var firstErr error
-		for _, p := range pending {
-			_, err := p.Get(pubCtx)
-			switch {
-			case err == nil:
-			case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
-				// The message may still be delivered; only its outcome is unknown.
-				unsettled++
-			default:
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
+		settle(pubCtx, logger, "intent assessments", pending)
+		if !exportTranscript {
+			return
+		}
+		records, err := intentpolicy.TranscriptRecords(pubCtx, s.redactor, rc, chatID, messages)
+		if err != nil {
+			logger.WarnContext(pubCtx, "export intent transcript", attr.SlogError(err))
+			return
+		}
+		published := make([]gcp.PublishResult, 0, len(records))
+		for _, r := range records {
+			published = append(published, s.transcripts.Publish(pubCtx, r))
+		}
+		settle(pubCtx, logger, "intent transcript messages", published)
+	}()
+}
+
+// settle waits for publishes and logs failures and publishes whose outcome
+// was still unknown at the deadline.
+func settle(ctx context.Context, logger *slog.Logger, what string, pending []gcp.PublishResult) {
+	failed, unsettled := 0, 0
+	var firstErr error
+	for _, p := range pending {
+		_, err := p.Get(ctx)
+		switch {
+		case err == nil:
+		case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
+			// The message may still be delivered; only its outcome is unknown.
+			unsettled++
+		default:
+			failed++
+			if firstErr == nil {
+				firstErr = err
 			}
 		}
-		if failed > 0 {
-			logger.ErrorContext(pubCtx, "publish intent assessments", attr.SlogError(firstErr), attr.SlogValueInt(failed))
-		}
-		if unsettled > 0 {
-			logger.WarnContext(pubCtx, "intent assessment publishes unsettled before timeout", attr.SlogValueInt(unsettled))
-		}
-	}()
+	}
+	if failed > 0 {
+		logger.ErrorContext(ctx, "publish "+what, attr.SlogError(firstErr), attr.SlogValueInt(failed))
+	}
+	if unsettled > 0 {
+		logger.WarnContext(ctx, what+" publishes unsettled before timeout", attr.SlogValueInt(unsettled))
+	}
 }
 
 // UploadTranscript stores a transcript as a chat in the caller's project.

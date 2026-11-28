@@ -3,10 +3,12 @@ package intentpolicies_test
 import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	intentpolicyv1 "github.com/speakeasy-api/gram/infra/gen/gram/intentpolicy/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/intent_policies"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
@@ -116,7 +118,7 @@ func TestAnalyzePublishesAssessments(t *testing.T) {
 	res, err := svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
 	require.NoError(t, err)
 
-	published := results.published()
+	published := results.assessments.published()
 	require.Len(t, published, 2)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -142,10 +144,47 @@ func TestAnalyzePublishesAssessments(t *testing.T) {
 	// A second run of the same calls shares logical ids but not the analysis id.
 	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: nil})
 	require.NoError(t, err)
-	again := results.published()[2:]
+	again := results.assessments.published()[2:]
 	require.Len(t, again, 2)
 	require.Equal(t, published[0].GetId(), again[0].GetId())
 	require.NotEqual(t, published[0].GetAnalysisId(), again[0].GetAnalysisId())
+}
+
+func TestAnalyzeExportsTranscriptOnce(t *testing.T) {
+	t.Parallel()
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagIntentPolicies, feature.AnyDistinctID, true)
+	ctx, svc, results := newTestServiceWithResults(t, classifier.Noop{}, flags)
+
+	up, err := svc.UploadTranscript(ctx, &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "upload.json", Content: transcript})
+	require.NoError(t, err)
+
+	limit := int32(1)
+	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 0, Limit: &limit})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return len(results.transcripts.published()) == up.MessageCount }, 10*time.Second, 20*time.Millisecond)
+
+	// Later windows of the same session do not export it again.
+	_, err = svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil, Offset: 1, Limit: &limit})
+	require.NoError(t, err)
+	require.Never(t, func() bool { return len(results.transcripts.published()) > up.MessageCount }, 200*time.Millisecond, 20*time.Millisecond)
+
+	messages := results.transcripts.published()
+	first := results.assessments.published()[0]
+	var carrier *intentpolicyv1.TranscriptMessage
+	for _, m := range messages {
+		require.Equal(t, up.ChatID, m.GetChatId())
+		require.Equal(t, first.GetAnalysisId(), m.GetAnalysisId())
+		require.False(t, m.GetWithheld())
+		if m.GetMessageId() == first.GetToolCall().GetMessageId() {
+			carrier = m
+		}
+	}
+	require.NotNil(t, carrier, "the assessed call's message is exported")
+	require.Equal(t, "assistant", carrier.GetRole())
+	require.Len(t, carrier.GetToolCalls(), 2)
+	require.Equal(t, first.GetToolCall().GetToolCallId(), carrier.GetToolCalls()[0].GetToolCallId())
+	require.JSONEq(t, `{"command":"ls"}`, carrier.GetToolCalls()[0].GetArguments())
 }
 
 func TestAnalyzeInBatches(t *testing.T) {

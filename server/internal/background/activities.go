@@ -113,6 +113,7 @@ type Publishers struct {
 	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
 	IntentPolicyAssessments gcp.Publisher[*intentpolicyv1.Assessment]
+	IntentPolicyTranscripts gcp.Publisher[*intentpolicyv1.TranscriptMessage]
 	Outbox                  topics.Publisher
 }
 
