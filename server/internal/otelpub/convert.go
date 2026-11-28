@@ -26,7 +26,7 @@ const maxValueDepth = 32
 // provenance to the caller.
 func inboundFromRecord(ctx context.Context, record *log.Record, res *resource.Resource, scope string) (*otelv1.InboundLogRecord, error) {
 	var body *otelv1.InboundLogRecord_AnyValue
-	if !record.Body().Empty() {
+	if record.Body().Type() != attribute.EMPTY {
 		converted, err := anyValue(record.Body(), 0)
 		if err != nil {
 			return nil, fmt.Errorf("convert body: %w", err)
@@ -36,13 +36,13 @@ func inboundFromRecord(ctx context.Context, record *log.Record, res *resource.Re
 
 	attributes := make([]*otelv1.InboundLogRecord_KeyValue, 0, record.AttributesLen())
 	var walkErr error
-	record.WalkAttributes(func(kv log.KeyValue) bool {
+	record.WalkAttributes(func(kv attribute.KeyValue) bool {
 		value, err := anyValue(kv.Value, 0)
 		if err != nil {
 			walkErr = fmt.Errorf("convert attribute %q: %w", kv.Key, err)
 			return false
 		}
-		key := kv.Key
+		key := string(kv.Key)
 		attributes = append(attributes, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: value}).Build())
 		return true
 	})
@@ -123,35 +123,75 @@ func unixNano(t time.Time) uint64 {
 	return uint64(seconds)*nanosPerSecond + nanos
 }
 
-func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, error) {
+func anyValue(value attribute.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, error) {
 	if depth > maxValueDepth {
 		return nil, fmt.Errorf("value nested deeper than %d levels", maxValueDepth)
 	}
-	switch value.Kind() {
-	case log.KindEmpty:
+	switch value.Type() {
+	case attribute.EMPTY:
 		// A non-nil empty value, so an empty element of a slice or map never
 		// becomes a nil message, which protobuf refuses to marshal.
 		return (&otelv1.InboundLogRecord_AnyValue_builder{}).Build(), nil
-	case log.KindBool:
+	case attribute.BOOL:
 		v := value.AsBool()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{BoolValue: &v}).Build(), nil
-	case log.KindInt64:
+	case attribute.INT64:
 		v := value.AsInt64()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &v}).Build(), nil
-	case log.KindFloat64:
+	case attribute.FLOAT64:
 		v := value.AsFloat64()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &v}).Build(), nil
-	case log.KindString:
+	case attribute.STRING:
 		v := value.AsString()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build(), nil
-	case log.KindBytes:
+	case attribute.BYTESLICE:
 		// A nil slice would leave the oneof unset and lose the value's kind.
-		bytes := value.AsBytes()
+		bytes := value.AsByteSlice()
 		if bytes == nil {
 			bytes = []byte{}
 		}
 		return (&otelv1.InboundLogRecord_AnyValue_builder{BytesValue: bytes}).Build(), nil
-	case log.KindSlice:
+	case attribute.BOOLSLICE:
+		items := value.AsBoolSlice()
+		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
+		for _, item := range items {
+			v := item
+			values = append(values, (&otelv1.InboundLogRecord_AnyValue_builder{BoolValue: &v}).Build())
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case attribute.INT64SLICE:
+		items := value.AsInt64Slice()
+		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
+		for _, item := range items {
+			v := item
+			values = append(values, (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &v}).Build())
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case attribute.FLOAT64SLICE:
+		items := value.AsFloat64Slice()
+		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
+		for _, item := range items {
+			v := item
+			values = append(values, (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &v}).Build())
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case attribute.STRINGSLICE:
+		items := value.AsStringSlice()
+		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
+		for _, item := range items {
+			v := item
+			values = append(values, (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build())
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case attribute.SLICE:
 		items := value.AsSlice()
 		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))
 		for _, item := range items {
@@ -164,7 +204,7 @@ func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, er
 		return (&otelv1.InboundLogRecord_AnyValue_builder{
 			ArrayValue: (&otelv1.InboundLogRecord_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
-	case log.KindMap:
+	case attribute.MAP:
 		entries := value.AsMap()
 		values := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(entries))
 		for _, entry := range entries {
@@ -172,22 +212,22 @@ func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, er
 			if err != nil {
 				return nil, err
 			}
-			key := entry.Key
+			key := string(entry.Key)
 			values = append(values, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: converted}).Build())
 		}
 		return (&otelv1.InboundLogRecord_AnyValue_builder{
 			KvlistValue: (&otelv1.InboundLogRecord_KeyValueList_builder{Values: values}).Build(),
 		}).Build(), nil
 	default:
-		return nil, fmt.Errorf("unsupported log value kind %s", value.Kind())
+		return nil, fmt.Errorf("unsupported log value type %s", value.Type())
 	}
 }
 
-// attributeKeyValues converts resource attributes, which are attribute.KeyValue rather than log.KeyValue.
+// attributeKeyValues converts resource attributes into OTLP key-value entries.
 func attributeKeyValues(attrs []attribute.KeyValue) ([]*otelv1.InboundLogRecord_KeyValue, error) {
 	out := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(attrs))
 	for _, kv := range attrs {
-		converted, err := anyValue(log.ValueFromAttribute(kv.Value), 0)
+		converted, err := anyValue(kv.Value, 0)
 		if err != nil {
 			return nil, fmt.Errorf("convert attribute %q: %w", kv.Key, err)
 		}

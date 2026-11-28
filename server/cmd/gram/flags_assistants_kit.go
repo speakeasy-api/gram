@@ -22,7 +22,7 @@ import (
 )
 
 func assistantKitRuntimeFlags() []cli.Flag {
-	return []cli.Flag{
+	return append([]cli.Flag{
 		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; ignored by GKE Kit, which derives its JWKS from the cluster identity."},
 		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local assertions; ignored by GKE Kit, which derives its issuer from the cluster identity."},
 		&cli.StringFlag{Name: "assistant-kit-workload-subject", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT"}, Usage: "Local operator-projected subject, unique to one cold bootstrap. Supply a fresh external subject and assertion before restarting; subjects cannot be reused or shared between assistants."},
@@ -41,10 +41,21 @@ func assistantKitRuntimeFlags() []cli.Flag {
 		&cli.BoolFlag{Name: "assistant-kit-gke-snapshots-enabled", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_SNAPSHOTS_ENABLED"}, Usage: "Enable Kit GKE snapshot provisioning for new sessions."},
 		&cli.StringFlag{Name: "assistant-kit-network", EnvVars: []string{"GRAM_ASSISTANT_KIT_NETWORK"}, Usage: "Isolated local container network with a trusted TLS relay for ai.speakeasy.com."},
 		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt new assistant sessions into Kit v3 using an explicit non-latest tag or digest; empty preserves legacy composition."},
-	}
+	}, assistantATERuntimeFlags()...)
 }
 
 func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL, orgHosts *orghost.Resolver) error {
+	if c.Bool("assistant-ate-enabled") {
+		base, err := assistantRuntimeConfigFromCLI(c, serverURL)
+		if err != nil {
+			return err
+		}
+		if base.Provider == assistants.RuntimeProviderDisabled {
+			logger.WarnContext(c.Context, "ignoring ATE Kit settings: the assistant runtime provider is disabled")
+			return nil
+		}
+		return installKitATERuntimeFromCLI(c, core, redisClient, serverURL, orgHosts)
+	}
 	if c.String("assistant-kit-image") == "" {
 		return nil
 	}

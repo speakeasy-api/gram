@@ -111,9 +111,7 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 	record.SetEventName(executeToolOperation)
 	record.SetTimestamp(end)
 	record.SetSeverity(log.SeverityInfo)
-	for _, kv := range attrs {
-		record.AddAttributes(log.KeyValueFromAttribute(kv))
-	}
+	record.AddAttributes(attrs...)
 	return record
 }
 

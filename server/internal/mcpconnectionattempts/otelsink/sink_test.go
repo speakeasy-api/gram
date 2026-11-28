@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
@@ -52,7 +53,7 @@ func connectionLogTestRecord() log.Record {
 	record.SetEventName("speakeasy.mcp_connection")
 	record.SetTimestamp(time.Now())
 	record.SetSeverity(log.SeverityError)
-	record.AddAttributes(log.String("error.type", "idp_unavailable"), log.Float64("speakeasy.mcp_connection.duration", 1.5), log.Int64("speakeasy.mcp_connection.repeated_failures", 2), log.Bool("speakeasy.mcp_connection.final", true))
+	record.AddAttributes(attribute.String("error.type", "idp_unavailable"), attribute.Float64("speakeasy.mcp_connection.duration", 1.5), attribute.Int64("speakeasy.mcp_connection.repeated_failures", 2), attribute.Bool("speakeasy.mcp_connection.final", true))
 	return record
 }
 

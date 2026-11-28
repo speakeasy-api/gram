@@ -27,6 +27,10 @@ const kitProjectGatewayServerName = "project-gateway"
 // KitLocalCompositionConfig composes runtime-owned workload authentication.
 // Inference and MCP never borrow a human token or an API key.
 type KitLocalCompositionConfig struct {
+	// Set only by ATE composition after selecting an exact thread actor.
+	ateIdentity           *kitATEWorkloadIdentity
+	bootstrapGatewayToken string
+	bootstrapWorkload     *KitWorkloadBinding
 	// Set only by the native GKE composition, never from token claims.
 	nativeIdentity                                            *KitGKEIdentityConfig
 	OrgHosts                                                  *orghost.Resolver
@@ -244,16 +248,36 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	r.LifecycleTx = tx
-	gateway, err := s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
-	if err != nil {
-		return zero, err
+	gateway := c.bootstrapGatewayToken
+	if gateway == "" {
+		gateway, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
+		if err != nil {
+			return zero, err
+		}
 	}
-	workload, err := s.provisionKitWorkload(ctx, r, c, identity, gateway)
-	if err != nil {
-		return zero, err
+	workload := c.bootstrapWorkload
+	if workload != nil {
+		if err := s.validateKitATEBootstrapWorkload(ctx, r, c, workload, identity, gateway); err != nil {
+			return zero, err
+		}
+		recovered := *workload
+		workload = &recovered
+	} else {
+		workload, err = s.provisionKitWorkload(ctx, r, c, identity, gateway)
+		if err != nil {
+			return zero, err
+		}
+	}
+	if c.bootstrapWorkload != nil && !workload.MCPProjectGateway {
+		return zero, errKitMCPConfigurationUnverified
 	}
 	workload.MCPProjectGateway = true
-	mcpJSON, err := kitCompositionMCP(gatewayURL, workload)
+	var mcpJSON []byte
+	if c.ateIdentity != nil {
+		mcpJSON, err = kitProjectGatewayMCPJSON(gatewayURL, nil, nil)
+	} else {
+		mcpJSON, err = kitCompositionMCP(gatewayURL, workload)
+	}
 	if err != nil {
 		return zero, err
 	}
@@ -269,7 +293,22 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 		return zero, fmt.Errorf("resolve Kit managed assistant: %w", mErr)
 	}
 	instructions := []byte(renderKitAgentsMD(baseInstructions))
-	bootstrap := KitLocalBootstrap{Model: assistant.Model, ReasoningEffort: assistant.ReasoningEffort, AgentsMD: instructions, MCPJSON: mcpJSON, GatewayToken: []byte(gateway), Workload: workload, AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: c.Origin.String() + "/chat/completions"}
+	egressInjected := c.ateIdentity != nil
+	assertionFile := KitWorkloadAssertionPath
+	if egressInjected {
+		assertionFile = ""
+	}
+	bootstrap := KitLocalBootstrap{
+		Model:              assistant.Model,
+		ReasoningEffort:    assistant.ReasoningEffort,
+		AgentsMD:           instructions,
+		MCPJSON:            mcpJSON,
+		GatewayToken:       []byte(gateway),
+		Workload:           workload,
+		AssertionFile:      assertionFile,
+		EgressInjectedAuth: egressInjected,
+		InferenceEndpoint:  c.Origin.String() + "/chat/completions",
+	}
 	if err := validateKitBootstrap(bootstrap); err != nil {
 		return zero, err
 	}

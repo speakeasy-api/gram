@@ -1,0 +1,5 @@
+**
+!server/
+!server/cmd/
+!server/cmd/kit-ate-init/
+!server/cmd/kit-ate-init/main.go

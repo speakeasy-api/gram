@@ -1,4 +1,4 @@
-// Package kitacp implements Kit's ACP v2 HTTP/SSE transport without extensions.
+// Package kitacp implements Kit's ACP HTTP/SSE transport without extensions.
 package kitacp
 
 import (
@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -19,7 +20,12 @@ import (
 	"time"
 )
 
-const MaxMessageBytes = 8 << 20
+const (
+	MaxMessageBytes = 8 << 20
+	// RequestCancelledCode is the ACP v2 JSON-RPC error code returned when a
+	// held prompt is withdrawn via $/cancel_request before insertion.
+	RequestCancelledCode = -32800
+)
 
 var ErrClosed = errors.New("ACP transport closed")
 
@@ -83,8 +89,15 @@ type Client struct {
 // The supplied HTTP client is copied and redirects are always disabled.
 func Dial(ctx context.Context, endpoint, token string, hc *guardian.HTTPClient, params any) (*Client, json.RawMessage, error) {
 	u, err := url.Parse(endpoint)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "/acp/v2" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp/v2 URL")
+	// HTTP origins require loopback or an origin-bound confidential transport.
+	secureOrigin := err == nil && (u.Scheme == "https" || (u.Scheme == "http" &&
+		(strings.EqualFold(u.Hostname(), "localhost") || net.ParseIP(u.Hostname()).IsLoopback())))
+	if !secureOrigin && err == nil && u.Scheme == "http" && hc != nil {
+		confidential, ok := hc.Transport.(interface{ ConfidentialOrigin(*url.URL) bool })
+		secureOrigin = ok && confidential.ConfidentialOrigin(u)
+	}
+	if !secureOrigin || u.Host == "" || (u.Path != "/acp" && u.Path != "/acp/v2") || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.User != nil || u.Opaque != "" || strings.ContainsAny(endpoint, "?#") {
+		return nil, nil, errors.New("invalid ACP endpoint: expected exact /acp or /acp/v2 URL")
 	}
 	if token == "" || strings.ContainsAny(token, "\r\n") {
 		return nil, nil, errors.New("invalid ACP bearer credential")
@@ -263,11 +276,75 @@ func (c *Client) cancelWhenClosed(ctx context.Context, cancel context.CancelFunc
 	}()
 }
 
-// Call correlates an ordinary JSON-RPC request with its SSE response. It never
-// retries. Context cancellation stops waiting, not accepted server work.
-func (c *Client) Call(ctx context.Context, method string, params any, session string) (json.RawMessage, error) {
-	if method == "initialize" || method == "session/cancel" {
-		return nil, errors.New("use Dial or Cancel for this ACP method")
+// PendingCall represents an accepted JSON-RPC request awaiting its SSE response.
+type PendingCall struct {
+	client  *Client
+	session string
+	id      uint64
+	idKey   string
+	ch      chan reply
+	done    <-chan struct{}
+	once    sync.Once
+}
+
+func (p *PendingCall) cleanup() {
+	p.once.Do(func() {
+		p.client.mu.Lock()
+		delete(p.client.pending, p.idKey)
+		p.client.mu.Unlock()
+	})
+}
+
+// Wait blocks until the SSE response arrives, ctx ends, or the transport closes.
+func (p *PendingCall) Wait(ctx context.Context) (json.RawMessage, error) {
+	defer p.cleanup()
+	select {
+	case r := <-p.ch:
+		return r.result, r.err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("ACP request canceled: %w", ctx.Err())
+	case <-p.done:
+		return nil, p.client.Err()
+	}
+}
+
+// CancelRequest sends an ACP v2 $/cancel_request notification for this call's
+// JSON-RPC request ID on its session stream so a held uninserted prompt can be
+// withdrawn before insertion.
+func (p *PendingCall) CancelRequest(ctx context.Context) error {
+	c := p.client
+	c.mu.Lock()
+	attached := c.streams[p.session]
+	err := c.terminal
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if p.session == "" || !attached {
+		return errors.New("ACP session stream must be attached first")
+	}
+	body, err := marshal("$/cancel_request", struct {
+		RequestID uint64 `json:"requestId"`
+	}{RequestID: p.id}, nil)
+	if err != nil {
+		return err
+	}
+	res, err := c.request(ctx, http.MethodPost, p.session, body)
+	if err != nil {
+		return err
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusAccepted {
+		return statusError(res.StatusCode)
+	}
+	return nil
+}
+
+// StartCall POSTs a JSON-RPC request and returns a PendingCall once accepted so
+// the caller can wait concurrently or withdraw it with $/cancel_request.
+func (c *Client) StartCall(ctx context.Context, method string, params any, session string) (*PendingCall, error) {
+	if method == "initialize" || method == "session/cancel" || method == "$/cancel_request" {
+		return nil, errors.New("use Dial, Cancel, or CancelRequest for this ACP method")
 	}
 	c.mu.Lock()
 	if c.terminal != nil {
@@ -280,33 +357,53 @@ func (c *Client) Call(ctx context.Context, method string, params any, session st
 		return nil, errors.New("ACP session stream must be attached first")
 	}
 	c.next++
-	id := strconv.FormatUint(c.next, 10)
+	numID := c.next
+	id := strconv.FormatUint(numID, 10)
 	ch := make(chan reply, 1)
 	reqCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c.pending[id] = pending{session: session, ch: ch, cancel: cancel}
 	c.mu.Unlock()
-	defer func() { c.mu.Lock(); delete(c.pending, id); c.mu.Unlock() }()
 	body, err := marshal(method, params, json.RawMessage(id))
 	if err != nil {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return nil, err
 	}
 	res, err := c.request(reqCtx, http.MethodPost, session, body)
 	if err != nil {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return nil, err
 	}
 	_ = res.Body.Close()
 	if res.StatusCode != http.StatusAccepted {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return nil, statusError(res.StatusCode)
 	}
-	select {
-	case r := <-ch:
-		return r.result, r.err
-	case <-ctx.Done():
-		return nil, fmt.Errorf("ACP request canceled: %w", ctx.Err())
-	case <-c.done:
-		return nil, c.Err()
+	return &PendingCall{
+		client:  c,
+		session: session,
+		id:      numID,
+		idKey:   id,
+		ch:      ch,
+		done:    c.done,
+		once:    sync.Once{},
+	}, nil
+}
+
+// Call correlates an ordinary JSON-RPC request with its SSE response. It never
+// retries. Context cancellation stops waiting, not accepted server work.
+func (c *Client) Call(ctx context.Context, method string, params any, session string) (json.RawMessage, error) {
+	call, err := c.StartCall(ctx, method, params, session)
+	if err != nil {
+		return nil, err
 	}
+	return call.Wait(ctx)
 }
 
 // Cancel sends standard v2 session/cancel, a notification without a request ID.

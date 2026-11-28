@@ -43,7 +43,14 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			return fmt.Errorf("kit gateway bearer must be one printable ASCII token")
 		}
 	}
-	if b.Model == "" || b.Workload == nil || b.Workload.IssuerID == uuid.Nil || b.Workload.Subject == "" || !strings.HasPrefix(b.AssertionFile, "/") {
+	if b.Model == "" || b.Workload == nil || b.Workload.IssuerID == uuid.Nil || b.Workload.Subject == "" {
+		return fmt.Errorf("kit requires explicit model and workload assertion binding")
+	}
+	if b.EgressInjectedAuth {
+		if b.AssertionFile != "" {
+			return fmt.Errorf("egress-injected kit bootstrap must not specify an assertion file")
+		}
+	} else if !strings.HasPrefix(b.AssertionFile, "/") {
 		return fmt.Errorf("kit requires explicit model and workload assertion binding")
 	}
 	for _, raw := range []string{b.InferenceEndpoint, b.Workload.Audience} {
@@ -69,7 +76,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers,omitempty"`
-			Auth    struct {
+			Auth    *struct {
 				Type          string            `json:"type"`
 				TokenFile     string            `json:"tokenFile"`
 				TokenEndpoint string            `json:"tokenEndpoint"`
@@ -78,20 +85,29 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 				Resource      string            `json:"resource"`
 				Scope         string            `json:"scope"`
 				Extensions    map[string]string `json:"extensions,omitempty"`
-			} `json:"auth"`
+			} `json:"auth,omitempty"`
 		}
 		decoder := json.NewDecoder(strings.NewReader(string(raw)))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&server); err != nil {
 			return fmt.Errorf("invalid Kit workload MCP configuration: %w", err)
 		}
-		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
-			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
+		if server.Type != "streamable-http" {
+			return fmt.Errorf("kit MCP requires streamable-http transport")
 		}
-		// The Project Gateway binds its project through its resource URL and
-		// never carries OAuth token-exchange extensions.
-		if len(server.Auth.Extensions) != 0 {
-			return fmt.Errorf("kit project gateway resource must not carry extensions")
+		if b.EgressInjectedAuth {
+			if server.Auth != nil {
+				return fmt.Errorf("egress-injected kit MCP must not configure in-sandbox workload auth")
+			}
+		} else {
+			if server.Auth == nil || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
+				return fmt.Errorf("kit MCP requires the bound generic workload assertion")
+			}
+			// The Project Gateway binds its project through its resource URL and
+			// never carries OAuth token-exchange extensions.
+			if len(server.Auth.Extensions) != 0 {
+				return fmt.Errorf("kit project gateway resource must not carry extensions")
+			}
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {
@@ -110,6 +126,8 @@ func DefaultKitLocalRuntimeConfig(origin *url.URL) KitLocalRuntimeConfig {
 }
 
 // kitBootstrapConfig is the public Kit v0.3.1 generic workload contract.
+// When EgressInjectedAuth is true, the sandbox holds no assertion file and
+// relies on ATE's egress gateway to inject the actor JWT on outbound calls.
 func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if b.Workload == nil {
 		return ""
@@ -118,8 +136,12 @@ func kitBootstrapConfig(b KitLocalBootstrap) string {
 	if err != nil {
 		return ""
 	}
-	return kitFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n" +
-		"[inference_providers.speakeasy]\nendpoint = " + strconv.Quote(b.InferenceEndpoint) + "\n" +
+	base := kitFileConfig + "model = " + strconv.Quote(b.Model) + "\nreasoning_effort = " + strconv.Quote(effort) + "\n" +
+		"[inference_providers.speakeasy]\nendpoint = " + strconv.Quote(b.InferenceEndpoint) + "\n"
+	if b.EgressInjectedAuth {
+		return base
+	}
+	return base +
 		"[inference_providers.speakeasy.workload]\ntokenFile = " + strconv.Quote(b.AssertionFile) + "\nendpointMode = \"explicit\"\ngrant = \"jwtBearer\"\ntokenEndpoint = " + strconv.Quote(b.Workload.Audience+"/token") + "\nresource = \"urn:speakeasy:inference\"\n" +
 		"[inference_providers.speakeasy.workload.extensions]\nproject_id = " + strconv.Quote(b.Workload.Identity.ProjectID.String()) + "\n"
 }

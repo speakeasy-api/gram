@@ -138,7 +138,7 @@ func hookLogRecord(row hookTelemetryRow) log.Record {
 	}
 	for _, key := range slices.Sorted(maps.Keys(row.attrs)) {
 		if value, ok := hookLogValue(row.attrs[key]); ok {
-			record.AddAttributes(log.KeyValue{Key: string(key), Value: value})
+			record.AddAttributes(attribute.KeyValue{Key: key, Value: value})
 		}
 	}
 	return record
@@ -146,22 +146,22 @@ func hookLogRecord(row hookTelemetryRow) log.Record {
 
 // hookLogValue converts one Go-typed row attribute. Anything without a
 // scalar form is carried as its JSON encoding.
-func hookLogValue(value any) (log.Value, bool) {
+func hookLogValue(value any) (attribute.Value, bool) {
 	switch v := value.(type) {
 	case nil:
-		return log.Value{}, false
+		return attribute.Value{}, false
 	case string:
-		return log.StringValue(v), true
+		return attribute.StringValue(v), true
 	case bool:
-		return log.BoolValue(v), true
+		return attribute.BoolValue(v), true
 	case int:
-		return log.IntValue(v), true
+		return attribute.IntValue(v), true
 	case int64:
-		return log.Int64Value(v), true
+		return attribute.Int64Value(v), true
 	case float64:
-		return log.Float64Value(v), true
+		return attribute.Float64Value(v), true
 	default:
-		return log.StringValue(jsonString(v)), true
+		return attribute.StringValue(jsonString(v)), true
 	}
 }
 

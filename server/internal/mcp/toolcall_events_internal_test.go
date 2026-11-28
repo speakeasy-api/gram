@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -203,7 +204,7 @@ func TestToolCallRecordConversationFallsBackToTheChat(t *testing.T) {
 
 	record := call.record(call.start, http.StatusOK, false, nil)
 	var conversationID string
-	record.WalkAttributes(func(kv log.KeyValue) bool {
+	record.WalkAttributes(func(kv attribute.KeyValue) bool {
 		if kv.Key == "gen_ai.conversation.id" {
 			conversationID = kv.Value.AsString()
 		}

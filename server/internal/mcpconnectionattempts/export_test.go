@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -155,10 +156,10 @@ func notExported(t *testing.T, r testRecorder, reason notExportedReason) int64 {
 	return total
 }
 
-func recordAttributes(record log.Record) map[string]log.Value {
-	values := make(map[string]log.Value, record.AttributesLen())
-	record.WalkAttributes(func(kv log.KeyValue) bool {
-		values[kv.Key] = kv.Value
+func recordAttributes(record log.Record) map[string]attribute.Value {
+	values := make(map[string]attribute.Value, record.AttributesLen())
+	record.WalkAttributes(func(kv attribute.KeyValue) bool {
+		values[string(kv.Key)] = kv.Value
 		return true
 	})
 	return values
@@ -202,7 +203,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	require.Equal(t, log.SeverityError, record.Severity())
 	require.Equal(t, "ERROR", record.SeverityText())
 	require.Equal(t, "speakeasy.mcp_connection", record.EventName())
-	require.True(t, record.Body().Empty(), "a string body is redacted on destinations that exclude sensitive data")
+	require.Equal(t, attribute.EMPTY, record.Body().Type(), "a string body is redacted on destinations that exclude sensitive data")
 
 	got := recordAttributes(record)
 	require.Equal(t, []string{

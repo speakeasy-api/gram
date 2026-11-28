@@ -250,6 +250,13 @@ func kitLocalBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
 	if err := validateKitLocalBootstrap(b); err != nil {
 		return nil, err
 	}
+	return kitBootstrapArchive(b)
+}
+
+func kitBootstrapArchive(b KitLocalBootstrap) ([]byte, error) {
+	if err := validateKitBootstrap(b); err != nil {
+		return nil, err
+	}
 	var buffer bytes.Buffer
 	writer := tar.NewWriter(&buffer)
 	for _, name := range []string{".kit/", ".kit/credentials/", "workspace/"} {

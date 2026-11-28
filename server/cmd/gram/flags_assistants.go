@@ -186,6 +186,13 @@ func newAssistantRuntime(
 		return nil, err
 	}
 
+	// Server, worker, and private ingress compose primary dispatch here before
+	// installing Kit. An ATE-only deployment has no GKE cluster, and must not
+	// redirect persisted GKE runtime rows to ATE or fall back to local.
+	if c.Bool("assistant-ate-enabled") && cfg.Provider == assistants.RuntimeProviderGKE && c.String("assistant-runtime-gke-cluster-endpoint") == "" {
+		return assistants.NewUnavailableRuntimeBackend(cfg.Provider, cfg.GKE.ServerURL), nil
+	}
+
 	// Build the GKE backend whenever an assistant cluster is configured (its
 	// endpoint is set), not only when it is the target, so local-target processes
 	// can still reap GKE-backed runtime rows. The client authenticates with Google credentials
