@@ -592,6 +592,10 @@ type Client struct {
 	// to the finalizeOrganizationEncryption endpoint.
 	FinalizeOrganizationEncryptionDoer goahttp.Doer
 
+	// BlockUser Doer is the HTTP client used to make requests to the blockUser
+	// endpoint.
+	BlockUserDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -756,6 +760,7 @@ func NewClient(
 		RollbackOrganizationEncryptionDoer:             doer,
 		RunOrganizationEncryptionDoer:                  doer,
 		FinalizeOrganizationEncryptionDoer:             doer,
+		BlockUserDoer:                                  doer,
 		RestoreResponseBody:                            restoreBody,
 		scheme:                                         scheme,
 		host:                                           host,
@@ -4221,6 +4226,30 @@ func (c *Client) FinalizeOrganizationEncryption() goa.Endpoint {
 		resp, err := c.FinalizeOrganizationEncryptionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "finalizeOrganizationEncryption", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BlockUser returns an endpoint that makes HTTP requests to the admin service
+// blockUser server.
+func (c *Client) BlockUser() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBlockUserRequest(c.encoder)
+		decodeResponse = DecodeBlockUserResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBlockUserRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BlockUserDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "blockUser", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -34591,6 +34591,240 @@ func DecodeFinalizeOrganizationEncryptionResponse(decoder func(*http.Response) g
 	}
 }
 
+// BuildBlockUserRequest instantiates a HTTP request object with method and
+// path set to call the "admin" service "blockUser" endpoint
+func (c *Client) BuildBlockUserRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BlockUserAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "blockUser", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBlockUserRequest returns an encoder for requests sent to the admin
+// blockUser server.
+func EncodeBlockUserRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BlockUserPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "blockUser", "*admin.BlockUserPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewBlockUserRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "blockUser", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBlockUserResponse returns a decoder for responses returned by the
+// admin blockUser endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeBlockUserResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBlockUserResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BlockUserResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			res := NewBlockUserAdminBlockUserResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BlockUserUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BlockUserForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BlockUserBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BlockUserNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BlockUserConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BlockUserUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BlockUserInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BlockUserInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+				}
+				err = ValidateBlockUserInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+				}
+				return nil, NewBlockUserInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BlockUserUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+				}
+				err = ValidateBlockUserUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+				}
+				return nil, NewBlockUserUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "blockUser", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BlockUserGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "blockUser", err)
+			}
+			err = ValidateBlockUserGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "blockUser", err)
+			}
+			return nil, NewBlockUserGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "blockUser", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -37095,6 +37329,18 @@ func unmarshalAdminOrganizationEncryptionStateCountResponseBodyToAdminAdminOrgan
 	res := &admin.AdminOrganizationEncryptionStateCount{
 		State:         *v.State,
 		Organizations: *v.Organizations,
+	}
+
+	return res
+}
+
+// unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult
+// builds a value of type *admin.AdminBlockUserStepResult from a value of type
+// *AdminBlockUserStepResultResponseBody.
+func unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(v *AdminBlockUserStepResultResponseBody) *admin.AdminBlockUserStepResult {
+	res := &admin.AdminBlockUserStepResult{
+		Status: *v.Status,
+		Detail: v.Detail,
 	}
 
 	return res

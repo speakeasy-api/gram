@@ -161,6 +161,7 @@ type Endpoints struct {
 	RollbackOrganizationEncryption             goa.Endpoint
 	RunOrganizationEncryption                  goa.Endpoint
 	FinalizeOrganizationEncryption             goa.Endpoint
+	BlockUser                                  goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -330,6 +331,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RollbackOrganizationEncryption:             NewRollbackOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
 		RunOrganizationEncryption:                  NewRunOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
 		FinalizeOrganizationEncryption:             NewFinalizeOrganizationEncryptionEndpoint(s, a.APIKeyAuth),
+		BlockUser:                                  NewBlockUserEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -479,6 +481,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RollbackOrganizationEncryption = m(e.RollbackOrganizationEncryption)
 	e.RunOrganizationEncryption = m(e.RunOrganizationEncryption)
 	e.FinalizeOrganizationEncryption = m(e.FinalizeOrganizationEncryption)
+	e.BlockUser = m(e.BlockUser)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3758,5 +3761,28 @@ func NewFinalizeOrganizationEncryptionEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return s.FinalizeOrganizationEncryption(ctx, p)
+	}
+}
+
+// NewBlockUserEndpoint returns an endpoint function that calls the method
+// "blockUser" of service "admin".
+func NewBlockUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BlockUserPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BlockUser(ctx, p)
 	}
 }

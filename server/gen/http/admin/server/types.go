@@ -859,6 +859,15 @@ type FinalizeOrganizationEncryptionRequestBody struct {
 	AcknowledgedUnreadableValues *int64 `form:"acknowledged_unreadable_values,omitempty" json:"acknowledged_unreadable_values,omitempty" xml:"acknowledged_unreadable_values,omitempty"`
 }
 
+// BlockUserRequestBody is the type of the "admin" service "blockUser" endpoint
+// HTTP request body.
+type BlockUserRequestBody struct {
+	// Canonical Speakeasy user ID to block.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Optional staff reason recorded in audit logs.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -3953,6 +3962,59 @@ type FinalizeOrganizationEncryptionResponseBody struct {
 	// the hourly background run finishes clearing, or an administrator starts a
 	// run.
 	ClearingStarted bool `form:"clearing_started" json:"clearing_started" xml:"clearing_started"`
+}
+
+// BlockUserResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body.
+type BlockUserResponseBody struct {
+	// Canonical ID of the blocked user.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Email address of the blocked user.
+	Email string `form:"email" json:"email" xml:"email"`
+	// Linked WorkOS user ID, if present.
+	WorkosUserID *string `form:"workos_user_id,omitempty" json:"workos_user_id,omitempty" xml:"workos_user_id,omitempty"`
+	// True if users.blacklisted_at was already set before this request.
+	AlreadyBlacklisted bool `form:"already_blacklisted" json:"already_blacklisted" xml:"already_blacklisted"`
+	// Timestamp when the user was blacklisted.
+	BlacklistedAt string `form:"blacklisted_at" json:"blacklisted_at" xml:"blacklisted_at"`
+	// IDs of organizations disabled because the blocked user was their sole
+	// remaining active non-staff member.
+	DisabledOrganizationIds []string `form:"disabled_organization_ids" json:"disabled_organization_ids" xml:"disabled_organization_ids"`
+	// Number of API keys created by the user that were soft-revoked.
+	RevokedAPIKeyCount int `form:"revoked_api_key_count" json:"revoked_api_key_count" xml:"revoked_api_key_count"`
+	// Number of recorded sign-ins revoked.
+	RevokedSignInCount int `form:"revoked_sign_in_count" json:"revoked_sign_in_count" xml:"revoked_sign_in_count"`
+	// Number of hosted user sessions soft-revoked.
+	RevokedUserSessionCount int `form:"revoked_user_session_count" json:"revoked_user_session_count" xml:"revoked_user_session_count"`
+	// Number of remembered user session consents withdrawn.
+	RevokedUserSessionConsentCount int `form:"revoked_user_session_consent_count" json:"revoked_user_session_consent_count" xml:"revoked_user_session_consent_count"`
+	// Number of user-owned hosted OAuth clients soft-revoked.
+	RevokedUserSessionClientCount int `form:"revoked_user_session_client_count" json:"revoked_user_session_client_count" xml:"revoked_user_session_client_count"`
+	// Number of Platform MCP connections revoked.
+	RevokedPlatformMcpConnectionCount int `form:"revoked_platform_mcp_connection_count" json:"revoked_platform_mcp_connection_count" xml:"revoked_platform_mcp_connection_count"`
+	// Number of Platform MCP sessions revoked.
+	RevokedPlatformMcpSessionCount int `form:"revoked_platform_mcp_session_count" json:"revoked_platform_mcp_session_count" xml:"revoked_platform_mcp_session_count"`
+	// Number of user-owned Platform MCP OAuth clients revoked.
+	RevokedPlatformMcpOauthClientCount int `form:"revoked_platform_mcp_oauth_client_count" json:"revoked_platform_mcp_oauth_client_count" xml:"revoked_platform_mcp_oauth_client_count"`
+	// Number of Channels OAuth grants revoked.
+	RevokedChannelsOauthGrantCount int `form:"revoked_channels_oauth_grant_count" json:"revoked_channels_oauth_grant_count" xml:"revoked_channels_oauth_grant_count"`
+	// Number of user-owned Channels OAuth clients revoked.
+	RevokedChannelsOauthClientCount int `form:"revoked_channels_oauth_client_count" json:"revoked_channels_oauth_client_count" xml:"revoked_channels_oauth_client_count"`
+	// Immediate Redis dashboard epoch and JTI revocation push outcome.
+	SessionCache *AdminBlockUserStepResultResponseBody `form:"session_cache" json:"session_cache" xml:"session_cache"`
+	// Outcome of setting WorkOS user metadata blacklisted=true.
+	WorkosMetadata *AdminBlockUserStepResultResponseBody `form:"workos_metadata" json:"workos_metadata" xml:"workos_metadata"`
+	// Outcome of listing and revoking WorkOS AuthKit sessions.
+	WorkosSessions *AdminBlockUserStepResultResponseBody `form:"workos_sessions" json:"workos_sessions" xml:"workos_sessions"`
+	// Number of WorkOS AuthKit sessions revoked.
+	WorkosSessionsRevokedCount int `form:"workos_sessions_revoked_count" json:"workos_sessions_revoked_count" xml:"workos_sessions_revoked_count"`
+	// Outcome of adding the user's email to the WorkOS Radar email blocklist.
+	WorkosRadar *AdminBlockUserStepResultResponseBody `form:"workos_radar" json:"workos_radar" xml:"workos_radar"`
+	// Outcome of disabling the user in the registry service.
+	RegistryDisable *AdminBlockUserStepResultResponseBody `form:"registry_disable" json:"registry_disable" xml:"registry_disable"`
+	// Non-fatal warnings or partial failure details from post-commit external
+	// steps.
+	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -31700,6 +31762,186 @@ type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BlockUserUnauthorizedResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unauthorized" error.
+type BlockUserUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserForbiddenResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "forbidden" error.
+type BlockUserForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserBadRequestResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "bad_request" error.
+type BlockUserBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserNotFoundResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "not_found" error.
+type BlockUserNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserConflictResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "conflict" error.
+type BlockUserConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserUnsupportedMediaResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unsupported_media" error.
+type BlockUserUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserInvalidResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "invalid" error.
+type BlockUserInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserInvariantViolationResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "invariant_violation" error.
+type BlockUserInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserUnexpectedResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unexpected" error.
+type BlockUserUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BlockUserGatewayErrorResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "gateway_error" error.
+type BlockUserGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -33788,6 +34030,16 @@ type AdminOrganizationEncryptionStateCountResponseBody struct {
 	State string `form:"state" json:"state" xml:"state"`
 	// Organizations in the state.
 	Organizations int64 `form:"organizations" json:"organizations" xml:"organizations"`
+}
+
+// AdminBlockUserStepResultResponseBody is used to define fields on response
+// body types.
+type AdminBlockUserStepResultResponseBody struct {
+	// Step outcome: succeeded, partial, skipped, failed, or not_configured.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Human-readable detail explaining skipped, partial, failed, or not_configured
+	// outcomes.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -37457,6 +37709,61 @@ func NewFinalizeOrganizationEncryptionResponseBody(res *admin.AdminOrganizationE
 	}
 	if res.UseCase != nil {
 		body.UseCase = marshalAdminAdminOrganizationEncryptionUseCaseToAdminOrganizationEncryptionUseCaseResponseBody(res.UseCase)
+	}
+	return body
+}
+
+// NewBlockUserResponseBody builds the HTTP response body from the result of
+// the "blockUser" endpoint of the "admin" service.
+func NewBlockUserResponseBody(res *admin.AdminBlockUserResult) *BlockUserResponseBody {
+	body := &BlockUserResponseBody{
+		UserID:                             res.UserID,
+		Email:                              res.Email,
+		WorkosUserID:                       res.WorkosUserID,
+		AlreadyBlacklisted:                 res.AlreadyBlacklisted,
+		BlacklistedAt:                      res.BlacklistedAt,
+		RevokedAPIKeyCount:                 res.RevokedAPIKeyCount,
+		RevokedSignInCount:                 res.RevokedSignInCount,
+		RevokedUserSessionCount:            res.RevokedUserSessionCount,
+		RevokedUserSessionConsentCount:     res.RevokedUserSessionConsentCount,
+		RevokedUserSessionClientCount:      res.RevokedUserSessionClientCount,
+		RevokedPlatformMcpConnectionCount:  res.RevokedPlatformMcpConnectionCount,
+		RevokedPlatformMcpSessionCount:     res.RevokedPlatformMcpSessionCount,
+		RevokedPlatformMcpOauthClientCount: res.RevokedPlatformMcpOauthClientCount,
+		RevokedChannelsOauthGrantCount:     res.RevokedChannelsOauthGrantCount,
+		RevokedChannelsOauthClientCount:    res.RevokedChannelsOauthClientCount,
+		WorkosSessionsRevokedCount:         res.WorkosSessionsRevokedCount,
+	}
+	if res.DisabledOrganizationIds != nil {
+		body.DisabledOrganizationIds = make([]string, len(res.DisabledOrganizationIds))
+		for i, val := range res.DisabledOrganizationIds {
+			body.DisabledOrganizationIds[i] = val
+		}
+	} else {
+		body.DisabledOrganizationIds = []string{}
+	}
+	if res.SessionCache != nil {
+		body.SessionCache = marshalAdminAdminBlockUserStepResultToAdminBlockUserStepResultResponseBody(res.SessionCache)
+	}
+	if res.WorkosMetadata != nil {
+		body.WorkosMetadata = marshalAdminAdminBlockUserStepResultToAdminBlockUserStepResultResponseBody(res.WorkosMetadata)
+	}
+	if res.WorkosSessions != nil {
+		body.WorkosSessions = marshalAdminAdminBlockUserStepResultToAdminBlockUserStepResultResponseBody(res.WorkosSessions)
+	}
+	if res.WorkosRadar != nil {
+		body.WorkosRadar = marshalAdminAdminBlockUserStepResultToAdminBlockUserStepResultResponseBody(res.WorkosRadar)
+	}
+	if res.RegistryDisable != nil {
+		body.RegistryDisable = marshalAdminAdminBlockUserStepResultToAdminBlockUserStepResultResponseBody(res.RegistryDisable)
+	}
+	if res.Warnings != nil {
+		body.Warnings = make([]string, len(res.Warnings))
+		for i, val := range res.Warnings {
+			body.Warnings[i] = val
+		}
+	} else {
+		body.Warnings = []string{}
 	}
 	return body
 }
@@ -59251,6 +59558,146 @@ func NewFinalizeOrganizationEncryptionGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewBlockUserUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserUnauthorizedResponseBody(res *goa.ServiceError) *BlockUserUnauthorizedResponseBody {
+	body := &BlockUserUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserForbiddenResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserForbiddenResponseBody(res *goa.ServiceError) *BlockUserForbiddenResponseBody {
+	body := &BlockUserForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserBadRequestResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserBadRequestResponseBody(res *goa.ServiceError) *BlockUserBadRequestResponseBody {
+	body := &BlockUserBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserNotFoundResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserNotFoundResponseBody(res *goa.ServiceError) *BlockUserNotFoundResponseBody {
+	body := &BlockUserNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserConflictResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserConflictResponseBody(res *goa.ServiceError) *BlockUserConflictResponseBody {
+	body := &BlockUserConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserUnsupportedMediaResponseBody(res *goa.ServiceError) *BlockUserUnsupportedMediaResponseBody {
+	body := &BlockUserUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserInvalidResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserInvalidResponseBody(res *goa.ServiceError) *BlockUserInvalidResponseBody {
+	body := &BlockUserInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserInvariantViolationResponseBody(res *goa.ServiceError) *BlockUserInvariantViolationResponseBody {
+	body := &BlockUserInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserUnexpectedResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserUnexpectedResponseBody(res *goa.ServiceError) *BlockUserUnexpectedResponseBody {
+	body := &BlockUserUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBlockUserGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "blockUser" endpoint of the "admin" service.
+func NewBlockUserGatewayErrorResponseBody(res *goa.ServiceError) *BlockUserGatewayErrorResponseBody {
+	body := &BlockUserGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -61091,6 +61538,17 @@ func NewFinalizeOrganizationEncryptionPayload(body *FinalizeOrganizationEncrypti
 	return v
 }
 
+// NewBlockUserPayload builds a admin service blockUser endpoint payload.
+func NewBlockUserPayload(body *BlockUserRequestBody, adminSessionToken *string) *admin.BlockUserPayload {
+	v := &admin.BlockUserPayload{
+		UserID: *body.UserID,
+		Reason: body.Reason,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -62360,6 +62818,30 @@ func ValidateFinalizeOrganizationEncryptionRequestBody(body *FinalizeOrganizatio
 	if body.AcknowledgedUnreadableValues != nil {
 		if *body.AcknowledgedUnreadableValues < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.acknowledged_unreadable_values", *body.AcknowledgedUnreadableValues, 0, true))
+		}
+	}
+	return
+}
+
+// ValidateBlockUserRequestBody runs the validations defined on
+// BlockUserRequestBody
+func ValidateBlockUserRequestBody(body *BlockUserRequestBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.UserID != nil {
+		if utf8.RuneCountInString(*body.UserID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", *body.UserID, utf8.RuneCountInString(*body.UserID), 1, true))
+		}
+	}
+	if body.UserID != nil {
+		if utf8.RuneCountInString(*body.UserID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", *body.UserID, utf8.RuneCountInString(*body.UserID), 255, false))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 500, false))
 		}
 	}
 	return

@@ -92,6 +92,9 @@ actions:
       operationId: adminLogout
       x-speakeasy-name-override: logout
   # Keep resource-local SDK methods from repeating the admin namespace.
+  - target: $.paths.*[?@.operationId=='adminBlockUser']
+    update:
+      x-speakeasy-name-override: blockUser
   - target: $.paths.*[?@.operationId=='adminBulkUpdateAccountType']
     update:
       x-speakeasy-name-override: bulkUpdateAccountType

@@ -859,6 +859,15 @@ type FinalizeOrganizationEncryptionRequestBody struct {
 	AcknowledgedUnreadableValues int64 `form:"acknowledged_unreadable_values" json:"acknowledged_unreadable_values" xml:"acknowledged_unreadable_values"`
 }
 
+// BlockUserRequestBody is the type of the "admin" service "blockUser" endpoint
+// HTTP request body.
+type BlockUserRequestBody struct {
+	// Canonical Speakeasy user ID to block.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Optional staff reason recorded in audit logs.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -3945,6 +3954,59 @@ type FinalizeOrganizationEncryptionResponseBody struct {
 	// the hourly background run finishes clearing, or an administrator starts a
 	// run.
 	ClearingStarted *bool `form:"clearing_started,omitempty" json:"clearing_started,omitempty" xml:"clearing_started,omitempty"`
+}
+
+// BlockUserResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body.
+type BlockUserResponseBody struct {
+	// Canonical ID of the blocked user.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// Email address of the blocked user.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// Linked WorkOS user ID, if present.
+	WorkosUserID *string `form:"workos_user_id,omitempty" json:"workos_user_id,omitempty" xml:"workos_user_id,omitempty"`
+	// True if users.blacklisted_at was already set before this request.
+	AlreadyBlacklisted *bool `form:"already_blacklisted,omitempty" json:"already_blacklisted,omitempty" xml:"already_blacklisted,omitempty"`
+	// Timestamp when the user was blacklisted.
+	BlacklistedAt *string `form:"blacklisted_at,omitempty" json:"blacklisted_at,omitempty" xml:"blacklisted_at,omitempty"`
+	// IDs of organizations disabled because the blocked user was their sole
+	// remaining active non-staff member.
+	DisabledOrganizationIds []string `form:"disabled_organization_ids,omitempty" json:"disabled_organization_ids,omitempty" xml:"disabled_organization_ids,omitempty"`
+	// Number of API keys created by the user that were soft-revoked.
+	RevokedAPIKeyCount *int `form:"revoked_api_key_count,omitempty" json:"revoked_api_key_count,omitempty" xml:"revoked_api_key_count,omitempty"`
+	// Number of recorded sign-ins revoked.
+	RevokedSignInCount *int `form:"revoked_sign_in_count,omitempty" json:"revoked_sign_in_count,omitempty" xml:"revoked_sign_in_count,omitempty"`
+	// Number of hosted user sessions soft-revoked.
+	RevokedUserSessionCount *int `form:"revoked_user_session_count,omitempty" json:"revoked_user_session_count,omitempty" xml:"revoked_user_session_count,omitempty"`
+	// Number of remembered user session consents withdrawn.
+	RevokedUserSessionConsentCount *int `form:"revoked_user_session_consent_count,omitempty" json:"revoked_user_session_consent_count,omitempty" xml:"revoked_user_session_consent_count,omitempty"`
+	// Number of user-owned hosted OAuth clients soft-revoked.
+	RevokedUserSessionClientCount *int `form:"revoked_user_session_client_count,omitempty" json:"revoked_user_session_client_count,omitempty" xml:"revoked_user_session_client_count,omitempty"`
+	// Number of Platform MCP connections revoked.
+	RevokedPlatformMcpConnectionCount *int `form:"revoked_platform_mcp_connection_count,omitempty" json:"revoked_platform_mcp_connection_count,omitempty" xml:"revoked_platform_mcp_connection_count,omitempty"`
+	// Number of Platform MCP sessions revoked.
+	RevokedPlatformMcpSessionCount *int `form:"revoked_platform_mcp_session_count,omitempty" json:"revoked_platform_mcp_session_count,omitempty" xml:"revoked_platform_mcp_session_count,omitempty"`
+	// Number of user-owned Platform MCP OAuth clients revoked.
+	RevokedPlatformMcpOauthClientCount *int `form:"revoked_platform_mcp_oauth_client_count,omitempty" json:"revoked_platform_mcp_oauth_client_count,omitempty" xml:"revoked_platform_mcp_oauth_client_count,omitempty"`
+	// Number of Channels OAuth grants revoked.
+	RevokedChannelsOauthGrantCount *int `form:"revoked_channels_oauth_grant_count,omitempty" json:"revoked_channels_oauth_grant_count,omitempty" xml:"revoked_channels_oauth_grant_count,omitempty"`
+	// Number of user-owned Channels OAuth clients revoked.
+	RevokedChannelsOauthClientCount *int `form:"revoked_channels_oauth_client_count,omitempty" json:"revoked_channels_oauth_client_count,omitempty" xml:"revoked_channels_oauth_client_count,omitempty"`
+	// Immediate Redis dashboard epoch and JTI revocation push outcome.
+	SessionCache *AdminBlockUserStepResultResponseBody `form:"session_cache,omitempty" json:"session_cache,omitempty" xml:"session_cache,omitempty"`
+	// Outcome of setting WorkOS user metadata blacklisted=true.
+	WorkosMetadata *AdminBlockUserStepResultResponseBody `form:"workos_metadata,omitempty" json:"workos_metadata,omitempty" xml:"workos_metadata,omitempty"`
+	// Outcome of listing and revoking WorkOS AuthKit sessions.
+	WorkosSessions *AdminBlockUserStepResultResponseBody `form:"workos_sessions,omitempty" json:"workos_sessions,omitempty" xml:"workos_sessions,omitempty"`
+	// Number of WorkOS AuthKit sessions revoked.
+	WorkosSessionsRevokedCount *int `form:"workos_sessions_revoked_count,omitempty" json:"workos_sessions_revoked_count,omitempty" xml:"workos_sessions_revoked_count,omitempty"`
+	// Outcome of adding the user's email to the WorkOS Radar email blocklist.
+	WorkosRadar *AdminBlockUserStepResultResponseBody `form:"workos_radar,omitempty" json:"workos_radar,omitempty" xml:"workos_radar,omitempty"`
+	// Outcome of disabling the user in the registry service.
+	RegistryDisable *AdminBlockUserStepResultResponseBody `form:"registry_disable,omitempty" json:"registry_disable,omitempty" xml:"registry_disable,omitempty"`
+	// Non-fatal warnings or partial failure details from post-commit external
+	// steps.
+	Warnings []string `form:"warnings,omitempty" json:"warnings,omitempty" xml:"warnings,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -31692,6 +31754,186 @@ type FinalizeOrganizationEncryptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// BlockUserUnauthorizedResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unauthorized" error.
+type BlockUserUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserForbiddenResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "forbidden" error.
+type BlockUserForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserBadRequestResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "bad_request" error.
+type BlockUserBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserNotFoundResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "not_found" error.
+type BlockUserNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserConflictResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "conflict" error.
+type BlockUserConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserUnsupportedMediaResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unsupported_media" error.
+type BlockUserUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserInvalidResponseBody is the type of the "admin" service "blockUser"
+// endpoint HTTP response body for the "invalid" error.
+type BlockUserInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserInvariantViolationResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "invariant_violation" error.
+type BlockUserInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserUnexpectedResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "unexpected" error.
+type BlockUserUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BlockUserGatewayErrorResponseBody is the type of the "admin" service
+// "blockUser" endpoint HTTP response body for the "gateway_error" error.
+type BlockUserGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -33826,6 +34068,16 @@ type AdminOrganizationEncryptionStateCountResponseBody struct {
 	Organizations *int64 `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
+// AdminBlockUserStepResultResponseBody is used to define fields on response
+// body types.
+type AdminBlockUserStepResultResponseBody struct {
+	// Step outcome: succeeded, partial, skipped, failed, or not_configured.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Human-readable detail explaining skipped, partial, failed, or not_configured
+	// outcomes.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
+}
+
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
 // payload of the "setOrganizationFeature" endpoint of the "admin" service.
 func NewSetOrganizationFeatureRequestBody(p *admin.SetOrganizationFeaturePayload) *SetOrganizationFeatureRequestBody {
@@ -34824,6 +35076,16 @@ func NewFinalizeOrganizationEncryptionRequestBody(p *admin.FinalizeOrganizationE
 		UseCase:                      p.UseCase,
 		Confirmation:                 p.Confirmation,
 		AcknowledgedUnreadableValues: p.AcknowledgedUnreadableValues,
+	}
+	return body
+}
+
+// NewBlockUserRequestBody builds the HTTP request body from the payload of the
+// "blockUser" endpoint of the "admin" service.
+func NewBlockUserRequestBody(p *admin.BlockUserPayload) *BlockUserRequestBody {
+	body := &BlockUserRequestBody{
+		UserID: p.UserID,
+		Reason: p.Reason,
 	}
 	return body
 }
@@ -60448,6 +60710,193 @@ func NewFinalizeOrganizationEncryptionGatewayError(body *FinalizeOrganizationEnc
 	return v
 }
 
+// NewBlockUserAdminBlockUserResultOK builds a "admin" service "blockUser"
+// endpoint result from a HTTP "OK" response.
+func NewBlockUserAdminBlockUserResultOK(body *BlockUserResponseBody) *admin.AdminBlockUserResult {
+	v := &admin.AdminBlockUserResult{
+		UserID:                             *body.UserID,
+		Email:                              *body.Email,
+		WorkosUserID:                       body.WorkosUserID,
+		AlreadyBlacklisted:                 *body.AlreadyBlacklisted,
+		BlacklistedAt:                      *body.BlacklistedAt,
+		RevokedAPIKeyCount:                 *body.RevokedAPIKeyCount,
+		RevokedSignInCount:                 *body.RevokedSignInCount,
+		RevokedUserSessionCount:            *body.RevokedUserSessionCount,
+		RevokedUserSessionConsentCount:     *body.RevokedUserSessionConsentCount,
+		RevokedUserSessionClientCount:      *body.RevokedUserSessionClientCount,
+		RevokedPlatformMcpConnectionCount:  *body.RevokedPlatformMcpConnectionCount,
+		RevokedPlatformMcpSessionCount:     *body.RevokedPlatformMcpSessionCount,
+		RevokedPlatformMcpOauthClientCount: *body.RevokedPlatformMcpOauthClientCount,
+		RevokedChannelsOauthGrantCount:     *body.RevokedChannelsOauthGrantCount,
+		RevokedChannelsOauthClientCount:    *body.RevokedChannelsOauthClientCount,
+		WorkosSessionsRevokedCount:         *body.WorkosSessionsRevokedCount,
+	}
+	v.DisabledOrganizationIds = make([]string, len(body.DisabledOrganizationIds))
+	for i, val := range body.DisabledOrganizationIds {
+		v.DisabledOrganizationIds[i] = val
+	}
+	v.SessionCache = unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(body.SessionCache)
+	v.WorkosMetadata = unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(body.WorkosMetadata)
+	v.WorkosSessions = unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(body.WorkosSessions)
+	v.WorkosRadar = unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(body.WorkosRadar)
+	v.RegistryDisable = unmarshalAdminBlockUserStepResultResponseBodyToAdminAdminBlockUserStepResult(body.RegistryDisable)
+	v.Warnings = make([]string, len(body.Warnings))
+	for i, val := range body.Warnings {
+		v.Warnings[i] = val
+	}
+
+	return v
+}
+
+// NewBlockUserUnauthorized builds a admin service blockUser endpoint
+// unauthorized error.
+func NewBlockUserUnauthorized(body *BlockUserUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserForbidden builds a admin service blockUser endpoint forbidden
+// error.
+func NewBlockUserForbidden(body *BlockUserForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserBadRequest builds a admin service blockUser endpoint bad_request
+// error.
+func NewBlockUserBadRequest(body *BlockUserBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserNotFound builds a admin service blockUser endpoint not_found
+// error.
+func NewBlockUserNotFound(body *BlockUserNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserConflict builds a admin service blockUser endpoint conflict
+// error.
+func NewBlockUserConflict(body *BlockUserConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserUnsupportedMedia builds a admin service blockUser endpoint
+// unsupported_media error.
+func NewBlockUserUnsupportedMedia(body *BlockUserUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserInvalid builds a admin service blockUser endpoint invalid error.
+func NewBlockUserInvalid(body *BlockUserInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserInvariantViolation builds a admin service blockUser endpoint
+// invariant_violation error.
+func NewBlockUserInvariantViolation(body *BlockUserInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserUnexpected builds a admin service blockUser endpoint unexpected
+// error.
+func NewBlockUserUnexpected(body *BlockUserUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBlockUserGatewayError builds a admin service blockUser endpoint
+// gateway_error error.
+func NewBlockUserGatewayError(body *BlockUserGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -64962,6 +65411,106 @@ func ValidateFinalizeOrganizationEncryptionResponseBody(body *FinalizeOrganizati
 	}
 	if body.UseCase != nil {
 		if err2 := ValidateAdminOrganizationEncryptionUseCaseResponseBody(body.UseCase); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateBlockUserResponseBody runs the validations defined on
+// BlockUserResponseBody
+func ValidateBlockUserResponseBody(body *BlockUserResponseBody) (err error) {
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.Email == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.AlreadyBlacklisted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("already_blacklisted", "body"))
+	}
+	if body.BlacklistedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("blacklisted_at", "body"))
+	}
+	if body.DisabledOrganizationIds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled_organization_ids", "body"))
+	}
+	if body.RevokedAPIKeyCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_api_key_count", "body"))
+	}
+	if body.RevokedSignInCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_sign_in_count", "body"))
+	}
+	if body.RevokedUserSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_user_session_count", "body"))
+	}
+	if body.RevokedUserSessionConsentCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_user_session_consent_count", "body"))
+	}
+	if body.RevokedUserSessionClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_user_session_client_count", "body"))
+	}
+	if body.RevokedPlatformMcpConnectionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_platform_mcp_connection_count", "body"))
+	}
+	if body.RevokedPlatformMcpSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_platform_mcp_session_count", "body"))
+	}
+	if body.RevokedPlatformMcpOauthClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_platform_mcp_oauth_client_count", "body"))
+	}
+	if body.RevokedChannelsOauthGrantCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_channels_oauth_grant_count", "body"))
+	}
+	if body.RevokedChannelsOauthClientCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revoked_channels_oauth_client_count", "body"))
+	}
+	if body.SessionCache == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_cache", "body"))
+	}
+	if body.WorkosMetadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workos_metadata", "body"))
+	}
+	if body.WorkosSessions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workos_sessions", "body"))
+	}
+	if body.WorkosSessionsRevokedCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workos_sessions_revoked_count", "body"))
+	}
+	if body.WorkosRadar == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workos_radar", "body"))
+	}
+	if body.RegistryDisable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("registry_disable", "body"))
+	}
+	if body.Warnings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warnings", "body"))
+	}
+	if body.BlacklistedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.blacklisted_at", *body.BlacklistedAt, goa.FormatDateTime))
+	}
+	if body.SessionCache != nil {
+		if err2 := ValidateAdminBlockUserStepResultResponseBody(body.SessionCache); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.WorkosMetadata != nil {
+		if err2 := ValidateAdminBlockUserStepResultResponseBody(body.WorkosMetadata); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.WorkosSessions != nil {
+		if err2 := ValidateAdminBlockUserStepResultResponseBody(body.WorkosSessions); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.WorkosRadar != nil {
+		if err2 := ValidateAdminBlockUserStepResultResponseBody(body.WorkosRadar); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.RegistryDisable != nil {
+		if err2 := ValidateAdminBlockUserStepResultResponseBody(body.RegistryDisable); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -100932,6 +101481,246 @@ func ValidateFinalizeOrganizationEncryptionGatewayErrorResponseBody(body *Finali
 	return
 }
 
+// ValidateBlockUserUnauthorizedResponseBody runs the validations defined on
+// blockUser_unauthorized_response_body
+func ValidateBlockUserUnauthorizedResponseBody(body *BlockUserUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserForbiddenResponseBody runs the validations defined on
+// blockUser_forbidden_response_body
+func ValidateBlockUserForbiddenResponseBody(body *BlockUserForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserBadRequestResponseBody runs the validations defined on
+// blockUser_bad_request_response_body
+func ValidateBlockUserBadRequestResponseBody(body *BlockUserBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserNotFoundResponseBody runs the validations defined on
+// blockUser_not_found_response_body
+func ValidateBlockUserNotFoundResponseBody(body *BlockUserNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserConflictResponseBody runs the validations defined on
+// blockUser_conflict_response_body
+func ValidateBlockUserConflictResponseBody(body *BlockUserConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserUnsupportedMediaResponseBody runs the validations defined
+// on blockUser_unsupported_media_response_body
+func ValidateBlockUserUnsupportedMediaResponseBody(body *BlockUserUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserInvalidResponseBody runs the validations defined on
+// blockUser_invalid_response_body
+func ValidateBlockUserInvalidResponseBody(body *BlockUserInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserInvariantViolationResponseBody runs the validations defined
+// on blockUser_invariant_violation_response_body
+func ValidateBlockUserInvariantViolationResponseBody(body *BlockUserInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserUnexpectedResponseBody runs the validations defined on
+// blockUser_unexpected_response_body
+func ValidateBlockUserUnexpectedResponseBody(body *BlockUserUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBlockUserGatewayErrorResponseBody runs the validations defined on
+// blockUser_gateway_error_response_body
+func ValidateBlockUserGatewayErrorResponseBody(body *BlockUserGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -104334,6 +105123,15 @@ func ValidateAdminOrganizationEncryptionStateCountResponseBody(body *AdminOrgani
 		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
 		}
+	}
+	return
+}
+
+// ValidateAdminBlockUserStepResultResponseBody runs the validations defined on
+// AdminBlockUserStepResultResponseBody
+func ValidateAdminBlockUserStepResultResponseBody(body *AdminBlockUserStepResultResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
 	return
 }

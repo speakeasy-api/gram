@@ -726,3 +726,8 @@ func RunOrganizationEncryptionAdminPath() string {
 func FinalizeOrganizationEncryptionAdminPath() string {
 	return "/admin/organizationEncryption.finalize"
 }
+
+// BlockUserAdminPath returns the URL path to the admin service blockUser HTTP endpoint.
+func BlockUserAdminPath() string {
+	return "/admin/users.block"
+}

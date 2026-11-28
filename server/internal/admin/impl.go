@@ -34,7 +34,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
+	authsessions "github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -57,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -125,6 +128,16 @@ type Service struct {
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
 	workos orgprovision.WorkOSVerifiedDomainCreator
+
+	// workosUserBlocker updates WorkOS user metadata, revokes WorkOS sessions,
+	// and adds blocked emails to the WorkOS Radar blocklist. Nil leaves those
+	// post-commit steps reported as not_configured.
+	workosUserBlocker WorkOSUserBlocker
+
+	// epochRaiser and tokenRevoker push immediate Redis session and JTI
+	// invalidations after BlockUser commits to Postgres.
+	epochRaiser  signins.EpochRaiser
+	tokenRevoker signins.TokenRevoker
 
 	openRouter           TrialKeyReviver
 	openRouterSpendCap   OpenRouterSpendCapScheduler
@@ -302,6 +315,17 @@ func NewService(
 		encryptionClient,
 	)
 
+	var workosUserBlocker WorkOSUserBlocker
+	if blocker, ok := workosClient.(WorkOSUserBlocker); ok {
+		workosUserBlocker = blocker
+	}
+	var epochRaiser signins.EpochRaiser
+	var tokenRevoker signins.TokenRevoker
+	if redisClient != nil {
+		epochRaiser = authsessions.NewEpochStore(redisClient)
+		tokenRevoker = chatsessions.NewManager(logger, redisClient, "", nil)
+	}
+
 	return &Service{orgEncryption: nil, applicationEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, secretBackfillPlatformKey: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracerProvider:             tracerProvider,
@@ -317,6 +341,9 @@ func NewService(
 			supporthandoff.NewStore(adminCache),
 		),
 		workos:               workosClient,
+		workosUserBlocker:    workosUserBlocker,
+		epochRaiser:          epochRaiser,
+		tokenRevoker:         tokenRevoker,
 		openRouter:           openRouter,
 		openRouterSpendCap:   openRouterSpendCap,
 		openRouterUsage:      openRouter,
@@ -599,6 +626,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.RollbackOrganizationEncryption = service.strictAdminJSON(server.RollbackOrganizationEncryption, func() any { return new(adminserver.RollbackOrganizationEncryptionRequestBody) })
 	server.RunOrganizationEncryption = service.strictAdminJSON(server.RunOrganizationEncryption, func() any { return new(adminserver.RunOrganizationEncryptionRequestBody) })
 	server.FinalizeOrganizationEncryption = service.strictAdminJSON(server.FinalizeOrganizationEncryption, func() any { return new(adminserver.FinalizeOrganizationEncryptionRequestBody) })
+	server.BlockUser = service.strictAdminJSON(server.BlockUser, func() any { return new(adminserver.BlockUserRequestBody) })
 	adminserver.Mount(mux, server)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)

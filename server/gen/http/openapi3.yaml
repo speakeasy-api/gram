@@ -11778,6 +11778,82 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: getUpstreamOAuthMigrationStatus
+    /admin/users.block:
+        post:
+            tags:
+                - admin
+            summary: blockUser admin
+            description: Staff-only action that blacklists a user, atomically cascades all database revocations and sole-member organization disables, invalidates session caches, and executes best-effort WorkOS revocation steps with structured partial-failure reporting.
+            operationId: adminBlockUser
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/BlockUserRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminBlockUserResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/users.list:
         get:
             tags:
@@ -103426,6 +103502,125 @@ components:
                 - inserted
                 - extended
                 - taken_over
+        AdminBlockUserResult:
+            type: object
+            properties:
+                already_blacklisted:
+                    type: boolean
+                    description: True if users.blacklisted_at was already set before this request.
+                blacklisted_at:
+                    type: string
+                    description: Timestamp when the user was blacklisted.
+                    format: date-time
+                disabled_organization_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: IDs of organizations disabled because the blocked user was their sole remaining active non-staff member.
+                email:
+                    type: string
+                    description: Email address of the blocked user.
+                registry_disable:
+                    $ref: '#/components/schemas/AdminBlockUserStepResult'
+                revoked_api_key_count:
+                    type: integer
+                    description: Number of API keys created by the user that were soft-revoked.
+                    format: int64
+                revoked_channels_oauth_client_count:
+                    type: integer
+                    description: Number of user-owned Channels OAuth clients revoked.
+                    format: int64
+                revoked_channels_oauth_grant_count:
+                    type: integer
+                    description: Number of Channels OAuth grants revoked.
+                    format: int64
+                revoked_platform_mcp_connection_count:
+                    type: integer
+                    description: Number of Platform MCP connections revoked.
+                    format: int64
+                revoked_platform_mcp_oauth_client_count:
+                    type: integer
+                    description: Number of user-owned Platform MCP OAuth clients revoked.
+                    format: int64
+                revoked_platform_mcp_session_count:
+                    type: integer
+                    description: Number of Platform MCP sessions revoked.
+                    format: int64
+                revoked_sign_in_count:
+                    type: integer
+                    description: Number of recorded sign-ins revoked.
+                    format: int64
+                revoked_user_session_client_count:
+                    type: integer
+                    description: Number of user-owned hosted OAuth clients soft-revoked.
+                    format: int64
+                revoked_user_session_consent_count:
+                    type: integer
+                    description: Number of remembered user session consents withdrawn.
+                    format: int64
+                revoked_user_session_count:
+                    type: integer
+                    description: Number of hosted user sessions soft-revoked.
+                    format: int64
+                session_cache:
+                    $ref: '#/components/schemas/AdminBlockUserStepResult'
+                user_id:
+                    type: string
+                    description: Canonical ID of the blocked user.
+                warnings:
+                    type: array
+                    items:
+                        type: string
+                    description: Non-fatal warnings or partial failure details from post-commit external steps.
+                workos_metadata:
+                    $ref: '#/components/schemas/AdminBlockUserStepResult'
+                workos_radar:
+                    $ref: '#/components/schemas/AdminBlockUserStepResult'
+                workos_sessions:
+                    $ref: '#/components/schemas/AdminBlockUserStepResult'
+                workos_sessions_revoked_count:
+                    type: integer
+                    description: Number of WorkOS AuthKit sessions revoked.
+                    format: int64
+                workos_user_id:
+                    type: string
+                    description: Linked WorkOS user ID, if present.
+            description: Summary of a staff block-user action, including committed database cascades and per-step external results.
+            required:
+                - user_id
+                - email
+                - already_blacklisted
+                - blacklisted_at
+                - disabled_organization_ids
+                - revoked_api_key_count
+                - revoked_sign_in_count
+                - revoked_user_session_count
+                - revoked_user_session_consent_count
+                - revoked_user_session_client_count
+                - revoked_platform_mcp_connection_count
+                - revoked_platform_mcp_session_count
+                - revoked_platform_mcp_oauth_client_count
+                - revoked_channels_oauth_grant_count
+                - revoked_channels_oauth_client_count
+                - session_cache
+                - workos_metadata
+                - workos_sessions
+                - workos_sessions_revoked_count
+                - workos_radar
+                - registry_disable
+                - warnings
+        AdminBlockUserStepResult:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Human-readable detail explaining skipped, partial, failed, or not_configured outcomes.
+                status:
+                    type: string
+                    description: 'Step outcome: succeeded, partial, skipped, failed, or not_configured.'
+            description: Outcome of one post-commit cache or external system step during a user block.
+            required:
+                - status
         AdminBulkUpdateAccountTypeResult:
             type: object
             properties:
@@ -110966,6 +111161,20 @@ components:
             required:
                 - agent_id
                 - remote_session_client_id
+        BlockUserRequestBody:
+            type: object
+            properties:
+                reason:
+                    type: string
+                    description: Optional staff reason recorded in audit logs.
+                    maxLength: 500
+                user_id:
+                    type: string
+                    description: Canonical Speakeasy user ID to block.
+                    minLength: 1
+                    maxLength: 255
+            required:
+                - user_id
         BuiltInCard:
             type: object
             properties:

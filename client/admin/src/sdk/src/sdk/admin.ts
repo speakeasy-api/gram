@@ -6,6 +6,7 @@ import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignO
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
 import { adminBackfillOrganizationAssistantBuiltinGrants } from "../funcs/adminBackfillOrganizationAssistantBuiltinGrants.js";
+import { adminBlockUser } from "../funcs/adminBlockUser.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -152,6 +153,7 @@ import { AdminAssistantOrganizations } from "../models/components/adminassistant
 import { AdminAssistantSlackMigrationRun } from "../models/components/adminassistantslackmigrationrun.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
+import { AdminBlockUserResult } from "../models/components/adminblockuserresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
@@ -221,6 +223,7 @@ import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminups
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
 import { BackfillOrganizationAssistantBuiltinGrantsRequestBody } from "../models/components/backfillorganizationassistantbuiltingrantsrequestbody.js";
+import { BlockUserRequestBody } from "../models/components/blockuserrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -2689,6 +2692,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminUpstreamOAuthMigrationStatus> {
     return unwrapAsync(adminGetUpstreamOAuthMigrationStatus(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * blockUser admin
+   *
+   * @remarks
+   * Staff-only action that blacklists a user, atomically cascades all database revocations and sole-member organization disables, invalidates session caches, and executes best-effort WorkOS revocation steps with structured partial-failure reporting.
+   */
+  async blockUser(
+    request: BlockUserRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminBlockUserResult> {
+    return unwrapAsync(adminBlockUser(
       this,
       request,
       options,

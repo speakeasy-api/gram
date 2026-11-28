@@ -36,6 +36,7 @@ trackedFiles:
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
   src/funcs/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
+  src/funcs/adminBlockUser.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -205,6 +206,8 @@ trackedFiles:
   src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
+  src/models/components/adminblockuserresult.ts: {}
+  src/models/components/adminblockuserstepresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
@@ -349,6 +352,7 @@ trackedFiles:
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
   src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
   src/models/components/backfillorganizationassistantbuiltingrantsrequestbody.ts: {}
+  src/models/components/blockuserrequestbody.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
@@ -513,6 +517,7 @@ trackedFiles:
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
+  src/react-query/adminBlockUser.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -788,6 +793,17 @@ examples:
       responses:
         "200":
           application/json: {"already_granted": 561547, "failed": 599621, "granted": 179677, "organization_id": "<id>", "results": [{"assistant_id": "fe2c6f77-4abb-4c7b-860e-0a40c647afbe", "grants_added": 335148, "name": "<value>", "outcome": "failed", "project_id": "6e03306b-83d2-4075-9d22-59af174f5e32"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminBlockUser:
+    speakeasy-default-admin-block-user:
+      requestBody:
+        application/json: {"user_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"already_blacklisted": true, "blacklisted_at": "2025-07-27T08:12:47.082Z", "disabled_organization_ids": [], "email": "Cecil_Wisoky@yahoo.com", "registry_disable": {"status": "<value>"}, "revoked_api_key_count": 465285, "revoked_channels_oauth_client_count": 547271, "revoked_channels_oauth_grant_count": 890755, "revoked_platform_mcp_connection_count": 249393, "revoked_platform_mcp_oauth_client_count": 121834, "revoked_platform_mcp_session_count": 544933, "revoked_sign_in_count": 489648, "revoked_user_session_client_count": 758600, "revoked_user_session_consent_count": 23664, "revoked_user_session_count": 397384, "session_cache": {"status": "<value>"}, "user_id": "<id>", "warnings": [], "workos_metadata": {"status": "<value>"}, "workos_radar": {"status": "<value>"}, "workos_sessions": {"status": "<value>"}, "workos_sessions_revoked_count": 812220}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
