@@ -28,16 +28,23 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
   useProject: () => ({ id: "project" }),
 }));
-// Stands in for the greyed-out wrapper RequireScope renders when denied.
+// The real gate, with its request-access prompt, is covered by
+// require-scope.test.tsx. This stand-in records how the line configures it.
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
-    scope,
+    check,
+    level,
     children,
   }: {
-    scope: string;
+    check: { scope: string; resourceId: string };
+    level: string;
     children: React.ReactNode;
   }) => (
-    <div data-testid="scope-disabled" data-scope={scope}>
+    <div
+      data-testid="scope-disabled"
+      data-level={level}
+      data-check={`${check.scope}:${check.resourceId}`}
+    >
       {children}
     </div>
   ),
@@ -142,7 +149,8 @@ describe("PluginDistributionLine", () => {
     };
     renderLine();
     const disabled = screen.getByTestId("scope-disabled");
-    expect(disabled.getAttribute("data-scope")).toBe("plugin:write");
+    expect(disabled.getAttribute("data-level")).toBe("component");
+    expect(disabled.getAttribute("data-check")).toBe("plugin:write:project");
     expect(disabled.textContent).toBe("Distributed in1 plugin·Manage plugins");
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

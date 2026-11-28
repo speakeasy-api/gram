@@ -8,6 +8,7 @@ import { RequireScope } from "@/components/require-scope";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { useRBAC } from "@/hooks/useRBAC";
+import * as authz from "@/lib/authz.gen";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useRoutes } from "@/routes";
 import { usePlugins } from "@gram/client/react-query/plugins";
@@ -49,9 +50,7 @@ export function PluginDistributionLine({
   );
   return (
     <RequireScope
-      scope="plugin:write"
-      resourceId={project.id}
-      projectId={project.id}
+      check={authz.project(project.id).pluginWrite()}
       level="component"
       reason="You don't have permission to manage this server's plugins."
     >
