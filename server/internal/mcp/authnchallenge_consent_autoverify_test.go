@@ -338,6 +338,10 @@ func TestConsentAutoVerify_ShutdownDrainsAndClosesAdmission(t *testing.T) {
 // Placement can consume part of the callback's budget; the verdict is still written inside what is left, even when a leg hangs.
 func TestConsentAutoVerify_PreservesRemainingBudgetForVerdict(t *testing.T) {
 	t.Parallel()
+	// A hanging close may run until half the probe's reserve (an eighth of what
+	// is left) remains for the verdict write. The budget is large enough that
+	// this window absorbs a slow database write under a loaded parallel suite.
+	const budget = 8 * time.Second
 	for _, tc := range []struct {
 		mode validationMemberMode
 		want string
@@ -347,10 +351,10 @@ func TestConsentAutoVerify_PreservesRemainingBudgetForVerdict(t *testing.T) {
 	} {
 		t.Run(string(tc.mode), func(t *testing.T) {
 			t.Parallel()
-			ctx, fx := seedStandaloneValidationFixture(t, "auto-budget-"+string(tc.mode))
+			ctx, fx := seedStandaloneValidationFixtureWith(t, "auto-budget-"+string(tc.mode), mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: budget, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
 			fx.member.set(tc.mode)
-			// Model placement having consumed half of the configured two-second probe budget.
-			remaining, cancel := context.WithTimeout(ctx, time.Second)
+			// Model placement having consumed half of the configured probe budget.
+			remaining, cancel := context.WithTimeout(ctx, budget/2)
 			defer cancel()
 			fx.ti.service.VerifyRemoteGrantOn(remaining, fx.endpoint, remotesessions.RemoteGrant{
 				ParentChallengeID:     fx.stateID,
