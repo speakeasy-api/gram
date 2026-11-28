@@ -96,6 +96,9 @@ describe("AUDIT_ACTIONS", () => {
     expect(staticActionPhrase("organization:disabled")).toBe(
       "disabled organization access for",
     );
+    expect(staticActionPhrase("organization:disabled_by_membership_cap")).toBe(
+      "disabled organization access over the per-user limit for",
+    );
   });
 
   it("distinguishes demo-access whitelisting from disabling an organisation", () => {

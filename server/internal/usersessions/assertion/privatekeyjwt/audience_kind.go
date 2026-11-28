@@ -10,6 +10,11 @@ const (
 	// server documents as canonical.
 	AudienceKindIssuer AudienceKind = "issuer"
 
+	// AudienceKindIssuerAlias is a second issuer identifier the endpoint
+	// answers to. Recorded apart from the issuer so the log shows how many
+	// clients still sign for it.
+	AudienceKindIssuerAlias AudienceKind = "issuer_alias"
+
 	// AudienceKindEndpoint is the URL of the endpoint the request was made to.
 	AudienceKindEndpoint AudienceKind = "endpoint"
 )

@@ -43,6 +43,9 @@ import {
   type FilterControlKey,
   type FilterOption,
   type FilterSelection,
+  whitelistState,
+  WHITELIST_LABELS,
+  WHITELIST_STATES,
 } from "@/lib/organizationFilters";
 import {
   CREATED_PRESETS,
@@ -82,6 +85,7 @@ export function FilterSheet({
   onReturnFocus: () => void;
 }): JSX.Element {
   const disabledId = useId();
+  const whitelistedId = useId();
   const membersId = useId();
   const createdId = useId();
   const [createdPreset, setCreatedPreset] = useState<CreatedPreset>(() =>
@@ -208,6 +212,38 @@ export function FilterSheet({
               />
             ),
           )}
+          <div className="space-y-2">
+            <label htmlFor={whitelistedId} className="text-sm font-medium">
+              Whitelist
+            </label>
+            <Select
+              value={draft.whitelisted ?? "all"}
+              onValueChange={(state) =>
+                setDraft((previous) => ({
+                  ...previous,
+                  whitelisted: whitelistState(state),
+                }))
+              }
+            >
+              <SelectTrigger
+                id={whitelistedId}
+                className="w-full"
+                ref={(node) => {
+                  if (node) pickers.current.whitelisted = node;
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {WHITELIST_STATES.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {WHITELIST_LABELS[state]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <fieldset className="grid gap-2">
             <legend className="mb-2 text-sm font-medium">
               Created date (UTC)

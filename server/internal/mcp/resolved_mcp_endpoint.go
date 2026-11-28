@@ -175,6 +175,12 @@ type AuthorizationServerURLs struct {
 	Token     string
 	Register  string
 	Revoke    string
+
+	// IssuerAlias is a second issuer identifier the authorization server
+	// answers to on the host a request was sent to, or "" when it has none.
+	// It is never advertised as the issuer of tokens or authorization
+	// responses; only client assertions may name it.
+	IssuerAlias string
 }
 
 // AuthorizationServerURLs builds every OAuth metadata URL the endpoint
@@ -185,7 +191,7 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 	if err != nil {
 		return AuthorizationServerURLs{}, err
 	}
-	urls := AuthorizationServerURLs{Issuer: root, Authorize: "", Token: "", Register: "", Revoke: ""}
+	urls := AuthorizationServerURLs{Issuer: root, Authorize: "", Token: "", Register: "", Revoke: "", IssuerAlias: ""}
 	for _, p := range []struct {
 		target *string
 		suffix string
@@ -204,9 +210,9 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 	return urls, nil
 }
 
-// clientAssertionAudiences is the pair of aud values a client assertion may
-// name when authenticating at the given endpoint: the issuer identifier, or
-// that endpoint's own URL.
+// clientAssertionAudiences is the aud values a client assertion may name when
+// authenticating at the given endpoint: the issuer identifier or its alias,
+// or that endpoint's own URL.
 //
 // Derived from the same values the RFC 8414 document advertises, so what a
 // client can read from metadata and what an assertion may name are one
@@ -222,8 +228,9 @@ func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndp
 		endpoint = u.Revoke
 	}
 	return privatekeyjwt.Audiences{
-		Issuer:   u.Issuer,
-		Endpoint: endpoint,
+		Issuer:      u.Issuer,
+		IssuerAlias: u.IssuerAlias,
+		Endpoint:    endpoint,
 	}
 }
 

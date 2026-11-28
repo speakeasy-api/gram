@@ -26,6 +26,10 @@ type Service interface {
 	Create(context.Context, *CreatePayload) (res *ManagedAgent, err error)
 	// Get implements get.
 	Get(context.Context, *GetPayload) (res *ManagedAgent, err error)
+	// Get the project gateway an agent runtime must call. Uses the same agent
+	// authorization as credential issuance and does not require project:read.
+	// Unscoped agents must be assigned to a project before setup.
+	GetRuntimeGateway(context.Context, *GetRuntimeGatewayPayload) (res *AgentRuntimeGateway, err error)
 	// Rename implements rename.
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
 	// List safe allow-only credential grant candidates shared by the live agent,
@@ -91,7 +95,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "checkPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [22]string{"listSessions", "revokeSession", "list", "create", "get", "getRuntimeGateway", "rename", "listDelegableGrants", "listPolicyGrants", "checkPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 // AgentConnectionBlock is the result type of the agents service
 // blockAgentOnConnection method.
@@ -184,6 +188,17 @@ type AgentPolicySelector struct {
 	ServerURL *string
 	// Server identity filter (risk policy scopes only).
 	ServerIdentity *string
+}
+
+// AgentRuntimeGateway is the result type of the agents service
+// getRuntimeGateway method.
+type AgentRuntimeGateway struct {
+	// Whether the agent runtime may use its bound project's gateway.
+	Available bool
+	// The bound project's gateway MCP URL. Set only when available.
+	URL *string
+	// Why runtime setup is unavailable. Set only when not available.
+	UnavailableReason *string
 }
 
 type AgentSession struct {
@@ -289,6 +304,14 @@ type DeletePolicyGrantPayload struct {
 type GetPayload struct {
 	SessionToken *string
 	ID           string
+}
+
+// GetRuntimeGatewayPayload is the payload type of the agents service
+// getRuntimeGateway method.
+type GetRuntimeGatewayPayload struct {
+	SessionToken *string
+	// First-class agent identifier
+	AgentID string
 }
 
 // ListAgentConnectionBlocksResult is the result type of the agents service

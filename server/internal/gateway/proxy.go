@@ -449,15 +449,15 @@ func (tp *ToolProxy) doFunction(
 		payloadEnv[strings.ToUpper(k)] = v
 	}
 
-	// For each variable required by the function, allow user config to merge/override
+	// For each variable required by the function, allow saved config and user config to merge/override
 	for key := range plan.Variables {
-		if val := env.UserConfig.Get(key); val != "" {
+		if val := env.UserOrSavedGet(key); val != "" {
 			payloadEnv[key] = val
 		}
 	}
 
 	if plan.AuthInput != nil {
-		if val := env.UserConfig.Get(plan.AuthInput.Variable); val != "" {
+		if val := env.UserOrSavedGet(plan.AuthInput.Variable); val != "" {
 			payloadEnv[plan.AuthInput.Variable] = val
 		}
 	}
@@ -703,14 +703,11 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	// We prefer tool call specified arguments over user-specified config
-	if toolCallBody.EnvironmentVariables != nil {
-		for k, v := range toolCallBody.EnvironmentVariables {
-			env.UserConfig.Set(k, v)
-			if env.Credentials != nil {
-				env.Credentials.CallerVariables = append(env.Credentials.CallerVariables, k)
-			}
-		}
+	// A tool call's arguments do not set variables: those come from system
+	// environment, saved configuration and request headers. The field is still
+	// accepted so that a call carrying it keeps working.
+	if len(toolCallBody.EnvironmentVariables) > 0 {
+		logger.WarnContext(ctx, "environment variables in tool call arguments not used", attr.SlogValueInt(len(toolCallBody.EnvironmentVariables)))
 	}
 
 	// Handle path parameters
@@ -1214,26 +1211,47 @@ func captureResponseStatusCode(opts ReverseProxyOptions, statusCode int) {
 }
 
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) string {
-	if tool.ServerEnvVar != "" {
-		if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
-			return envVar
-		} else if len(env.SystemEnv.All()) > 0 {
-			// IMPORTANT: when system environment variables exist, we _always_ disallow user-supplied
-			// server URLs to prevent exfiltration of system environment variables to user-controlled servers.
-			return ""
-		}
-
-		envVar := env.UserConfig.Get(tool.ServerEnvVar)
-		if envVar != "" {
-			if env.Credentials != nil {
-				env.Credentials.ServerVariable = tool.ServerEnvVar
-			}
-			return envVar
-		} else {
-			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
-		}
+	if tool.ServerEnvVar == "" {
+		return ""
 	}
+
+	// Each layer's values stay bound to a server URL from that layer or above
+	// it, so a layer that holds any value settles the server URL, with the
+	// tool's own as the fallback: system environment first, then saved
+	// configuration, and a request-level server URL only when both are empty.
+	if envVar := env.SystemEnv.Get(tool.ServerEnvVar); envVar != "" {
+		logUnusedServerURL(ctx, logger, tool, env)
+		return envVar
+	}
+	if env.SystemEnv.Len() > 0 {
+		logUnusedServerURL(ctx, logger, tool, env)
+		return ""
+	}
+	if envVar := env.SavedConfig.Get(tool.ServerEnvVar); envVar != "" {
+		logUnusedServerURL(ctx, logger, tool, env)
+		return envVar
+	}
+	if env.SavedConfig.Len() > 0 {
+		logUnusedServerURL(ctx, logger, tool, env)
+		return ""
+	}
+
+	if envVar := env.UserConfig.Get(tool.ServerEnvVar); envVar != "" {
+		if env.Credentials != nil {
+			env.Credentials.ServerVariable = tool.ServerEnvVar
+		}
+		return envVar
+	}
+
+	logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
 	return ""
+}
+
+// logUnusedServerURL notes a request-level server URL that a configured layer took precedence over.
+func logUnusedServerURL(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) {
+	if env.HasUserValue(tool.ServerEnvVar) {
+		logger.WarnContext(ctx, "request server url not used: the server has configured values", attr.SlogEnvVarName(tool.ServerEnvVar))
+	}
 }
 
 var paramRegex = regexp.MustCompile(`{([^}]+)}`)

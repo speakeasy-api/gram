@@ -194,6 +194,7 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:disabled",
+  "organization:disabled_by_membership_cap",
   "organization:enabled",
   "organization:whitelist_updated",
   "organization:account_type_changed",
@@ -812,6 +813,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled organization access for";
     case "organization:disabled":
       return "disabled organization access for";
+    case "organization:disabled_by_membership_cap":
+      return "disabled organization access over the per-user limit for";
     case "organization:whitelist_updated":
       return "changed demo-access whitelisting for";
     case "organization:webhooks_enabled":

@@ -86,12 +86,6 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// so every one-segment tail here really is a slug.
 		slug, ok := strings.CutPrefix(tail, "mcp/")
 		return ok && isEndpointSlug(slug)
-	case "agent-mcp":
-		// POST /agent-mcp/{agentID} — the per-agent gateway
-		// (internal/mcp/serve_agent_gateway.go). Nothing static is registered
-		// beside it, and the tail is an agent id rather than a slug, so every
-		// one-segment tail here is the endpoint itself.
-		return isEndpointSlug(tail)
 	case "channels":
 		return isChannelsEndpoint(path, "mcp")
 	case "platform-mcp":

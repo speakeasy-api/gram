@@ -5908,6 +5908,20 @@ type PlatformMcpSetupHandoff struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type PlatformSwitch struct {
+	// @access: confidential
+	Key string
+	// @access: confidential
+	Engaged bool
+	// Email of the staff member who last changed the switch.
+	// @access: confidential-pii
+	UpdatedBy pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Plugin struct {
 	// @access: confidential
 	ID uuid.UUID
