@@ -448,6 +448,89 @@ func BuildEnableOrganizationPayload(adminEnableOrganizationBody string, adminEna
 	return v, nil
 }
 
+// BuildResolveOrganizationsPayload builds the payload for the admin
+// resolveOrganizations endpoint from CLI flags.
+func BuildResolveOrganizationsPayload(adminResolveOrganizationsBody string, adminResolveOrganizationsAdminSessionToken string) (*admin.ResolveOrganizationsPayload, error) {
+	var err error
+	var body ResolveOrganizationsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminResolveOrganizationsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ids\": [\n         \"aa\",\n         \"aa\",\n         \"aa\"\n      ],\n      \"slugs\": [\n         \"aa\",\n         \"aa\",\n         \"aa\"\n      ]\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminResolveOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminResolveOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.ResolveOrganizationsPayload{}
+	if body.Ids != nil {
+		v.Ids = make([]string, len(body.Ids))
+		for i, val := range body.Ids {
+			v.Ids[i] = val
+		}
+	}
+	if body.Slugs != nil {
+		v.Slugs = make([]string, len(body.Slugs))
+		for i, val := range body.Slugs {
+			v.Slugs[i] = val
+		}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBulkDisableOrganizationsPayload builds the payload for the admin
+// bulkDisableOrganizations endpoint from CLI flags.
+func BuildBulkDisableOrganizationsPayload(adminBulkDisableOrganizationsBody string, adminBulkDisableOrganizationsAdminSessionToken string) (*admin.BulkDisableOrganizationsPayload, error) {
+	var err error
+	var body BulkDisableOrganizationsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBulkDisableOrganizationsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }'")
+		}
+		if body.Ids == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("ids", "body"))
+		}
+		if len(body.Ids) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1, true))
+		}
+		if len(body.Ids) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids", body.Ids, len(body.Ids), 1000, false))
+		}
+		for _, e := range body.Ids {
+			if utf8.RuneCountInString(e) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.ids[*]", e, utf8.RuneCountInString(e), 1, true))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBulkDisableOrganizationsAdminSessionToken != "" {
+			adminSessionToken = &adminBulkDisableOrganizationsAdminSessionToken
+		}
+	}
+	v := &admin.BulkDisableOrganizationsPayload{}
+	if body.Ids != nil {
+		v.Ids = make([]string, len(body.Ids))
+		for i, val := range body.Ids {
+			v.Ids[i] = val
+		}
+	} else {
+		v.Ids = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetOrganizationPayload builds the payload for the admin getOrganization
 // endpoint from CLI flags.
 func BuildGetOrganizationPayload(adminGetOrganizationIDOrSlug string, adminGetOrganizationAdminSessionToken string) (*admin.GetOrganizationPayload, error) {

@@ -134,6 +134,12 @@ import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminS
 import { adminGetStripeSubscriptionCandidate } from "@gram/admin-client/funcs/adminGetStripeSubscriptionCandidate";
 import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
 import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
+import { buildAdminResolveOrganizationsMutation } from "@gram/admin-client/react-query/adminResolveOrganizations";
+import { buildAdminBulkDisableOrganizationsMutation } from "@gram/admin-client/react-query/adminBulkDisableOrganizations";
+import type { ResolveOrganizationsRequestBody } from "@gram/admin-client/models/components/resolveorganizationsrequestbody";
+import type { AdminResolveOrganizationsResult } from "@gram/admin-client/models/components/adminresolveorganizationsresult";
+import type { BulkDisableOrganizationsRequestBody } from "@gram/admin-client/models/components/bulkdisableorganizationsrequestbody";
+import type { AdminBulkDisableOrganizationsResult } from "@gram/admin-client/models/components/adminbulkdisableorganizationsresult";
 import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
 import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
 import { buildAdminSetStripeSubscriptionMutation } from "@gram/admin-client/react-query/adminSetStripeSubscription";
@@ -1420,4 +1426,28 @@ export function finalizeOrganizationEncryption(request: {
       },
     }),
   );
+}
+
+// These sit apart from the organization writes above: neither call answers
+// with an organization record. The first is a read-only lookup, the second a
+// batch outcome.
+const resolveOrganizationsMutation =
+  buildAdminResolveOrganizationsMutation(redirectingClient);
+const bulkDisableOrganizationsMutation =
+  buildAdminBulkDisableOrganizationsMutation(redirectingClient);
+
+// Looks organizations up by id and slug. A POST because a list can carry a
+// thousand identifiers, but it writes nothing.
+export function resolveOrganizations(
+  request: ResolveOrganizationsRequestBody,
+): Promise<AdminResolveOrganizationsResult> {
+  return redirecting(resolveOrganizationsMutation.mutationFn({ request }));
+}
+
+// `missingIds` names what was not written. A caller that drops it reports the
+// batch as having done more than it did.
+export function bulkDisableOrganizations(
+  request: BulkDisableOrganizationsRequestBody,
+): Promise<AdminBulkDisableOrganizationsResult> {
+  return redirecting(bulkDisableOrganizationsMutation.mutationFn({ request }));
 }

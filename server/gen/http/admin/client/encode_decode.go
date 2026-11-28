@@ -3582,6 +3582,476 @@ func DecodeEnableOrganizationResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildResolveOrganizationsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "resolveOrganizations"
+// endpoint
+func (c *Client) BuildResolveOrganizationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ResolveOrganizationsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "resolveOrganizations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeResolveOrganizationsRequest returns an encoder for requests sent to
+// the admin resolveOrganizations server.
+func EncodeResolveOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ResolveOrganizationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "resolveOrganizations", "*admin.ResolveOrganizationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewResolveOrganizationsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "resolveOrganizations", err)
+		}
+		return nil
+	}
+}
+
+// DecodeResolveOrganizationsResponse returns a decoder for responses returned
+// by the admin resolveOrganizations endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeResolveOrganizationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeResolveOrganizationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ResolveOrganizationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			res := NewResolveOrganizationsAdminResolveOrganizationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ResolveOrganizationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ResolveOrganizationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ResolveOrganizationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ResolveOrganizationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ResolveOrganizationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ResolveOrganizationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ResolveOrganizationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ResolveOrganizationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+				}
+				err = ValidateResolveOrganizationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+				}
+				return nil, NewResolveOrganizationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ResolveOrganizationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+				}
+				err = ValidateResolveOrganizationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+				}
+				return nil, NewResolveOrganizationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "resolveOrganizations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ResolveOrganizationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "resolveOrganizations", err)
+			}
+			err = ValidateResolveOrganizationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "resolveOrganizations", err)
+			}
+			return nil, NewResolveOrganizationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "resolveOrganizations", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildBulkDisableOrganizationsRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "bulkDisableOrganizations"
+// endpoint
+func (c *Client) BuildBulkDisableOrganizationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: BulkDisableOrganizationsAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "bulkDisableOrganizations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeBulkDisableOrganizationsRequest returns an encoder for requests sent
+// to the admin bulkDisableOrganizations server.
+func EncodeBulkDisableOrganizationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.BulkDisableOrganizationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "bulkDisableOrganizations", "*admin.BulkDisableOrganizationsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewBulkDisableOrganizationsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "bulkDisableOrganizations", err)
+		}
+		return nil
+	}
+}
+
+// DecodeBulkDisableOrganizationsResponse returns a decoder for responses
+// returned by the admin bulkDisableOrganizations endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeBulkDisableOrganizationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeBulkDisableOrganizationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body BulkDisableOrganizationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			res := NewBulkDisableOrganizationsAdminBulkDisableOrganizationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body BulkDisableOrganizationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body BulkDisableOrganizationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body BulkDisableOrganizationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body BulkDisableOrganizationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body BulkDisableOrganizationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body BulkDisableOrganizationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body BulkDisableOrganizationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body BulkDisableOrganizationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+				}
+				err = ValidateBulkDisableOrganizationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+				}
+				return nil, NewBulkDisableOrganizationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body BulkDisableOrganizationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+				}
+				err = ValidateBulkDisableOrganizationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+				}
+				return nil, NewBulkDisableOrganizationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "bulkDisableOrganizations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body BulkDisableOrganizationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "bulkDisableOrganizations", err)
+			}
+			err = ValidateBulkDisableOrganizationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "bulkDisableOrganizations", err)
+			}
+			return nil, NewBulkDisableOrganizationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "bulkDisableOrganizations", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetOrganizationRequest instantiates a HTTP request object with method
 // and path set to call the "admin" service "getOrganization" endpoint
 func (c *Client) BuildGetOrganizationRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -34604,6 +35074,22 @@ func unmarshalAdminTrialCardSharingOrganizationResponseBodyToAdminAdminTrialCard
 		Slug:            *v.Slug,
 		CardAddedAt:     *v.CardAddedAt,
 		RejectionReason: v.RejectionReason,
+	}
+
+	return res
+}
+
+// unmarshalAdminResolvedOrganizationResponseBodyToAdminAdminResolvedOrganization
+// builds a value of type *admin.AdminResolvedOrganization from a value of type
+// *AdminResolvedOrganizationResponseBody.
+func unmarshalAdminResolvedOrganizationResponseBodyToAdminAdminResolvedOrganization(v *AdminResolvedOrganizationResponseBody) *admin.AdminResolvedOrganization {
+	res := &admin.AdminResolvedOrganization{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		Slug:        *v.Slug,
+		AccountType: *v.AccountType,
+		Whitelisted: *v.Whitelisted,
+		DisabledAt:  v.DisabledAt,
 	}
 
 	return res

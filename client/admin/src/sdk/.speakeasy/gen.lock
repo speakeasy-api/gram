@@ -36,6 +36,7 @@ trackedFiles:
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
   src/funcs/adminBackfillMcpConnectGrants.ts: {}
   src/funcs/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
+  src/funcs/adminBulkDisableOrganizations.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -139,6 +140,7 @@ trackedFiles:
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/funcs/adminResolveOrganizations.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
   src/funcs/adminRetryRegistryPromotionDocs.ts: {}
   src/funcs/adminRollbackOrganizationEncryption.ts: {}
@@ -205,6 +207,7 @@ trackedFiles:
   src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
   src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
+  src/models/components/adminbulkdisableorganizationsresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
@@ -317,6 +320,8 @@ trackedFiles:
   src/models/components/adminregistrypromotionsetupguide.ts: {}
   src/models/components/adminregistrypromotionsuggestions.ts: {}
   src/models/components/adminregistrysummary.ts: {}
+  src/models/components/adminresolvedorganization.ts: {}
+  src/models/components/adminresolveorganizationsresult.ts: {}
   src/models/components/adminrunnerkeyorganizationbackfill.ts: {}
   src/models/components/adminsecretbackfillorganization.ts: {}
   src/models/components/adminsecretbackfills.ts: {}
@@ -350,6 +355,7 @@ trackedFiles:
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
   src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
   src/models/components/backfillorganizationassistantbuiltingrantsrequestbody.ts: {}
+  src/models/components/bulkdisableorganizationsrequestbody.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
@@ -407,6 +413,7 @@ trackedFiles:
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/repairorganizationassistantagentnamesrequestbody.ts: {}
+  src/models/components/resolveorganizationsrequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/retryregistrypromotiondocsrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
@@ -514,6 +521,7 @@ trackedFiles:
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
   src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBackfillOrganizationAssistantBuiltinGrants.ts: {}
+  src/react-query/adminBulkDisableOrganizations.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -677,6 +685,7 @@ trackedFiles:
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminRepairOrganizationAssistantAgentNames.ts: {}
+  src/react-query/adminResolveOrganizations.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminRetryRegistryPromotionDocs.ts: {}
   src/react-query/adminRollbackOrganizationEncryption.ts: {}
@@ -793,6 +802,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminBulkDisableOrganizations:
+    speakeasy-default-admin-bulk-disable-organizations:
+      requestBody:
+        application/json: {"ids": ["<value 1>", "<value 2>", "<value 3>"]}
+      responses:
+        "200":
+          application/json: {"disabled_ids": ["<value 1>", "<value 2>"], "missing_ids": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminBulkUpdateAccountType:
     speakeasy-default-admin-bulk-update-account-type:
       requestBody:
@@ -2083,6 +2103,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminResolveOrganizations:
+    speakeasy-default-admin-resolve-organizations:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"missing_ids": [], "missing_slugs": ["<value 1>", "<value 2>"], "organizations": [{"account_type": "<value>", "id": "<id>", "name": "<value>", "slug": "<value>", "whitelisted": false}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminResumeStripeSubscription:
     speakeasy-default-admin-resume-stripe-subscription:
       requestBody:

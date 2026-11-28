@@ -6,6 +6,7 @@ import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignO
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
 import { adminBackfillOrganizationAssistantBuiltinGrants } from "../funcs/adminBackfillOrganizationAssistantBuiltinGrants.js";
+import { adminBulkDisableOrganizations } from "../funcs/adminBulkDisableOrganizations.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -109,6 +110,7 @@ import { adminRedeployProject } from "../funcs/adminRedeployProject.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
+import { adminResolveOrganizations } from "../funcs/adminResolveOrganizations.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRollbackOrganizationEncryption } from "../funcs/adminRollbackOrganizationEncryption.js";
@@ -152,6 +154,7 @@ import { AdminAssistantOrganizations } from "../models/components/adminassistant
 import { AdminAssistantSlackMigrationRun } from "../models/components/adminassistantslackmigrationrun.js";
 import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBackfillMCPConnectGrantsResult } from "../models/components/adminbackfillmcpconnectgrantsresult.js";
+import { AdminBulkDisableOrganizationsResult } from "../models/components/adminbulkdisableorganizationsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
@@ -203,6 +206,7 @@ import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryokt
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminRegistryPromotionCandidate } from "../models/components/adminregistrypromotioncandidate.js";
 import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
+import { AdminResolveOrganizationsResult } from "../models/components/adminresolveorganizationsresult.js";
 import { AdminRunnerKeyOrganizationBackfill } from "../models/components/adminrunnerkeyorganizationbackfill.js";
 import { AdminSecretBackfills } from "../models/components/adminsecretbackfills.js";
 import { AdminSelfServeStatus } from "../models/components/adminselfservestatus.js";
@@ -221,6 +225,7 @@ import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminups
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
 import { BackfillOrganizationAssistantBuiltinGrantsRequestBody } from "../models/components/backfillorganizationassistantbuiltingrantsrequestbody.js";
+import { BulkDisableOrganizationsRequestBody } from "../models/components/bulkdisableorganizationsrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
@@ -268,6 +273,7 @@ import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remo
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { RepairOrganizationAssistantAgentNamesRequestBody } from "../models/components/repairorganizationassistantagentnamesrequestbody.js";
+import { ResolveOrganizationsRequestBody } from "../models/components/resolveorganizationsrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retryregistrypromotiondocsrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
@@ -1688,6 +1694,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * bulkDisableOrganizations admin
+   *
+   * @remarks
+   * Disables many organizations in one transaction: each is removed from the whitelist and has disabled_at stamped, keeping the original timestamp when it was already disabled. An ID that matches no organization is reported back rather than failing the batch.
+   */
+  async bulkDisableOrganizations(
+    request: BulkDisableOrganizationsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminBulkDisableOrganizationsResult> {
+    return unwrapAsync(adminBulkDisableOrganizations(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * bulkUpdateAccountType admin
    *
    * @remarks
@@ -1749,6 +1772,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<AdminListOrganizationsResponse, { cursor: string }>> {
     return unwrapResultIterator(adminListOrganizations(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * resolveOrganizations admin
+   *
+   * @remarks
+   * Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.
+   */
+  async resolveOrganizations(
+    request: ResolveOrganizationsRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminResolveOrganizationsResult> {
+    return unwrapAsync(adminResolveOrganizations(
       this,
       request,
       options,

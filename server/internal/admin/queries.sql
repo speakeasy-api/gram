@@ -436,6 +436,22 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: AdminResolveOrganizations :many
+-- Read-only lookup of organizations by id and by slug. An id is matched only against
+-- id and a slug only against slug, so one organization's slug that equals
+-- another's id cannot cross over; the caller sorts rows back to the identifier
+-- that found them.
+SELECT
+    id,
+    name,
+    slug,
+    gram_account_type AS account_type,
+    whitelisted,
+    disabled_at
+FROM organization_metadata
+WHERE id = ANY(@ids::text[])
+   OR slug = ANY(@slugs::text[]);
+
 -- name: AdminEnableOrganization :execrows
 -- Undo of AdminDisableOrganization, and likewise blind to workos_last_event_id.
 -- Idempotent — enabling an already-active organization is a no-op beyond

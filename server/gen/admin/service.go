@@ -59,6 +59,17 @@ type Service interface {
 	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
 	// organization that is already active is unaffected.
 	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
+	// Looks up organizations by id and by slug without changing anything. Useful
+	// wherever a caller holds a list of identifiers, such as one read from a file,
+	// and needs to know what each points at, for example to show an operator the
+	// targets of a bulk operation before confirming it. Identifiers that match
+	// nothing are reported back rather than failing the call.
+	ResolveOrganizations(context.Context, *ResolveOrganizationsPayload) (res *AdminResolveOrganizationsResult, err error)
+	// Disables many organizations in one transaction: each is removed from the
+	// whitelist and has disabled_at stamped, keeping the original timestamp when
+	// it was already disabled. An ID that matches no organization is reported back
+	// rather than failing the batch.
+	BulkDisableOrganizations(context.Context, *BulkDisableOrganizationsPayload) (res *AdminBulkDisableOrganizationsResult, err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
@@ -562,7 +573,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [144]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
+var MethodNames = [146]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "resolveOrganizations", "bulkDisableOrganizations", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getSelfServeStatus", "setSelfServeDisabled", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getSecretBackfills", "runMarketplaceTokenBackfill", "runRunnerKeyOrganizationBackfill", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "backfillOrganizationAssistantBuiltinGrants", "migrateOrganizationAssistantSlack", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "getHooksReleaseProgress", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep", "getOrganizationEncryption", "listOrganizationEncryptionTransitions", "enrollOrganizationEncryption", "rollbackOrganizationEncryption", "runOrganizationEncryption", "finalizeOrganizationEncryption"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -800,6 +811,17 @@ type AdminBackfillMCPConnectGrantsResult struct {
 	// How many mcp:connect grants provisioned by the default auth permission
 	// backfill became explicit grants.
 	TakenOver int64
+}
+
+// AdminBulkDisableOrganizationsResult is the result type of the admin service
+// bulkDisableOrganizations method.
+type AdminBulkDisableOrganizationsResult struct {
+	// IDs of the organizations that are now disabled and not whitelisted,
+	// including any that already were. Order is unspecified.
+	DisabledIds []string
+	// IDs from the request that matched no organization, deduplicated and in
+	// request order. Nothing was written for these.
+	MissingIds []string
 }
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
@@ -2514,6 +2536,35 @@ type AdminRegistrySummary struct {
 	Issues    []*AdminRegistryIssue
 }
 
+// AdminResolveOrganizationsResult is the result type of the admin service
+// resolveOrganizations method.
+type AdminResolveOrganizationsResult struct {
+	// Organizations matched, each listed once, in request order (ids first, then
+	// slugs).
+	Organizations []*AdminResolvedOrganization
+	// IDs that matched no organization, deduplicated and in request order.
+	MissingIds []string
+	// Slugs that matched no organization, deduplicated and in request order.
+	MissingSlugs []string
+}
+
+// An organization matched by an id or slug lookup, with its identity and its
+// current access state.
+type AdminResolvedOrganization struct {
+	// The ID of the organization.
+	ID string
+	// The name of the organization.
+	Name string
+	// The slug of the organization.
+	Slug string
+	// Speakeasy account type (free, pro, payg, or enterprise).
+	AccountType string
+	// Whether the organization is currently whitelisted.
+	Whitelisted bool
+	// When the organization was disabled. Absent while it is active.
+	DisabledAt *string
+}
+
 // AdminRunnerKeyOrganizationBackfill is the result type of the admin service
 // runRunnerKeyOrganizationBackfill method.
 type AdminRunnerKeyOrganizationBackfill struct {
@@ -3090,6 +3141,14 @@ type BackfillOrganizationAssistantBuiltinGrantsPayload struct {
 	AdminSessionToken *string
 	// The organization ID.
 	OrganizationID string
+}
+
+// BulkDisableOrganizationsPayload is the payload type of the admin service
+// bulkDisableOrganizations method.
+type BulkDisableOrganizationsPayload struct {
+	AdminSessionToken *string
+	// Organization IDs to disable.
+	Ids []string
 }
 
 // BulkUpdateAccountTypePayload is the payload type of the admin service
@@ -4521,6 +4580,16 @@ type RepairInferenceKeyPayload struct {
 type RepairOrganizationAssistantAgentNamesPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// ResolveOrganizationsPayload is the payload type of the admin service
+// resolveOrganizations method.
+type ResolveOrganizationsPayload struct {
+	AdminSessionToken *string
+	// Organization IDs to look up. Together with slugs, at most 1000 identifiers.
+	Ids []string
+	// Organization slugs to look up. Together with ids, at most 1000 identifiers.
+	Slugs []string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service

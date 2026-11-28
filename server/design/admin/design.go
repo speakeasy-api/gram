@@ -289,6 +289,38 @@ var AdminBulkUpdateAccountTypeResult = Type("AdminBulkUpdateAccountTypeResult", 
 	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
 })
 
+var AdminResolvedOrganization = Type("AdminResolvedOrganization", func() {
+	Description("An organization matched by an id or slug lookup, with its identity and its current access state.")
+	Required("id", "name", "slug", "account_type", "whitelisted")
+
+	Attribute("id", String, "The ID of the organization.")
+	Attribute("name", String, "The name of the organization.")
+	Attribute("slug", String, "The slug of the organization.")
+	Attribute("account_type", String, "Speakeasy account type (free, pro, payg, or enterprise).")
+	Attribute("whitelisted", Boolean, "Whether the organization is currently whitelisted.")
+	Attribute("disabled_at", String, func() {
+		Description("When the organization was disabled. Absent while it is active.")
+		Format(FormatDateTime)
+	})
+})
+
+var AdminResolveOrganizationsResult = Type("AdminResolveOrganizationsResult", func() {
+	Description("Organizations matched by a list of ids and slugs, and the identifiers that matched none.")
+	Required("organizations", "missing_ids", "missing_slugs")
+
+	Attribute("organizations", ArrayOf(AdminResolvedOrganization), "Organizations matched, each listed once, in request order (ids first, then slugs).")
+	Attribute("missing_ids", ArrayOf(String), "IDs that matched no organization, deduplicated and in request order.")
+	Attribute("missing_slugs", ArrayOf(String), "Slugs that matched no organization, deduplicated and in request order.")
+})
+
+var AdminBulkDisableOrganizationsResult = Type("AdminBulkDisableOrganizationsResult", func() {
+	Description("Outcome of a bulk disable.")
+	Required("disabled_ids", "missing_ids")
+
+	Attribute("disabled_ids", ArrayOf(String), "IDs of the organizations that are now disabled and not whitelisted, including any that already were. Order is unspecified.")
+	Attribute("missing_ids", ArrayOf(String), "IDs from the request that matched no organization, deduplicated and in request order. Nothing was written for these.")
+})
+
 var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
 	Description("Stripe customer details shown to an admin before assignment.")
 	Required("id", "livemode")
@@ -782,6 +814,59 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminEnableOrganization")
+	})
+
+	Method("resolveOrganizations", func() {
+		Description("Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+
+			Attribute("ids", ArrayOf(String, func() {
+				MinLength(1)
+			}), fmt.Sprintf("Organization IDs to look up. Together with slugs, at most %d identifiers.", constants.MaxResolveOrganizationsBatch), func() {
+				MaxLength(constants.MaxResolveOrganizationsBatch)
+			})
+			Attribute("slugs", ArrayOf(String, func() {
+				MinLength(1)
+			}), fmt.Sprintf("Organization slugs to look up. Together with ids, at most %d identifiers.", constants.MaxResolveOrganizationsBatch), func() {
+				MaxLength(constants.MaxResolveOrganizationsBatch)
+			})
+		})
+
+		Result(AdminResolveOrganizationsResult)
+
+		HTTP(func() {
+			POST("/admin/organizations.resolve")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminResolveOrganizations")
+	})
+
+	Method("bulkDisableOrganizations", func() {
+		Description("Disables many organizations in one transaction: each is removed from the whitelist and has disabled_at stamped, keeping the original timestamp when it was already disabled. An ID that matches no organization is reported back rather than failing the batch.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("ids")
+
+			Attribute("ids", ArrayOf(String, func() {
+				MinLength(1)
+			}), "Organization IDs to disable.", func() {
+				MinLength(1)
+				MaxLength(constants.MaxBulkDisableOrganizations)
+			})
+		})
+
+		Result(AdminBulkDisableOrganizationsResult)
+
+		HTTP(func() {
+			POST("/admin/organizations.bulkDisable")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminBulkDisableOrganizations")
 	})
 
 	Method("getOrganization", func() {

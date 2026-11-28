@@ -210,7 +210,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|create-trial-payment-method-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|resolve-organizations|bulk-disable-organizations|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-self-serve-status|set-self-serve-disabled|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-secret-backfills|run-marketplace-token-backfill|run-runner-key-organization-backfill|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|backfill-organization-assistant-builtin-grants|migrate-organization-assistant-slack|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|get-hooks-release-progress|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|get-organization-encryption|list-organization-encryption-transitions|enroll-organization-encryption|rollback-organization-encryption|run-organization-encryption|finalize-organization-encryption)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4685,6 +4685,14 @@ func ParseEndpoint(
 		adminEnableOrganizationBodyFlag              = adminEnableOrganizationFlags.String("body", "REQUIRED", "")
 		adminEnableOrganizationAdminSessionTokenFlag = adminEnableOrganizationFlags.String("admin-session-token", "", "")
 
+		adminResolveOrganizationsFlags                 = flag.NewFlagSet("resolve-organizations", flag.ExitOnError)
+		adminResolveOrganizationsBodyFlag              = adminResolveOrganizationsFlags.String("body", "REQUIRED", "")
+		adminResolveOrganizationsAdminSessionTokenFlag = adminResolveOrganizationsFlags.String("admin-session-token", "", "")
+
+		adminBulkDisableOrganizationsFlags                 = flag.NewFlagSet("bulk-disable-organizations", flag.ExitOnError)
+		adminBulkDisableOrganizationsBodyFlag              = adminBulkDisableOrganizationsFlags.String("body", "REQUIRED", "")
+		adminBulkDisableOrganizationsAdminSessionTokenFlag = adminBulkDisableOrganizationsFlags.String("admin-session-token", "", "")
+
 		adminGetOrganizationFlags                 = flag.NewFlagSet("get-organization", flag.ExitOnError)
 		adminGetOrganizationIDOrSlugFlag          = adminGetOrganizationFlags.String("id-or-slug", "REQUIRED", "")
 		adminGetOrganizationAdminSessionTokenFlag = adminGetOrganizationFlags.String("admin-session-token", "", "")
@@ -6862,6 +6870,8 @@ func ParseEndpoint(
 	adminBulkUpdateAccountTypeFlags.Usage = adminBulkUpdateAccountTypeUsage
 	adminDisableOrganizationFlags.Usage = adminDisableOrganizationUsage
 	adminEnableOrganizationFlags.Usage = adminEnableOrganizationUsage
+	adminResolveOrganizationsFlags.Usage = adminResolveOrganizationsUsage
+	adminBulkDisableOrganizationsFlags.Usage = adminBulkDisableOrganizationsUsage
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
 	adminListOrganizationMembersFlags.Usage = adminListOrganizationMembersUsage
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
@@ -10115,6 +10125,12 @@ func ParseEndpoint(
 
 			case "enable-organization":
 				epf = adminEnableOrganizationFlags
+
+			case "resolve-organizations":
+				epf = adminResolveOrganizationsFlags
+
+			case "bulk-disable-organizations":
+				epf = adminBulkDisableOrganizationsFlags
 
 			case "get-organization":
 				epf = adminGetOrganizationFlags
@@ -13700,6 +13716,12 @@ func ParseEndpoint(
 			case "enable-organization":
 				endpoint = c.EnableOrganization()
 				data, err = adminc.BuildEnableOrganizationPayload(*adminEnableOrganizationBodyFlag, *adminEnableOrganizationAdminSessionTokenFlag)
+			case "resolve-organizations":
+				endpoint = c.ResolveOrganizations()
+				data, err = adminc.BuildResolveOrganizationsPayload(*adminResolveOrganizationsBodyFlag, *adminResolveOrganizationsAdminSessionTokenFlag)
+			case "bulk-disable-organizations":
+				endpoint = c.BulkDisableOrganizations()
+				data, err = adminc.BuildBulkDisableOrganizationsPayload(*adminBulkDisableOrganizationsBodyFlag, *adminBulkDisableOrganizationsAdminSessionTokenFlag)
 			case "get-organization":
 				endpoint = c.GetOrganization()
 				data, err = adminc.BuildGetOrganizationPayload(*adminGetOrganizationIDOrSlugFlag, *adminGetOrganizationAdminSessionTokenFlag)
@@ -34021,6 +34043,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    bulk-update-account-type: Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.`)
 	fmt.Fprintln(os.Stderr, `    disable-organization: Disables an organization, recording the moment of the action in disabled_at. Idempotent: disabling an already-disabled organization keeps the original timestamp.`)
 	fmt.Fprintln(os.Stderr, `    enable-organization: Re-enables a disabled organization by clearing disabled_at. Idempotent: an organization that is already active is unaffected.`)
+	fmt.Fprintln(os.Stderr, `    resolve-organizations: Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
+	fmt.Fprintln(os.Stderr, `    bulk-disable-organizations: Disables many organizations in one transaction: each is removed from the whitelist and has disabled_at stamped, keeping the original timestamp when it was already disabled. An ID that matches no organization is reported back rather than failing the batch.`)
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
@@ -34460,6 +34484,46 @@ func adminEnableOrganizationUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin enable-organization --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminResolveOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin resolve-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Looks up organizations by id and by slug without changing anything. Useful wherever a caller holds a list of identifiers, such as one read from a file, and needs to know what each points at, for example to show an operator the targets of a bulk operation before confirming it. Identifiers that match nothing are reported back rather than failing the call.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resolve-organizations --body '{\n      \"ids\": [\n         \"aa\",\n         \"aa\",\n         \"aa\"\n      ],\n      \"slugs\": [\n         \"aa\",\n         \"aa\",\n         \"aa\"\n      ]\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminBulkDisableOrganizationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin bulk-disable-organizations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Disables many organizations in one transaction: each is removed from the whitelist and has disabled_at stamped, keeping the original timestamp when it was already disabled. An ID that matches no organization is reported back rather than failing the batch.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin bulk-disable-organizations --body '{\n      \"ids\": [\n         \"aa\",\n         \"aa\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetOrganizationUsage() {

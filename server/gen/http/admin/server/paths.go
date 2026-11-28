@@ -82,6 +82,16 @@ func EnableOrganizationAdminPath() string {
 	return "/admin/organization.enable"
 }
 
+// ResolveOrganizationsAdminPath returns the URL path to the admin service resolveOrganizations HTTP endpoint.
+func ResolveOrganizationsAdminPath() string {
+	return "/admin/organizations.resolve"
+}
+
+// BulkDisableOrganizationsAdminPath returns the URL path to the admin service bulkDisableOrganizations HTTP endpoint.
+func BulkDisableOrganizationsAdminPath() string {
+	return "/admin/organizations.bulkDisable"
+}
+
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
 func GetOrganizationAdminPath() string {
 	return "/admin/organization.get"
