@@ -27,7 +27,7 @@ const (
 	cardMetaKey = "com.speakeasy/card"
 	// cardWidgetDescription tells ChatGPT what the card view shows, for every
 	// tool that renders in it.
-	cardWidgetDescription = "Shows a summary card for the result of a Speakeasy AI Control Plane tool call: the resource it read or changed, a short list of items, or why the request did not complete, with at most one link to the matching page in the Speakeasy dashboard. The card repeats the tool result; it takes no actions of its own."
+	cardWidgetDescription = "Shows a summary card for the result of a Speakeasy AI Control Plane tool call: the resource it read or changed, a short list of items, a carousel of catalog search results, or why the request did not complete. Links open the matching Speakeasy dashboard page or, on a sign-in card, the provider's authorization page. A catalog result's Add button only sends a request to add that server to the chat as the user's message; the agent still confirms before anything changes. The card changes nothing by itself."
 )
 
 //go:embed card.html

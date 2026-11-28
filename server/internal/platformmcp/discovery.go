@@ -245,7 +245,7 @@ func firstRunToolsFor(ctx context.Context, next mcp.MethodHandler, method string
 // to 1 KB. Tool-specific rules travel with describe_platform_tool instead.
 func discoveryInstructions(mode discoveryMode) string {
 	instructions := "Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization, and manage access, logs, analytics, risk signals, exports, dashboards and Organizational Memory (team decisions). Call the listed tools directly. Before saying something can't be done, find the tool with search_platform_tools in plain words, then describe_platform_tool and call_platform_tool. Answer how-to questions with search_speakeasy_docs and cite its pages. " +
-		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Do not read tool names, IDs or error codes aloud."
+		"Writes: call with confirmed:false first, even if the user agreed, and show the preview; send confirmed:true only after the user approves it. Never request or accept tokens, passwords or secrets in chat. Leave tool names, IDs and error codes out of replies unless the user asks for them."
 	if mode == discoveryCode {
 		instructions += " For multi-step work, execute runs Python that can search, describe and call every tool as platform--<tool name>."
 	}
