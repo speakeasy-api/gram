@@ -3348,6 +3348,46 @@ func BuildUpdateSignupOfferPayload(adminUpdateSignupOfferBody string, adminUpdat
 	return v, nil
 }
 
+// BuildGetSelfServeStatusPayload builds the payload for the admin
+// getSelfServeStatus endpoint from CLI flags.
+func BuildGetSelfServeStatusPayload(adminGetSelfServeStatusAdminSessionToken string) (*admin.GetSelfServeStatusPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetSelfServeStatusAdminSessionToken != "" {
+			adminSessionToken = &adminGetSelfServeStatusAdminSessionToken
+		}
+	}
+	v := &admin.GetSelfServeStatusPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetSelfServeDisabledPayload builds the payload for the admin
+// setSelfServeDisabled endpoint from CLI flags.
+func BuildSetSelfServeDisabledPayload(adminSetSelfServeDisabledBody string, adminSetSelfServeDisabledAdminSessionToken string) (*admin.SetSelfServeDisabledPayload, error) {
+	var err error
+	var body SetSelfServeDisabledRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetSelfServeDisabledBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"disabled\": false\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetSelfServeDisabledAdminSessionToken != "" {
+			adminSessionToken = &adminSetSelfServeDisabledAdminSessionToken
+		}
+	}
+	v := &admin.SetSelfServeDisabledPayload{
+		Disabled: body.Disabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListPlatformMcpFeedbackPayload builds the payload for the admin
 // listPlatformMcpFeedback endpoint from CLI flags.
 func BuildListPlatformMcpFeedbackPayload(adminListPlatformMcpFeedbackLimit string, adminListPlatformMcpFeedbackAdminSessionToken string) (*admin.ListPlatformMcpFeedbackPayload, error) {

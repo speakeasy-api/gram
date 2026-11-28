@@ -1414,6 +1414,7 @@ var _ = Service("admin", func() {
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	selfServeMethods()
 	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
