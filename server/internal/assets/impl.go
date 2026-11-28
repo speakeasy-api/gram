@@ -76,6 +76,10 @@ type Service struct {
 	// comes from the Functions provider, so it is the same for every
 	// organization.
 	functionsAvailable bool
+
+	// sealed keeps encrypted copies of chat attachments for the chat
+	// transcript shadow projects. Nil keeps plaintext objects only.
+	sealed *sealedChatAttachments
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -115,6 +119,7 @@ func NewService(
 		audit:          auditLogger,
 
 		functionsAvailable: functionsAvailable,
+		sealed:             nil,
 	}
 }
 
@@ -1451,6 +1456,9 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 		return nil, err
 	}
 	if existing != nil {
+		if err := s.sealExistingChatAttachment(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.ID, result.hash, result.file); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error writing document").LogError(ctx, s.logger)
+		}
 		existingServeURL := url.URL{
 			Path: srv.ServeChatAttachmentAssetsPath(),
 			RawQuery: url.Values{
@@ -1478,6 +1486,14 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	objectPath, err := assetStorageKey(tierProject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, filename)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("resolve storage key: %w", err), "error writing document").LogError(ctx, s.logger)
+	}
+	if err := s.sealChatAttachment(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, objectPath, result.hash, result.file); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error writing document").LogError(ctx, s.logger)
 	}
 
 	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
@@ -1563,18 +1579,9 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
-	exists, err := s.storage.Exists(ctx, assetURL)
+	body, err := s.readChatAttachment(ctx, logger, projectID, row, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
-	}
-
-	if !exists {
-		return nil, nil, oops.C(oops.CodeNotFound)
-	}
-
-	body, err := s.storage.Read(ctx, assetURL)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
+		return nil, nil, err
 	}
 
 	return &gen.ServeChatAttachmentResult{
@@ -1585,6 +1592,32 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 		ContentSecurityPolicy: chatAttachmentCSP,
 		XContentTypeOptions:   chatAttachmentNoSniff,
 	}, body, nil
+}
+
+// readChatAttachment opens a chat attachment's body: its encrypted copy for a
+// shadow read project when one exists, otherwise the plaintext object.
+func (s *Service) readChatAttachment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, row repo.GetChatAttachmentAssetURLRow, assetURL *url.URL) (io.ReadCloser, error) {
+	sealed, found, err := s.openSealedChatAttachment(ctx, projectID, row, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching asset").LogError(ctx, logger)
+	}
+	if found {
+		return sealed, nil
+	}
+
+	exists, err := s.storage.Exists(ctx, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
+	}
+	if !exists {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+
+	body, err := s.storage.Read(ctx, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
+	}
+	return body, nil
 }
 
 const (
@@ -1705,18 +1738,9 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
-	exists, err := s.storage.Exists(ctx, assetURL)
+	body, err := s.readChatAttachment(ctx, logger, projectID, row, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
-	}
-
-	if !exists {
-		return nil, nil, oops.C(oops.CodeNotFound)
-	}
-
-	body, err := s.storage.Read(ctx, assetURL)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
+		return nil, nil, err
 	}
 
 	return &gen.ServeChatAttachmentSignedResult{

@@ -157,7 +157,7 @@ WHERE
 -- name: GetChatAttachmentAssetURL :one
 -- A disabled organization's attachments are not served, including through
 -- signed URLs minted before it was disabled.
-SELECT assets.name, assets.url, assets.content_type, assets.content_length, assets.updated_at
+SELECT assets.name, assets.url, assets.sha256, assets.organization_id, assets.content_type, assets.content_length, assets.updated_at
 FROM assets
 JOIN projects p ON p.id = assets.project_id
 JOIN organization_metadata om ON om.id = p.organization_id AND om.disabled_at IS NULL

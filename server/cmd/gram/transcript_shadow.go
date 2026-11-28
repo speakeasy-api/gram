@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
@@ -41,17 +42,21 @@ type transcriptShadow struct {
 	// Store seals and opens shadow copies.
 	Store *transcriptstore.Store
 
-	// ProjectIDs are the projects that capture shadows. Their chat reads open
-	// the shadows instead of plaintext, so a read never meets a shadow that
-	// capture stopped keeping current.
+	// Assets seals and opens encrypted copies of message body, content part
+	// and chat attachment objects for the same projects.
+	Assets *transcriptstore.AssetStore
+
+	// ProjectIDs are the projects that capture shadows and encrypted asset
+	// copies. Their chat reads open them instead of plaintext, so a read never
+	// meets a copy that capture stopped keeping current.
 	ProjectIDs []uuid.UUID
 }
 
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
 // writes and reads. Plaintext remains authoritative for every other project;
 // startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
-	none := transcriptShadow{Store: nil, ProjectIDs: nil}
+func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, assetStorage assets.BlobStore, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) (transcriptShadow, error) {
+	none := transcriptShadow{Store: nil, Assets: nil, ProjectIDs: nil}
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
@@ -67,8 +72,8 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if orgEncryption.Service == nil || orgEncryption.Provisioner == nil {
 		return none, fmt.Errorf("chat transcript shadow requires organization encryption service and provisioner")
 	}
-	if db == nil || writer == nil {
-		return none, fmt.Errorf("chat transcript shadow requires database and writer")
+	if db == nil || writer == nil || assetStorage == nil {
+		return none, fmt.Errorf("chat transcript shadow requires database, writer and asset storage")
 	}
 	queries := chatrepo.New(db)
 	organizations := make([]string, 0, len(projectIDs))
@@ -92,14 +97,18 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 	if err != nil {
 		return none, fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
+	assetStore, err := transcriptstore.NewAssetStore(assetStorage, orgEncryption.Service, tracerProvider, meterProvider)
+	if err != nil {
+		return none, fmt.Errorf("create chat transcript shadow asset store: %w", err)
+	}
 	for _, org := range organizations {
 		if err := orgEncryption.Provisioner.EnsureUseCase(ctx, org, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 			return none, fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
-	writer.WithTranscriptShadow(store, projectIDs...)
+	writer.WithTranscriptShadow(store, projectIDs...).WithSealedAssets(assetStore)
 	// Captures run inside write transactions: keep the transcript key warm so
 	// a request does not wait for KMS each time the cached key expires.
 	go orgEncryption.Service.KeepWarm(ctx, orgencryption.UseCaseChatTranscripts)
-	return transcriptShadow{Store: store, ProjectIDs: projectIDs}, nil
+	return transcriptShadow{Store: store, Assets: assetStore, ProjectIDs: projectIDs}, nil
 }

@@ -36,9 +36,10 @@ func TestTranscriptShadowDisabled(t *testing.T) {
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
-	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	require.Nil(t, shadow.Store)
+	require.Nil(t, shadow.Assets)
 	require.Empty(t, shadow.ProjectIDs)
 }
 
@@ -68,7 +69,7 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
 			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
-			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
+			_, err := configureTranscriptShadow(t.Context(), c, nil, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
 			require.Error(t, err)
 		})
 	}

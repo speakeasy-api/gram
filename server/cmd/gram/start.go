@@ -1222,7 +1222,7 @@ func newStartCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			shadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			shadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, assetStorage, orgEncryption, tracerProvider, meterProvider)
 			if err != nil {
 				return err
 			}
@@ -1336,6 +1336,7 @@ func newStartCommand() *cli.Command {
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
 				WithTranscriptShadowReads(shadow.Store, shadow.ProjectIDs...).
+				WithSealedAssetReads(shadow.Assets).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
 				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
@@ -1887,7 +1888,8 @@ func newStartCommand() *cli.Command {
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			templates.Attach(mux, templates.NewService(logger, tracerProvider, db, sessionManager, toolsetsSvc, authzEngine, auditLogger))
-			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger, functionsAvailable)
+			assetsService := assets.NewService(logger, tracerProvider, guardianPolicy, db, sessionManager, chatSessionsManager, assetStorage, c.String(usersessions.JWTSigningKeyFlag), authzEngine, auditLogger, functionsAvailable).
+				WithSealedChatAttachments(shadow.Assets, shadow.ProjectIDs...)
 			assets.Attach(mux, assetsService)
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
 				return fmt.Errorf("ensure native catalog source: %w", err)

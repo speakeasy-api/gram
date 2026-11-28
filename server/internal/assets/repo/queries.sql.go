@@ -269,7 +269,7 @@ func (q *Queries) GetAssetsByID(ctx context.Context, arg GetAssetsByIDParams) ([
 }
 
 const getChatAttachmentAssetURL = `-- name: GetChatAttachmentAssetURL :one
-SELECT assets.name, assets.url, assets.content_type, assets.content_length, assets.updated_at
+SELECT assets.name, assets.url, assets.sha256, assets.organization_id, assets.content_type, assets.content_length, assets.updated_at
 FROM assets
 JOIN projects p ON p.id = assets.project_id
 JOIN organization_metadata om ON om.id = p.organization_id AND om.disabled_at IS NULL
@@ -285,11 +285,13 @@ type GetChatAttachmentAssetURLParams struct {
 }
 
 type GetChatAttachmentAssetURLRow struct {
-	Name          string
-	Url           string
-	ContentType   string
-	ContentLength int64
-	UpdatedAt     pgtype.Timestamptz
+	Name           string
+	Url            string
+	Sha256         string
+	OrganizationID pgtype.Text
+	ContentType    string
+	ContentLength  int64
+	UpdatedAt      pgtype.Timestamptz
 }
 
 // A disabled organization's attachments are not served, including through
@@ -300,6 +302,8 @@ func (q *Queries) GetChatAttachmentAssetURL(ctx context.Context, arg GetChatAtta
 	err := row.Scan(
 		&i.Name,
 		&i.Url,
+		&i.Sha256,
+		&i.OrganizationID,
 		&i.ContentType,
 		&i.ContentLength,
 		&i.UpdatedAt,

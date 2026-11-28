@@ -1250,6 +1250,9 @@ const (
 	// one encrypted transcript read that had no shadow and were served from
 	// plaintext.
 	TranscriptShadowPlaintextFallbackCountKey = attribute.Key("gram.transcript_shadow.plaintext_fallback_count")
+	// TranscriptShadowAssetKindKey says which transcript copy a sealed asset
+	// object holds: message_content, content_part or chat_attachment.
+	TranscriptShadowAssetKindKey = attribute.Key("gram.transcript_shadow.asset_kind")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -4751,6 +4754,10 @@ func TranscriptShadowMessageCount(v int) attribute.KeyValue {
 
 func TranscriptShadowPlaintextFallbackCount(v int) attribute.KeyValue {
 	return TranscriptShadowPlaintextFallbackCountKey.Int(v)
+}
+
+func TranscriptShadowAssetKind(v string) attribute.KeyValue {
+	return TranscriptShadowAssetKindKey.String(v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }

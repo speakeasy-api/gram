@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -101,6 +102,10 @@ type Service struct {
 	// transcriptShadowReadProjects are the projects whose chat reads open
 	// shadows instead of plaintext.
 	transcriptShadowReadProjects map[uuid.UUID]struct{}
+
+	// sealedAssets opens encrypted copies of message body and content part
+	// objects for the same projects. Nil reads plaintext objects only.
+	sealedAssets *transcriptstore.AssetStore
 	// access is the per-chat gate, shared with services that reveal session
 	// content under another name (see SessionAccess).
 	access *SessionAccess
@@ -158,6 +163,14 @@ func (s *Service) WithTranscriptShadowReads(store *transcriptstore.Store, projec
 	for _, projectID := range projectIDs {
 		s.transcriptShadowReadProjects[projectID] = struct{}{}
 	}
+	return s
+}
+
+// WithSealedAssetReads makes chat reads for the transcript shadow read
+// projects open message body and content part objects from their encrypted
+// copies. An object with no encrypted copy is served from plaintext.
+func (s *Service) WithSealedAssetReads(store *transcriptstore.AssetStore) *Service {
+	s.sealedAssets = store
 	return s
 }
 
@@ -223,6 +236,7 @@ func NewService(
 		riskFindings:                 nil,
 		transcriptShadow:             nil,
 		transcriptShadowReadProjects: nil,
+		sealedAssets:                 nil,
 		access:                       NewSessionAccess(logger, db, authzEngine),
 		turnStream:                   nil, // opt in via WithTurnStream
 		streamMetrics:                nil, // opt in via WithStreamRotation
@@ -1624,7 +1638,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	contentPartGroup.SetLimit(maxConcurrentChatAssetWork)
 	for i, row := range contentPartRows {
 		contentPartGroup.Go(func() error {
-			content := s.loadContentPartContent(ctx, row.ChatID, row.ID, row.ContentAssetUrl)
+			content, err := s.readContentPart(ctx, authCtx, row.ChatID, row.ID, row.ContentAssetUrl)
+			if err != nil {
+				return err
+			}
 			contentPart := &gen.ChatContentPart{
 				ID:                  row.ID.String(),
 				Kind:                row.Kind,
@@ -1642,7 +1659,11 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			return nil
 		})
 	}
-	_ = contentPartGroup.Wait()
+	// Only an encrypted copy that exists but does not open returns an error;
+	// plaintext read failures still degrade to empty content.
+	if err := contentPartGroup.Wait(); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to open encrypted chat content parts").LogError(ctx, s.logger)
+	}
 
 	var source *string
 	var originatingClient *string
@@ -3315,7 +3336,15 @@ const (
 	maxConcurrentChatAssetWork = 32
 )
 
-func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, rows []chatMessageRow) ([]MessageWrite, error) {
+// sealAssetFunc writes the encrypted copy of one uploaded transcript object
+// next to the plaintext object at objectPath.
+type sealAssetFunc func(ctx context.Context, kind transcriptcrypto.AssetKind, chatID uuid.UUID, objectPath string, body []byte) error
+
+// prepareMessages uploads each message body. When seal is non-nil it also
+// writes the body's encrypted copy, and a sealing failure counts as an upload
+// failure: the row keeps its plain text inline, records the storage error and
+// references no object that lacks an encrypted copy.
+func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, seal sealAssetFunc, rows []chatMessageRow) ([]MessageWrite, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -3404,6 +3433,13 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			if err := writer.Close(); err != nil {
 				results[leader] = uploadResult{assetURL: "", jsonData: prep.jsonData, err: fmt.Errorf("finalize asset upload: %w", err)}
 				return nil
+			}
+
+			if seal != nil {
+				if err := seal(ctx, transcriptcrypto.AssetMessageContent, rows[leader].chatID, assetPath, prep.jsonData); err != nil {
+					results[leader] = uploadResult{assetURL: "", jsonData: prep.jsonData, err: err}
+					return nil
+				}
 			}
 
 			results[leader] = uploadResult{
