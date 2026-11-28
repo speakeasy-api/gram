@@ -783,7 +783,7 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
 		}
 		if created {
-			r.orgCreations.RecordCreated(ctx, synced)
+			r.orgCreations.RecordCreated(ctx, synced, "")
 		}
 	default:
 		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)

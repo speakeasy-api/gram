@@ -270,7 +270,7 @@ type signInRevocation struct {
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
 	if org := effects.createdOrganization; org != nil {
-		p.orgCreations.RecordCreated(ctx, *org)
+		p.orgCreations.RecordCreated(ctx, *org, "")
 	}
 
 	if len(effects.revocationDeliveries) > 0 {

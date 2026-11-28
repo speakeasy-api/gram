@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/emaildomain"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
@@ -45,18 +46,26 @@ func NewCreationRecorder(meterProvider metric.MeterProvider) *CreationRecorder {
 	return &CreationRecorder{created: created}
 }
 
-// RecordCreated counts org as created. Call it only after the transaction that
-// inserted org has committed.
-func (r *CreationRecorder) RecordCreated(ctx context.Context, org orgRepo.OrganizationMetadatum) {
+// RecordCreated counts org as created. creatorEmail is the email of the user
+// the organization was created for, or "" when no user created it; only its
+// domain class is recorded. Call it only after the transaction that inserted
+// org has committed.
+func (r *CreationRecorder) RecordCreated(ctx context.Context, org orgRepo.OrganizationMetadatum, creatorEmail string) {
 	if r == nil || r.created == nil {
 		return
 	}
-	source := conv.FromPGTextOrEmpty[string](org.CreationSource)
-	if source == "" {
-		source = SourceUnknown
-	}
 	r.created.Add(ctx, 1, metric.WithAttributes(
-		attr.OrganizationCreatedSource(source),
+		attr.OrganizationCreatedSource(CreationSourceLabel(org)),
 		attr.OrganizationCreatedAccountType(org.GramAccountType),
+		attr.OrganizationCreatedEmailDomainClass(string(emaildomain.Classify(creatorEmail))),
 	))
+}
+
+// CreationSourceLabel is org's creation source as the counter labels it:
+// SourceUnknown when the row records none.
+func CreationSourceLabel(org orgRepo.OrganizationMetadatum) string {
+	if source := conv.FromPGTextOrEmpty[string](org.CreationSource); source != "" {
+		return source
+	}
+	return SourceUnknown
 }

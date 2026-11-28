@@ -17,8 +17,9 @@ import (
 )
 
 type orgCreatedLabels struct {
-	source      string
-	accountType string
+	source           string
+	accountType      string
+	emailDomainClass string
 }
 
 func newOrgCreationReader(t *testing.T) (*orgprovision.CreationRecorder, *sdkmetric.ManualReader) {
@@ -46,7 +47,8 @@ func collectOrgsCreated(t *testing.T, ctx context.Context, reader *sdkmetric.Man
 			for _, point := range sum.DataPoints {
 				source, _ := point.Attributes.Value(attr.OrganizationCreatedSourceKey)
 				accountType, _ := point.Attributes.Value(attr.OrganizationCreatedAccountTypeKey)
-				counts[orgCreatedLabels{source: source.AsString(), accountType: accountType.AsString()}] += point.Value
+				class, _ := point.Attributes.Value(attr.OrganizationCreatedEmailDomainClassKey)
+				counts[orgCreatedLabels{source: source.AsString(), accountType: accountType.AsString(), emailDomainClass: class.AsString()}] += point.Value
 			}
 		}
 	}
@@ -57,6 +59,7 @@ func TestRegister_CountsCreatedOrganization(t *testing.T) {
 	t.Parallel()
 
 	userInfo := defaultMockUserInfo()
+	userInfo.Email = "counted@gmail.com"
 	userInfo.Organizations = []MockOrganizationEntry{}
 	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 	recorder, reader := newOrgCreationReader(t)
@@ -85,7 +88,7 @@ func TestRegister_CountsCreatedOrganization(t *testing.T) {
 	require.NoError(t, instance.service.Register(ctx, &gen.RegisterPayload{OrgName: "Counted Organization", SessionToken: nil}))
 
 	require.Equal(t, map[orgCreatedLabels]int64{
-		{source: orgprovision.SourceSignup, accountType: "free"}: 1,
+		{source: orgprovision.SourceSignup, accountType: "free", emailDomainClass: "free_webmail"}: 1,
 	}, collectOrgsCreated(t, ctx, reader))
 }
 

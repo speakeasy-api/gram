@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/emaildomain"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 
@@ -1123,7 +1124,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
 	if created {
-		s.orgCreations.RecordCreated(ctx, switched)
+		s.orgCreations.RecordCreated(ctx, switched, "")
 	}
 
 	existingSession, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
@@ -1519,7 +1520,7 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []auth
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
 	}
 	if created {
-		s.orgCreations.RecordCreated(ctx, whitelisted)
+		s.orgCreations.RecordCreated(ctx, whitelisted, "")
 	}
 	return whitelisted.ID, whitelisted, nil
 }
@@ -1817,7 +1818,13 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("commit organization provisioning transaction: %w", err)
 	}
 	if created {
-		s.orgCreations.RecordCreated(ctx, org)
+		s.orgCreations.RecordCreated(ctx, org, opts.ActorEmail)
+		s.logger.InfoContext(ctx, "organization created",
+			attr.SlogOrganizationID(org.ID),
+			attr.SlogOrganizationCreatedSource(orgprovision.CreationSourceLabel(org)),
+			attr.SlogOrganizationCreatedEmailDomainClass(string(emaildomain.Classify(opts.ActorEmail))),
+			attr.SlogOrganizationCreatorEmailDomain(emaildomain.Domain(opts.ActorEmail)),
+		)
 	}
 
 	return org, nil

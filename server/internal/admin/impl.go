@@ -1820,7 +1820,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 	if inserted {
-		s.orgCreations.RecordCreated(ctx, org)
+		s.orgCreations.RecordCreated(ctx, org, "")
 	}
 
 	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")

@@ -19,8 +19,9 @@ import (
 )
 
 type orgCreatedLabels struct {
-	source      string
-	accountType string
+	source           string
+	accountType      string
+	emailDomainClass string
 }
 
 func newOrgCreationReader(t *testing.T) (*orgprovision.CreationRecorder, *sdkmetric.ManualReader) {
@@ -48,7 +49,8 @@ func collectOrgsCreated(t *testing.T, ctx context.Context, reader *sdkmetric.Man
 			for _, point := range sum.DataPoints {
 				source, _ := point.Attributes.Value(attr.OrganizationCreatedSourceKey)
 				accountType, _ := point.Attributes.Value(attr.OrganizationCreatedAccountTypeKey)
-				counts[orgCreatedLabels{source: source.AsString(), accountType: accountType.AsString()}] += point.Value
+				class, _ := point.Attributes.Value(attr.OrganizationCreatedEmailDomainClassKey)
+				counts[orgCreatedLabels{source: source.AsString(), accountType: accountType.AsString(), emailDomainClass: class.AsString()}] += point.Value
 			}
 		}
 	}
@@ -67,7 +69,7 @@ func TestCreateOrganization_CountsCreatedOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, map[orgCreatedLabels]int64{
-		{source: orgprovision.SourcePlatformAdmin, accountType: "free"}: 1,
+		{source: orgprovision.SourcePlatformAdmin, accountType: "free", emailDomainClass: "unknown"}: 1,
 	}, collectOrgsCreated(t, ctx, reader))
 }
 
@@ -89,13 +91,13 @@ func TestCreateOrganization_UpdatingASyncedRowIsNotCounted(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, map[orgCreatedLabels]int64{
-		{source: orgprovision.SourceUnknown, accountType: "free"}: 1,
+		{source: orgprovision.SourceUnknown, accountType: "free", emailDomainClass: "unknown"}: 1,
 	}, collectOrgsCreated(t, ctx, reader))
 
 	_, err = svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "count-race.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
 	require.Equal(t, map[orgCreatedLabels]int64{
-		{source: orgprovision.SourceUnknown, accountType: "free"}: 1,
+		{source: orgprovision.SourceUnknown, accountType: "free", emailDomainClass: "unknown"}: 1,
 	}, collectOrgsCreated(t, ctx, reader), "an upsert that updated an existing row must not count as a creation")
 }
