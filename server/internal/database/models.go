@@ -6445,6 +6445,8 @@ type RemoteSession struct {
 	// @access: secret-restricted
 	RefreshTokenOrgEncrypted pgtype.Text
 	// @access: confidential
+	AuthorizedAt pgtype.Timestamptz
+	// @access: confidential
 	AuthorizationExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	RefreshExpiresAt pgtype.Timestamptz
@@ -6515,6 +6517,10 @@ type RemoteSessionClient struct {
 	Scope []string
 	// @access: opaque-confidential
 	GrantTypes []string
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
+	// @access: confidential
+	SessionMaximumDuration pgtype.Interval
 	// @access: restricted
 	Audience pgtype.Text
 	// @access: confidential
@@ -9085,6 +9091,10 @@ type UserSession struct {
 	RefreshExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
+	// @access: confidential
+	SessionAbsoluteExpiresAt pgtype.Timestamptz
 	// @access: opaque-restricted
 	ToolSelection []byte
 	// @access: confidential
@@ -9224,6 +9234,8 @@ type UserSessionIssuer struct {
 	AuthnChallengeMode string
 	// @access: confidential
 	SessionDuration pgtype.Interval
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
 	// @access: confidential
 	Classification string
 	// @access: confidential

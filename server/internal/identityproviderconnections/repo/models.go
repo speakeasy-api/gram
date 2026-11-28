@@ -173,6 +173,10 @@ type RemoteSessionClient struct {
 	Scope []string
 	// @access: opaque-confidential
 	GrantTypes []string
+	// @access: confidential
+	SessionInactivityTimeout pgtype.Interval
+	// @access: confidential
+	SessionMaximumDuration pgtype.Interval
 	// @access: restricted
 	Audience pgtype.Text
 	// @access: confidential
