@@ -131,8 +131,9 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 			return s.ServeWellKnownProtectedResourceForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, mcproute.MCP)
 		}
 		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, mcproute.MCP)
-	case mcpendpoints.IsAddressMiss(err):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage)
 	default:
 		return err
 	}
@@ -160,8 +161,9 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 			return s.ServeWellKnownAuthorizationServerForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, mcproute.MCP)
 		}
 		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, mcproute.MCP)
-	case mcpendpoints.IsAddressMiss(err):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage)
 	default:
 		return err
 	}
